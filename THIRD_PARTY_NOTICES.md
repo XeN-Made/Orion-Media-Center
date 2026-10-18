@@ -67,6 +67,13 @@ domain or MIT; see `src/third_party/stb/LICENSE`), vendored at the commit in
 `src/third_party/stb/UPSTREAM` by `tools/update-stb.sh`. It is linked into the
 PS5 application.
 
+## Icon decoding
+
+Title icons (PNG) are decoded by [stb_image](https://github.com/nothings/stb)
+v2.30 (public domain or MIT; see `src/third_party/stb/LICENSE`), vendored as
+`src/third_party/stb/stb_image.inc` at the same commit and by the same script
+as stb_vorbis. It is linked into the PS5 application.
+
 ## Shader distance functions
 
 The fragment shader in `src/gfx/gl_batch.cpp` adapts the two-dimensional
