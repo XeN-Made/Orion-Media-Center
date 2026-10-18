@@ -269,12 +269,27 @@ std::vector<DirectoryEntry> list_directory(const std::string &directory, Listing
         return entries;
     }
     // Records are FreeBSD 11 dirents: fileno (u32), reclen (u16), type (u8),
-    // namlen (u8), then the name. The buffer must hold a whole block.
-    alignas(8) char buffer[16384];
+    // namlen (u8), then the name. getdents refuses (EINVAL) a buffer smaller
+    // than the file system's I/O block: 64 KiB on the console's /data, where
+    // 16 KiB returned nothing. Start at the block size and grow on refusal.
+    constexpr std::size_t kMaxBuffer = 1u << 20;
+    struct stat folder
+    {
+    };
+    std::size_t size = 64u << 10;
+    if (::fstat(fd, &folder) == 0 && folder.st_blksize > 0)
+        size = std::max(size, static_cast<std::size_t>(folder.st_blksize));
+    std::vector<std::uint64_t> storage((size + 7) / 8); // 8-byte aligned records
     for (;;)
     {
-        const int got = ::getdents(fd, buffer, static_cast<int>(sizeof(buffer)));
+        char *buffer = reinterpret_cast<char *>(storage.data());
+        const int got = ::getdents(fd, buffer, static_cast<int>(storage.size() * 8));
         ++seen.reads;
+        if (got < 0 && errno == EINVAL && storage.size() * 8 < kMaxBuffer)
+        {
+            storage.resize(storage.size() * 2); // nothing was consumed: retry larger
+            continue;
+        }
         if (got < 0)
             seen.read_error = errno;
         if (got <= 0)

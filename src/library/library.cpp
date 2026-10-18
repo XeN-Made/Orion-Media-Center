@@ -291,10 +291,7 @@ bool parse_image_name(std::string_view file_name, Title *title)
 ScanOptions console_defaults()
 {
     ScanOptions options;
-    // /user/data is what /data points at; listing it directly is the
-    // fallback when the sandbox's /data does not show ShadowMountPlus's own
-    // mount of /data/homebrew.
-    options.roots = {"/data/homebrew", "/user/data/homebrew", "/mnt/ext0/homebrew"};
+    options.roots = {"/data/homebrew", "/mnt/ext0/homebrew"};
     for (int usb = 0; usb < 8; ++usb)
         options.roots.push_back("/mnt/usb" + std::to_string(usb) + "/homebrew");
     options.icon_cache = "/data/shadowmount/icon-cache";
