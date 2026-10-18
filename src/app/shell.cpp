@@ -45,10 +45,10 @@ Settings Shell::load_settings(const std::string &data_root)
     return settings;
 }
 
-Shell::Shell(const ui::Fonts &fonts, const demo::Catalog &catalog, std::string data_root,
-             std::uint32_t glass_texture)
+Shell::Shell(const ui::Fonts &fonts, const demo::Catalog &catalog, const library::Library &library,
+             std::string data_root, std::uint32_t glass_texture)
     : fonts_(fonts), data_root_(std::move(data_root)), settings_(load_settings(data_root_)),
-      context_{fonts_, catalog, telemetry_, settings_}, glass_texture_(glass_texture)
+      context_{fonts_, catalog, library, telemetry_, settings_}, glass_texture_(glass_texture)
 {
     for (ConceptFactory factory : concept_registry())
         concepts_.push_back(factory(context_));

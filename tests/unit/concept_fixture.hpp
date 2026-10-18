@@ -24,7 +24,7 @@ namespace hui::testing
 class ConceptFixture : public ::testing::Test
 {
   protected:
-    ConceptFixture() : context_{fonts_, catalog_, telemetry_, settings_}
+    ConceptFixture() : context_{fonts_, catalog_, library_, telemetry_, settings_}
     {
         load("inter-regular", &regular_, &fonts_.regular);
         load("inter-semibold", &semibold_, &fonts_.semibold);
@@ -102,6 +102,8 @@ class ConceptFixture : public ::testing::Test
     gfx::Font regular_, semibold_, display_, mono_, pixel_, hand_;
     ui::Fonts fonts_;
     demo::Catalog catalog_;
+    // Empty unless a test fills it (see library_test.cpp for the fixture folder).
+    library::Library library_;
     app::Telemetry telemetry_;
     Settings settings_;
     app::Context context_;

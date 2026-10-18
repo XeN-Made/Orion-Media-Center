@@ -1,0 +1,14 @@
+{
+  "applicationCategoryType": 0,
+  "contentVersion": "01.000.000",
+  "localizedParameters": {
+    "defaultLanguage": "fr-FR",
+    "en-US": {
+      "titleName": "Open Sky"
+    },
+    "fr-FR": {
+      "titleName": "Ciel Ouvert"
+    }
+  },
+  "titleId": "PPSA90108"
+}

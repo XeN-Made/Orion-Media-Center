@@ -30,8 +30,8 @@ namespace hui::app
 class Shell
 {
   public:
-    Shell(const ui::Fonts &fonts, const demo::Catalog &catalog, std::string data_root,
-          std::uint32_t glass_texture);
+    Shell(const ui::Fonts &fonts, const demo::Catalog &catalog, const library::Library &library,
+          std::string data_root, std::uint32_t glass_texture);
 
     static Settings load_settings(const std::string &data_root);
 

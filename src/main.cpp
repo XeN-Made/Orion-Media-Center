@@ -19,6 +19,8 @@
 #include "demo/catalog.hpp"
 #include "gfx/canvas.hpp"
 #include "gfx/renderer.hpp"
+#include "library/icon.hpp"
+#include "library/library.hpp"
 #include "platform/ps5/audio_out.hpp"
 #include "platform/ps5/display_egl.hpp"
 #include "platform/ps5/pad.hpp"
@@ -191,6 +193,24 @@ int main()
     sys::log("[HUI] cover art %zu covers in %lld ms", catalog.size(),
              static_cast<long long>((sys::monotonic_us() - art_start) / 1000));
 
+    // The installed titles, as ShadowMountPlus sees them. /data is visible
+    // here only because ShadowMountPlus mounts it into the titles it launches.
+    library::Library titles;
+    {
+        library::ScanOptions scan = library::console_defaults();
+        std::string param;
+        library::Title self;
+        if (save::read_file("/app0/sce_sys/param.json", &param) &&
+            library::read_param_json(param, &self))
+            scan.exclude.push_back(self.id);
+        const std::int64_t scan_start = sys::monotonic_us();
+        titles.titles = library::scan(scan);
+        titles.scanned = true;
+        const int icons = library::load_icons(titles, renderer.batch());
+        sys::log("[HUI] library titles=%zu icons=%d in %lld ms", titles.titles.size(), icons,
+                 static_cast<long long>((sys::monotonic_us() - scan_start) / 1000));
+    }
+
     ps5::Pad pad;
     pad.open();
     InputTracker tracker;
@@ -208,7 +228,7 @@ int main()
     for (const std::string &error : bank.errors)
         sys::log("[HUI] sound rejected %s", error.c_str());
 
-    app::Shell shell(fonts, catalog, kDataRoot, renderer.glass_texture());
+    app::Shell shell(fonts, catalog, titles, kDataRoot, renderer.glass_texture());
     const std::string version = read_content_version("/app0/sce_sys/param.json");
     shell.set_version(version);
     sys::log("[HUI] version %s designs=%zu", version.empty() ? "unknown" : version.c_str(),

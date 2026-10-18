@@ -10,13 +10,15 @@ namespace hui::app
 std::span<const ConceptFactory> concept_registry()
 {
     static constexpr ConceptFactory kFactories[] = {
-        concepts::make_aurora,    concepts::make_paper,         concepts::make_neon,
-        concepts::make_editorial, concepts::make_carousel,      concepts::make_radial,
-        concepts::make_hud,       concepts::make_dashboard,     concepts::make_player,
-        concepts::make_keyboard,  concepts::make_constellation, concepts::make_terminal,
-        concepts::make_store,     concepts::make_trophies,      concepts::make_files,
-        concepts::make_inventory, concepts::make_boot,          concepts::make_settings,
-        concepts::make_themes,    concepts::make_components,    concepts::make_toolbox,
+        // ORION opens on the library; the reference designs follow.
+        concepts::make_library,  concepts::make_aurora,    concepts::make_paper,
+        concepts::make_neon,     concepts::make_editorial, concepts::make_carousel,
+        concepts::make_radial,   concepts::make_hud,       concepts::make_dashboard,
+        concepts::make_player,   concepts::make_keyboard,  concepts::make_constellation,
+        concepts::make_terminal, concepts::make_store,     concepts::make_trophies,
+        concepts::make_files,    concepts::make_inventory, concepts::make_boot,
+        concepts::make_settings, concepts::make_themes,    concepts::make_components,
+        concepts::make_toolbox,
     };
     return kFactories;
 }

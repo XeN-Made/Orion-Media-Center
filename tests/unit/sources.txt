@@ -20,6 +20,10 @@ src/demo/catalog.cpp
 src/gfx/draw_list.cpp
 src/gfx/font.cpp
 src/gfx/triangulate.cpp
+src/library/icon.cpp
+src/library/json.cpp
+src/library/library.cpp
+src/third_party/stb/image.c
 src/third_party/stb/vorbis.c
 src/ui/components/*.cpp
 src/ui/confetti.cpp

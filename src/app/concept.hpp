@@ -10,6 +10,7 @@
 #include "demo/catalog.hpp"
 #include "gfx/backdrop_spec.hpp"
 #include "gfx/draw_list.hpp"
+#include "library/library.hpp"
 #include "ui/feedback.hpp"
 #include "ui/fonts.hpp"
 
@@ -58,6 +59,8 @@ struct Context
 {
     const ui::Fonts &fonts;
     const demo::Catalog &catalog;
+    // The titles installed on the console (library/library.hpp).
+    const library::Library &library;
     const Telemetry &telemetry;
     // Live settings. A design that edits them sets settings_changed; the app
     // applies the change (volumes, button swap, ...) and saves it.

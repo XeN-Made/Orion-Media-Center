@@ -4,6 +4,8 @@
 //
 // usage: hui_snapshots <assets dir> <output dir> [design id|all] [width height]
 //
+// HUI_LIBRARY=<dir> shows that library instead of tests/fixtures/library.
+//
 // Runs the same shell, designs and tour script as the console build, through
 // Mesa's surfaceless EGL (llvmpipe), with a fixed 60 Hz clock. Only the frames
 // the tour marks are rendered, so a full run takes seconds. With
@@ -22,6 +24,8 @@
 #include "demo/catalog.hpp"
 #include "gfx/gl_program.hpp"
 #include "gfx/renderer.hpp"
+#include "library/icon.hpp"
+#include "library/library.hpp"
 #include "manifest.hpp"
 #include "ui/fonts.hpp"
 
@@ -253,7 +257,24 @@ int main(int argc, char **argv)
     hui::save::ensure_directory(output);
     hui::save::ensure_directory(data_root);
     std::remove((data_root + "/settings.bin").c_str());
-    hui::app::Shell shell(fonts, catalog, data_root, renderer.glass_texture());
+    // HUI_LIBRARY=<dir>: the library to show, laid out like a console's /data
+    // (<dir>/homebrew, <dir>/icon-cache). The default is the invented one the
+    // unit tests use, so pictures do not depend on what this PC has.
+    hui::library::Library titles;
+    {
+        const char *library_dir = std::getenv("HUI_LIBRARY");
+        const std::string base =
+            library_dir != nullptr ? library_dir : assets + "/../tests/fixtures/library";
+        hui::library::ScanOptions scan;
+        scan.roots = {base + "/homebrew"};
+        scan.icon_cache = base + "/icon-cache";
+        titles.titles = hui::library::scan(scan);
+        titles.scanned = true;
+        const int icons = hui::library::load_icons(titles, renderer.batch());
+        std::fprintf(stderr, "library: %zu titles, %d icons from %s\n", titles.titles.size(), icons,
+                     base.c_str());
+    }
+    hui::app::Shell shell(fonts, catalog, titles, data_root, renderer.glass_texture());
     shell.set_version("host");
 
     constexpr float kDt = 1.0f / 60.0f;
