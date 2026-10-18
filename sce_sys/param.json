@@ -12,18 +12,11 @@
   "attribute": 1644167168,
   "attribute2": 0,
   "attribute3": 1048576,
-  "conceptId": "99050",
+  "conceptId": "99061",
   "contentBadgeType": 1,
-  "contentId": "UP9000-PPSA99050_00-PS5HOMEBREWUI001",
+  "contentId": "UP9000-PPSA99061_00-ORIONMEDIACENTER",
   "contentVersion": "01.000.010",
   "downloadDataSize": 256,
-  "gameIntent": {
-    "permittedIntents": [
-      {
-        "intentType": "launchActivity"
-      }
-    ]
-  },
   "kernel": {
     "cpuPageTableSize": 268435456,
     "gpuPageTableSize": 268435456
@@ -31,7 +24,7 @@
   "localizedParameters": {
     "defaultLanguage": "en-US",
     "en-US": {
-      "titleName": "Homebrew UI Lab"
+      "titleName": "ORION Media Center"
     }
   },
   "masterVersion": "01.00",
@@ -42,6 +35,13 @@
   },
   "requiredSystemSoftwareVersion": "0x0000000000000000",
   "sdkVersion": "0x0000000000000000",
-  "titleId": "PPSA99050",
-  "versionFileUri": ""
+  "titleId": "PPSA99061",
+  "versionFileUri": "",
+  "gameIntent": {
+    "permittedIntents": [
+      {
+        "intentType": "launchActivity"
+      }
+    ]
+  }
 }
