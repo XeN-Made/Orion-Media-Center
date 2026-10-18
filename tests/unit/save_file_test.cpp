@@ -138,4 +138,25 @@ TEST(SaveFile, ListFilesPrefersTheIndex)
     EXPECT_TRUE(hui::save::list_files(dir + "/missing").empty());
 }
 
+TEST(SaveFile, ListsADirectorySortedWithItsFolders)
+{
+    const std::string dir = std::string(HUI_SOURCE_DIR) + "/tests/fixtures/library/homebrew";
+    const std::vector<hui::save::DirectoryEntry> entries = hui::save::list_directory(dir);
+    ASSERT_GE(entries.size(), 10u);
+    EXPECT_TRUE(std::is_sorted(entries.begin(), entries.end(),
+                               [](const auto &a, const auto &b) { return a.name < b.name; }));
+    const auto find = [&](const std::string &name)
+    {
+        return std::find_if(entries.begin(), entries.end(),
+                            [&](const auto &entry) { return entry.name == name; });
+    };
+    ASSERT_NE(find("PPSA90101"), entries.end());
+    EXPECT_TRUE(find("PPSA90101")->directory);
+    ASSERT_NE(find("readme.txt"), entries.end());
+    EXPECT_FALSE(find("readme.txt")->directory);
+    EXPECT_EQ(find("."), entries.end());
+    EXPECT_EQ(find(".."), entries.end());
+    EXPECT_TRUE(hui::save::list_directory(dir + "/missing").empty());
+}
+
 } // namespace

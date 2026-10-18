@@ -19,7 +19,6 @@
 #include <cstddef>
 #include <cstdlib>
 #include <cstring>
-#include <dirent.h>
 #include <sys/stat.h>
 
 namespace hui::library
@@ -33,35 +32,13 @@ constexpr std::size_t kMaxMetadata = 256u << 10;
 
 constexpr std::string_view kImageExtensions[] = {".ffpfsc", ".ffpkg", ".ffpfs", ".exfat"};
 
-struct Entry
-{
-    std::string name;
-    bool directory = false;
-};
+using Entry = save::DirectoryEntry;
 
-// Children of a directory, hidden names (".", "..", ".upload" temporaries)
-// left out, in a stable order.
+// Children of a directory with hidden names (".upload" temporaries) left out.
 std::vector<Entry> list_directory(const std::string &path)
 {
-    std::vector<Entry> entries;
-    DIR *dir = ::opendir(path.c_str());
-    if (dir == nullptr)
-        return entries;
-    while (const dirent *child = ::readdir(dir))
-    {
-        if (child->d_name[0] == '.')
-            continue;
-        Entry entry;
-        entry.name = child->d_name;
-        struct stat info = {};
-        if (::stat((path + "/" + entry.name).c_str(), &info) != 0)
-            continue;
-        entry.directory = S_ISDIR(info.st_mode);
-        entries.push_back(std::move(entry));
-    }
-    ::closedir(dir);
-    std::sort(entries.begin(), entries.end(),
-              [](const Entry &a, const Entry &b) { return a.name < b.name; });
+    std::vector<Entry> entries = save::list_directory(path);
+    std::erase_if(entries, [](const Entry &entry) { return entry.name.front() == '.'; });
     return entries;
 }
 
@@ -334,7 +311,9 @@ std::vector<Title> scan(const ScanOptions &options)
 
     for (const std::string &root : options.roots)
     {
-        for (const Entry &entry : list_directory(root))
+        const std::vector<Entry> entries = list_directory(root);
+        const std::size_t before = titles.size() + images.size();
+        for (const Entry &entry : entries)
         {
             const std::string path = root + "/" + entry.name;
             Title title;
@@ -362,6 +341,10 @@ std::vector<Title> scan(const ScanOptions &options)
                 images.push_back(std::move(title));
             }
         }
+        if (options.report != nullptr && !entries.empty())
+            options.report->push_back(root + ": " + std::to_string(entries.size()) + " entries, " +
+                                      std::to_string(titles.size() + images.size() - before) +
+                                      " titles");
     }
 
     // Images last, so a folder of the same title is the one listed.

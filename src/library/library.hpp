@@ -69,6 +69,9 @@ struct ScanOptions
     std::string icon_cache;
     // Titles to leave out (ORION itself, for one).
     std::vector<std::string> exclude;
+    // When set, receives one line per root that could be listed:
+    // "<root>: <entries> entries, <titles> titles".
+    std::vector<std::string> *report = nullptr;
 };
 
 // The places ShadowMountPlus scans by default on a console, and its cache.

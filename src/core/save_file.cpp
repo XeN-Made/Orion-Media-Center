@@ -4,6 +4,7 @@
 
 #include "core/save_file.hpp"
 
+#include <algorithm>
 #include <cerrno>
 #include <dirent.h>
 #include <cstring>
@@ -219,17 +220,73 @@ std::vector<std::string> list_files(const std::string &directory)
         }
         return names;
     }
-    if (DIR *dir = ::opendir(directory.c_str()))
+    for (DirectoryEntry &entry : list_directory(directory))
     {
-        while (const dirent *entry = ::readdir(dir))
-        {
-            const std::string name = entry->d_name;
-            if (name != "." && name != ".." && name != "index.txt")
-                names.push_back(name);
-        }
-        ::closedir(dir);
+        if (entry.name != "index.txt")
+            names.push_back(std::move(entry.name));
     }
     return names;
+}
+
+std::vector<DirectoryEntry> list_directory(const std::string &directory)
+{
+    std::vector<DirectoryEntry> entries;
+    const auto add = [&](const char *name, std::size_t length, unsigned type)
+    {
+        DirectoryEntry entry;
+        entry.name.assign(name, length);
+        if (entry.name == "." || entry.name == "..")
+            return;
+        if (type == DT_DIR || type == DT_REG)
+        {
+            entry.directory = type == DT_DIR;
+        }
+        else
+        {
+            // DT_UNKNOWN (some file systems leave the type out) or a link.
+            struct stat info
+            {
+            };
+            if (::stat((directory + "/" + entry.name).c_str(), &info) != 0)
+                return;
+            entry.directory = S_ISDIR(info.st_mode);
+        }
+        entries.push_back(std::move(entry));
+    };
+#if defined(__PROSPERO__)
+    const int fd = ::open(directory.c_str(), O_RDONLY | O_DIRECTORY);
+    if (fd < 0)
+        return entries;
+    // Records are FreeBSD 11 dirents: fileno (u32), reclen (u16), type (u8),
+    // namlen (u8), then the name. The buffer must hold a whole block.
+    alignas(8) char buffer[16384];
+    for (;;)
+    {
+        const int got = ::getdents(fd, buffer, static_cast<int>(sizeof(buffer)));
+        if (got <= 0)
+            break;
+        for (int at = 0; at < got;)
+        {
+            const dirent *record = reinterpret_cast<const dirent *>(buffer + at);
+            if (record->d_reclen == 0)
+                break;
+            if (record->d_fileno != 0)
+                add(record->d_name, record->d_namlen, record->d_type);
+            at += record->d_reclen;
+        }
+    }
+    ::close(fd);
+#else
+    if (DIR *dir = ::opendir(directory.c_str()))
+    {
+        while (const dirent *record = ::readdir(dir))
+            add(record->d_name, std::strlen(record->d_name), record->d_type);
+        ::closedir(dir);
+    }
+#endif
+    std::sort(entries.begin(), entries.end(),
+              [](const DirectoryEntry &a, const DirectoryEntry &b) { return a.name < b.name; });
+    return entries;
 }
 
 } // namespace hui::save

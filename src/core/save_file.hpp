@@ -47,9 +47,19 @@ std::string write_atomic(const std::string &path, std::string_view data);
 // unreadable.
 bool read_file(const std::string &path, std::string *data, std::size_t max_bytes = 4u << 20);
 
+struct DirectoryEntry
+{
+    std::string name;
+    bool directory = false;
+};
+
+// Every entry of a directory except "." and "..", sorted by name; empty when
+// it cannot be opened. On the console the C library's readdir returns
+// nothing, so the kernel's records are read directly (getdents).
+std::vector<DirectoryEntry> list_directory(const std::string &directory);
+
 // Names of the files in a directory. Reads the build-generated index.txt
-// (one name per line) when present, because directory listing returns
-// nothing under /app0 on the console; otherwise lists the directory.
+// (one name per line) when present; otherwise lists the directory.
 std::vector<std::string> list_files(const std::string &directory);
 
 // Creates a directory if it does not exist (single level).

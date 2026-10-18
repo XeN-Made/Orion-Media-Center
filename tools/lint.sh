@@ -48,6 +48,9 @@ python3 - <<'PY'
 from pathlib import Path
 import json, re, subprocess
 for name in subprocess.check_output(["git", "ls-files", "*.json"], text=True).splitlines():
+    # Test fixtures under a broken-* folder are malformed on purpose.
+    if name.startswith("tests/fixtures/") and "/broken-" in name:
+        continue
     if Path(name).is_file():
         with open(name, encoding="utf-8") as source:
             json.load(source)

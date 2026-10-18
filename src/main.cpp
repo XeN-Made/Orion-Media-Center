@@ -203,12 +203,27 @@ int main()
         if (save::read_file("/app0/sce_sys/param.json", &param) &&
             library::read_param_json(param, &self))
             scan.exclude.push_back(self.id);
+        std::vector<std::string> report;
+        scan.report = &report;
         const std::int64_t scan_start = sys::monotonic_us();
         titles.titles = library::scan(scan);
         titles.scanned = true;
         const int icons = library::load_icons(titles, renderer.batch());
-        sys::log("[HUI] library titles=%zu icons=%d in %lld ms", titles.titles.size(), icons,
-                 static_cast<long long>((sys::monotonic_us() - scan_start) / 1000));
+        char summary[128];
+        std::snprintf(summary, sizeof(summary), "titles=%zu icons=%d in %lld ms",
+                      titles.titles.size(), icons,
+                      static_cast<long long>((sys::monotonic_us() - scan_start) / 1000));
+        sys::log("[HUI] library %s", summary);
+        // The same report where a PC can read it over FTP after the app has
+        // closed (klog is gone by then): /data/orion/scan.txt.
+        std::string text = std::string(summary) + "\n";
+        for (const std::string &line : report)
+        {
+            sys::log("[HUI] library %s", line.c_str());
+            text += line + "\n";
+        }
+        if (save::ensure_directory("/data/orion"))
+            save::write_atomic("/data/orion/scan.txt", text);
     }
 
     ps5::Pad pad;
@@ -228,7 +243,8 @@ int main()
     for (const std::string &error : bank.errors)
         sys::log("[HUI] sound rejected %s", error.c_str());
 
-    app::Shell shell(fonts, catalog, titles, kDataRoot, renderer.glass_texture());
+    app::Shell shell(fonts, catalog, titles, kDataRoot, renderer.glass_texture(),
+                     app::orion_registry());
     const std::string version = read_content_version("/app0/sce_sys/param.json");
     shell.set_version(version);
     sys::log("[HUI] version %s designs=%zu", version.empty() ? "unknown" : version.c_str(),
