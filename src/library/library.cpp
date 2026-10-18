@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstddef>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <sys/stat.h>
@@ -35,9 +36,9 @@ constexpr std::string_view kImageExtensions[] = {".ffpfsc", ".ffpkg", ".ffpfs", 
 using Entry = save::DirectoryEntry;
 
 // Children of a directory with hidden names (".upload" temporaries) left out.
-std::vector<Entry> list_directory(const std::string &path)
+std::vector<Entry> visible_entries(const std::string &path, save::ListingStats *stats = nullptr)
 {
-    std::vector<Entry> entries = save::list_directory(path);
+    std::vector<Entry> entries = save::list_directory(path, stats);
     std::erase_if(entries, [](const Entry &entry) { return entry.name.front() == '.'; });
     return entries;
 }
@@ -290,7 +291,10 @@ bool parse_image_name(std::string_view file_name, Title *title)
 ScanOptions console_defaults()
 {
     ScanOptions options;
-    options.roots = {"/data/homebrew", "/mnt/ext0/homebrew"};
+    // /user/data is what /data points at; listing it directly is the
+    // fallback when the sandbox's /data does not show ShadowMountPlus's own
+    // mount of /data/homebrew.
+    options.roots = {"/data/homebrew", "/user/data/homebrew", "/mnt/ext0/homebrew"};
     for (int usb = 0; usb < 8; ++usb)
         options.roots.push_back("/mnt/usb" + std::to_string(usb) + "/homebrew");
     options.icon_cache = "/data/shadowmount/icon-cache";
@@ -311,7 +315,8 @@ std::vector<Title> scan(const ScanOptions &options)
 
     for (const std::string &root : options.roots)
     {
-        const std::vector<Entry> entries = list_directory(root);
+        save::ListingStats stats;
+        const std::vector<Entry> entries = visible_entries(root, &stats);
         const std::size_t before = titles.size() + images.size();
         for (const Entry &entry : entries)
         {
@@ -341,14 +346,26 @@ std::vector<Title> scan(const ScanOptions &options)
                 images.push_back(std::move(title));
             }
         }
-        if (options.report != nullptr && !entries.empty())
-            options.report->push_back(root + ": " + std::to_string(entries.size()) + " entries, " +
-                                      std::to_string(titles.size() + images.size() - before) +
-                                      " titles");
+        if (options.report != nullptr)
+        {
+            // Every root gets a line, so a folder that comes back empty says why.
+            char line[256];
+            if (stats.open_error != 0)
+                std::snprintf(line, sizeof(line), "%s: cannot open (errno %d)", root.c_str(),
+                              stats.open_error);
+            else
+                std::snprintf(line, sizeof(line),
+                              "%s: %zu entries, %zu titles (reads %d, records %d, empty %d, "
+                              "read errno %d, stat failures %d errno %d)",
+                              root.c_str(), entries.size(), titles.size() + images.size() - before,
+                              stats.reads, stats.records, stats.empty_records, stats.read_error,
+                              stats.stat_failures, stats.stat_error);
+            options.report->push_back(line);
+        }
     }
 
     // Images last, so a folder of the same title is the one listed.
-    const std::vector<Entry> cache = list_directory(options.icon_cache);
+    const std::vector<Entry> cache = visible_entries(options.icon_cache);
     for (Title &image : images)
     {
         if (known(image.id))

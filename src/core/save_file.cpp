@@ -228,11 +228,15 @@ std::vector<std::string> list_files(const std::string &directory)
     return names;
 }
 
-std::vector<DirectoryEntry> list_directory(const std::string &directory)
+std::vector<DirectoryEntry> list_directory(const std::string &directory, ListingStats *stats)
 {
+    ListingStats local;
+    ListingStats &seen = stats != nullptr ? *stats : local;
+    seen = ListingStats();
     std::vector<DirectoryEntry> entries;
     const auto add = [&](const char *name, std::size_t length, unsigned type)
     {
+        ++seen.records;
         DirectoryEntry entry;
         entry.name.assign(name, length);
         if (entry.name == "." || entry.name == "..")
@@ -248,7 +252,11 @@ std::vector<DirectoryEntry> list_directory(const std::string &directory)
             {
             };
             if (::stat((directory + "/" + entry.name).c_str(), &info) != 0)
+            {
+                if (seen.stat_failures++ == 0)
+                    seen.stat_error = errno;
                 return;
+            }
             entry.directory = S_ISDIR(info.st_mode);
         }
         entries.push_back(std::move(entry));
@@ -256,13 +264,19 @@ std::vector<DirectoryEntry> list_directory(const std::string &directory)
 #if defined(__PROSPERO__)
     const int fd = ::open(directory.c_str(), O_RDONLY | O_DIRECTORY);
     if (fd < 0)
+    {
+        seen.open_error = errno;
         return entries;
+    }
     // Records are FreeBSD 11 dirents: fileno (u32), reclen (u16), type (u8),
     // namlen (u8), then the name. The buffer must hold a whole block.
     alignas(8) char buffer[16384];
     for (;;)
     {
         const int got = ::getdents(fd, buffer, static_cast<int>(sizeof(buffer)));
+        ++seen.reads;
+        if (got < 0)
+            seen.read_error = errno;
         if (got <= 0)
             break;
         for (int at = 0; at < got;)
@@ -272,17 +286,22 @@ std::vector<DirectoryEntry> list_directory(const std::string &directory)
                 break;
             if (record->d_fileno != 0)
                 add(record->d_name, record->d_namlen, record->d_type);
+            else
+                ++seen.empty_records;
             at += record->d_reclen;
         }
     }
     ::close(fd);
 #else
-    if (DIR *dir = ::opendir(directory.c_str()))
+    DIR *dir = ::opendir(directory.c_str());
+    if (dir == nullptr)
     {
-        while (const dirent *record = ::readdir(dir))
-            add(record->d_name, std::strlen(record->d_name), record->d_type);
-        ::closedir(dir);
+        seen.open_error = errno;
+        return entries;
     }
+    while (const dirent *record = ::readdir(dir))
+        add(record->d_name, std::strlen(record->d_name), record->d_type);
+    ::closedir(dir);
 #endif
     std::sort(entries.begin(), entries.end(),
               [](const DirectoryEntry &a, const DirectoryEntry &b) { return a.name < b.name; });

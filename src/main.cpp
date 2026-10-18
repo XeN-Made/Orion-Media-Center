@@ -29,6 +29,7 @@
 
 #include <cstring>
 #include <GL/glcorearb.h>
+#include <sys/stat.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -221,6 +222,29 @@ int main()
         {
             sys::log("[HUI] library %s", line.c_str());
             text += line + "\n";
+        }
+        // How this sandbox sees /data: a separate device for /data/homebrew
+        // means a mount on top of /data that this view does not show.
+        {
+            save::ListingStats stats;
+            const std::vector<save::DirectoryEntry> top = save::list_directory("/data", &stats);
+            std::string names;
+            for (const save::DirectoryEntry &entry : top)
+                names += " " + entry.name + (entry.directory ? "/" : "");
+            struct stat data_info = {};
+            struct stat homebrew_info = {};
+            const int data_rc = ::stat("/data", &data_info);
+            const int homebrew_rc = ::stat("/data/homebrew", &homebrew_info);
+            char line[192];
+            std::snprintf(line, sizeof(line),
+                          "/data: %zu entries (open errno %d); stat /data rc=%d dev=%llu; "
+                          "/data/homebrew rc=%d dev=%llu mode=%o",
+                          top.size(), stats.open_error, data_rc,
+                          static_cast<unsigned long long>(data_info.st_dev), homebrew_rc,
+                          static_cast<unsigned long long>(homebrew_info.st_dev),
+                          static_cast<unsigned>(homebrew_info.st_mode));
+            text += std::string(line) + "\n/data names:" + names + "\n";
+            sys::log("[HUI] library %s", line);
         }
         if (save::ensure_directory("/data/orion"))
             save::write_atomic("/data/orion/scan.txt", text);

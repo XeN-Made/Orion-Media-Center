@@ -53,10 +53,23 @@ struct DirectoryEntry
     bool directory = false;
 };
 
+// What happened while listing, for diagnosing a folder that comes back empty.
+struct ListingStats
+{
+    int open_error = 0;    // errno of a failed open, else 0
+    int read_error = 0;    // errno of a failed getdents, else 0
+    int reads = 0;         // getdents calls (console only)
+    int records = 0;       // named records seen, "." and ".." included
+    int empty_records = 0; // records with no file number (skipped)
+    int stat_failures = 0; // records whose type had to be looked up and could not be
+    int stat_error = 0;    // errno of the first of those
+};
+
 // Every entry of a directory except "." and "..", sorted by name; empty when
 // it cannot be opened. On the console the C library's readdir returns
 // nothing, so the kernel's records are read directly (getdents).
-std::vector<DirectoryEntry> list_directory(const std::string &directory);
+std::vector<DirectoryEntry> list_directory(const std::string &directory,
+                                           ListingStats *stats = nullptr);
 
 // Names of the files in a directory. Reads the build-generated index.txt
 // (one name per line) when present; otherwise lists the directory.
