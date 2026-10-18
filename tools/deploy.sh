@@ -95,7 +95,10 @@ def remove_entry(ftp, path):
         message = str(error)
         if reply_code(error) == "550" and "No such file or directory" in message:
             return False
-        if reply_code(error) != "550" or "Directory not empty" not in message:
+        # Other ftpsrv builds refuse DELE on any directory ("Not a regular file").
+        if reply_code(error) != "550" or not (
+            "Directory not empty" in message or "Not a regular file" in message
+        ):
             raise
 
     for name in list_names(ftp, path):
