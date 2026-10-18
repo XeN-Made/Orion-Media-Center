@@ -30,8 +30,11 @@ namespace hui::app
 class Shell
 {
   public:
+    // designs is what L1/R1 cycles through; with a single design there is no
+    // switch and no design banner.
     Shell(const ui::Fonts &fonts, const demo::Catalog &catalog, const library::Library &library,
-          std::string data_root, std::uint32_t glass_texture);
+          std::string data_root, std::uint32_t glass_texture,
+          std::span<const ConceptFactory> designs = concept_registry());
 
     static Settings load_settings(const std::string &data_root);
 

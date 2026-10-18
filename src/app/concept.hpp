@@ -144,5 +144,8 @@ using ConceptFactory = std::unique_ptr<Concept> (*)(Context &context);
 
 // Every design, in switcher order (src/concepts/registry.cpp).
 std::span<const ConceptFactory> concept_registry();
+// What ORION itself shows: its own screens only. The reference designs stay
+// in concept_registry() for the tests and the PC tools.
+std::span<const ConceptFactory> orion_registry();
 
 } // namespace hui::app

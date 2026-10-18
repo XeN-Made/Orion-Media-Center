@@ -46,11 +46,12 @@ Settings Shell::load_settings(const std::string &data_root)
 }
 
 Shell::Shell(const ui::Fonts &fonts, const demo::Catalog &catalog, const library::Library &library,
-             std::string data_root, std::uint32_t glass_texture)
+             std::string data_root, std::uint32_t glass_texture,
+             std::span<const ConceptFactory> designs)
     : fonts_(fonts), data_root_(std::move(data_root)), settings_(load_settings(data_root_)),
       context_{fonts_, catalog, library, telemetry_, settings_}, glass_texture_(glass_texture)
 {
-    for (ConceptFactory factory : concept_registry())
+    for (ConceptFactory factory : designs)
         concepts_.push_back(factory(context_));
     if (!concepts_.empty())
     {
@@ -58,7 +59,7 @@ Shell::Shell(const ui::Fonts &fonts, const demo::Catalog &catalog, const library
         previous_ = current_;
         concepts_[current_]->enter();
     }
-    banner_ = kBannerSeconds;
+    banner_ = concepts_.size() > 1 ? kBannerSeconds : 0.0f;
 }
 
 audio::SoundSet Shell::sound_set() const
@@ -123,7 +124,7 @@ void Shell::update(const InputFrame &input, float dt)
     }
 
     const int count = static_cast<int>(concepts_.size());
-    if (input.is_pressed(Action::page_next) || input.is_pressed(Action::page_prev))
+    if (count > 1 && (input.is_pressed(Action::page_next) || input.is_pressed(Action::page_prev)))
     {
         direction_ = input.is_pressed(Action::page_next) ? 1 : -1;
         show(static_cast<std::size_t>((static_cast<int>(current_) + direction_ + count) % count),
@@ -294,10 +295,13 @@ void Shell::draw_chrome()
         ui::HintLayout layout;
         layout.size = 34;
         layout.text_size = 22;
-        ui::draw_hints(chrome_, fonts_, glyphs, hints, 2, left, false, layout);
+        // A single design has nothing to switch to.
+        const bool several = concepts_.size() > 1;
+        ui::draw_hints(chrome_, fonts_, glyphs, several ? hints : hints + 1, several ? 2 : 1, left,
+                       false, layout);
         if (!version_.empty())
         {
-            std::snprintf(text, sizeof(text), "ps5-homebrew-ui %s", version_.c_str());
+            std::snprintf(text, sizeof(text), "ORION Media Center %s", version_.c_str());
             ui::text(chrome_, fonts_.regular, text, left, 952, 18, white.with_alpha(0.4f));
         }
         chrome_.pop_opacity();

@@ -23,4 +23,10 @@ std::span<const ConceptFactory> concept_registry()
     return kFactories;
 }
 
+std::span<const ConceptFactory> orion_registry()
+{
+    static constexpr ConceptFactory kFactories[] = {concepts::make_library};
+    return kFactories;
+}
+
 } // namespace hui::app
