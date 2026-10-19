@@ -6,14 +6,20 @@
 // the never-return main policy, and libc entry points the clean-room libc
 // shim does not provide but the statically linked Mesa runtime references.
 
+#include <dirent.h>
 #include <dlfcn.h>
 #include <errno.h>
+#include <fnmatch.h>
+#include <netdb.h>
+#include <netinet/in.h>
 #include <fcntl.h>
 #include <net/if.h>
 #include <pwd.h>
 #include <sys/socket.h>
 #include <time.h>
 #include <unistd.h>
+#include <stdarg.h>
+#include <stdatomic.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -335,4 +341,228 @@ void ZSTD_trace_decompress_end(unsigned long long context, const void *trace)
 {
     (void)context;
     (void)trace;
+}
+
+// --- What the SDK binds to libScePosixForWebKit ---
+//
+// The SDK's stubs take getaddrinfo and a few more from the browser's POSIX
+// module, which a game's process cannot reach: the call lands on address 0
+// (a page fault on an instruction read). These replace them; names are
+// looked up with libSceNet's resolver, which every title may use. IPv4 only.
+
+int sceNetInit(void);
+int sceNetPoolCreate(const char *name, int size, int flags);
+int sceNetResolverCreate(const char *name, int pool, int flags);
+int sceNetResolverStartNtoa(int resolver, const char *hostname, struct in_addr *address,
+                            int timeout_us, int retries, int flags);
+int sceNetResolverDestroy(int resolver);
+
+static int hui_net_pool = -1;
+
+static int hui_resolve(const char *host, struct in_addr *address)
+{
+    // One pool for the process; a resolver per lookup (they are cheap).
+    static atomic_int ready;
+    int expected = 0;
+    if (atomic_compare_exchange_strong(&ready, &expected, 1))
+    {
+        sceNetInit(); // fails harmlessly when the system already did it
+        hui_net_pool = sceNetPoolCreate("orion-dns", 16 * 1024, 0);
+        atomic_store(&ready, 2);
+    }
+    while (atomic_load(&ready) != 2)
+        sceKernelUsleep(1000);
+    if (hui_net_pool < 0)
+        return EAI_FAIL;
+    const int resolver = sceNetResolverCreate("orion", hui_net_pool, 0);
+    if (resolver < 0)
+        return EAI_AGAIN;
+    const int result = sceNetResolverStartNtoa(resolver, host, address, 10 * 1000 * 1000, 2, 0);
+    sceNetResolverDestroy(resolver);
+    return result < 0 ? EAI_NONAME : 0;
+}
+
+// "93.184.216.34" -> its address; 0 when it is not a dotted quad.
+static int hui_parse_ipv4(const char *text, struct in_addr *address)
+{
+    uint32_t value = 0;
+    for (int part = 0; part < 4; ++part)
+    {
+        if (*text < '0' || *text > '9')
+            return 0;
+        unsigned number = 0;
+        int digits = 0;
+        while (*text >= '0' && *text <= '9' && digits < 4)
+        {
+            number = number * 10u + (unsigned)(*text - '0');
+            ++text;
+            ++digits;
+        }
+        if (number > 255 || digits > 3)
+            return 0;
+        value = (value << 8) | number;
+        if (part < 3 && *text++ != '.')
+            return 0;
+    }
+    if (*text != '\0')
+        return 0;
+    address->s_addr = htonl(value);
+    return 1;
+}
+
+int getaddrinfo(const char *node, const char *service, const struct addrinfo *hints,
+                struct addrinfo **result)
+{
+    if (result == NULL || (node == NULL && service == NULL))
+        return EAI_NONAME;
+    *result = NULL;
+    const int family = hints != NULL ? hints->ai_family : AF_UNSPEC;
+    if (family != AF_UNSPEC && family != AF_INET)
+        return EAI_FAMILY;
+    long port = 0;
+    if (service != NULL && *service != '\0')
+    {
+        char *end = NULL;
+        port = strtol(service, &end, 10);
+        if (*end != '\0' || port < 0 || port > 65535)
+            return EAI_SERVICE;
+    }
+    struct in_addr address;
+    const int flags = hints != NULL ? hints->ai_flags : 0;
+    if (node == NULL)
+        address.s_addr = htonl((flags & AI_PASSIVE) != 0 ? INADDR_ANY : INADDR_LOOPBACK);
+    else if (!hui_parse_ipv4(node, &address))
+    {
+        if ((flags & AI_NUMERICHOST) != 0)
+            return EAI_NONAME;
+        const int failed = hui_resolve(node, &address);
+        if (failed != 0)
+            return failed;
+    }
+    struct
+    {
+        struct addrinfo info;
+        struct sockaddr_in socket;
+    } *entry = calloc(1, sizeof(*entry));
+    if (entry == NULL)
+        return EAI_MEMORY;
+    entry->socket.sin_len = sizeof(entry->socket);
+    entry->socket.sin_family = AF_INET;
+    entry->socket.sin_port = htons((uint16_t)port);
+    entry->socket.sin_addr = address;
+    entry->info.ai_family = AF_INET;
+    entry->info.ai_socktype =
+        hints != NULL && hints->ai_socktype != 0 ? hints->ai_socktype : SOCK_STREAM;
+    entry->info.ai_protocol = hints != NULL ? hints->ai_protocol : 0;
+    entry->info.ai_addrlen = sizeof(entry->socket);
+    entry->info.ai_addr = (struct sockaddr *)&entry->socket;
+    *result = &entry->info;
+    return 0;
+}
+
+void freeaddrinfo(struct addrinfo *list)
+{
+    // Each entry is one allocation with its address (see getaddrinfo).
+    while (list != NULL)
+    {
+        struct addrinfo *next = list->ai_next;
+        free(list);
+        list = next;
+    }
+}
+
+const char *gai_strerror(int code)
+{
+    switch (code)
+    {
+    case 0:
+        return "success";
+    case EAI_AGAIN:
+        return "temporary failure in name resolution";
+    case EAI_FAMILY:
+        return "address family not supported";
+    case EAI_MEMORY:
+        return "out of memory";
+    case EAI_NONAME:
+        return "host not found";
+    case EAI_SERVICE:
+        return "service not supported";
+    default:
+        return "name resolution failed";
+    }
+}
+
+// Numbers only: an IPv4 address and a port, as curl asks for them.
+int getnameinfo(const struct sockaddr *address, socklen_t length, char *host, size_t host_size,
+                char *service, size_t service_size, int flags)
+{
+    (void)flags;
+    if (address == NULL || address->sa_family != AF_INET ||
+        length < (socklen_t)sizeof(struct sockaddr_in))
+        return EAI_FAMILY;
+    const struct sockaddr_in *in = (const struct sockaddr_in *)address;
+    const uint32_t value = ntohl(in->sin_addr.s_addr);
+    if (host != NULL && host_size > 0 &&
+        snprintf(host, host_size, "%u.%u.%u.%u", (unsigned)(value >> 24),
+                 (unsigned)(value >> 16) & 255u, (unsigned)(value >> 8) & 255u,
+                 (unsigned)value & 255u) >= (int)host_size)
+        return EAI_OVERFLOW;
+    if (service != NULL && service_size > 0 &&
+        snprintf(service, service_size, "%u", (unsigned)ntohs(in->sin_port)) >= (int)service_size)
+        return EAI_OVERFLOW;
+    return 0;
+}
+
+struct hostent *gethostbyname(const char *name)
+{
+    (void)name;
+    return NULL;
+}
+
+// Directory listing: readdir is broken in this runtime anyway (the library
+// scan uses getdents); the HTTPS path never lists folders.
+DIR *opendir(const char *path)
+{
+    (void)path;
+    errno = ENOSYS;
+    return NULL;
+}
+
+struct dirent *readdir(DIR *directory)
+{
+    (void)directory;
+    errno = EBADF;
+    return NULL;
+}
+
+int closedir(DIR *directory)
+{
+    (void)directory;
+    errno = EBADF;
+    return -1;
+}
+
+int fnmatch(const char *pattern, const char *text, int flags)
+{
+    (void)pattern;
+    (void)text;
+    (void)flags;
+    return FNM_NOMATCH;
+}
+
+// The console refuses FD_CLOEXEC on sockets (EINVAL), and curl drops every
+// socket it cannot mark. Nothing here ever execs another program, so the
+// flag means nothing: F_SETFD succeeds without asking. Everything else goes
+// to the system call.
+int _fcntl(int descriptor, int command, ...);
+
+int fcntl(int descriptor, int command, ...)
+{
+    va_list arguments;
+    va_start(arguments, command);
+    const intptr_t argument = va_arg(arguments, intptr_t);
+    va_end(arguments);
+    if (command == F_SETFD)
+        return 0;
+    return _fcntl(descriptor, command, argument);
 }
