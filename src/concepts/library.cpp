@@ -3,18 +3,25 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // ORION's home: every title ShadowMountPlus can mount (library/library.hpp),
-// as a grid of covers on five shelves (All, Games, Homebrew, Media,
-// Favourites), sorted four ways and filtered live from the on-screen
-// keyboard. Favourites are written to <state_dir>/favourites.json the moment
-// they change. Titles without artwork get a monogram on a colour derived from
-// their ID, so the same title always looks the same.
+// as a grid of covers on shelves: All, Games, Homebrew, Media, Favourites,
+// then the player's own tabs. Cross on a cover opens a menu to star it or
+// move it to a tab; Options opens Settings (orion/settings_panel.hpp), where
+// the look and the library's behaviour are edited live. Everything the
+// player chooses is written to <state_dir> the moment it changes:
+// favourites.json, library.json (tabs, placements, last tab, sort) and
+// theme.json (the look). Titles without artwork get a monogram on a colour
+// derived from their ID, so the same title always looks the same.
 
 #include "concepts/concepts.hpp"
 
 #include "core/tween.hpp"
 #include "library/favourites.hpp"
+#include "orion/look.hpp"
+#include "orion/prefs.hpp"
+#include "orion/settings_panel.hpp"
 #include "ui/components/grid.hpp"
 #include "ui/components/keyboard.hpp"
+#include "ui/components/menu.hpp"
 #include "ui/components/tabs.hpp"
 #include "ui/glyphs.hpp"
 #include "ui/motion.hpp"
@@ -46,22 +53,23 @@ constexpr float kGridBottom = 972.0f;
 // single row alone on the screen.
 constexpr int kColumns = 7;
 constexpr std::size_t kMaxQuery = 40; // bytes
+constexpr std::size_t kMaxName = 24;  // bytes, as orion::LibraryPrefs keeps them
 // The search panel sits under the first row of covers, so the results of
 // what is typed stay in view above it.
 constexpr Rect kSearchPanel{544.0f, 590.0f, 832.0f, 378.0f};
 constexpr Rect kSearchField{560.0f, 606.0f, 800.0f, 56.0f};
 constexpr Rect kKeysRect{560.0f, 670.0f, 800.0f, 290.0f};
 
-enum Tab : int
+// The built-in shelves, by the key library.json remembers them with.
+struct Shelf
 {
-    kAll,
-    kGames,
-    kHomebrew,
-    kMedia,
-    kFavourites,
-    kTabCount,
+    const char *key;
+    const char *name;
 };
-constexpr const char *kTabNames[kTabCount] = {"All", "Games", "Homebrew", "Media", "Favourites"};
+constexpr Shelf kShelves[] = {
+    {"all", "All"},     {"games", "Games"},           {"homebrew", "Homebrew"},
+    {"media", "Media"}, {"favourites", "Favourites"},
+};
 
 enum class Sort : int
 {
@@ -69,17 +77,47 @@ enum class Sort : int
     name_reversed,
     recent,
     platform,
-    count,
 };
-constexpr const char *kSortNames[] = {"Name A\u2013Z", "Name Z\u2013A", "Recently added",
-                                      "Platform"};
+constexpr const char *kSortKeys[] = {"name", "name_reversed", "recent", "platform"};
+constexpr const char *kSortNames[] = {"Name A–Z", "Name Z–A", "Recently added", "Platform"};
+
+// What the on-screen keyboard is typing into.
+enum class Typing : std::uint8_t
+{
+    none,
+    search,
+    new_tab,           // from Settings > Tabs > New tab
+    new_tab_for_title, // from a title's menu: the title moves into it
+    rename_tab,
+};
+
+// Who the open menu is about.
+enum class MenuFor : std::uint8_t
+{
+    title,
+    tab,
+};
+
+// Tags of the menu items.
+enum : int
+{
+    kItemFavourite = 1,
+    kItemNewTab,
+    kItemUnplace,
+    kItemLaunch,
+    kItemRename,
+    kItemLeft,
+    kItemRight,
+    kItemDelete,
+    kItemMove = 100, // + the tab's index
+};
 
 constexpr const char *kTechniques[] = {
     "Reads the console's library the way ShadowMountPlus does: folders, images, icon cache",
     "Shelves from the metadata itself: DRM-free titles are homebrew, the Media area is media",
+    "Custom tabs and placements, the last tab and the sort kept in library.json",
+    "A look edited live in Settings and kept in theme.json, over any base theme",
     "Live search from the on-screen keyboard; the grid filters as you type",
-    "Favourites kept in a JSON file that survives reinstalling the app",
-    "Monogram covers in a colour hashed from the title ID for titles without art",
 };
 
 constexpr app::TourStep kTour[] = {
@@ -89,8 +127,12 @@ constexpr app::TourStep kTour[] = {
     {0.6f, action_bit(Action::west), Direction::none, "homebrew"},
     {0.5f, action_bit(Action::jump_prev)},
     {0.3f, action_bit(Action::jump_prev)},
-    {0.6f, action_bit(Action::menu), Direction::none, "favourite"},
-    {0.6f, action_bit(Action::north), Direction::none, "sorted"},
+    {0.6f, action_bit(Action::confirm), Direction::none, "favourite"},
+    {0.6f, action_bit(Action::back), Direction::none, "title-menu"},
+    {0.4f, action_bit(Action::menu)},
+    {0.9f, 0, Direction::down, "settings"},
+    {0.5f, action_bit(Action::back)},
+    {0.6f, action_bit(Action::north)},
     {0.7f, 0, Direction::none, "search"},
     // Type "re": down to the letters, along to r, then back to e.
     {0.15f, 0, Direction::down},
@@ -124,16 +166,6 @@ ui::Theme clear_glass(const ui::Theme &base)
     t.light = Color::rgb(0xffffff, 0.34f);
     t.shadow = Color::rgb(0x000000, 0.25f);
     return t;
-}
-
-const ui::Theme &library_theme()
-{
-    for (const ui::Theme &theme : ui::themes())
-    {
-        if (std::strcmp(theme.id, "orion") == 0)
-            return theme;
-    }
-    return ui::themes()[0];
 }
 
 // FNV-1a of the ID, then a finaliser: IDs differ only in their last digits,
@@ -229,14 +261,40 @@ std::string folded(std::string_view text)
     return out;
 }
 
+Sort sort_of(const std::string &key)
+{
+    for (int i = 0; i < 4; ++i)
+    {
+        if (key == kSortKeys[i])
+            return static_cast<Sort>(i);
+    }
+    return Sort::name;
+}
+
+// A colour brighter by a factor, for clouds drawn from the nebula's colours.
+Color lifted(Color colour, float factor)
+{
+    return Color{std::min(1.0f, colour.r * factor), std::min(1.0f, colour.g * factor),
+                 std::min(1.0f, colour.b * factor), 1.0f};
+}
+
+// A menu row with just a label (MenuItem holds strings, so it is filled field
+// by field rather than brace-initialised in part).
+ui::MenuItem menu_item(std::string label)
+{
+    ui::MenuItem item;
+    item.label = std::move(label);
+    return item;
+}
+
 class Library final : public app::Concept
 {
   public:
     explicit Library(app::Context &context)
-        : context_(context), theme_(library_theme()),
+        : context_(context), look_(orion::load_look(context.library.state_dir)),
+          prefs_(orion::load_prefs(context.library.state_dir)),
           favourites_(library::load_favourites(context.library.state_dir))
     {
-        tabs_.style.theme = theme_;
         tabs_.style.kind = ui::TabKind::pill;
         tabs_.style.height = 52.0f;
         tabs_.style.text_size = 21.0f;
@@ -244,9 +302,8 @@ class Library final : public app::Concept
         tabs_.style.padding = 20.0f;
         tabs_.style.on_page = true;
         tabs_.style.focus_ring = false;
-        tabs_.set_bounds({kMargin, kTabsTop, 1080.0f, 56.0f});
+        tabs_.set_bounds({kMargin, kTabsTop, 1300.0f, 56.0f});
 
-        grid_.style.theme = theme_;
         grid_.style.columns = kColumns;
         grid_.style.gap_x = 28.0f;
         grid_.style.gap_y = 30.0f;
@@ -256,36 +313,26 @@ class Library final : public app::Concept
         grid_.style.card.subtitle_size = 17.0f;
         grid_.style.card.badge_corner = ui::CardCorner::top_right;
         grid_.style.card.glow = true;
-        grid_.style.card.radius = 22.0f; // soft covers, not tiles
         grid_.art = [this](ui::Canvas &canvas, const Rect &art, float radius,
                            const ui::CardItem &item, float /*focus*/)
         { draw_art(canvas, art, radius, item); };
         grid_.set_bounds(
             {kMargin, kGridTop, gfx::kVirtualWidth - 2.0f * kMargin, kGridBottom - kGridTop});
 
-        keys_.style.theme = clear_glass(theme_);
         keys_.style.bindings = ui::KeyboardBindings::standard();
         keys_.style.bindings.done = Action::menu;
-        keys_.style.max_length = static_cast<int>(kMaxQuery);
         keys_.set_bounds(kKeysRect);
-        keys_.on_text = [this](std::string_view utf8)
-        {
-            if (query_.size() + utf8.size() <= kMaxQuery)
-            {
-                query_ += utf8;
-                rebuild();
-            }
-        };
-        keys_.on_backspace = [this]
-        {
-            // Drop one whole UTF-8 character: continuation bytes, then its lead.
-            while (!query_.empty() && (static_cast<unsigned char>(query_.back()) & 0xc0) == 0x80)
-                query_.pop_back();
-            if (!query_.empty())
-                query_.pop_back();
-            rebuild();
-        };
+        keys_.on_text = [this](std::string_view utf8) { type(utf8); };
+        keys_.on_backspace = [this] { erase(); };
 
+        menu_.set_bounds({kMargin, 120.0f, gfx::kVirtualWidth - 2.0f * kMargin, 900.0f});
+        menu_.style.backing = 0.86f; // readable over bright covers
+        menu_.style.scrim = 0.25f;
+
+        restyle();
+        // ORION reopens where it was left, when asked to.
+        std::string start = prefs_.reopen_last_tab ? prefs_.last_tab : std::string("all");
+        rebuild_tabs(start);
         rebuild();
     }
 
@@ -297,7 +344,7 @@ class Library final : public app::Concept
             "Every title on this console, as ShadowMountPlus sees it",
             "src/concepts/library.cpp",
             audio::SoundSet::glass,
-            library_theme().accent,
+            orion::base_theme("orion").accent,
             kTechniques,
         };
         return kInfo;
@@ -314,56 +361,48 @@ class Library final : public app::Concept
         age_ += dt;
         clock_ += dt;
         const bool reduced = context_.settings.reduced_motion;
-        grid_.style.reduced_motion = tabs_.style.reduced_motion = keys_.style.reduced_motion =
-            reduced;
+        if (reduced != reduced_)
+        {
+            reduced_ = reduced;
+            restyle();
+        }
 
-        if (searching_)
-            update_search(input, feedback);
+        // One layer has the input: the keyboard, then a menu, then Settings,
+        // then the library itself.
+        if (typing_ != Typing::none)
+            update_typing(input, feedback);
+        else if (menu_.is_open())
+            update_menu(input, feedback);
+        else if (settings_.is_open())
+            update_settings(input, feedback);
         else
             update_browse(input, feedback);
 
         tabs_.update(dt);
         grid_.update(dt);
         keys_.update(dt);
-        keyboard_shown_.target = searching_ ? 1.0f : 0.0f;
+        menu_.update(dt);
+        settings_.update(dt);
+        keyboard_shown_.target = typing_ != Typing::none ? 1.0f : 0.0f;
         keyboard_shown_.update(dt, reduced ? 60.0f : 16.0f);
     }
 
     void draw(app::Frame &frame) const override
     {
-        const bool still = context_.settings.reduced_motion;
+        const bool still = context_.settings.reduced_motion || !look_.motion;
         const float drift = still ? 0.0f : clock_;
         frame.backdrop = theme_.backdrop;
         frame.backdrop.time = drift;
-        // The star layers slide at different fractions of the camera: a slow
-        // pan is enough to make the sky feel deep.
-        frame.backdrop.params[0] = drift * 6.0f;
-        frame.backdrop.params[1] = std::sin(drift * 0.05f) * 40.0f;
+        if (frame.backdrop.mode == gfx::BackdropMode::stars)
+        {
+            // The star layers slide at different fractions of the camera: a
+            // slow pan is enough to make the sky feel deep.
+            frame.backdrop.params[0] = drift * 6.0f;
+            frame.backdrop.params[1] = std::sin(drift * 0.05f) * 40.0f;
+        }
         if (theme_.style == ui::SurfaceStyle::glass)
         {
-            // Nebula clouds: large, faint and slow. They are what the frosted
-            // glass picks its colour up from.
-            struct Cloud
-            {
-                float x, y, size, speed;
-                std::uint32_t colour;
-                float alpha;
-            };
-            constexpr Cloud kClouds[] = {
-                {300.0f, 300.0f, 900.0f, 0.05f, 0x2448c8, 0.16f},
-                {1520.0f, 240.0f, 820.0f, 0.04f, 0x1a9ad0, 0.15f},
-                {1100.0f, 840.0f, 960.0f, 0.03f, 0x1f5f9a, 0.1f},
-                {380.0f, 920.0f, 700.0f, 0.06f, 0x1c3a9c, 0.12f},
-            };
-            for (int i = 0; i < 4; ++i)
-            {
-                const Cloud &c = kClouds[i];
-                const float phase = drift * c.speed + static_cast<float>(i) * 1.9f;
-                const float cx = c.x + std::sin(phase) * 120.0f;
-                const float cy = c.y + std::cos(phase * 1.2f) * 80.0f;
-                frame.scene.shadow({cx - c.size * 0.5f, cy - c.size * 0.5f, c.size, c.size},
-                                   c.size * 0.5f, c.size * 0.55f, Color::rgb(c.colour, c.alpha));
-            }
+            draw_clouds(frame.scene, drift);
             frame.glass = true;
         }
 
@@ -389,17 +428,15 @@ class Library final : public app::Concept
         draw_tab_sheen(list);
         draw_query(list, paint);
         if (grid_.count() > 0)
-        {
             draw_details(list, paint);
-        }
         else
-        {
             draw_empty(list, paint);
-        }
         if (keyboard_shown_.value > 0.01f)
             draw_keyboard(canvas, paint);
         else
             draw_hints(list, paint);
+        settings_.draw(canvas);
+        menu_.draw(canvas); // last: it belongs to whatever it was opened over
         list.pop_opacity();
     }
 
@@ -409,6 +446,25 @@ class Library final : public app::Concept
     }
 
   private:
+    // ---- styling ----
+
+    // The look's theme on every component; called when Settings changes it.
+    void restyle()
+    {
+        theme_ = orion::themed(look_);
+        tabs_.style.theme = grid_.style.theme = menu_.style.theme = theme_;
+        keys_.style.theme = clear_glass(theme_);
+        grid_.style.card.radius = look_.corners;
+        tabs_.style.reduced_motion = grid_.style.reduced_motion = keys_.style.reduced_motion =
+            menu_.style.reduced_motion = reduced_;
+        settings_.set_theme(theme_, reduced_);
+    }
+
+    void save_prefs() const
+    {
+        orion::save_prefs(context_.library.state_dir, prefs_);
+    }
+
     // ---- input ----
 
     void update_browse(const InputFrame &input, app::Feedback &feedback)
@@ -422,24 +478,23 @@ class Library final : public app::Concept
             input.is_pressed(Action::page_prev) || input.is_pressed(Action::jump_prev);
         if (next || previous)
         {
-            const int direction = next ? 1 : -1;
-            if (tabs_.step(direction, input, feedback) == ui::Event::changed)
+            if (tabs_.step(next ? 1 : -1, input, feedback) == ui::Event::changed)
+            {
+                prefs_.last_tab = active_key();
+                save_prefs();
                 rebuild();
+            }
             return;
         }
         if (input.is_pressed(Action::north))
         {
-            searching_ = true;
-            keys_.set_length(static_cast<int>(query_.size()));
+            start_typing(Typing::search, query_);
             feedback.play(audio::Cue::modal_open);
             return;
         }
         if (input.is_pressed(Action::menu))
         {
-            sort_ =
-                static_cast<Sort>((static_cast<int>(sort_) + 1) % static_cast<int>(Sort::count));
-            feedback.play(audio::Cue::tab);
-            rebuild();
+            settings_.open(look_, prefs_, feedback);
             return;
         }
         if (input.is_pressed(Action::back) && !query_.empty())
@@ -449,33 +504,244 @@ class Library final : public app::Concept
             rebuild();
             return;
         }
-        if (input.is_pressed(Action::west) && grid_.count() > 0)
+        if (grid_.count() == 0)
+            return;
+        if (input.is_pressed(Action::west))
         {
-            toggle_favourite(feedback);
+            toggle_favourite(focused().id, feedback);
             return;
         }
-        if (grid_.count() > 0)
-            grid_.handle(input, feedback);
+        if (input.is_pressed(Action::confirm))
+        {
+            open_title_menu(feedback);
+            return;
+        }
+        grid_.handle(input, feedback);
     }
 
-    void update_search(const InputFrame &input, app::Feedback &feedback)
+    void update_settings(const InputFrame &input, app::Feedback &feedback)
     {
-        keys_.set_length(static_cast<int>(query_.size()));
-        const ui::Event event = keys_.handle(input, feedback);
-        if (event == ui::Event::activated || event == ui::Event::cancelled)
+        switch (settings_.handle(input, feedback, &look_, &prefs_))
         {
-            searching_ = false;
-            feedback.play(audio::Cue::modal_close);
+        case orion::SettingsPanel::Change::look:
+            restyle();
+            orion::save_look(context_.library.state_dir, look_);
+            break;
+        case orion::SettingsPanel::Change::prefs:
+            save_prefs();
+            rebuild();
+            break;
+        case orion::SettingsPanel::Change::new_tab:
+            start_typing(Typing::new_tab, "");
+            feedback.play(audio::Cue::modal_open);
+            break;
+        case orion::SettingsPanel::Change::edit_tab:
+            open_tab_menu(settings_.tab_id(), feedback);
+            break;
+        case orion::SettingsPanel::Change::none:
+            break;
         }
     }
 
-    void toggle_favourite(app::Feedback &feedback)
+    // ---- the keyboard ----
+
+    void start_typing(Typing typing, std::string text)
     {
-        const Title &title = titles()[static_cast<std::size_t>(view_[focus_index()])];
-        const auto found = std::find(favourites_.begin(), favourites_.end(), title.id);
+        typing_ = typing;
+        if (typing == Typing::search)
+            query_ = std::move(text);
+        else
+            name_ = std::move(text);
+        keys_.style.max_length = static_cast<int>(typing == Typing::search ? kMaxQuery : kMaxName);
+        keys_.set_length(static_cast<int>(buffer().size()));
+    }
+
+    std::string &buffer()
+    {
+        return typing_ == Typing::search ? query_ : name_;
+    }
+
+    void type(std::string_view utf8)
+    {
+        const std::size_t limit = typing_ == Typing::search ? kMaxQuery : kMaxName;
+        if (buffer().size() + utf8.size() > limit)
+            return;
+        buffer() += utf8;
+        if (typing_ == Typing::search)
+            rebuild();
+    }
+
+    void erase()
+    {
+        // Drop one whole UTF-8 character: continuation bytes, then its lead.
+        std::string &text = buffer();
+        while (!text.empty() && (static_cast<unsigned char>(text.back()) & 0xc0) == 0x80)
+            text.pop_back();
+        if (!text.empty())
+            text.pop_back();
+        if (typing_ == Typing::search)
+            rebuild();
+    }
+
+    void update_typing(const InputFrame &input, app::Feedback &feedback)
+    {
+        keys_.set_length(static_cast<int>(buffer().size()));
+        const ui::Event event = keys_.handle(input, feedback);
+        if (event != ui::Event::activated && event != ui::Event::cancelled)
+            return;
+        const Typing typing = typing_;
+        typing_ = Typing::none;
+        feedback.play(audio::Cue::modal_close);
+        // Back keeps a search but abandons a name.
+        if (event == ui::Event::cancelled || typing == Typing::search)
+            return;
+
+        if (typing == Typing::rename_tab)
+        {
+            prefs_.rename_tab(menu_tab_, name_);
+        }
+        else
+        {
+            const std::string id = prefs_.add_tab(name_).id;
+            if (typing == Typing::new_tab_for_title)
+                prefs_.place(menu_title_, id);
+        }
+        save_prefs();
+        rebuild_tabs(active_key());
+        rebuild();
+        if (settings_.is_open())
+            settings_.refresh(look_, prefs_);
+        feedback.play(audio::Cue::saved);
+    }
+
+    // ---- menus ----
+
+    void open_title_menu(app::Feedback &feedback)
+    {
+        const Title &title = focused();
+        menu_for_ = MenuFor::title;
+        menu_title_ = title.id;
+        const orion::CustomTab *placed = prefs_.placement(title.id);
+
+        std::vector<ui::MenuItem> items;
+        ui::MenuItem favourite =
+            menu_item(favourite_of(title.id) ? "Remove from Favourites" : "Add to Favourites");
+        favourite.shortcut = "Square";
+        favourite.tag = kItemFavourite;
+        items.push_back(favourite);
+        ui::MenuItem line;
+        line.separator = true;
+        items.push_back(line);
+        for (std::size_t i = 0; i < prefs_.tabs.size(); ++i)
+        {
+            const bool here = placed != nullptr && placed->id == prefs_.tabs[i].id;
+            ui::MenuItem move = menu_item("Move to " + prefs_.tabs[i].name);
+            move.tag = kItemMove + static_cast<int>(i);
+            move.disabled = here;
+            move.shortcut = here ? "Here" : "";
+            items.push_back(move);
+        }
+        ui::MenuItem fresh = menu_item("Move to a new tab…");
+        fresh.tag = kItemNewTab;
+        items.push_back(fresh);
+        if (placed != nullptr)
+        {
+            ui::MenuItem unplace = menu_item("Remove from " + placed->name);
+            unplace.tag = kItemUnplace;
+            unplace.danger = true;
+            items.push_back(unplace);
+        }
+        items.push_back(line);
+        ui::MenuItem launch = menu_item("Launch");
+        launch.shortcut = "Coming soon";
+        launch.disabled = true;
+        launch.tag = kItemLaunch;
+        items.push_back(launch);
+        menu_.set_items(std::move(items));
+        menu_.open(grid_.cell_rect(grid_.focus()), feedback);
+    }
+
+    void open_tab_menu(const std::string &tab_id, app::Feedback &feedback)
+    {
+        menu_for_ = MenuFor::tab;
+        menu_tab_ = tab_id;
+        std::size_t index = 0;
+        while (index < prefs_.tabs.size() && prefs_.tabs[index].id != tab_id)
+            ++index;
+        ui::MenuItem rename = menu_item("Rename");
+        rename.tag = kItemRename;
+        ui::MenuItem left = menu_item("Move left");
+        left.tag = kItemLeft;
+        left.disabled = index == 0;
+        ui::MenuItem right = menu_item("Move right");
+        right.tag = kItemRight;
+        right.disabled = index + 1 >= prefs_.tabs.size();
+        ui::MenuItem line;
+        line.separator = true;
+        ui::MenuItem remove = menu_item("Delete tab");
+        remove.tag = kItemDelete;
+        remove.danger = true;
+        menu_.set_items({rename, left, right, line, remove});
+        menu_.open(settings_.focused_row(), feedback);
+    }
+
+    void update_menu(const InputFrame &input, app::Feedback &feedback)
+    {
+        if (menu_.handle(input, feedback) != ui::Event::activated)
+            return;
+        const int tag = menu_.items()[static_cast<std::size_t>(menu_.focus())].tag;
+        if (menu_.is_open())
+            menu_.close(feedback);
+
+        if (menu_for_ == MenuFor::title)
+        {
+            if (tag == kItemFavourite)
+            {
+                toggle_favourite(menu_title_, feedback);
+                return;
+            }
+            if (tag == kItemNewTab)
+            {
+                start_typing(Typing::new_tab_for_title, "");
+                feedback.play(audio::Cue::modal_open);
+                return;
+            }
+            if (tag == kItemUnplace)
+                prefs_.unplace(menu_title_);
+            else if (tag >= kItemMove && tag - kItemMove < static_cast<int>(prefs_.tabs.size()))
+                prefs_.place(menu_title_,
+                             prefs_.tabs[static_cast<std::size_t>(tag - kItemMove)].id);
+            save_prefs();
+            rebuild_tabs(active_key());
+            rebuild();
+            feedback.play(audio::Cue::place);
+            return;
+        }
+
+        // A tab, from Settings.
+        if (tag == kItemRename)
+        {
+            const orion::CustomTab *tab = prefs_.tab(menu_tab_);
+            start_typing(Typing::rename_tab, tab != nullptr ? tab->name : "");
+            feedback.play(audio::Cue::modal_open);
+            return;
+        }
+        if (tag == kItemLeft || tag == kItemRight)
+            prefs_.move_tab(menu_tab_, tag == kItemLeft ? -1 : 1);
+        else if (tag == kItemDelete)
+            prefs_.remove_tab(menu_tab_);
+        save_prefs();
+        rebuild_tabs(active_key());
+        rebuild();
+        settings_.refresh(look_, prefs_);
+    }
+
+    void toggle_favourite(const std::string &id, app::Feedback &feedback)
+    {
+        const auto found = std::find(favourites_.begin(), favourites_.end(), id);
         if (found == favourites_.end())
         {
-            favourites_.push_back(title.id);
+            favourites_.push_back(id);
             feedback.play(audio::Cue::favorite_on);
         }
         else
@@ -495,26 +761,40 @@ class Library final : public app::Concept
         return context_.library.titles;
     }
 
-    bool favourite(const std::string &id) const
+    const Title &focused() const
+    {
+        return titles()[static_cast<std::size_t>(view_[focus_index()])];
+    }
+
+    bool favourite_of(const std::string &id) const
     {
         return std::find(favourites_.begin(), favourites_.end(), id) != favourites_.end();
     }
 
-    bool on_tab(const Title &title, int tab) const
+    std::string active_key() const
     {
-        switch (tab)
-        {
-        case kGames:
-            return library::shelf_of(title) == library::Shelf::games;
-        case kHomebrew:
-            return library::shelf_of(title) == library::Shelf::homebrew;
-        case kMedia:
-            return library::shelf_of(title) == library::Shelf::media;
-        case kFavourites:
-            return favourite(title.id);
-        default:
+        const int active = tabs_.active();
+        return active >= 0 && active < static_cast<int>(tab_keys_.size())
+                   ? tab_keys_[static_cast<std::size_t>(active)]
+                   : std::string("all");
+    }
+
+    bool on_tab(const Title &title, const std::string &key) const
+    {
+        if (key == "all")
             return true;
-        }
+        if (key == "favourites")
+            return favourite_of(title.id);
+        const orion::CustomTab *placed = prefs_.placement(title.id);
+        if (key.rfind("tab:", 0) == 0)
+            return placed != nullptr && key.compare(4, std::string::npos, placed->id) == 0;
+        // A built-in shelf; a moved title may have left it.
+        if (placed != nullptr && prefs_.moved_leave_shelf)
+            return false;
+        const library::Shelf shelf = library::shelf_of(title);
+        return (key == "games" && shelf == library::Shelf::games) ||
+               (key == "homebrew" && shelf == library::Shelf::homebrew) ||
+               (key == "media" && shelf == library::Shelf::media);
     }
 
     int focus_index() const
@@ -522,33 +802,55 @@ class Library final : public app::Concept
         return std::clamp(grid_.focus(), 0, std::max(0, static_cast<int>(view_.size()) - 1));
     }
 
+    // The tab row: the built-in shelves, then the player's tabs. The active
+    // tab is chosen by key, so it survives tabs being added, moved or removed.
+    void rebuild_tabs(const std::string &active)
+    {
+        tab_keys_.clear();
+        std::vector<ui::TabItem> tabs;
+        const auto add = [&](std::string key, std::string name)
+        {
+            ui::TabItem item;
+            item.label = std::move(name);
+            item.badge = static_cast<int>(std::count_if(
+                titles().begin(), titles().end(), [&](const Title &t) { return on_tab(t, key); }));
+            tabs.push_back(std::move(item));
+            tab_keys_.push_back(std::move(key));
+        };
+        for (const Shelf &shelf : kShelves)
+            add(shelf.key, shelf.name);
+        for (const orion::CustomTab &tab : prefs_.tabs)
+            add("tab:" + tab.id, tab.name);
+        tabs_.set_tabs(std::move(tabs));
+        int index = 0;
+        for (std::size_t i = 0; i < tab_keys_.size(); ++i)
+        {
+            if (tab_keys_[i] == active)
+                index = static_cast<int>(i);
+        }
+        tabs_.set_active(index, true);
+    }
+
     // Recomputes what the grid shows from the tab, the query and the sort,
     // keeping the focus on the same title when it is still there.
     void rebuild()
     {
-        std::string focused;
+        std::string keep;
         if (!view_.empty())
-            focused = titles()[static_cast<std::size_t>(view_[focus_index()])].id;
+            keep = focused().id;
+        // The counts follow favourites and placements.
+        for (std::size_t i = 0; i < tab_keys_.size(); ++i)
+            tabs_.tab(static_cast<int>(i)).badge =
+                static_cast<int>(std::count_if(titles().begin(), titles().end(), [&](const Title &t)
+                                               { return on_tab(t, tab_keys_[i]); }));
 
-        std::vector<ui::TabItem> tabs;
-        for (int tab = 0; tab < kTabCount; ++tab)
-        {
-            ui::TabItem item;
-            item.label = kTabNames[tab];
-            item.badge = static_cast<int>(std::count_if(
-                titles().begin(), titles().end(), [&](const Title &t) { return on_tab(t, tab); }));
-            tabs.push_back(std::move(item));
-        }
-        const int active = tabs_.tabs().empty() ? 0 : tabs_.active();
-        tabs_.set_tabs(std::move(tabs));
-        tabs_.set_active(active, true);
-
+        const std::string key = active_key();
         const std::string needle = folded(query_);
         view_.clear();
         for (std::size_t i = 0; i < titles().size(); ++i)
         {
             const Title &title = titles()[i];
-            if (!on_tab(title, active))
+            if (!on_tab(title, key))
                 continue;
             if (!needle.empty() && folded(title.name).find(needle) == std::string::npos &&
                 folded(title.id).find(needle) == std::string::npos)
@@ -557,7 +859,7 @@ class Library final : public app::Concept
         }
         // The scan already sorted by name; every other order is a stable sort
         // on top of it, so ties stay alphabetical.
-        switch (sort_)
+        switch (sort_of(prefs_.sort))
         {
         case Sort::name_reversed:
             std::reverse(view_.begin(), view_.end());
@@ -579,7 +881,7 @@ class Library final : public app::Concept
         for (std::size_t i = 0; i < view_.size(); ++i)
         {
             const Title &title = titles()[static_cast<std::size_t>(view_[i])];
-            if (title.id == focused)
+            if (title.id == keep)
                 focus = static_cast<int>(i);
             ui::CardItem item;
             item.title = title.name;
@@ -599,6 +901,43 @@ class Library final : public app::Concept
 
     // ---- drawing ----
 
+    // Nebula clouds: large, faint and slow. They are what the frosted glass
+    // picks its colour up from. With ORION's own nebula they are the hues it
+    // was designed with; any other nebula lends its colours to them.
+    void draw_clouds(gfx::DrawList &scene, float drift) const
+    {
+        struct Cloud
+        {
+            float x, y, size, speed;
+            std::uint32_t designed;
+            bool far;
+            float alpha;
+        };
+        constexpr Cloud kClouds[] = {
+            {300.0f, 300.0f, 900.0f, 0.05f, 0x2448c8, false, 0.16f},
+            {1520.0f, 240.0f, 820.0f, 0.04f, 0x1a9ad0, true, 0.15f},
+            {1100.0f, 840.0f, 960.0f, 0.03f, 0x1f5f9a, true, 0.1f},
+            {380.0f, 920.0f, 700.0f, 0.06f, 0x1c3a9c, false, 0.12f},
+        };
+        const orion::Look designed = orion::default_look();
+        const bool own = orion::same_rgb(look_.nebula, designed.nebula) &&
+                         orion::same_rgb(look_.nebula_far, designed.nebula_far);
+        for (int i = 0; i < 4; ++i)
+        {
+            const Cloud &c = kClouds[i];
+            const Color hue = own ? Color::rgb(c.designed)
+                                  : lifted(c.far ? look_.nebula_far : look_.nebula, 2.0f);
+            const float alpha = c.alpha * look_.clouds;
+            if (alpha <= 0.001f)
+                continue;
+            const float phase = drift * c.speed + static_cast<float>(i) * 1.9f;
+            const float cx = c.x + std::sin(phase) * 120.0f;
+            const float cy = c.y + std::cos(phase * 1.2f) * 80.0f;
+            scene.shadow({cx - c.size * 0.5f, cy - c.size * 0.5f, c.size, c.size}, c.size * 0.5f,
+                         c.size * 0.55f, hue.with_alpha(std::min(1.0f, alpha)));
+        }
+    }
+
     void draw_header(gfx::DrawList &list, const ui::Painter &paint) const
     {
         const ui::Fonts &fonts = context_.fonts;
@@ -612,7 +951,8 @@ class Library final : public app::Concept
         ui::text(list, fonts.display, "Library", kMargin, 172, 62, paint.page_text());
         const std::size_t count = view_.size();
         const std::string summary = std::to_string(count) + (count == 1 ? " title" : " titles") +
-                                    "  \xc2\xb7  " + kSortNames[static_cast<int>(sort_)];
+                                    "  \xc2\xb7  " +
+                                    kSortNames[static_cast<int>(sort_of(prefs_.sort))];
         ui::text(list, fonts.regular, summary.c_str(), gfx::kVirtualWidth - kMargin, 172, 24,
                  paint.page_text_muted(), gfx::Align::right);
     }
@@ -626,7 +966,7 @@ class Library final : public app::Concept
         const float right = gfx::kVirtualWidth - kMargin;
         const float y = kTabsTop + 37.0f;
         float x = right;
-        if (!searching_)
+        if (typing_ != Typing::search)
         {
             const float w = ui::button_width(ui::Button::circle, 30);
             ui::draw_button(list, fonts, glyphs(), ui::Button::circle, right - w, y - 9, 30);
@@ -655,7 +995,7 @@ class Library final : public app::Concept
                                   Color::rgb(0xffffff, 0.0f));
         canvas.list.bordered_rect(art, radius, Color::rgb(0x000000, 0.0f), 1.0f,
                                   Color::rgb(0xffffff, 0.16f));
-        if (favourite(titles()[static_cast<std::size_t>(item.tag)].id))
+        if (favourite_of(titles()[static_cast<std::size_t>(item.tag)].id))
         {
             // A gold star on a dark disc in the corner the badge leaves free.
             const float r = std::max(14.0f, art.w * 0.075f);
@@ -668,12 +1008,14 @@ class Library final : public app::Concept
 
     void draw_details(gfx::DrawList &list, ui::Painter &paint) const
     {
-        const Title &title = titles()[static_cast<std::size_t>(view_[focus_index()])];
+        const Title &title = focused();
         std::string line = title.id;
         if (!title.version.empty())
             line += "   v" + title.version;
         line += "   " + std::string(shelf_name(library::shelf_of(title)));
-        if (favourite(title.id))
+        if (const orion::CustomTab *placed = prefs_.placement(title.id))
+            line += "   \xc2\xb7   " + placed->name;
+        if (favourite_of(title.id))
             line += "   \xc2\xb7   Favourite";
         const float width = context_.fonts.regular.font->measure(line, 21.0f);
         glass_panel(list, paint, {kMargin - 24.0f, 972.0f, width + 48.0f, 76.0f}, 38.0f);
@@ -685,52 +1027,57 @@ class Library final : public app::Concept
     {
         const ui::Fonts &fonts = context_.fonts;
         const float cx = gfx::kVirtualWidth * 0.5f;
-        const char *title = "No titles yet";
-        const char *first = "ORION shows what ShadowMountPlus can mount from /data/homebrew,";
-        const char *second = "/mnt/ext0/homebrew and USB drives.";
-        std::string searched;
+        const std::string key = active_key();
+        std::string title = "No titles yet";
+        std::string first = "ORION shows what ShadowMountPlus can mount from /data/homebrew,";
+        std::string second = "/mnt/ext0/homebrew and USB drives.";
         if (!titles().empty() && !query_.empty())
         {
-            searched = "Nothing matches \xe2\x80\x9c" + query_ + "\xe2\x80\x9d";
-            title = searched.c_str();
+            title = "Nothing matches \xe2\x80\x9c" + query_ + "\xe2\x80\x9d";
             first = "Try fewer letters, or press Circle to clear the search.";
-            second = "";
+            second.clear();
         }
-        else if (!titles().empty() && tabs_.active() == kFavourites)
+        else if (!titles().empty() && key == "favourites")
         {
             title = "No favourites yet";
             first = "Press Square on any title to star it.";
             second = "Starred titles collect here and keep their star.";
         }
+        else if (!titles().empty() && key.rfind("tab:", 0) == 0)
+        {
+            title = "Nothing here yet";
+            first = "Press Cross on any title and choose where to move it.";
+            second = "Titles you move here stay here.";
+        }
         else if (!titles().empty())
         {
             title = "Nothing on this shelf";
             first = "Press L1 or R1 to look at another one.";
-            second = "";
+            second.clear();
         }
-        ui::text(list, fonts.display, title, cx, 560, 46, paint.page_text(), gfx::Align::center);
-        ui::text(list, fonts.regular, first, cx, 616, 24, paint.page_text_muted(),
+        ui::text(list, fonts.display, title.c_str(), cx, 560, 46, paint.page_text(),
                  gfx::Align::center);
-        ui::text(list, fonts.regular, second, cx, 650, 24, paint.page_text_muted(),
+        ui::text(list, fonts.regular, first.c_str(), cx, 616, 24, paint.page_text_muted(),
+                 gfx::Align::center);
+        ui::text(list, fonts.regular, second.c_str(), cx, 650, 24, paint.page_text_muted(),
                  gfx::Align::center);
     }
 
     void draw_hints(gfx::DrawList &list, ui::Painter &paint) const
     {
         const ui::Hint hints[] = {
-            {ui::Button::l1, "Shelf", ui::Button::r1},
-            {ui::Button::square, "Favourite"},
-            {ui::Button::triangle, "Search"},
-            {ui::Button::options, "Sort"},
+            {ui::Button::l1, "Shelf", ui::Button::r1}, {ui::Button::cross, "More"},
+            {ui::Button::square, "Favourite"},         {ui::Button::triangle, "Search"},
+            {ui::Button::options, "Settings"},
         };
         const float right = gfx::kVirtualWidth - kMargin;
         ui::HintLayout layout;
         layout.size = 46.0f;
         layout.text_size = 26.0f;
         layout.cy = 1010.0f;
-        const float width = ui::measure_hints(context_.fonts, hints, 4, layout);
+        const float width = ui::measure_hints(context_.fonts, hints, 5, layout);
         glass_panel(list, paint, {right - width - 30.0f, 972.0f, width + 60.0f, 76.0f}, 38.0f);
-        ui::draw_hints(list, context_.fonts, glyphs(), hints, 4, right, true, layout);
+        ui::draw_hints(list, context_.fonts, glyphs(), hints, 5, right, true, layout);
     }
 
     // A frosted panel with a glossy sheen and a polished rim: the glass ORION's
@@ -783,7 +1130,7 @@ class Library final : public app::Concept
         sheen(list, track, track.h * 0.5f, false); // the bar has a rim of its own
     }
 
-    // The search overlay: a veil, the query in a field, the keyboard under it.
+    // The keyboard overlay: a veil, what is being typed in a field, the keys.
     void draw_keyboard(ui::Canvas &canvas, ui::Painter &paint) const
     {
         gfx::DrawList &list = canvas.list;
@@ -793,8 +1140,8 @@ class Library final : public app::Concept
                           Color::rgb(0x000000, 0.22f * shown));
         list.push_opacity(shown);
         list.push_transform(1.0f, 0.0f, 0.0f, 0.0f, 40.0f * (1.0f - shown));
-        // Frosted glass from the sky behind; it is opaque to the covers drawn
-        // in the same layer, so they do not show through the keys.
+        // Frosted glass from the sky and covers behind; it is opaque to the
+        // overlay, so nothing drawn above the glass capture shows through.
         glass_panel(list, paint, kSearchPanel, theme_.radius_card, Color::rgb(0xffffff, 0.05f),
                     0.25f);
         const Rect field = kSearchField;
@@ -802,13 +1149,18 @@ class Library final : public app::Concept
         list.bordered_rect(field, field.h * 0.5f, Color::rgb(0x000000, 0.0f), 1.0f,
                            Color::rgb(0xffffff, 0.18f));
         const ui::Fonts &fonts = context_.fonts;
-        const bool empty = query_.empty();
-        ui::text(list, fonts.regular, empty ? "Search titles or IDs" : query_.c_str(), field.x + 28,
+        const bool search = typing_ == Typing::search || typing_ == Typing::none;
+        const std::string &text = search ? query_ : name_;
+        const char *placeholder = search                          ? "Search titles or IDs"
+                                  : typing_ == Typing::rename_tab ? "Rename the tab"
+                                                                  : "Name the new tab";
+        const bool empty = text.empty();
+        ui::text(list, fonts.regular, empty ? placeholder : text.c_str(), field.x + 28,
                  field.y + 37, 25, empty ? Color::rgb(0xffffff, 0.66f) : Color::rgb(0xffffff));
         if (!empty || std::fmod(clock_, 1.0f) < 0.5f)
         {
             const float caret =
-                empty ? field.x + 26 : field.x + 30 + fonts.regular.font->measure(query_, 25.0f);
+                empty ? field.x + 26 : field.x + 30 + fonts.regular.font->measure(text, 25.0f);
             list.rounded_rect({caret, field.y + 13, 2.5f, 30}, 1.0f, theme_.accent);
         }
         keys_.draw(canvas);
@@ -817,15 +1169,24 @@ class Library final : public app::Concept
     }
 
     app::Context &context_;
-    const ui::Theme &theme_;
+    orion::Look look_;
+    orion::LibraryPrefs prefs_;
+    ui::Theme theme_;
+    bool reduced_ = false;
     std::vector<std::string> favourites_;
-    std::vector<int> view_; // indices into the library, in display order
+    std::vector<std::string> tab_keys_; // the key of each tab, in tab order
+    std::vector<int> view_;             // indices into the library, in display order
     std::string query_;
-    Sort sort_ = Sort::name;
-    bool searching_ = false;
+    std::string name_; // a tab name being typed
+    Typing typing_ = Typing::none;
+    MenuFor menu_for_ = MenuFor::title;
+    std::string menu_title_; // the title a menu is about
+    std::string menu_tab_;   // the tab a menu (or a rename) is about
     ui::TabBar tabs_;
     ui::GridView grid_;
     ui::Keyboard keys_;
+    ui::Menu menu_;
+    orion::SettingsPanel settings_;
     tween::Spring keyboard_shown_;
     float age_ = 0.0f;
     float clock_ = 0.0f;

@@ -6,6 +6,7 @@
 #include "concepts/concepts.hpp"
 #include "core/save_file.hpp"
 #include "library/favourites.hpp"
+#include "orion/prefs.hpp"
 
 #include <cstdio>
 
@@ -108,15 +109,71 @@ TEST_F(LibraryDesign, SquareStarsATitleAndSavesIt)
     EXPECT_TRUE(hui::library::load_favourites(dir).empty());
 }
 
-TEST_F(LibraryDesign, OptionsCyclesTheSort)
+TEST_F(LibraryDesign, OptionsOpensSettingsAndBackClosesThem)
 {
     auto design = with_fixture();
-    for (int i = 0; i < 4; ++i)
-    {
-        send(*design, press(hui::Action::menu));
-        EXPECT_TRUE(played(Cue::tab)) << i;
-        expect_drawable(*design);
-    }
+    send(*design, press(hui::Action::menu));
+    EXPECT_FALSE(last_cues_.empty());
+    expect_drawable(*design);
+    // The settings have the input: shoulders do not turn the shelves.
+    send(*design, press(hui::Action::page_next));
+    EXPECT_FALSE(played(Cue::tab));
+    send(*design, nav(Direction::down));
+    EXPECT_TRUE(played(Cue::focus));
+    send(*design, press(hui::Action::back));
+    expect_drawable(*design);
+    // Closed again: the grid has the input back.
+    send(*design, nav(Direction::right));
+    EXPECT_TRUE(played(Cue::focus));
+}
+
+TEST_F(LibraryDesign, CrossMovesATitleToACustomTabAndItIsRemembered)
+{
+    const std::string dir = ::testing::TempDir() + "orion-design-tabs";
+    ASSERT_TRUE(hui::save::ensure_directory(dir));
+    hui::orion::LibraryPrefs prefs;
+    const std::string rpgs = prefs.add_tab("RPGs").id;
+    ASSERT_TRUE(hui::orion::save_prefs(dir, prefs));
+    std::remove((dir + "/favourites.json").c_str());
+    library_.state_dir = dir;
+    auto design = with_fixture();
+
+    // Cross opens the menu on Ciel Ouvert: Favourite, then Move to RPGs.
+    send(*design, press(hui::Action::confirm));
+    EXPECT_FALSE(last_cues_.empty());
+    send(*design, nav(Direction::down));
+    send(*design, press(hui::Action::confirm));
+    expect_drawable(*design);
+    const hui::orion::LibraryPrefs saved = hui::orion::load_prefs(dir);
+    ASSERT_NE(saved.placement("PPSA90108"), nullptr);
+    EXPECT_EQ(saved.placement("PPSA90108")->id, rpgs);
+
+    // The RPGs tab (after the five shelves) holds just that title.
+    for (int i = 0; i < 5; ++i)
+        send(*design, press(hui::Action::page_next));
+    send(*design, nav(Direction::right));
+    EXPECT_TRUE(played(Cue::error));
+    EXPECT_EQ(hui::orion::load_prefs(dir).last_tab, "tab:" + rpgs);
+
+    // A new Library opens on that tab again.
+    auto again = hui::concepts::make_library(context_);
+    send(*again, nav(Direction::right));
+    EXPECT_TRUE(played(Cue::error));
+}
+
+TEST_F(LibraryDesign, ItStartsOnAllWhenAskedNotToRemember)
+{
+    const std::string dir = ::testing::TempDir() + "orion-design-noreopen";
+    ASSERT_TRUE(hui::save::ensure_directory(dir));
+    hui::orion::LibraryPrefs prefs;
+    prefs.last_tab = "media";
+    prefs.reopen_last_tab = false;
+    ASSERT_TRUE(hui::orion::save_prefs(dir, prefs));
+    library_.state_dir = dir;
+    auto design = with_fixture();
+    // All has seven titles in a row, so right moves.
+    send(*design, nav(Direction::right));
+    EXPECT_TRUE(played(Cue::focus));
 }
 
 TEST_F(LibraryDesign, TriangleOpensTheKeyboardAndCircleClosesIt)

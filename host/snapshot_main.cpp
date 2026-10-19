@@ -272,7 +272,8 @@ int main(int argc, char **argv)
         titles.scanned = true;
         // Favourites go to the scratch folder and start empty, like settings.
         titles.state_dir = data_root;
-        std::remove((data_root + "/favourites.json").c_str());
+        for (const char *file : {"/favourites.json", "/library.json", "/theme.json"})
+            std::remove((data_root + file).c_str());
         const int icons = hui::library::load_icons(titles, renderer.batch());
         std::fprintf(stderr, "library: %zu titles, %d icons from %s\n", titles.titles.size(), icons,
                      base.c_str());
