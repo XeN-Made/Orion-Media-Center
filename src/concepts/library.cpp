@@ -41,6 +41,8 @@
 #include <string>
 #include <vector>
 
+#include <sys/stat.h>
+
 namespace hui::concepts
 {
 
@@ -1063,8 +1065,7 @@ class Library final : public app::Concept
             why = "its path is longer than RetroArch reads";
         else if (title->is_rom() && !(keep_aside(args) && keep_aside(frontend)))
             why = "could not keep RetroArch's own settings aside";
-        else if (title->is_rom() &&
-                 !save::write_atomic(args, library::retroarch_args(core, title->rom)).empty())
+        else if (title->is_rom() && !write_shared(args, library::retroarch_args(core, title->rom)))
             why = "could not write " + args;
         else if (title->is_rom() && !write_frontend(frontend))
             why = "could not write " + frontend;
@@ -1273,6 +1274,15 @@ class Library final : public app::Concept
         launch_shown_ = 5.0f;
     }
 
+    // A file another title reads: written, then readable by every app. ORION's
+    // sandbox creates files for itself alone, and RetroArch's launcher, which
+    // decides what to do before it repairs permissions in its folder, then
+    // reads its defaults instead.
+    static bool write_shared(const std::string &file, std::string_view bytes)
+    {
+        return save::write_atomic(file, bytes).empty() && ::chmod(file.c_str(), 0666) == 0;
+    }
+
     // Keeps a file of RetroArch's before ORION writes its own: as
     // <file>.orion-backup, or, when there was none, an empty
     // <file>.orion-absent. A backup still there from an earlier start is the
@@ -1285,8 +1295,8 @@ class Library final : public app::Concept
         if (save::read_file(backup, &bytes, 1u << 20) || save::read_file(absent, &bytes, 1u << 20))
             return true;
         if (save::read_file(file, &bytes, 1u << 20))
-            return save::write_atomic(backup, bytes).empty();
-        return save::write_atomic(absent, "").empty();
+            return write_shared(backup, bytes);
+        return write_shared(absent, "");
     }
 
     // The undoing of keep_aside(), as the launch helper does it.
@@ -1297,7 +1307,7 @@ class Library final : public app::Concept
         std::string bytes;
         if (save::read_file(backup, &bytes, 1u << 20))
         {
-            if (save::write_atomic(file, bytes).empty())
+            if (write_shared(file, bytes))
                 std::remove(backup.c_str());
         }
         else if (save::read_file(absent, &bytes, 1u << 20))
@@ -1313,7 +1323,7 @@ class Library final : public app::Concept
         std::string current;
         if (!save::read_file(file + ".orion-backup", &current, 1u << 20))
             save::read_file(file, &current, 1u << 20);
-        return save::write_atomic(file, library::retroarch_frontend(current)).empty();
+        return write_shared(file, library::retroarch_frontend(current));
     }
 
     // The core a game for an emulator runs with: the player's choice for

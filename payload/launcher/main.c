@@ -36,7 +36,7 @@
 #define MAX_RESTORES 4
 #define RESTORE_LINE "@restore "
 #define WAIT_FOR_TITLE_MS 20000
-#define TITLE_READS_MS 8000
+#define TITLE_READS_MS 15000
 
 // The launch parameters as the PS5 homebrew loader passes them: only the
 // user is filled in.
