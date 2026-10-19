@@ -55,4 +55,11 @@ int launch_app(const char *title_id)
     return kLaunchUnsupported;
 }
 
+int send_payload(const std::string &elf, int port)
+{
+    std::fprintf(stderr, "[HUI] payload of %zu bytes for port %d: not on a console\n", elf.size(),
+                 port);
+    return kLaunchUnsupported;
+}
+
 } // namespace hui::sys

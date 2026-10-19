@@ -5,6 +5,7 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 
 namespace hui::sys
 {
@@ -38,5 +39,10 @@ constexpr int kLaunchUnsupported = -1;
 // system takes it from there (it closes this app to start the other); any
 // other value is the system's refusal code.
 int launch_app(const char *title_id);
+
+// Streams an ELF to the console's ELF loader on this machine
+// (127.0.0.1:port), which runs it outside any app. 0 when every byte was
+// accepted, else the errno of what failed (kLaunchUnsupported on a PC).
+int send_payload(const std::string &elf, int port);
 
 } // namespace hui::sys

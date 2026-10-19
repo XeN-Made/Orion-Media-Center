@@ -169,7 +169,8 @@ TEST_F(LibraryDesign, LaunchSaysWhatHappenedAndLogsIt)
     std::remove((dir + "/launch.txt").c_str());
     library_.state_dir = dir;
     auto design = with_fixture();
-    // Cross, then Cross on Launch: on a PC the system launcher is absent.
+    // Cross, then Cross on Launch: on a PC there is no helper to hand to, so
+    // nothing is launched, the request is withdrawn and ORION stays open.
     send(*design, press(hui::Action::confirm));
     send(*design, press(hui::Action::confirm));
     EXPECT_TRUE(played(Cue::error));
@@ -177,7 +178,11 @@ TEST_F(LibraryDesign, LaunchSaysWhatHappenedAndLogsIt)
     std::string log;
     ASSERT_TRUE(hui::save::read_file(dir + "/launch.txt", &log));
     EXPECT_NE(log.find("PPSA90108"), std::string::npos);
-    EXPECT_NE(log.find("refused"), std::string::npos);
+    EXPECT_NE(log.find("not launched"), std::string::npos);
+    std::string request;
+    EXPECT_FALSE(hui::save::read_file(dir + "/launch-request.txt", &request));
+    send(*design, idle(), 2.0f);
+    EXPECT_FALSE(context_.exit_requested);
 }
 
 TEST_F(LibraryDesign, ItStartsOnAllWhenAskedNotToRemember)

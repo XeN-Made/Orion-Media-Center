@@ -37,6 +37,11 @@ class Shell
           std::span<const ConceptFactory> designs = concept_registry());
 
     static Settings load_settings(const std::string &data_root);
+    // True once a design asked for the app to close (see Context).
+    bool exit_requested() const
+    {
+        return context_.exit_requested;
+    }
 
     void update(const InputFrame &input, float dt);
     // Queues this frame's layers; the caller presents them.

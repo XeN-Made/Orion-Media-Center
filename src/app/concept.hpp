@@ -66,6 +66,9 @@ struct Context
     // applies the change (volumes, button swap, ...) and saves it.
     Settings &settings;
     bool settings_changed = false;
+    // A design that needs the app gone (to hand the console to another
+    // title) sets this; the app closes itself cleanly on the next frame.
+    bool exit_requested = false;
 };
 
 // One frame of a design, back to front:

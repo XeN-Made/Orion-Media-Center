@@ -450,6 +450,14 @@ int main()
         }
         if (collect_wait >= 0.0)
             collect_wait += static_cast<double>(frame_ms) / 1000.0;
+        // A design handed the console to another title: close the way the
+        // system expects (never a kill), and let the launch helper take over.
+        if (shell.exit_requested())
+        {
+            sys::log("[HUI] closing: a launch was handed to the helper");
+            pad.close();
+            sys::quit();
+        }
         if (frames % 60 == 0)
         {
             poll_request();

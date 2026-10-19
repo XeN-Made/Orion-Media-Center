@@ -58,6 +58,9 @@ constexpr float kGridBottom = 972.0f;
 constexpr int kColumns = 7;
 constexpr std::size_t kMaxQuery = 40; // bytes
 constexpr std::size_t kMaxName = 24;  // bytes, as orion::LibraryPrefs keeps them
+// The launch helper shipped in the app folder, and the console's ELF loader.
+constexpr const char *kLauncherPath = "/app0/assets/payloads/orion-launcher.elf";
+constexpr int kLoaderPort = 9021;
 // The search panel sits under the first row of covers, so the results of
 // what is typed stay in view above it.
 constexpr Rect kSearchPanel{544.0f, 590.0f, 832.0f, 378.0f};
@@ -122,7 +125,8 @@ constexpr const char *kTechniques[] = {
     "Custom tabs and placements, the last tab and the sort kept in library.json",
     "A look edited live in Settings and kept in theme.json, over any base theme",
     "Live search from the on-screen keyboard; the grid filters as you type",
-    "Launches through the system launcher and logs every attempt to launch.txt",
+    "Launches through a helper payload, since a title cannot start while ORION is in front",
+    "Logs every launch step, ORION's and the helper's, to launch.txt",
 };
 
 constexpr app::TourStep kTour[] = {
@@ -392,6 +396,12 @@ class Library final : public app::Concept
         keys_.update(dt);
         menu_.update(dt);
         settings_.update(dt);
+        if (launch_exit_ > 0.0f)
+        {
+            launch_exit_ -= dt;
+            if (launch_exit_ <= 0.0f)
+                context_.exit_requested = true;
+        }
         launch_shown_ = std::max(0.0f, launch_shown_ - dt);
         launch_pending_ = std::max(0.0f, launch_pending_ - dt);
         launch_card_.target = launch_shown_ > 0.0f ? 1.0f : 0.0f;
@@ -756,10 +766,12 @@ class Library final : public app::Concept
         settings_.refresh(look_, prefs_);
     }
 
-    // Hands the title to the system launcher. Accepted, the system closes
-    // ORION and starts it (ShadowMountPlus mounts it on the way); refused,
-    // the card says so with the system's code. Every attempt is appended to
-    // <state_dir>/launch.txt, so a run on the console can be read back.
+    // A title cannot start while ORION is in front (the system refuses with
+    // 0x8094000f), so the launch is handed over: the title goes into
+    // <state_dir>/launch-request.txt, the launch helper (payload/launcher)
+    // goes to the console's ELF loader, and ORION closes itself a moment
+    // later. The helper waits for that and starts the title. Every step is
+    // appended to <state_dir>/launch.txt, by ORION and by the helper.
     void launch(const std::string &id, app::Feedback &feedback)
     {
         const Title *title = nullptr;
@@ -770,36 +782,60 @@ class Library final : public app::Concept
         }
         if (title == nullptr || launch_pending_ > 0.0f)
             return;
-        const int result = sys::launch_app(title->id.c_str());
-        char code[16];
-        std::snprintf(code, sizeof(code), "0x%08x", static_cast<unsigned>(result));
-        launch_ok_ = result == 0;
-        if (launch_ok_)
-            launch_message_ = "Starting " + title->name + "\u2026";
-        else if (result == sys::kLaunchUnsupported)
-            launch_message_ = "Launching works on the console only";
+        const std::string &dir = context_.library.state_dir;
+        launch_ok_ = false;
+        std::string elf;
+        std::string why;
+        if (dir.empty() ||
+            !save::write_atomic(dir + "/launch-request.txt", title->id + "\n").empty())
+            why = "could not write the launch request";
+        else if (!save::read_file(kLauncherPath, &elf, 4u << 20) || elf.empty())
+            why = std::string("the launch helper is missing (") + kLauncherPath + ")";
         else
-            launch_message_ = "The console did not start " + title->name + " (" + code + ")";
+        {
+            const int error = sys::send_payload(elf, kLoaderPort);
+            if (error == 0)
+                launch_ok_ = true;
+            else if (error == sys::kLaunchUnsupported)
+                why = "not on a console";
+            else
+                why = "the ELF loader did not answer (errno " + std::to_string(error) + ")";
+        }
+
+        if (launch_ok_)
+        {
+            log_launch(*title, "sent the helper (" + std::to_string(elf.size()) +
+                                   " bytes) to 127.0.0.1:" + std::to_string(kLoaderPort) +
+                                   "; closing ORION");
+            launch_message_ = "Starting " + title->name + "\u2026";
+            // Long enough to read the card, then ORION gets out of the way.
+            launch_exit_ = 0.9f;
+            launch_pending_ = 30.0f;
+        }
+        else
+        {
+            log_launch(*title, "not launched: " + why);
+            std::remove((dir + "/launch-request.txt").c_str());
+            launch_message_ = why == "not on a console"
+                                  ? std::string("Launching works on the console only")
+                                  : "Could not start " + title->name + ": " + why;
+        }
         launch_shown_ = 6.0f;
-        // A request in flight is not repeated while the system acts on it.
-        launch_pending_ = launch_ok_ ? 15.0f : 0.0f;
         feedback.play(launch_ok_ ? audio::Cue::launch : audio::Cue::error);
-        log_launch(*title, code, launch_ok_);
     }
 
-    void log_launch(const Title &title, const char *code, bool accepted) const
+    void log_launch(const Title &title, const std::string &what) const
     {
         const std::string &dir = context_.library.state_dir;
         if (dir.empty() || !save::ensure_directory(dir))
             return;
         std::string text;
         save::read_file(dir + "/launch.txt", &text, 64u << 10);
-        char line[256];
-        std::snprintf(line, sizeof(line), "%lld  %s  %s  result=%s  %s\n",
-                      static_cast<long long>(std::time(nullptr)), title.id.c_str(),
-                      title.name.c_str(), code, accepted ? "accepted" : "refused");
+        char stamp[32];
+        std::snprintf(stamp, sizeof(stamp), "%lld", static_cast<long long>(std::time(nullptr)));
+        text +=
+            std::string(stamp) + "  orion   " + title.id + "  " + title.name + "  " + what + "\n";
         // The newest lines are the ones that matter; keep the file small.
-        text += line;
         if (text.size() > 32u << 10)
             text.erase(0, text.find('\n', text.size() - (24u << 10)) + 1);
         save::write_atomic(dir + "/launch.txt", text);
@@ -1282,6 +1318,7 @@ class Library final : public app::Concept
     bool launch_ok_ = false;
     float launch_shown_ = 0.0f;   // seconds the card stays
     float launch_pending_ = 0.0f; // seconds before another launch is taken
+    float launch_exit_ = 0.0f;    // seconds until ORION closes for a launch
     tween::Spring launch_card_;
     float age_ = 0.0f;
     float clock_ = 0.0f;

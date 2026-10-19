@@ -4,7 +4,12 @@
 
 #include "platform/ps5/system.hpp"
 
+#include <arpa/inet.h>
+#include <cerrno>
 #include <cstdarg>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <unistd.h>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -90,6 +95,40 @@ void quit()
     const int refused = sceSystemServiceLoadExec("exit", nullptr);
     log("[HUI] quit refused rc=0x%x", static_cast<unsigned>(refused));
     park();
+}
+
+int send_payload(const std::string &elf, int port)
+{
+    const int fd = ::socket(AF_INET, SOCK_STREAM, 0);
+    if (fd < 0)
+        return errno != 0 ? errno : EIO;
+    sockaddr_in address = {};
+    address.sin_family = AF_INET;
+    address.sin_port = htons(static_cast<std::uint16_t>(port));
+    address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    if (::connect(fd, reinterpret_cast<const sockaddr *>(&address), sizeof(address)) != 0)
+    {
+        const int error = errno != 0 ? errno : ECONNREFUSED;
+        ::close(fd);
+        return error;
+    }
+    std::size_t sent = 0;
+    while (sent < elf.size())
+    {
+        const ssize_t wrote = ::send(fd, elf.data() + sent, elf.size() - sent, 0);
+        if (wrote <= 0)
+        {
+            const int error = errno != 0 ? errno : EIO;
+            ::close(fd);
+            return error;
+        }
+        sent += static_cast<std::size_t>(wrote);
+    }
+    // The loader starts the payload once the stream ends.
+    ::shutdown(fd, SHUT_WR);
+    ::close(fd);
+    log("[HUI] payload sent: %zu bytes to 127.0.0.1:%d", sent, port);
+    return 0;
 }
 
 int launch_app(const char *title_id)
