@@ -104,6 +104,28 @@ constexpr app::TourStep kTour[] = {
     {0.6f, 0, Direction::none, "filtered"},
 };
 
+// iOS-like clear glass for the search keyboard: keys of frosted white at low
+// opacity with white lettering, the focused one lit almost solid white, and
+// no tint from the page, so it floats over the sky instead of sitting on it.
+ui::Theme clear_glass(const ui::Theme &base)
+{
+    ui::Theme t = base;
+    t.surface = Color::rgb(0xffffff, 0.1f);
+    t.surface_high = Color::rgb(0xffffff, 0.16f);
+    t.secondary = Color::rgb(0xffffff, 0.12f);
+    t.on_secondary = Color::rgb(0xffffff);
+    t.text = Color::rgb(0xffffff);
+    t.text_muted = Color::rgb(0xffffff, 0.72f);
+    t.primary = Color::rgb(0xffffff, 0.92f);
+    t.on_primary = Color::rgb(0x0a0c16);
+    t.accent = Color::rgb(0xffffff);
+    t.outline = Color::rgb(0xffffff, 0.16f);
+    t.focus = Color::rgb(0xffffff);
+    t.light = Color::rgb(0xffffff, 0.34f);
+    t.shadow = Color::rgb(0x000000, 0.25f);
+    return t;
+}
+
 const ui::Theme &library_theme()
 {
     for (const ui::Theme &theme : ui::themes())
@@ -241,7 +263,7 @@ class Library final : public app::Concept
         grid_.set_bounds(
             {kMargin, kGridTop, gfx::kVirtualWidth - 2.0f * kMargin, kGridBottom - kGridTop});
 
-        keys_.style.theme = theme_;
+        keys_.style.theme = clear_glass(theme_);
         keys_.style.bindings = ui::KeyboardBindings::standard();
         keys_.style.bindings.done = Action::menu;
         keys_.style.max_length = static_cast<int>(kMaxQuery);
@@ -328,10 +350,10 @@ class Library final : public app::Concept
                 float alpha;
             };
             constexpr Cloud kClouds[] = {
-                {300.0f, 300.0f, 900.0f, 0.05f, 0x6a3cff, 0.42f},
-                {1520.0f, 240.0f, 820.0f, 0.04f, 0x1aa6d9, 0.34f},
-                {1100.0f, 840.0f, 960.0f, 0.03f, 0xc04bd6, 0.3f},
-                {380.0f, 920.0f, 700.0f, 0.06f, 0x3b4bff, 0.3f},
+                {300.0f, 300.0f, 900.0f, 0.05f, 0x2448c8, 0.16f},
+                {1520.0f, 240.0f, 820.0f, 0.04f, 0x1a9ad0, 0.15f},
+                {1100.0f, 840.0f, 960.0f, 0.03f, 0x1f5f9a, 0.1f},
+                {380.0f, 920.0f, 700.0f, 0.06f, 0x1c3a9c, 0.12f},
             };
             for (int i = 0; i < 4; ++i)
             {
@@ -349,7 +371,18 @@ class Library final : public app::Concept
         const std::uint32_t glass = frame.glass ? frame.glass_texture : 0;
         ui::Canvas canvas{list, context_.fonts, glass, clock_};
         ui::Painter paint(list, context_.fonts, theme_, glass);
-        list.push_opacity(tween::cubic_out(age_ / 0.35f));
+        const float intro = tween::cubic_out(age_ / 0.35f);
+        // The covers go in the scene, under the glass capture: every frosted
+        // panel drawn over them (the keyboard, the plates) shows them blurred,
+        // which is what makes the glass read as glass.
+        if (grid_.count() > 0)
+        {
+            ui::Canvas covers{frame.scene, context_.fonts, 0, clock_};
+            frame.scene.push_opacity(intro);
+            grid_.draw(covers);
+            frame.scene.pop_opacity();
+        }
+        list.push_opacity(intro);
 
         draw_header(list, paint);
         tabs_.draw(canvas);
@@ -357,7 +390,6 @@ class Library final : public app::Concept
         draw_query(list, paint);
         if (grid_.count() > 0)
         {
-            grid_.draw(canvas);
             draw_details(list, paint);
         }
         else
@@ -597,8 +629,7 @@ class Library final : public app::Concept
         if (!searching_)
         {
             const float w = ui::button_width(ui::Button::circle, 30);
-            ui::draw_button(list, fonts, ui::GlyphStyle::dark(), ui::Button::circle, right - w,
-                            y - 9, 30);
+            ui::draw_button(list, fonts, glyphs(), ui::Button::circle, right - w, y - 9, 30);
             x -= w + 12.0f;
         }
         const std::string label = "\xe2\x80\x9c" + query_ + "\xe2\x80\x9d";
@@ -645,7 +676,7 @@ class Library final : public app::Concept
         if (favourite(title.id))
             line += "   \xc2\xb7   Favourite";
         const float width = context_.fonts.regular.font->measure(line, 21.0f);
-        glass_panel(list, paint, {kMargin - 24.0f, 976.0f, width + 48.0f, 68.0f}, 34.0f);
+        glass_panel(list, paint, {kMargin - 24.0f, 972.0f, width + 48.0f, 76.0f}, 38.0f);
         ui::text(list, context_.fonts.regular, line.c_str(), kMargin, 1018, 21,
                  paint.page_text_muted());
     }
@@ -693,31 +724,49 @@ class Library final : public app::Concept
             {ui::Button::options, "Sort"},
         };
         const float right = gfx::kVirtualWidth - kMargin;
-        const float width = ui::measure_hints(context_.fonts, hints, 4);
-        glass_panel(list, paint, {right - width - 28.0f, 976.0f, width + 56.0f, 68.0f}, 34.0f);
-        ui::draw_hints(list, context_.fonts, ui::GlyphStyle::dark(), hints, 4, right, true);
+        ui::HintLayout layout;
+        layout.size = 46.0f;
+        layout.text_size = 26.0f;
+        layout.cy = 1010.0f;
+        const float width = ui::measure_hints(context_.fonts, hints, 4, layout);
+        glass_panel(list, paint, {right - width - 30.0f, 972.0f, width + 60.0f, 76.0f}, 38.0f);
+        ui::draw_hints(list, context_.fonts, glyphs(), hints, 4, right, true, layout);
     }
 
     // A frosted panel with a glossy sheen and a polished rim: the glass ORION's
     // menus are made of.
     void glass_panel(gfx::DrawList &list, ui::Painter &paint, const Rect &r, float radius) const
     {
-        list.shadow({r.x, r.y + 12.0f, r.w, r.h}, radius, 34.0f, Color::rgb(0x000000, 0.38f));
-        paint.surface(r, radius, theme_.surface, theme_.light, 1.0f);
+        glass_panel(list, paint, r, radius, theme_.surface, 0.38f);
+    }
+    void glass_panel(gfx::DrawList &list, ui::Painter &paint, const Rect &r, float radius,
+                     Color tint, float shadow) const
+    {
+        list.shadow({r.x, r.y + 12.0f, r.w, r.h}, radius, 34.0f, Color::rgb(0x000000, shadow));
+        paint.surface(r, radius, tint, theme_.light, 1.0f);
         sheen(list, r, radius);
     }
 
-    // Light falling on glass from above: brightest at the top edge, gone by
-    // the bottom, with a thin specular line just inside the rim.
+    // Light falling on glass from above: brightest at the top edge and gone
+    // by the bottom, inside a faint rim.
     static void sheen(gfx::DrawList &list, const Rect &r, float radius, bool rim = true)
     {
-        list.gradient_rect(r, radius, Color::rgb(0xffffff, 0.16f), Color::rgb(0xffffff, 0.0f));
-        const float inset = std::min(radius, r.w * 0.25f) * 0.75f + 6.0f;
-        list.rounded_rect({r.x + inset, r.y + 2.0f, r.w - 2.0f * inset, 2.0f}, 1.0f,
-                          Color::rgb(0xffffff, 0.38f));
+        list.gradient_rect(r, radius, Color::rgb(0xffffff, 0.14f), Color::rgb(0xffffff, 0.0f));
         if (rim)
             list.bordered_rect(r, radius, Color::rgb(0x000000, 0.0f), 1.0f,
-                               Color::rgb(0xffffff, 0.2f));
+                               Color::rgb(0xffffff, 0.14f));
+    }
+
+    // Controller glyphs as frosted caps with white lettering: no grey outline
+    // to fight the glass they sit on.
+    static ui::GlyphStyle glyphs()
+    {
+        ui::GlyphStyle style = ui::GlyphStyle::dark();
+        style.body = Color::rgb(0xffffff, 0.14f);
+        style.edge = Color::rgb(0xffffff, 0.0f);
+        style.ink = Color::rgb(0xffffff);
+        style.label = Color::rgb(0xffffff, 0.92f);
+        return style;
     }
 
     // The tab bar draws its own frosted track; this adds the same gloss.
@@ -741,20 +790,21 @@ class Library final : public app::Concept
         const float shown = tween::cubic_out(keyboard_shown_.value);
         // A light veil: the filtered covers above the panel are the point.
         list.rounded_rect({0, 0, gfx::kVirtualWidth, gfx::kVirtualHeight}, 0,
-                          theme_.page.with_alpha(0.3f * shown));
+                          Color::rgb(0x000000, 0.22f * shown));
         list.push_opacity(shown);
         list.push_transform(1.0f, 0.0f, 0.0f, 0.0f, 40.0f * (1.0f - shown));
         // Frosted glass from the sky behind; it is opaque to the covers drawn
         // in the same layer, so they do not show through the keys.
-        glass_panel(list, paint, kSearchPanel, theme_.radius_card);
+        glass_panel(list, paint, kSearchPanel, theme_.radius_card, Color::rgb(0xffffff, 0.05f),
+                    0.25f);
         const Rect field = kSearchField;
-        list.rounded_rect(field, field.h * 0.5f, Color::rgb(0x000000, 0.28f));
+        list.rounded_rect(field, field.h * 0.5f, Color::rgb(0xffffff, 0.08f));
         list.bordered_rect(field, field.h * 0.5f, Color::rgb(0x000000, 0.0f), 1.0f,
                            Color::rgb(0xffffff, 0.18f));
         const ui::Fonts &fonts = context_.fonts;
         const bool empty = query_.empty();
         ui::text(list, fonts.regular, empty ? "Search titles or IDs" : query_.c_str(), field.x + 28,
-                 field.y + 37, 25, empty ? paint.page_text_muted() : theme_.text);
+                 field.y + 37, 25, empty ? Color::rgb(0xffffff, 0.66f) : Color::rgb(0xffffff));
         if (!empty || std::fmod(clock_, 1.0f) < 0.5f)
         {
             const float caret =

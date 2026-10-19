@@ -137,11 +137,11 @@ Theme orion()
 {
     Theme t = web_dark("orion", "ORION", "Galaxy glass",
                        "Star field and nebula behind frosted, glossy glass; pills and soft panels");
-    t.backdrop = backdrop(BackdropMode::stars, 0x02030b, 0x0a0d2a, 0x6a3cff, 0x1aa6d9);
-    t.page = rgb(0x070a1e);
+    t.backdrop = backdrop(BackdropMode::stars, 0x000000, 0x02040b, 0x16285e, 0x0a4a66);
+    t.page = rgb(0x04050d);
     t.page_text = rgb(0xf3f1ff);
     t.page_text_muted = rgb(0xc9c6ee, 0.78f);
-    t.surface = rgb(0x1a1c4a, 0.42f);
+    t.surface = rgb(0x0d1024, 0.4f);
     t.surface_high = rgb(0xffffff, 0.12f);
     t.text = rgb(0xf6f4ff);
     t.text_muted = rgb(0xffffff, 0.68f);
