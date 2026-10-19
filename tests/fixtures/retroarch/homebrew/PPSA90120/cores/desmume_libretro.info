@@ -1,0 +1,5 @@
+# Invented core information for tests
+display_name = "DeSmuME"
+corename = "DeSmuME"
+database = "Nintendo - Nintendo DS"
+supported_extensions = "nds|ids|bin"

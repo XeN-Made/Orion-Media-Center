@@ -77,7 +77,7 @@ const CustomTab *LibraryPrefs::placement(const std::string &title) const
 
 bool LibraryPrefs::place(const std::string &title, const std::string &tab_id)
 {
-    if (tab(tab_id) == nullptr || !library::is_title_id(title))
+    if (tab(tab_id) == nullptr || !library::is_item_id(title))
         return false;
     unplace(title);
     placements.push_back({title, tab_id});
@@ -141,6 +141,69 @@ bool LibraryPrefs::move_tab(const std::string &id, int direction)
     return false;
 }
 
+namespace
+{
+
+SystemPref &system_pref(std::vector<SystemPref> &systems, const std::string &system)
+{
+    for (SystemPref &pref : systems)
+    {
+        if (pref.system == system)
+            return pref;
+    }
+    systems.push_back({system, true, ""});
+    return systems.back();
+}
+
+} // namespace
+
+bool LibraryPrefs::system_enabled(const std::string &system) const
+{
+    for (const SystemPref &pref : systems)
+    {
+        if (pref.system == system)
+            return pref.enabled;
+    }
+    return true;
+}
+
+std::string LibraryPrefs::system_core(const std::string &system) const
+{
+    for (const SystemPref &pref : systems)
+    {
+        if (pref.system == system)
+            return pref.core;
+    }
+    return "";
+}
+
+void LibraryPrefs::set_system_enabled(const std::string &system, bool enabled)
+{
+    system_pref(systems, system).enabled = enabled;
+}
+
+void LibraryPrefs::set_system_core(const std::string &system, const std::string &core)
+{
+    system_pref(systems, system).core = core;
+}
+
+std::string LibraryPrefs::tab_theme(const std::string &tab) const
+{
+    for (const TabTheme &entry : tab_themes)
+    {
+        if (entry.tab == tab)
+            return entry.theme;
+    }
+    return "";
+}
+
+void LibraryPrefs::set_tab_theme(const std::string &tab, const std::string &theme)
+{
+    std::erase_if(tab_themes, [&](const TabTheme &entry) { return entry.tab == tab; });
+    if (!theme.empty())
+        tab_themes.push_back({tab, theme});
+}
+
 LibraryPrefs load_prefs(const std::string &state_dir)
 {
     LibraryPrefs prefs;
@@ -159,10 +222,31 @@ LibraryPrefs load_prefs(const std::string &state_dir)
     for (const auto &member : root["placements"].members())
         prefs.place(member.first, member.second.string_or(""));
 
+    for (const auto &member : root["systems"].members())
+    {
+        if (member.first.empty() || member.first.size() > 80 || prefs.systems.size() >= 64)
+            continue;
+        SystemPref pref;
+        pref.system = member.first;
+        pref.enabled = member.second["enabled"].bool_or(true);
+        const std::string core = member.second["core"].string_or("");
+        // A core is a file name in RetroArch's cores folder, nothing more.
+        if (core.find('/') == std::string::npos && core.size() <= 64)
+            pref.core = core;
+        prefs.systems.push_back(std::move(pref));
+    }
+    for (const auto &member : root["tab_themes"].members())
+    {
+        const std::string theme = member.second.string_or("");
+        if (!member.first.empty() && member.first.size() <= 96 && !theme.empty() &&
+            theme.size() <= 40 && prefs.tab_themes.size() < 64)
+            prefs.set_tab_theme(member.first, theme);
+    }
     prefs.last_tab = root["last_tab"].string_or(prefs.last_tab);
     prefs.sort = root["sort"].string_or(prefs.sort);
     prefs.reopen_last_tab = root["reopen_last_tab"].bool_or(prefs.reopen_last_tab);
     prefs.moved_leave_shelf = root["moved_leave_shelf"].bool_or(prefs.moved_leave_shelf);
+    prefs.auto_art = root["auto_art"].bool_or(prefs.auto_art);
     return prefs;
 }
 
@@ -177,6 +261,7 @@ bool save_prefs(const std::string &state_dir, const LibraryPrefs &prefs)
         std::string("  \"reopen_last_tab\": ") + (prefs.reopen_last_tab ? "true" : "false") + ",\n";
     text += std::string("  \"moved_leave_shelf\": ") +
             (prefs.moved_leave_shelf ? "true" : "false") + ",\n";
+    text += std::string("  \"auto_art\": ") + (prefs.auto_art ? "true" : "false") + ",\n";
     text += "  \"tabs\": [";
     for (std::size_t i = 0; i < prefs.tabs.size(); ++i)
     {
@@ -192,7 +277,25 @@ bool save_prefs(const std::string &state_dir, const LibraryPrefs &prefs)
         text += "    " + json::quote(prefs.placements[i].title) + ": " +
                 json::quote(prefs.placements[i].tab);
     }
-    text += prefs.placements.empty() ? "}\n}\n" : "\n  }\n}\n";
+    text += prefs.placements.empty() ? "},\n" : "\n  },\n";
+    text += "  \"systems\": {";
+    for (std::size_t i = 0; i < prefs.systems.size(); ++i)
+    {
+        const SystemPref &pref = prefs.systems[i];
+        text += i == 0 ? "\n" : ",\n";
+        text += "    " + json::quote(pref.system) +
+                ": {\"enabled\": " + (pref.enabled ? "true" : "false") +
+                ", \"core\": " + json::quote(pref.core) + "}";
+    }
+    text += prefs.systems.empty() ? "},\n" : "\n  },\n";
+    text += "  \"tab_themes\": {";
+    for (std::size_t i = 0; i < prefs.tab_themes.size(); ++i)
+    {
+        text += i == 0 ? "\n" : ",\n";
+        text += "    " + json::quote(prefs.tab_themes[i].tab) + ": " +
+                json::quote(prefs.tab_themes[i].theme);
+    }
+    text += prefs.tab_themes.empty() ? "}\n}\n" : "\n  }\n}\n";
     return save::write_atomic(file_of(state_dir), text).empty();
 }
 

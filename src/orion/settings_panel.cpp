@@ -22,6 +22,7 @@ enum : int
     kReopen,
     kLeaveShelf,
     kBase,
+    kTabTheme,
     kBackground,
     kSky,
     kNebula,
@@ -40,7 +41,11 @@ enum : int
     kRestore,
     kSaveTheme,
     kNewTab,
-    kTabRow = 100, // + the tab's index
+    kArtAuto,
+    kArtNow,
+    kTabRow = 100,    // + the tab's index
+    kSystemRow = 200, // + the system's index: on or off
+    kCoreRow = 300,   // + the system's index: which core
 };
 
 constexpr const char *kSortKeys[] = {"name", "name_reversed", "recent", "platform"};
@@ -165,6 +170,45 @@ void SettingsPanel::build(const Look &look, const LibraryPrefs &prefs)
     form_.add_toggle(kLeaveShelf, "Moved titles leave shelf", prefs.moved_leave_shelf).description =
         "A title moved to your own tab leaves Games, Homebrew or Media";
 
+    if (emulator_ != nullptr && !emulator_->systems.empty())
+    {
+        form_.add_header("Emulators");
+        for (std::size_t i = 0; i < emulator_->systems.size(); ++i)
+        {
+            const library::System &system = emulator_->systems[i];
+            const std::string games =
+                std::to_string(system.games) + (system.games == 1 ? " game" : " games");
+            form_
+                .add_toggle(kSystemRow + static_cast<int>(i),
+                            system.short_name + "  (" + games + ")",
+                            prefs.system_enabled(system.name))
+                .description = system.name + ", played by RetroArch: on shows its tab";
+            if (system.cores.size() < 2)
+                continue;
+            std::vector<std::string> names;
+            int chosen = 0;
+            for (std::size_t c = 0; c < system.cores.size(); ++c)
+            {
+                std::string name = system.cores[c];
+                for (const library::Core &core : emulator_->cores)
+                {
+                    if (core.file == system.cores[c])
+                        name = core.name;
+                }
+                names.push_back(std::move(name));
+                if (system.cores[c] == prefs.system_core(system.name))
+                    chosen = static_cast<int>(c);
+            }
+            form_
+                .add_choice(kCoreRow + static_cast<int>(i), system.short_name + " core",
+                            std::move(names), chosen)
+                .description = "The RetroArch core " + system.short_name + " games start with";
+        }
+        form_.add_toggle(kArtAuto, "Find box art by itself", prefs.auto_art).description =
+            "When ORION starts, new games get covers from the internet";
+        form_.add_action(kArtNow, "Find box art now").description = art_status_;
+    }
+
     form_.add_header("Appearance");
     std::vector<std::string> style_names;
     int base = 0;
@@ -180,6 +224,19 @@ void SettingsPanel::build(const Look &look, const LibraryPrefs &prefs)
         style_names.emplace_back("ORION");
     form_.add_choice(kBase, "Theme", std::move(style_names), base).description =
         "Built in, or a theme file of yours; everything below adjusts it";
+    // This tab may wear a theme of its own instead.
+    std::vector<std::string> tab_names = {"Main theme"};
+    int tab_choice = 0;
+    const std::string tab_theme = prefs.tab_theme(tab_key_);
+    for (std::size_t i = 0; themes_ != nullptr && i < themes_->size(); ++i)
+    {
+        const ThemeFile &file = themes_->at(i);
+        tab_names.push_back(file.user ? file.name + " (yours)" : file.name);
+        if (file.id == tab_theme)
+            tab_choice = static_cast<int>(i) + 1;
+    }
+    form_.add_choice(kTabTheme, "Theme for " + tab_name_, std::move(tab_names), tab_choice)
+        .description = "This tab can wear a theme of its own; the rows below edit the main one";
     std::vector<std::string> background_names;
     int background = 0;
     for (std::size_t i = 0; i < backgrounds().size(); ++i)
@@ -241,6 +298,15 @@ void SettingsPanel::build(const Look &look, const LibraryPrefs &prefs)
     }
 }
 
+void SettingsPanel::set_art_status(std::string status)
+{
+    if (status == art_status_)
+        return;
+    art_status_ = std::move(status);
+    if (ui::FormRow *row = form_.row(kArtNow))
+        row->description = art_status_;
+}
+
 SettingsPanel::Change SettingsPanel::handle(const InputFrame &input, ui::Feedback &feedback,
                                             Look *look, LibraryPrefs *prefs)
 {
@@ -261,6 +327,8 @@ SettingsPanel::Change SettingsPanel::handle(const InputFrame &input, ui::Feedbac
         }
         if (id == kNewTab)
             return Change::new_tab;
+        if (id == kArtNow)
+            return Change::fetch_art;
         if (id >= kTabRow && id - kTabRow < static_cast<int>(tab_ids_.size()))
         {
             tab_id_ = tab_ids_[static_cast<std::size_t>(id - kTabRow)];
@@ -272,6 +340,32 @@ SettingsPanel::Change SettingsPanel::handle(const InputFrame &input, ui::Feedbac
         return Change::none;
 
     const int id = form_.changed_id();
+    if (emulator_ != nullptr && id >= kSystemRow &&
+        id < kSystemRow + static_cast<int>(emulator_->systems.size()))
+    {
+        const library::System &system =
+            emulator_->systems[static_cast<std::size_t>(id - kSystemRow)];
+        prefs->set_system_enabled(system.name, form_.toggle_value(id));
+        return Change::prefs;
+    }
+    if (emulator_ != nullptr && id >= kCoreRow &&
+        id < kCoreRow + static_cast<int>(emulator_->systems.size()))
+    {
+        const library::System &system = emulator_->systems[static_cast<std::size_t>(id - kCoreRow)];
+        const int index = form_.choice_index(id);
+        if (index >= 0 && index < static_cast<int>(system.cores.size()))
+            prefs->set_system_core(system.name, system.cores[static_cast<std::size_t>(index)]);
+        return Change::prefs;
+    }
+    if (id == kTabTheme)
+    {
+        const int index = form_.choice_index(kTabTheme);
+        const bool own =
+            themes_ != nullptr && index > 0 && index <= static_cast<int>(themes_->size());
+        prefs->set_tab_theme(tab_key_,
+                             own ? themes_->at(static_cast<std::size_t>(index - 1)).id : "");
+        return Change::prefs;
+    }
     switch (id)
     {
     case kSort:
@@ -282,6 +376,9 @@ SettingsPanel::Change SettingsPanel::handle(const InputFrame &input, ui::Feedbac
         return Change::prefs;
     case kLeaveShelf:
         prefs->moved_leave_shelf = form_.toggle_value(kLeaveShelf);
+        return Change::prefs;
+    case kArtAuto:
+        prefs->auto_art = form_.toggle_value(kArtAuto);
         return Change::prefs;
     case kBase:
     {

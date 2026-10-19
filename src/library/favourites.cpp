@@ -34,7 +34,7 @@ std::vector<std::string> load_favourites(const std::string &state_dir)
     for (const json::Value &value : root["favourites"].elements())
     {
         const std::string id = value.string_or("");
-        if (is_title_id(id) && std::find(ids.begin(), ids.end(), id) == ids.end())
+        if (is_item_id(id) && std::find(ids.begin(), ids.end(), id) == ids.end())
             ids.push_back(id);
     }
     return ids;
@@ -49,7 +49,7 @@ bool save_favourites(const std::string &state_dir, const std::vector<std::string
     bool first = true;
     for (const std::string &id : ids)
     {
-        if (!is_title_id(id))
+        if (!is_item_id(id))
             continue;
         text += first ? "\n    \"" : ",\n    \"";
         text += id + "\"";

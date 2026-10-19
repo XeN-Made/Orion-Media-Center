@@ -6,6 +6,7 @@
 //
 // HUI_LIBRARY=<dir> shows that library instead of tests/fixtures/library.
 // HUI_THEME=<id> wears that theme (built in, or a file in <output>/.data/themes).
+// HUI_PREFS=<json> starts ORION with that library.json (tabs, tab themes, ...).
 //
 // Runs the same shell, designs and tour script as the console build, through
 // Mesa's surfaceless EGL (llvmpipe), with a fixed 60 Hz clock. Only the frames
@@ -25,6 +26,7 @@
 #include "demo/catalog.hpp"
 #include "gfx/gl_program.hpp"
 #include "gfx/renderer.hpp"
+#include "library/emulators.hpp"
 #include "library/icon.hpp"
 #include "library/library.hpp"
 #include "manifest.hpp"
@@ -274,6 +276,19 @@ int main(int argc, char **argv)
         // Favourites go to the scratch folder and start empty, like settings.
         titles.state_dir = data_root;
         titles.themes_dir = assets + "/themes";
+        // RetroArch's games, when it is installed: one more library source.
+        for (std::size_t i = 0; i < titles.titles.size(); ++i)
+        {
+            if (!hui::library::is_retroarch(titles.titles[i]))
+                continue;
+            const hui::library::Title retroarch = titles.titles[i];
+            std::vector<hui::library::Title> roms;
+            titles.emulator = hui::library::scan_retroarch(retroarch, &roms);
+            hui::library::attach_rom_art(roms, retroarch.path, titles.state_dir + "/art");
+            for (hui::library::Title &rom : roms)
+                titles.titles.push_back(std::move(rom));
+            break;
+        }
         for (const char *file : {"/favourites.json", "/library.json", "/theme.json", "/themes.txt"})
             std::remove((data_root + file).c_str());
         // HUI_THEME=<id>: wear that theme, built in or one placed in
@@ -281,6 +296,8 @@ int main(int argc, char **argv)
         if (const char *theme = std::getenv("HUI_THEME"))
             hui::save::write_atomic(data_root + "/theme.json",
                                     std::string("{\"base\": \"") + theme + "\"}\n");
+        if (const char *prefs = std::getenv("HUI_PREFS"))
+            hui::save::write_atomic(data_root + "/library.json", std::string(prefs) + "\n");
         const int icons = hui::library::load_icons(titles, renderer.batch());
         std::fprintf(stderr, "library: %zu titles, %d icons from %s\n", titles.titles.size(), icons,
                      base.c_str());

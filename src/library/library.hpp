@@ -53,8 +53,49 @@ struct Title
     // When the folder or image last changed (seconds since 1970): the best
     // "recently added" the file system offers. 0 when unknown.
     std::int64_t added = 0;
-    // The icon's texture, once something has uploaded it (0 until then).
+    // The icon's texture, once something has uploaded it (0 until then), and
+    // its size: box art is seldom square.
     std::uint32_t texture = 0;
+    int icon_width = 0;
+    int icon_height = 0;
+    // A game for an emulator (library/emulators.hpp): the system it is for
+    // ("Nintendo - Game Boy Advance"), the file as the emulator sees it, and
+    // the app that plays it. Empty for the console's own titles.
+    std::string system;
+    std::string rom;
+    std::string launcher;
+    bool is_rom() const
+    {
+        return !system.empty();
+    }
+};
+
+// One libretro core, from its .info file.
+struct Core
+{
+    std::string file;                    // "mgba_libretro.so"
+    std::string name;                    // "mGBA"
+    std::vector<std::string> databases;  // "Nintendo - Game Boy Advance", ...
+    std::vector<std::string> extensions; // "gba", "gb", ... (lowercase)
+};
+
+// One system RetroArch keeps content for: a folder under content/ named as
+// the libretro databases name it.
+struct System
+{
+    std::string name;               // "Nintendo - Game Boy Advance"
+    std::string short_name;         // "GBA": the tab and the banner
+    std::vector<std::string> cores; // core files that play it, as RetroArch lists them
+    int games = 0;
+};
+
+// RetroArch as found on this console: where it is and what it can play.
+struct Emulator
+{
+    std::string title_id; // the app to start ("PPSA99169")
+    std::string root;     // its folder as ORION sees it
+    std::vector<Core> cores;
+    std::vector<System> systems; // with content, sorted by name
 };
 
 // What the designs receive: the titles found at start-up.
@@ -69,6 +110,9 @@ struct Library
     // The app's own theme files (orion/theme_file.hpp); the player's are in
     // <state_dir>/themes. Empty: the kit's themes, built in.
     std::string themes_dir;
+    // RetroArch, when there is one, and the systems it has games for. Its
+    // games are in `titles` too, marked by Title::system.
+    Emulator emulator;
 };
 
 // The three shelves the Library groups titles on.
@@ -104,6 +148,9 @@ std::vector<Title> scan(const ScanOptions &options);
 
 // "PPSA01234" style: four capital letters and five digits.
 bool is_title_id(std::string_view text);
+// A title ID or an emulated game's ID ("rom-" and twelve hex digits): what
+// favourites and placements may name.
+bool is_item_id(std::string_view text);
 
 // The parts of a title that come from its metadata file. Exposed for tests.
 bool read_param_json(std::string_view text, Title *title);

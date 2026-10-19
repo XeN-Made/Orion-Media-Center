@@ -25,6 +25,8 @@ int load_icons(Library &library, gfx::GlBatch &batch)
         if (!save::read_file(title.icon, &bytes, kMaxFile) || !decode_png(bytes, kIconSize, &image))
             continue;
         title.texture = batch.create_texture(image.width, image.height, image.rgba.data());
+        title.icon_width = image.width;
+        title.icon_height = image.height;
         uploaded += title.texture != 0 ? 1 : 0;
     }
     return uploaded;

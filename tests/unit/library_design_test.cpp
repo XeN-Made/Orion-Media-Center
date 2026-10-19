@@ -6,6 +6,7 @@
 #include "concepts/concepts.hpp"
 #include "core/save_file.hpp"
 #include "library/favourites.hpp"
+#include "library/emulators.hpp"
 #include "orion/prefs.hpp"
 
 #include <cstdio>
@@ -213,6 +214,90 @@ TEST_F(LibraryDesign, CircleHeldToCloseSettingsDoesNotCloseOrion)
     for (int frame = 0; frame < 120; ++frame)
         send(*design, hold, 0.0f);
     EXPECT_FALSE(context_.exit_requested);
+}
+
+// The invented library plus the invented RetroArch: two systems, three games.
+class LibraryWithRetroArch : public LibraryDesign
+{
+  protected:
+    std::unique_ptr<hui::app::Concept> with_retroarch()
+    {
+        const std::string base = std::string(HUI_SOURCE_DIR) + "/tests/fixtures";
+        hui::library::ScanOptions options;
+        options.roots = {base + "/library/homebrew", base + "/retroarch/homebrew"};
+        options.icon_cache = base + "/library/icon-cache";
+        library_.titles = hui::library::scan(options);
+        for (const hui::library::Title &title : std::vector<hui::library::Title>(library_.titles))
+        {
+            if (hui::library::is_retroarch(title))
+                library_.emulator = hui::library::scan_retroarch(title, &library_.titles);
+        }
+        library_.scanned = true;
+        return hui::concepts::make_library(context_);
+    }
+};
+
+TEST_F(LibraryWithRetroArch, EachSystemGetsATabOfItsGames)
+{
+    auto design = with_retroarch();
+    ASSERT_EQ(library_.emulator.systems.size(), 2u);
+    // All, Games, Homebrew, Media, Favourites, DS, GBA: GBA holds two games.
+    for (int i = 0; i < 6; ++i)
+        send(*design, press(hui::Action::page_next));
+    send(*design, nav(Direction::right));
+    EXPECT_TRUE(played(Cue::focus));
+    send(*design, nav(Direction::right));
+    EXPECT_TRUE(played(Cue::error));
+    expect_drawable(*design);
+    // Past GBA there is nothing.
+    send(*design, press(hui::Action::page_next));
+    EXPECT_TRUE(played(Cue::error));
+}
+
+TEST_F(LibraryWithRetroArch, TheConsoleShelvesStayFreeOfRoms)
+{
+    auto design = with_retroarch();
+    // Games: the four invented games, not the three ROMs.
+    send(*design, press(hui::Action::page_next));
+    for (int i = 0; i < 3; ++i)
+    {
+        send(*design, nav(Direction::right));
+        EXPECT_TRUE(played(Cue::focus)) << i;
+    }
+    send(*design, nav(Direction::right));
+    EXPECT_TRUE(played(Cue::error));
+}
+
+TEST_F(LibraryWithRetroArch, TurningASystemOffTakesItsTabAway)
+{
+    const std::string dir = ::testing::TempDir() + "orion-design-systems";
+    ASSERT_TRUE(hui::save::ensure_directory(dir));
+    hui::orion::LibraryPrefs prefs;
+    prefs.set_system_enabled("Nintendo - Game Boy Advance", false);
+    ASSERT_TRUE(hui::orion::save_prefs(dir, prefs));
+    library_.state_dir = dir;
+    auto design = with_retroarch();
+    for (int i = 0; i < 5; ++i)
+        send(*design, press(hui::Action::page_next)); // ... to DS
+    send(*design, press(hui::Action::page_next));
+    EXPECT_TRUE(played(Cue::error)); // no GBA after DS
+}
+
+TEST_F(LibraryWithRetroArch, LaunchingARomNamesTheCoreAndTheGame)
+{
+    const std::string dir = ::testing::TempDir() + "orion-design-rom-launch";
+    ASSERT_TRUE(hui::save::ensure_directory(dir));
+    std::remove((dir + "/launch.txt").c_str());
+    library_.state_dir = dir;
+    auto design = with_retroarch();
+    for (int i = 0; i < 6; ++i)
+        send(*design, press(hui::Action::page_next));
+    send(*design, press(hui::Action::confirm));
+    std::string log;
+    ASSERT_TRUE(hui::save::read_file(dir + "/launch.txt", &log));
+    EXPECT_NE(log.find("Comet Post"), std::string::npos); // first by name on GBA
+    EXPECT_NE(log.find("not on a console"), std::string::npos);
+    expect_drawable(*design);
 }
 
 TEST_F(LibraryDesign, ItStartsOnAllWhenAskedNotToRemember)

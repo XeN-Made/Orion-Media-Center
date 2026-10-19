@@ -70,6 +70,44 @@ TEST(OrionPrefs, TabsAndPlacementsRoundTrip)
     EXPECT_FALSE(back.moved_leave_shelf);
 }
 
+TEST(OrionPrefs, SystemsKeepTheirSwitchAndCore)
+{
+    const std::string dir = fresh_dir("orion-prefs-systems");
+    orion::LibraryPrefs prefs;
+    EXPECT_TRUE(prefs.system_enabled("Nintendo - Game Boy Advance")); // on until turned off
+    prefs.set_system_enabled("Nintendo - Game Boy Advance", false);
+    prefs.set_system_core("Nintendo - Nintendo DS", "desmume_libretro.so");
+    ASSERT_TRUE(orion::save_prefs(dir, prefs));
+    const orion::LibraryPrefs back = orion::load_prefs(dir);
+    EXPECT_FALSE(back.system_enabled("Nintendo - Game Boy Advance"));
+    EXPECT_TRUE(back.system_enabled("Nintendo - Nintendo DS"));
+    EXPECT_EQ(back.system_core("Nintendo - Nintendo DS"), "desmume_libretro.so");
+    EXPECT_EQ(back.system_core("Sega - Saturn"), "");
+    // A core is a file name, never a path.
+    ASSERT_TRUE(save::write_atomic(dir + "/library.json",
+                                   R"({"systems": {"X": {"core": "../../evil.so"}}})")
+                    .empty());
+    EXPECT_EQ(orion::load_prefs(dir).system_core("X"), "");
+}
+
+TEST(OrionPrefs, TabsKeepTheirOwnThemes)
+{
+    const std::string dir = fresh_dir("orion-prefs-tab-themes");
+    orion::LibraryPrefs prefs;
+    EXPECT_EQ(prefs.tab_theme("games"), ""); // the main look until chosen
+    prefs.set_tab_theme("games", "candy");
+    prefs.set_tab_theme("sys:Nintendo - Game Boy Advance", "sunset-nebula");
+    prefs.set_tab_theme("games", "paper"); // a second choice replaces the first
+    ASSERT_TRUE(orion::save_prefs(dir, prefs));
+    orion::LibraryPrefs back = orion::load_prefs(dir);
+    EXPECT_EQ(back.tab_theme("games"), "paper");
+    EXPECT_EQ(back.tab_theme("sys:Nintendo - Game Boy Advance"), "sunset-nebula");
+    EXPECT_EQ(back.tab_theme("all"), "");
+    back.set_tab_theme("games", ""); // back to the main look
+    EXPECT_EQ(back.tab_theme("games"), "");
+    EXPECT_EQ(back.tab_themes.size(), 1u);
+}
+
 TEST(OrionPrefs, RemovingATabSendsItsTitlesHome)
 {
     orion::LibraryPrefs prefs;

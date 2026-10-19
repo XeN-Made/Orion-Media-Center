@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "library/library.hpp"
 #include "orion/look.hpp"
 #include "orion/prefs.hpp"
 #include "ui/components/form.hpp"
@@ -18,6 +19,7 @@ namespace hui::orion
 // A drawer from the right with one form in three sections:
 //
 //   Library     sort order, reopen on the last tab, moved titles leave their shelf
+//   Emulators   per system RetroArch has games for: on or off, and its core
 //   Appearance  base style, background, sky, nebula, clouds, motion, glass,
 //               highlight, accent, cover corners, restore ORION's look
 //   Tabs        new tab, then one row per custom tab
@@ -51,6 +53,7 @@ class SettingsPanel
         new_tab,    // "New tab" was chosen: the screen asks for a name
         save_theme, // "Save as new theme" was chosen: the screen asks for a name
         edit_tab,   // a tab row was chosen: tab_id() says which
+        fetch_art,  // "Find box art now" was chosen
     };
 
     SettingsPanel();
@@ -60,6 +63,19 @@ class SettingsPanel
     void set_themes(const ThemeLibrary &themes)
     {
         themes_ = &themes;
+    }
+    // What the box art row says under itself: the last run, or this one.
+    void set_art_status(std::string status);
+    // The tab Settings was opened over: its "Theme for" row is about it.
+    void set_tab(std::string key, std::string name)
+    {
+        tab_key_ = std::move(key);
+        tab_name_ = std::move(name);
+    }
+    // The systems the Emulators rows offer; must outlive the panel.
+    void set_emulator(const library::Emulator &emulator)
+    {
+        emulator_ = &emulator;
     }
     void open(const Look &look, const LibraryPrefs &prefs, ui::Feedback &feedback);
     void close(ui::Feedback &feedback);
@@ -91,8 +107,12 @@ class SettingsPanel
     ui::Sheet sheet_;
     ui::Form form_;
     const ThemeLibrary *themes_ = nullptr;
+    const library::Emulator *emulator_ = nullptr;
     std::vector<std::string> tab_ids_; // the tab of each tab row, by row id
     std::string tab_id_;
+    std::string tab_key_ = "all";
+    std::string art_status_ = "Covers from thumbnails.libretro.com for games without one";
+    std::string tab_name_ = "All";
 };
 
 } // namespace hui::orion

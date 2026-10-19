@@ -1,0 +1,5 @@
+# Invented core information for tests
+display_name = "VBA Next"
+corename = "VBA Next"
+database = "Nintendo - Game Boy Advance"
+supported_extensions = "gba"

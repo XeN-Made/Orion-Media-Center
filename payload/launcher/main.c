@@ -7,7 +7,8 @@
 // /data/orion/launch-request.txt, sends this payload to the console's ELF
 // loader (127.0.0.1:9021) and closes itself. The payload runs outside any
 // app: it waits until no app is in front, then asks the system to start the
-// title for the foreground user. ShadowMountPlus mounts the title on its way
+// title for the foreground user, with any arguments the request names (an
+// emulator's core and game). ShadowMountPlus mounts the title on its way
 // up, as it does for a launch from the home screen. Every step is appended to
 // /data/orion/launch-helper.txt: a file of its own, since launch.txt belongs to
 // ORION's sandbox and the helper may not be allowed to write to it.
@@ -25,6 +26,7 @@
 #define LOG_PATH "/data/orion/launch-helper.txt"
 #define WAIT_FOR_EXIT_MS 20000
 #define WAIT_FOR_LAUNCH_MS 15000
+#define MAX_ARGUMENTS 16
 
 // The launch parameters as the PS5 homebrew loader passes them: only the
 // user is filled in.
@@ -82,6 +84,7 @@ static int is_title_id(const char *text)
 typedef struct launch_job
 {
     char title[16];
+    char *argv[MAX_ARGUMENTS + 1]; // NULL-terminated; argv[0] NULL when there are none
     launch_param_t param;
     volatile int done;
     volatile int result;
@@ -92,14 +95,18 @@ typedef struct launch_job
 static void *launch_thread(void *argument)
 {
     launch_job_t *job = (launch_job_t *)argument;
-    job->result = sceSystemServiceLaunchApp(job->title, NULL, &job->param);
+    job->result =
+        sceSystemServiceLaunchApp(job->title, job->argv[0] != NULL ? job->argv : NULL, &job->param);
     job->done = 1;
     return NULL;
 }
 
 int main(void)
 {
-    char request[64] = {0};
+    // The request: the title ID on the first line, then one argument per
+    // line (ORION writes "-L", the core and the game for an emulator).
+    static char request[4096];
+    memset(request, 0, sizeof(request));
     FILE *file = fopen(REQUEST_PATH, "r");
     if (file == NULL)
     {
@@ -114,12 +121,33 @@ int main(void)
 
     static launch_job_t job;
     memset(&job, 0, sizeof(job));
-    if (sscanf(request, "%15s", job.title) != 1 || !is_title_id(job.title))
+    char *lines[MAX_ARGUMENTS + 2];
+    int count = 0;
+    for (char *line = request; *line != '\0' && count < MAX_ARGUMENTS + 1;)
     {
-        say("request is not a title ID: \"%.20s\"", request);
+        char *end = strchr(line, '\n');
+        if (end != NULL)
+            *end = '\0';
+        const size_t length = strlen(line);
+        if (length > 0 && line[length - 1] == '\r')
+            line[length - 1] = '\0';
+        if (line[0] != '\0')
+            lines[count++] = line;
+        if (end == NULL)
+            break;
+        line = end + 1;
+    }
+    if (count == 0 || strlen(lines[0]) >= sizeof(job.title) || !is_title_id(lines[0]))
+    {
+        say("request is not a title ID: \"%.20s\"", count > 0 ? lines[0] : "");
         return 1;
     }
-    say("started for %s", job.title);
+    strcpy(job.title, lines[0]);
+    for (int i = 1; i < count; ++i)
+        job.argv[i - 1] = lines[i];
+    say("started for %s with %d argument(s)", job.title, count - 1);
+    for (int i = 1; i < count; ++i)
+        say("  argument %d: %s", i, lines[i]);
 
     // ORION closes itself after sending this payload; wait until no app is
     // in front before asking for the next one.

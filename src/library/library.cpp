@@ -152,6 +152,16 @@ bool is_title_id(std::string_view text)
     return true;
 }
 
+bool is_item_id(std::string_view text)
+{
+    if (is_title_id(text))
+        return true;
+    if (text.size() != 16 || text.substr(0, 4) != "rom-")
+        return false;
+    return std::all_of(text.begin() + 4, text.end(),
+                       [](char c) { return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'); });
+}
+
 bool read_param_json(std::string_view text, Title *title)
 {
     json::Value root;

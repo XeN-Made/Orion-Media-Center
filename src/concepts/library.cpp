@@ -15,7 +15,9 @@
 
 #include "core/save_file.hpp"
 #include "core/tween.hpp"
+#include "library/emulators.hpp"
 #include "library/favourites.hpp"
+#include "orion/art_fetcher.hpp"
 #include "orion/look.hpp"
 #include "orion/prefs.hpp"
 #include "orion/settings_panel.hpp"
@@ -161,6 +163,19 @@ constexpr app::TourStep kTour[] = {
     {0.2f, action_bit(Action::confirm)},
     {0.6f, action_bit(Action::menu), Direction::none, "typed"},
     {0.6f, 0, Direction::none, "filtered"},
+    // On to the emulated systems' tabs, past the five shelves.
+    {0.2f, action_bit(Action::back)},
+    {0.2f, action_bit(Action::jump_next)},
+    {0.2f, action_bit(Action::jump_next)},
+    {0.2f, action_bit(Action::jump_next)},
+    {0.2f, action_bit(Action::jump_next)},
+    {0.3f, action_bit(Action::jump_next)},
+    {0.7f, 0, Direction::none, "system-tab"},
+    {0.2f, action_bit(Action::jump_prev)},
+    {0.2f, action_bit(Action::jump_prev)},
+    {0.2f, action_bit(Action::jump_prev)},
+    {0.2f, action_bit(Action::jump_prev)},
+    {0.2f, action_bit(Action::jump_prev)},
     // Circle clears the search; held, it starts closing ORION (not long
     // enough here to finish).
     {0.1f, action_bit(Action::back)},
@@ -287,6 +302,8 @@ std::string monogram(const std::string &name)
 
 std::string describe(const Title &title)
 {
+    if (title.is_rom())
+        return library::short_system_name(title.system) + "  \xc2\xb7  RetroArch";
     std::string text = library::platform_name(title.platform);
     if (!text.empty())
         text += "  \xc2\xb7  ";
@@ -395,11 +412,16 @@ class Library final : public app::Concept
         }
         look_ = orion::load_look(state, themes_);
         settings_.set_themes(themes_);
+        settings_.set_emulator(context_.library.emulator);
         restyle();
         // ORION reopens where it was left, when asked to.
         std::string start = prefs_.reopen_last_tab ? prefs_.last_tab : std::string("all");
         rebuild_tabs(start);
+        restyle();
         rebuild();
+        // New games for an emulator look for their box art in the background.
+        if (prefs_.auto_art && sys::on_console())
+            start_art(false);
     }
 
     const app::ConceptInfo &info() const override
@@ -426,6 +448,7 @@ class Library final : public app::Concept
     {
         age_ += dt;
         clock_ += dt;
+        poll_art(feedback);
         const bool reduced = context_.settings.reduced_motion;
         if (reduced != reduced_)
         {
@@ -478,7 +501,7 @@ class Library final : public app::Concept
 
     void draw(app::Frame &frame) const override
     {
-        const bool still = context_.settings.reduced_motion || !look_.motion;
+        const bool still = context_.settings.reduced_motion || !shown_.motion;
         const float drift = still ? 0.0f : clock_;
         frame.backdrop = theme_.backdrop;
         frame.backdrop.time = drift;
@@ -542,24 +565,41 @@ class Library final : public app::Concept
     // The look's theme on every component; called when Settings changes it.
     void restyle()
     {
-        theme_ = orion::themed(look_, themes_);
+        shown_ = shown_look();
+        theme_ = orion::themed(shown_, themes_);
         tabs_.style.theme = grid_.style.theme = menu_.style.theme = theme_;
         keys_.style.theme = clear_glass(theme_);
-        grid_.style.card.radius = look_.corners;
+        grid_.style.card.radius = shown_.corners;
+        if (!shown_.chrome.cover_rim)
+        {
+            // The card strokes the theme's border over every picture.
+            ui::Theme covers = theme_;
+            covers.border = 0.0f;
+            grid_.style.theme = covers;
+        }
         // Plain tabs are text on the page, the active one lit and underlined,
         // as on the home screen; pills sit on a frosted track.
-        const bool plain = look_.chrome.tabs == orion::TabStyle::plain;
+        const bool plain = shown_.chrome.tabs == orion::TabStyle::plain;
         tabs_.style.kind = plain ? ui::TabKind::underline : ui::TabKind::pill;
         tabs_.style.track = !plain;
         tabs_.style.text_size = plain ? 24.0f : 21.0f;
         tabs_.style.thickness = 3.0f;
         // The aurora ring replaces the theme's ring and glow on covers.
-        const bool aurora = look_.chrome.focus == orion::FocusRing::aurora;
+        const bool aurora = shown_.chrome.focus == orion::FocusRing::aurora;
         grid_.style.card.ring = !aurora;
         grid_.style.card.glow = !aurora;
         tabs_.style.reduced_motion = grid_.style.reduced_motion = keys_.style.reduced_motion =
             menu_.style.reduced_motion = reduced_;
         settings_.set_theme(theme_, reduced_);
+    }
+
+    // What the screen wears: the active tab's own theme, else the main look.
+    orion::Look shown_look() const
+    {
+        const std::string id = prefs_.tab_theme(active_key());
+        if (const orion::ThemeFile *file = id.empty() ? nullptr : themes_.find(id))
+            return orion::look_of(*file);
+        return look_;
     }
 
     void save_prefs() const
@@ -584,6 +624,7 @@ class Library final : public app::Concept
             {
                 prefs_.last_tab = active_key();
                 save_prefs();
+                restyle();
                 rebuild();
             }
             return;
@@ -596,7 +637,7 @@ class Library final : public app::Concept
         }
         if (input.is_pressed(Action::r3) || (input.is_pressed(Action::menu) && grid_.count() == 0))
         {
-            settings_.open(look_, prefs_, feedback);
+            open_settings(feedback);
             return;
         }
         if (input.is_pressed(Action::back) && !query_.empty())
@@ -626,6 +667,16 @@ class Library final : public app::Concept
         grid_.handle(input, feedback);
     }
 
+    void open_settings(app::Feedback &feedback)
+    {
+        const int active = tabs_.active();
+        const std::string name = active >= 0 && active < static_cast<int>(tabs_.tabs().size())
+                                     ? tabs_.tabs()[static_cast<std::size_t>(active)].label
+                                     : std::string("All");
+        settings_.set_tab(active_key(), name);
+        settings_.open(look_, prefs_, feedback);
+    }
+
     void update_settings(const InputFrame &input, app::Feedback &feedback)
     {
         switch (settings_.handle(input, feedback, &look_, &prefs_))
@@ -636,6 +687,8 @@ class Library final : public app::Concept
             break;
         case orion::SettingsPanel::Change::prefs:
             save_prefs();
+            rebuild_tabs(active_key());
+            restyle();
             rebuild();
             break;
         case orion::SettingsPanel::Change::new_tab:
@@ -648,6 +701,10 @@ class Library final : public app::Concept
             break;
         case orion::SettingsPanel::Change::edit_tab:
             open_tab_menu(settings_.tab_id(), feedback);
+            break;
+        case orion::SettingsPanel::Change::fetch_art:
+            start_art(true);
+            feedback.play(art_.running() ? audio::Cue::select : audio::Cue::error);
             break;
         case orion::SettingsPanel::Change::none:
             break;
@@ -835,7 +892,7 @@ class Library final : public app::Concept
             }
             if (tag == kItemSettings)
             {
-                settings_.open(look_, prefs_, feedback);
+                open_settings(feedback);
                 return;
             }
             if (tag == kItemFavourite)
@@ -899,10 +956,17 @@ class Library final : public app::Concept
         launch_ok_ = false;
         std::string elf;
         std::string why;
-        if (!sys::on_console())
+        // A game for an emulator starts the emulator with the core and the
+        // game, as RetroArch's own ES-DE does: -L <core> <game>.
+        const std::string core = title->is_rom() ? core_for(*title) : std::string();
+        const std::string request = title->is_rom() ? title->launcher + "\n-L\n/app0/cores/" +
+                                                          core + "\n" + title->rom + "\n"
+                                                    : title->id + "\n";
+        if (title->is_rom() && core.empty())
+            why = "no core plays " + library::short_system_name(title->system);
+        else if (!sys::on_console())
             why = "not on a console";
-        else if (dir.empty() ||
-                 !save::write_atomic(dir + "/launch-request.txt", title->id + "\n").empty())
+        else if (dir.empty() || !save::write_atomic(dir + "/launch-request.txt", request).empty())
             why = "could not write the launch request";
         else if (!save::read_file(kLauncherPath, &elf, 4u << 20) || elf.empty())
             why = std::string("the launch helper is missing (") + kLauncherPath + ")";
@@ -937,6 +1001,165 @@ class Library final : public app::Concept
         }
         launch_shown_ = 6.0f;
         feedback.play(launch_ok_ ? audio::Cue::launch : audio::Cue::error);
+    }
+
+    // Games for an emulator that have no box art yet. Without retry, games a
+    // run already found nothing for are left alone (art/tried.txt).
+    std::vector<orion::ArtJob> art_jobs(bool retry) const
+    {
+        const std::string &state = context_.library.state_dir;
+        std::vector<orion::ArtJob> jobs;
+        if (state.empty())
+            return jobs;
+        std::string tried;
+        if (!retry)
+            save::read_file(state + "/art/tried.txt", &tried, 1u << 20);
+        for (const Title &title : titles())
+        {
+            if (!title.is_rom() || !title.icon.empty() || !prefs_.system_enabled(title.system) ||
+                tried.find(title.id + "\n") != std::string::npos)
+                continue;
+            const std::size_t slash = title.rom.rfind('/');
+            const std::string file =
+                slash == std::string::npos ? title.rom : title.rom.substr(slash + 1);
+            const std::size_t dot = file.rfind('.');
+            const std::string stem =
+                dot == std::string::npos || dot == 0 ? file : file.substr(0, dot);
+            orion::ArtJob job;
+            job.id = title.id;
+            job.system = title.system;
+            job.rom_file = file;
+            job.target = state + "/art/" + title.system + "/" + stem + ".png";
+            jobs.push_back(std::move(job));
+        }
+        return jobs;
+    }
+
+    void start_art(bool manual)
+    {
+        if (art_.running())
+            return;
+        std::vector<orion::ArtJob> jobs = art_jobs(manual);
+        const std::size_t count = jobs.size();
+        if (count == 0)
+        {
+            if (manual)
+                show_note(true, "Every game already has its box art");
+            return;
+        }
+        const std::string &state = context_.library.state_dir;
+        if (!art_.start(std::move(jobs), state + "/art.txt"))
+            return;
+        art_manual_ = manual;
+        const std::string games = std::to_string(count) + (count == 1 ? " game" : " games");
+        settings_.set_art_status("Looking for box art for " + games + "\u2026");
+        if (manual)
+            show_note(true, "Looking for box art for " + games + "\u2026");
+    }
+
+    // Pictures found reach the shell, which uploads them; the covers pick the
+    // textures up a frame later. A finished run is reported once.
+    void poll_art(app::Feedback &feedback)
+    {
+        std::vector<orion::ArtFound> found = art_.take_found();
+        for (orion::ArtFound &picture : found)
+            context_.new_icons.emplace_back(std::move(picture.id), std::move(picture.path));
+        if (!found.empty())
+            art_sweep_ = 2;
+        if (art_sweep_ > 0 && --art_sweep_ == 0)
+            refresh_covers();
+        if (art_.running())
+        {
+            const orion::ArtFetcher::Progress now = art_.progress();
+            settings_.set_art_status("Found " + std::to_string(now.found) + " of " +
+                                     std::to_string(now.total) + " so far\u2026");
+        }
+        if (!art_.take_finished())
+            return;
+        const orion::ArtFetcher::Progress done = art_.progress();
+        remember_tried(art_.take_missing());
+        std::string summary =
+            "Found " + std::to_string(done.found) + " of " + std::to_string(done.total);
+        if (done.missing > 0)
+            summary += ", none for " + std::to_string(done.missing);
+        if (done.failed > 0)
+            summary += ", " + std::to_string(done.failed) + " failed (" + done.error + ")";
+        settings_.set_art_status("Last run: " + summary);
+        if (done.found == 0 && done.failed > 0)
+            show_note(false, "Could not get box art: " + done.error);
+        else if (art_manual_ || done.found > 0)
+            show_note(true, done.found == 1
+                                ? std::string("Found box art for 1 game")
+                                : "Found box art for " + std::to_string(done.found) + " games");
+        else
+            return;
+        feedback.play(done.found > 0 ? audio::Cue::saved : audio::Cue::error);
+    }
+
+    void remember_tried(const std::vector<std::string> &ids) const
+    {
+        const std::string &state = context_.library.state_dir;
+        if (ids.empty() || state.empty() || !orion::make_directories(state + "/art"))
+            return;
+        std::string tried;
+        save::read_file(state + "/art/tried.txt", &tried, 1u << 20);
+        for (const std::string &id : ids)
+        {
+            if (tried.find(id + "\n") == std::string::npos)
+                tried += id + "\n";
+        }
+        save::write_atomic(state + "/art/tried.txt", tried);
+    }
+
+    // The covers on screen take the textures the shell has uploaded since.
+    void refresh_covers()
+    {
+        for (int i = 0; i < grid_.count(); ++i)
+        {
+            ui::CardItem &item = grid_.item(i);
+            const Title &title = titles()[static_cast<std::size_t>(item.tag)];
+            if (item.texture == title.texture)
+                continue;
+            item.texture = title.texture;
+            if (title.icon_width > 0 && title.icon_height > 0)
+                item.image_aspect =
+                    static_cast<float>(title.icon_width) / static_cast<float>(title.icon_height);
+        }
+    }
+
+    // The card above the hints, for a note that is not a launch.
+    void show_note(bool ok, std::string message)
+    {
+        launch_ok_ = ok;
+        launch_message_ = std::move(message);
+        launch_shown_ = 5.0f;
+    }
+
+    // The core a game for an emulator runs with: the player's choice for
+    // its system, else the first core that plays it.
+    std::string core_for(const Title &title) const
+    {
+        const std::string chosen = prefs_.system_core(title.system);
+        for (const library::System &system : context_.library.emulator.systems)
+        {
+            if (system.name != title.system)
+                continue;
+            if (!chosen.empty() &&
+                std::find(system.cores.begin(), system.cores.end(), chosen) != system.cores.end())
+                return chosen;
+            return system.cores.empty() ? std::string() : system.cores.front();
+        }
+        return chosen;
+    }
+
+    std::string core_name(const std::string &file) const
+    {
+        for (const library::Core &core : context_.library.emulator.cores)
+        {
+            if (core.file == file)
+                return core.name;
+        }
+        return file.empty() ? std::string("no core") : file;
     }
 
     void log_launch(const Title &title, const std::string &what) const
@@ -1040,6 +1263,26 @@ class Library final : public app::Concept
 
     bool on_tab(const Title &title, const std::string &key) const
     {
+        // Games for an emulator live on their system's tab (and in
+        // Favourites and the player's tabs), never on the console's shelves:
+        // a few hundred ROMs would bury everything else.
+        if (title.is_rom())
+        {
+            if (!prefs_.system_enabled(title.system))
+                return false;
+            if (key == "favourites")
+                return favourite_of(title.id);
+            if (key.rfind("sys:", 0) == 0)
+                return key.compare(4, std::string::npos, title.system) == 0;
+            if (key.rfind("tab:", 0) == 0)
+            {
+                const orion::CustomTab *placed = prefs_.placement(title.id);
+                return placed != nullptr && key.compare(4, std::string::npos, placed->id) == 0;
+            }
+            return false;
+        }
+        if (key.rfind("sys:", 0) == 0)
+            return false;
         if (key == "all")
             return true;
         if (key == "favourites")
@@ -1078,6 +1321,11 @@ class Library final : public app::Concept
         };
         for (const Shelf &shelf : kShelves)
             add(shelf.key, shelf.name);
+        for (const library::System &system : context_.library.emulator.systems)
+        {
+            if (prefs_.system_enabled(system.name))
+                add("sys:" + system.name, system.short_name);
+        }
         for (const orion::CustomTab &tab : prefs_.tabs)
             add("tab:" + tab.id, tab.name);
         tabs_.set_tabs(std::move(tabs));
@@ -1147,6 +1395,9 @@ class Library final : public app::Concept
             item.subtitle = describe(title);
             item.badge.clear(); // the art slot draws the category banner
             item.texture = title.texture;
+            if (title.icon_width > 0 && title.icon_height > 0)
+                item.image_aspect =
+                    static_cast<float>(title.icon_width) / static_cast<float>(title.icon_height);
             item.top = hashed_color(title.id, 0.55f, 0.42f);
             item.bottom = hashed_color(title.id, 0.7f, 0.2f);
             item.accent = hashed_color(title.id, 0.6f, 1.0f);
@@ -1179,14 +1430,14 @@ class Library final : public app::Concept
             {380.0f, 920.0f, 700.0f, 0.06f, 0x1c3a9c, false, 0.12f},
         };
         const orion::Look designed = orion::default_look(themes_);
-        const bool own = orion::same_rgb(look_.nebula, designed.nebula) &&
-                         orion::same_rgb(look_.nebula_far, designed.nebula_far);
+        const bool own = orion::same_rgb(shown_.nebula, designed.nebula) &&
+                         orion::same_rgb(shown_.nebula_far, designed.nebula_far);
         for (int i = 0; i < 4; ++i)
         {
             const Cloud &c = kClouds[i];
             const Color hue = own ? Color::rgb(c.designed)
-                                  : lifted(c.far ? look_.nebula_far : look_.nebula, 2.0f);
-            const float alpha = c.alpha * look_.clouds;
+                                  : lifted(c.far ? shown_.nebula_far : shown_.nebula, 2.0f);
+            const float alpha = c.alpha * shown_.clouds;
             if (alpha <= 0.001f)
                 continue;
             const float phase = drift * c.speed + static_cast<float>(i) * 1.9f;
@@ -1239,9 +1490,18 @@ class Library final : public app::Concept
     // The category on a cover: a small coloured banner in its top-right corner.
     void draw_banner(ui::Canvas &canvas, const Rect &art, const Title &title) const
     {
+        std::string system;
         const char *label = "GAME";
         Color colour = Color::rgb(0x8fe3ff);
-        if (title.platform == library::Platform::ps4)
+        if (title.is_rom())
+        {
+            system = library::short_system_name(title.system);
+            for (char &c : system)
+                c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+            label = system.c_str();
+            colour = Color::rgb(0xcdb6ff);
+        }
+        else if (title.platform == library::Platform::ps4)
             label = "PS4", colour = Color::rgb(0x8fb0ff);
         else if (library::shelf_of(title) == library::Shelf::media)
             label = "MEDIA", colour = Color::rgb(0xffc94a);
@@ -1277,7 +1537,7 @@ class Library final : public app::Concept
     void draw_art(ui::Canvas &canvas, const Rect &art, float radius, const ui::CardItem &item,
                   float focus) const
     {
-        const bool aurora = look_.chrome.focus == orion::FocusRing::aurora && focus > 0.01f;
+        const bool aurora = shown_.chrome.focus == orion::FocusRing::aurora && focus > 0.01f;
         if (aurora)
         {
             // glow() fills its inside too: drawn first, the art covers that.
@@ -1285,7 +1545,30 @@ class Library final : public app::Concept
             const Color light = hsv(std::fmod(time * 0.05f, 1.0f), 0.55f, 1.0f);
             canvas.list.glow(art, radius, 26.0f * focus, light.with_alpha(0.5f * focus));
         }
-        if (item.texture != 0)
+        const Title &title = titles()[static_cast<std::size_t>(item.tag)];
+        if (item.texture != 0 && title.is_rom())
+        {
+            // Box art keeps its shape, fitted inside the cover over the
+            // game's own colours.
+            canvas.list.gradient_rect(art, radius, item.top, item.bottom);
+            const float pad = art.w * 0.06f;
+            Rect fit = {art.x + pad, art.y + pad, art.w - 2.0f * pad, art.h - 2.0f * pad};
+            const float aspect = std::max(0.2f, item.image_aspect);
+            if (aspect > fit.w / fit.h)
+            {
+                const float h = fit.w / aspect;
+                fit.y += (fit.h - h) * 0.5f;
+                fit.h = h;
+            }
+            else
+            {
+                const float w = fit.h * aspect;
+                fit.x += (fit.w - w) * 0.5f;
+                fit.w = w;
+            }
+            canvas.list.image(item.texture, fit, item.uv, Color::rgb(0xffffff), radius * 0.4f);
+        }
+        else if (item.texture != 0)
         {
             canvas.list.image(item.texture, art, item.uv, Color::rgb(0xffffff), radius);
         }
@@ -1299,11 +1582,10 @@ class Library final : public app::Concept
         }
         canvas.list.gradient_rect(art, radius, Color::rgb(0xffffff, 0.14f),
                                   Color::rgb(0xffffff, 0.0f));
-        if (look_.chrome.cover_rim)
+        if (shown_.chrome.cover_rim)
             canvas.list.bordered_rect(art, radius, Color::rgb(0x000000, 0.0f), 1.0f,
                                       Color::rgb(0xffffff, 0.16f));
-        const Title &title = titles()[static_cast<std::size_t>(item.tag)];
-        if (look_.chrome.badges)
+        if (shown_.chrome.badges)
             draw_banner(canvas, art, title);
         if (aurora)
             draw_aurora_ring(canvas.list, art, radius, focus);
@@ -1322,9 +1604,15 @@ class Library final : public app::Concept
     {
         const Title &title = focused();
         std::string line = title.id;
-        if (!title.version.empty())
-            line += "   v" + title.version;
-        line += "   " + std::string(shelf_name(library::shelf_of(title)));
+        if (title.is_rom())
+            line = library::short_system_name(title.system) + "   RetroArch, " +
+                   core_name(core_for(title));
+        else
+        {
+            if (!title.version.empty())
+                line += "   v" + title.version;
+            line += "   " + std::string(shelf_name(library::shelf_of(title)));
+        }
         if (const orion::CustomTab *placed = prefs_.placement(title.id))
             line += "   \xc2\xb7   " + placed->name;
         if (favourite_of(title.id))
@@ -1397,9 +1685,9 @@ class Library final : public app::Concept
     // A bar at the bottom of the screen, as the look asks: glass, or its rim.
     void plate(gfx::DrawList &list, ui::Painter &paint, const Rect &r, float radius) const
     {
-        if (look_.chrome.plates == orion::Plates::none)
+        if (shown_.chrome.plates == orion::Plates::none)
             return;
-        if (look_.chrome.plates == orion::Plates::outline)
+        if (shown_.chrome.plates == orion::Plates::outline)
         {
             list.bordered_rect(r, radius, Color::rgb(0x000000, 0.0f), 1.5f,
                                Color::rgb(0xffffff, 0.3f));
@@ -1455,15 +1743,21 @@ class Library final : public app::Concept
                                Color::rgb(0xffffff, 0.14f));
     }
 
-    // Controller glyphs as frosted caps with white lettering: no grey outline
-    // to fight the glass they sit on.
-    static ui::GlyphStyle glyphs()
+    // Controller glyphs as frosted caps lettered in the theme's text: no grey
+    // outline to fight the glass they sit on. Bare on the page, they take the
+    // page's text; on a bar, the bar's.
+    ui::GlyphStyle glyphs() const
     {
+        const bool bare = shown_.chrome.plates == orion::Plates::none;
+        Color ink = bare && theme_.page_text.a > 0.0f ? theme_.page_text : theme_.text;
         ui::GlyphStyle style = ui::GlyphStyle::dark();
-        style.body = Color::rgb(0xffffff, 0.14f);
-        style.edge = Color::rgb(0xffffff, 0.0f);
-        style.ink = Color::rgb(0xffffff);
-        style.label = Color::rgb(0xffffff, 0.92f);
+        style.body = ink;
+        style.body.a = 0.14f;
+        style.edge = ink;
+        style.edge.a = 0.0f;
+        style.ink = ink;
+        style.label = ink;
+        style.label.a = 0.92f;
         return style;
     }
 
@@ -1471,7 +1765,7 @@ class Library final : public app::Concept
     void draw_tab_sheen(gfx::DrawList &list) const
     {
         const int count = static_cast<int>(tabs_.tabs().size());
-        if (count == 0 || look_.chrome.tabs != orion::TabStyle::pills)
+        if (count == 0 || shown_.chrome.tabs != orion::TabStyle::pills)
             return;
         const Rect first = tabs_.tab_rect(context_.fonts, 0);
         const Rect last = tabs_.tab_rect(context_.fonts, count - 1);
@@ -1545,7 +1839,8 @@ class Library final : public app::Concept
 
     app::Context &context_;
     orion::ThemeLibrary themes_; // before the look, which is read through it
-    orion::Look look_;
+    orion::Look look_;           // the main look, as Settings edits it
+    orion::Look shown_;          // what the active tab wears (its own theme, or look_)
     orion::LibraryPrefs prefs_;
     ui::Theme theme_;
     bool reduced_ = false;
@@ -1574,6 +1869,12 @@ class Library final : public app::Concept
     tween::Spring launch_card_;
     float age_ = 0.0f;
     float clock_ = 0.0f;
+    bool art_manual_ = false; // the run was asked for in Settings: report it
+    int art_sweep_ = 0;       // frames until the covers take new textures
+    // Last, so it is destroyed first: its thread stops before what it uses.
+    orion::ArtFetcher art_{
+        [](const std::string &url, std::size_t limit, std::string *body, std::string *error)
+        { return sys::http_get(url, limit, body, error); }};
 };
 
 } // namespace

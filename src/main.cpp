@@ -19,6 +19,7 @@
 #include "demo/catalog.hpp"
 #include "gfx/canvas.hpp"
 #include "gfx/renderer.hpp"
+#include "library/emulators.hpp"
 #include "library/icon.hpp"
 #include "library/library.hpp"
 #include "platform/ps5/audio_out.hpp"
@@ -211,6 +212,19 @@ int main()
         titles.scanned = true;
         titles.state_dir = "/data/orion";
         titles.themes_dir = std::string(kAssets) + "/themes";
+        // RetroArch's games, when it is installed: one more library source.
+        for (std::size_t i = 0; i < titles.titles.size(); ++i)
+        {
+            if (!library::is_retroarch(titles.titles[i]))
+                continue;
+            const library::Title retroarch = titles.titles[i];
+            std::vector<library::Title> roms;
+            titles.emulator = library::scan_retroarch(retroarch, &roms);
+            library::attach_rom_art(roms, retroarch.path, titles.state_dir + "/art");
+            for (library::Title &rom : roms)
+                titles.titles.push_back(std::move(rom));
+            break;
+        }
         const int icons = library::load_icons(titles, renderer.batch());
         char summary[128];
         std::snprintf(summary, sizeof(summary), "titles=%zu icons=%d in %lld ms",
@@ -340,6 +354,19 @@ int main()
             input = tour->step(dt);
 
         shell.update(input, dt);
+        // Box art ORION downloaded: loaded as the scan's icons were.
+        if (auto icons = shell.take_new_icons(); !icons.empty())
+        {
+            for (const auto &[id, path] : icons)
+            {
+                for (library::Title &title : titles.titles)
+                {
+                    if (title.id == id && title.texture == 0)
+                        title.icon = path;
+                }
+            }
+            library::load_icons(titles, renderer.batch());
+        }
         if (shell.take_settings_changed())
         {
             const Settings &settings = shell.settings();
