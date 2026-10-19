@@ -294,6 +294,21 @@ void LibraryPrefs::set_tab_hidden(const std::string &tab, bool hidden)
     edit_tab_prefs(tab_prefs, tab, [&](TabPrefs &e) { e.hidden = hidden && tab != "all"; });
 }
 
+bool valid_art_dir(std::string_view path)
+{
+    if (path.size() < 7 || path.size() > 160 ||
+        (path.rfind("/data/", 0) != 0 && path.rfind("/mnt/", 0) != 0) ||
+        path.find("..") != std::string_view::npos || path.back() == '/')
+        return false;
+    return std::none_of(path.begin(), path.end(),
+                        [](char c) { return static_cast<unsigned char>(c) < 0x20 || c == '\\'; });
+}
+
+std::string art_folder(const LibraryPrefs &prefs, const std::string &state_dir)
+{
+    return valid_art_dir(prefs.art_dir) ? prefs.art_dir : state_dir + "/art";
+}
+
 LibraryPrefs load_prefs(const std::string &state_dir)
 {
     LibraryPrefs prefs;
@@ -340,6 +355,9 @@ LibraryPrefs load_prefs(const std::string &state_dir)
     prefs.reopen_last_tab = root["reopen_last_tab"].bool_or(prefs.reopen_last_tab);
     prefs.moved_leave_shelf = root["moved_leave_shelf"].bool_or(prefs.moved_leave_shelf);
     prefs.auto_art = root["auto_art"].bool_or(prefs.auto_art);
+    const std::string art_dir = root["art_dir"].string_or("");
+    if (valid_art_dir(art_dir))
+        prefs.art_dir = art_dir;
     return prefs;
 }
 
@@ -355,6 +373,7 @@ bool save_prefs(const std::string &state_dir, const LibraryPrefs &prefs)
     text += std::string("  \"moved_leave_shelf\": ") +
             (prefs.moved_leave_shelf ? "true" : "false") + ",\n";
     text += std::string("  \"auto_art\": ") + (prefs.auto_art ? "true" : "false") + ",\n";
+    text += "  \"art_dir\": " + json::quote(prefs.art_dir) + ",\n";
     text += "  \"tabs\": [";
     for (std::size_t i = 0; i < prefs.tabs.size(); ++i)
     {

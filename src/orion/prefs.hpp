@@ -68,6 +68,7 @@ struct Placement
 //     "reopen_last_tab": true,
 //     "moved_leave_shelf": true,
 //     "auto_art": true,
+//     "art_dir": "/mnt/usb0/ORION/art",
 //     "tabs": [{"id": "t1", "name": "RPGs"}],
 //     "placements": {"PPSA01234": "t1"},
 //     "systems": {"Nintendo - Game Boy Advance": {"enabled": true, "core": "mgba_libretro.so"}},
@@ -94,6 +95,9 @@ struct LibraryPrefs
     bool moved_leave_shelf = true;
     // New games for an emulator get box art from the internet on start.
     bool auto_art = true;
+    // Where box art is looked for first and downloaded to; empty: ORION's
+    // own <state_dir>/art. Always a folder under /data or /mnt.
+    std::string art_dir;
 
     const CustomTab *tab(const std::string &id) const;
     // The tab a title was moved to, or nullptr.
@@ -129,6 +133,12 @@ struct LibraryPrefs
     bool tab_hidden(const std::string &tab) const;
     void set_tab_hidden(const std::string &tab, bool hidden);
 };
+
+// A folder box art may live in: absolute, under /data/ or /mnt/, no "..",
+// no control characters, at most 160 bytes.
+bool valid_art_dir(std::string_view path);
+// The folder box art goes in: the player's, else <state_dir>/art.
+std::string art_folder(const LibraryPrefs &prefs, const std::string &state_dir);
 
 LibraryPrefs load_prefs(const std::string &state_dir);
 // Atomic; false when state_dir is empty or unwritable.

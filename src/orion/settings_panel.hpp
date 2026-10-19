@@ -63,12 +63,14 @@ class SettingsPanel
     enum class Change : std::uint8_t
     {
         none,
-        look,       // the Look was edited
-        prefs,      // the LibraryPrefs were edited
-        new_tab,    // "New tab" was chosen: the screen asks for a name
-        save_theme, // "Save as new theme" was chosen: the screen asks for a name
-        rename_tab, // "Rename" on a tab's page: tab_id() says which custom tab
-        fetch_art,  // "Find box art now" was chosen
+        look,            // the Look was edited
+        prefs,           // the LibraryPrefs were edited
+        new_tab,         // "New tab" was chosen: the screen asks for a name
+        save_theme,      // "Save as new theme" was chosen: the screen asks for a name
+        rename_tab,      // "Rename" on a tab's page: tab_id() says which custom tab
+        fetch_art,       // "Find box art now" was chosen
+        art_folder,      // the box art folder changed (prefs.art_dir)
+        type_art_folder, // "Your own folder" was chosen: the screen asks for a path
     };
 
     enum class Section : std::uint8_t
@@ -95,6 +97,11 @@ class SettingsPanel
     }
     // What the box art row says under itself: the last run, or this one.
     void set_art_status(std::string status);
+    // ORION's own art folder, to show beside the choice that means it.
+    void set_state_dir(std::string dir)
+    {
+        state_dir_ = std::move(dir);
+    }
     // The systems the Emulators rows offer; must outlive the panel.
     void set_emulator(const library::Emulator &emulator)
     {
@@ -166,6 +173,7 @@ class SettingsPanel
     const library::Emulator *emulator_ = nullptr;
     std::vector<TabEntry> tabs_;
     std::string tab_id_;
+    std::string state_dir_ = "/data/orion";
     std::string art_status_ = "Covers from thumbnails.libretro.com for games without one";
 };
 

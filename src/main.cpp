@@ -22,6 +22,7 @@
 #include "library/emulators.hpp"
 #include "library/icon.hpp"
 #include "library/library.hpp"
+#include "orion/prefs.hpp"
 #include "platform/ps5/audio_out.hpp"
 #include "platform/ps5/display_egl.hpp"
 #include "platform/ps5/pad.hpp"
@@ -220,7 +221,9 @@ int main()
             const library::Title retroarch = titles.titles[i];
             std::vector<library::Title> roms;
             titles.emulator = library::scan_retroarch(retroarch, &roms);
-            library::attach_rom_art(roms, retroarch.path, titles.state_dir + "/art");
+            library::attach_rom_art(
+                roms, retroarch.path,
+                orion::art_folder(orion::load_prefs(titles.state_dir), titles.state_dir));
             for (library::Title &rom : roms)
                 titles.titles.push_back(std::move(rom));
             break;

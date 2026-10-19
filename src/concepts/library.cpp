@@ -60,6 +60,7 @@ constexpr float kGridBottom = 972.0f;
 constexpr int kColumns = 7;
 constexpr std::size_t kMaxQuery = 40; // bytes
 constexpr std::size_t kMaxName = 24;  // bytes, as orion::LibraryPrefs keeps them
+constexpr std::size_t kMaxPath = 160; // bytes, as orion::valid_art_dir takes them
 // The launch helper shipped in the app folder, and the console's ELF loader.
 constexpr const char *kLauncherPath = "/app0/assets/payloads/orion-launcher.elf";
 constexpr int kLoaderPort = 9021;
@@ -101,6 +102,7 @@ enum class Typing : std::uint8_t
     new_tab_for_title, // from a title's menu: the title moves into it
     rename_tab,
     theme_name, // from Settings > Save as new theme
+    art_folder, // from Settings > Box art > Your own folder
 };
 
 // Tags of the menu items.
@@ -157,7 +159,12 @@ constexpr app::TourStep kTour[] = {
     {0.2f, action_bit(Action::back)},
     {0.2f, action_bit(Action::back)},
     {0.2f, action_bit(Action::jump_next)},
-    {0.2f, action_bit(Action::jump_next)},
+    {0.3f, action_bit(Action::jump_next)},
+    {0.2f, 0, Direction::right},
+    {0.12f, 0, Direction::down},
+    {0.12f, 0, Direction::down},
+    {0.8f, 0, Direction::none, "settings-art"},
+    {0.2f, action_bit(Action::back)},
     {0.3f, action_bit(Action::jump_next)},
     {0.2f, 0, Direction::right},
     {0.8f, 0, Direction::none, "settings-appearance"},
@@ -424,6 +431,7 @@ class Library final : public app::Concept
         }
         look_ = orion::load_look(state, themes_);
         settings_.set_themes(themes_);
+        settings_.set_state_dir(state);
         settings_.set_emulator(context_.library.emulator);
         restyle();
         // ORION reopens where it was left, when asked to.
@@ -796,6 +804,13 @@ class Library final : public app::Concept
             feedback.play(audio::Cue::modal_open);
             break;
         }
+        case orion::SettingsPanel::Change::art_folder:
+            art_folder_changed();
+            break;
+        case orion::SettingsPanel::Change::type_art_folder:
+            start_typing(Typing::art_folder, orion::art_folder(prefs_, context_.library.state_dir));
+            feedback.play(audio::Cue::modal_open);
+            break;
         case orion::SettingsPanel::Change::fetch_art:
             start_art(true);
             feedback.play(art_.running() ? audio::Cue::select : audio::Cue::error);
@@ -814,8 +829,15 @@ class Library final : public app::Concept
             query_ = std::move(text);
         else
             name_ = std::move(text);
-        keys_.style.max_length = static_cast<int>(typing == Typing::search ? kMaxQuery : kMaxName);
+        keys_.style.max_length = static_cast<int>(limit_of(typing));
         keys_.set_length(static_cast<int>(buffer().size()));
+    }
+
+    static std::size_t limit_of(Typing typing)
+    {
+        return typing == Typing::search       ? kMaxQuery
+               : typing == Typing::art_folder ? kMaxPath
+                                              : kMaxName;
     }
 
     std::string &buffer()
@@ -825,7 +847,7 @@ class Library final : public app::Concept
 
     void type(std::string_view utf8)
     {
-        const std::size_t limit = typing_ == Typing::search ? kMaxQuery : kMaxName;
+        const std::size_t limit = limit_of(typing_);
         if (buffer().size() + utf8.size() > limit)
             return;
         buffer() += utf8;
@@ -861,6 +883,21 @@ class Library final : public app::Concept
         if (typing == Typing::theme_name)
         {
             save_theme(feedback);
+            return;
+        }
+        if (typing == Typing::art_folder)
+        {
+            if (!orion::valid_art_dir(name_))
+            {
+                show_note(false,
+                          "A box art folder goes under /data or /mnt, like /mnt/usb0/ORION/art");
+                feedback.play(audio::Cue::error);
+                settings_.refresh(look_, prefs_); // the row goes back to where it was
+                return;
+            }
+            prefs_.art_dir = name_;
+            art_folder_changed();
+            feedback.play(audio::Cue::saved);
             return;
         }
         if (typing == Typing::rename_tab)
@@ -1083,7 +1120,8 @@ class Library final : public app::Concept
             job.id = title.id;
             job.system = title.system;
             job.rom_file = file;
-            job.target = state + "/art/" + title.system + "/" + stem + ".png";
+            job.target =
+                orion::art_folder(prefs_, state) + "/" + title.system + "/" + stem + ".png";
             jobs.push_back(std::move(job));
         }
         return jobs;
@@ -1165,6 +1203,35 @@ class Library final : public app::Concept
                 tried += id + "\n";
         }
         save::write_atomic(state + "/art/tried.txt", tried);
+    }
+
+    // A new box art folder: saved, and searched now for the games that have
+    // no picture yet (the ones that have keep theirs until ORION restarts).
+    void art_folder_changed()
+    {
+        save_prefs();
+        if (settings_.is_open())
+            settings_.refresh(look_, prefs_);
+        std::vector<Title> roms;
+        for (const Title &title : titles())
+        {
+            if (title.is_rom() && title.icon.empty())
+                roms.push_back(title);
+        }
+        library::attach_rom_art(roms, context_.library.emulator.root,
+                                orion::art_folder(prefs_, context_.library.state_dir));
+        int found = 0;
+        for (const Title &rom : roms)
+        {
+            if (rom.icon.empty())
+                continue;
+            context_.new_icons.emplace_back(rom.id, rom.icon);
+            ++found;
+        }
+        if (found > 0)
+            art_sweep_ = 2;
+        show_note(true, "Box art folder: " + orion::art_folder(prefs_, context_.library.state_dir) +
+                            (found > 0 ? "  (" + std::to_string(found) + " found)" : ""));
     }
 
     // The covers on screen take the textures the shell has uploaded since.
@@ -1905,6 +1972,7 @@ class Library final : public app::Concept
         const char *placeholder = search                          ? "Search titles or IDs"
                                   : typing_ == Typing::rename_tab ? "Rename the tab"
                                   : typing_ == Typing::theme_name ? "Name the new theme"
+                                  : typing_ == Typing::art_folder ? "A folder under /data or /mnt"
                                                                   : "Name the new tab";
         const bool empty = text.empty();
         ui::text(list, fonts.regular, empty ? placeholder : text.c_str(), field.x + 28,

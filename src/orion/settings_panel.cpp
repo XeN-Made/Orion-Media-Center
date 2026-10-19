@@ -45,6 +45,7 @@ enum : int
     kNewTab,
     kArtAuto,
     kArtNow,
+    kArtFolder,
     // A tab's page.
     kPageShow,
     kPageTheme,
@@ -62,6 +63,22 @@ enum : int
 
 constexpr const char *kSortKeys[] = {"name", "name_reversed", "recent", "platform"};
 constexpr const char *kSortNames[] = {"Name A–Z", "Name Z–A", "Recently added", "Platform"};
+// Where box art can live: ORION's folder, a USB drive, the extended storage,
+// or a folder the player types.
+constexpr const char *kArtPlaces[] = {"ORION's folder", "USB drive", "Extended storage",
+                                      "Your own folder"};
+constexpr const char *kArtPaths[] = {"", "/mnt/usb0/ORION/art", "/mnt/ext0/ORION/art"};
+
+int art_place(const std::string &dir)
+{
+    for (int i = 0; i < 3; ++i)
+    {
+        if (dir == kArtPaths[i])
+            return i;
+    }
+    return 3;
+}
+
 constexpr const char *kCoverNames[] = {"Fit the pictures", "Square", "Portrait (5:7)",
                                        "Landscape (7:5)"};
 
@@ -457,6 +474,10 @@ void SettingsPanel::build_art(const LibraryPrefs &prefs)
     form_.add_toggle(kArtAuto, "Find box art by itself", prefs.auto_art).description =
         "When ORION starts, new games get covers from the internet";
     form_.add_action(kArtNow, "Find box art now").description = art_status_;
+    form_
+        .add_choice(kArtFolder, "Box art folder", {kArtPlaces, kArtPlaces + 4},
+                    art_place(prefs.art_dir))
+        .description = "Looked in first, and where downloads go: " + art_folder(prefs, state_dir_);
 }
 
 std::vector<std::string> SettingsPanel::theme_names() const
@@ -702,6 +723,17 @@ SettingsPanel::Change SettingsPanel::handle(const InputFrame &input, ui::Feedbac
     case kArtAuto:
         prefs->auto_art = form_.toggle_value(kArtAuto);
         return Change::prefs;
+    case kArtFolder:
+    {
+        const int place = form_.choice_index(kArtFolder);
+        if (place >= 3)
+            return Change::type_art_folder;
+        prefs->art_dir = kArtPaths[std::max(place, 0)];
+        if (ui::FormRow *row = form_.row(kArtFolder))
+            row->description =
+                "Looked in first, and where downloads go: " + art_folder(*prefs, state_dir_);
+        return Change::art_folder;
+    }
     default:
         return edit_appearance(id, look, *prefs);
     }

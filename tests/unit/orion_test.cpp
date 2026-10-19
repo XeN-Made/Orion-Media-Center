@@ -136,6 +136,24 @@ TEST(OrionPrefs, EachTabKeepsItsCoversSortAndPlace)
     EXPECT_EQ(orion::load_prefs(dir).tab_theme("games"), "candy");
 }
 
+TEST(OrionPrefs, BoxArtLivesWhereThePlayerSays)
+{
+    const std::string dir = fresh_dir("orion-prefs-art-dir");
+    orion::LibraryPrefs prefs;
+    EXPECT_EQ(orion::art_folder(prefs, "/data/orion"), "/data/orion/art");
+    prefs.art_dir = "/mnt/usb0/ORION/art";
+    ASSERT_TRUE(orion::save_prefs(dir, prefs));
+    EXPECT_EQ(orion::art_folder(orion::load_prefs(dir), "/data/orion"), "/mnt/usb0/ORION/art");
+    EXPECT_TRUE(orion::valid_art_dir("/data/my art"));
+    EXPECT_FALSE(orion::valid_art_dir("/system/art"));     // not under /data or /mnt
+    EXPECT_FALSE(orion::valid_art_dir("/data/../system")); // no way out
+    EXPECT_FALSE(orion::valid_art_dir("/data/art/"));
+    EXPECT_FALSE(orion::valid_art_dir("art"));
+    // A hand-edited file with a bad folder falls back to ORION's own.
+    ASSERT_TRUE(save::write_atomic(dir + "/library.json", R"({"art_dir": "/etc/x"})").empty());
+    EXPECT_EQ(orion::load_prefs(dir).art_dir, "");
+}
+
 TEST(OrionPrefs, RemovingATabSendsItsTitlesHome)
 {
     orion::LibraryPrefs prefs;
