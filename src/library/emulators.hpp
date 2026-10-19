@@ -43,7 +43,7 @@ std::string thumbnail_name(std::string_view stem);
 // Box art for games for an emulator: sets the icon of each ROM in roms that
 // has a picture, from the first of these that exists (stem: the ROM's file
 // name without its extension):
-//   <art_dir>/<system>/<stem>.png                 ORION's own (tools/fetch-rom-art.py)
+//   <art_dir>/<system>/<stem>.png                 ORION's own (it downloads there)
 //   <root>/thumbnails/<system>/Named_Boxarts/<thumbnail_name(stem)>.png
 //                                                 RetroArch's thumbnails
 //   <root>/es-de/ES-DE/downloaded_media/<esde_system_name>/covers/<stem>.png
@@ -51,18 +51,24 @@ std::string thumbnail_name(std::string_view stem);
 // root is RetroArch's folder. Returns how many ROMs got one.
 int attach_rom_art(std::vector<Title> &roms, const std::string &root, const std::string &art_dir);
 
-// The RetroArch port starts a game in "game mode" (`--ps5-mode=game`): it
-// reads <root>/game-request.txt, a command line as its ES-DE writes one,
-// paths escaped with backslashes as a shell would take them:
-//   /app0/eboot.bin -L /app0/cores/mgba_libretro.so /app0/content/Nintendo\ -\ ...gba
-// Started any other way it shows its frontend picker and ignores the game.
-// The mode decides before anything else is read (its args.txt only adds to
-// RetroArch's own arguments later), so it must come with the launch. A
-// launch with the mode as its only argument still reached the picker: the
-// system seems to take the first argument for the program's name, so ORION
-// passes the mode twice.
-std::string retroarch_game_request(const std::string &core_file, const std::string &rom);
-constexpr const char *kRetroArchGameMode = "--ps5-mode=game";
+// How the RetroArch port's launcher can be made to start a game. It picks a
+// mode (picker, RetroArch, ES-DE, game) from its own command line, which a
+// launch from outside cannot set: the system hands the title no arguments.
+// So ORION uses the two files the launcher reads on every start:
+//   <root>/config/frontend.cfg   frontend_start = "retroarch" skips the picker
+//   <root>/args.txt              one argument per line (up to 255 bytes, '#'
+//                                comments, "--ps5-" lines are the launcher's),
+//                                added to RetroArch's own: -L <core> <game>
+// RetroArch then starts the game as its own command line asks. The files are
+// the player's too: ORION keeps what it replaced and the launch helper puts
+// it back once RetroArch is up (payload/launcher).
+//
+// The args.txt for a game: "-L", the core in /app0/cores, the game.
+std::string retroarch_args(const std::string &core_file, const std::string &rom);
+// frontend.cfg with frontend_start set to "retroarch", other lines kept.
+std::string retroarch_frontend(std::string_view current);
+// Lines RetroArch's launcher reads no longer than this.
+constexpr std::size_t kRetroArchArgMax = 255;
 
 // "rom-" and twelve hex digits from the ROM's path: stable across scans.
 std::string rom_id(std::string_view path);

@@ -264,21 +264,37 @@ int attach_rom_art(std::vector<Title> &roms, const std::string &root, const std:
     return found;
 }
 
-std::string retroarch_game_request(const std::string &core_file, const std::string &rom)
+std::string retroarch_args(const std::string &core_file, const std::string &rom)
 {
-    const auto escaped = [](const std::string &text)
+    return "# ORION: this start only; put back when RetroArch is up\n-L\n/app0/cores/" + core_file +
+           "\n" + rom + "\n";
+}
+
+std::string retroarch_frontend(std::string_view current)
+{
+    std::string out;
+    bool set = false;
+    std::size_t start = 0;
+    while (start < current.size())
     {
-        std::string out;
-        for (char c : text)
+        std::size_t end = current.find('\n', start);
+        if (end == std::string_view::npos)
+            end = current.size();
+        const std::string_view line = current.substr(start, end - start);
+        start = end + 1;
+        if (trim(line).rfind("frontend_start", 0) == 0)
         {
-            if (std::isalnum(static_cast<unsigned char>(c)) == 0 &&
-                std::string_view("/._-+,:=@%").find(c) == std::string_view::npos)
-                out += '\\';
-            out += c;
+            if (!set)
+                out += "frontend_start = \"retroarch\"\n";
+            set = true;
+            continue;
         }
-        return out;
-    };
-    return "/app0/eboot.bin -L " + escaped("/app0/cores/" + core_file) + " " + escaped(rom);
+        if (!trim(line).empty())
+            out += std::string(line) + "\n";
+    }
+    if (!set)
+        out += "frontend_start = \"retroarch\"\n";
+    return out;
 }
 
 std::string rom_id(std::string_view path)

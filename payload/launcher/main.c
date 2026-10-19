@@ -12,6 +12,12 @@
 // up, as it does for a launch from the home screen. Every step is appended to
 // /data/orion/launch-helper.txt: a file of its own, since launch.txt belongs to
 // ORION's sandbox and the helper may not be allowed to write to it.
+//
+// A request line "@restore <file>" is not an argument: ORION changed that
+// file of the title's for this one start (RetroArch's args.txt and
+// frontend.cfg) and kept the original as <file>.orion-backup, or left
+// <file>.orion-absent when there was none. Once the title is up and has read
+// it, the helper puts the original back.
 
 #include <fcntl.h>
 #include <pthread.h>
@@ -27,6 +33,10 @@
 #define WAIT_FOR_EXIT_MS 20000
 #define WAIT_FOR_LAUNCH_MS 15000
 #define MAX_ARGUMENTS 16
+#define MAX_RESTORES 4
+#define RESTORE_LINE "@restore "
+#define WAIT_FOR_TITLE_MS 20000
+#define TITLE_READS_MS 8000
 
 // The launch parameters as the PS5 homebrew loader passes them: only the
 // user is filled in.
@@ -64,6 +74,33 @@ static void say(const char *format, ...)
 }
 
 // Four capital letters and five digits.
+// Puts back a file ORION changed for one start. Only args.txt and
+// config/frontend.cfg of a title under /data/homebrew.
+static void restore(const char *path)
+{
+    const size_t length = strlen(path);
+    const int args = length > 9 && strcmp(path + length - 9, "/args.txt") == 0;
+    const int frontend = length > 20 && strcmp(path + length - 20, "/config/frontend.cfg") == 0;
+    if (strncmp(path, "/data/homebrew/", 15) != 0 || strstr(path, "..") != NULL ||
+        length > 400 || (!args && !frontend))
+    {
+        say("not restoring %s: not a file ORION changes", path);
+        return;
+    }
+    char backup[512];
+    char absent[512];
+    snprintf(backup, sizeof(backup), "%s.orion-backup", path);
+    snprintf(absent, sizeof(absent), "%s.orion-absent", path);
+    if (access(backup, F_OK) == 0)
+        say(rename(backup, path) == 0 ? "restored %s" : "could not restore %s", path);
+    else if (access(absent, F_OK) == 0)
+    {
+        remove(path);
+        remove(absent);
+        say("removed %s (there was none before)", path);
+    }
+}
+
 static int is_title_id(const char *text)
 {
     if (strlen(text) != 9)
@@ -143,11 +180,24 @@ int main(void)
         return 1;
     }
     strcpy(job.title, lines[0]);
+    const char *restores[MAX_RESTORES];
+    int restore_count = 0;
+    int arguments = 0;
     for (int i = 1; i < count; ++i)
-        job.argv[i - 1] = lines[i];
-    say("started for %s with %d argument(s)", job.title, count - 1);
-    for (int i = 1; i < count; ++i)
-        say("  argument %d: %s", i, lines[i]);
+    {
+        if (strncmp(lines[i], RESTORE_LINE, strlen(RESTORE_LINE)) == 0)
+        {
+            if (restore_count < MAX_RESTORES)
+                restores[restore_count++] = lines[i] + strlen(RESTORE_LINE);
+        }
+        else
+            job.argv[arguments++] = lines[i];
+    }
+    say("started for %s with %d argument(s)", job.title, arguments);
+    for (int i = 0; i < arguments; ++i)
+        say("  argument %d: %s", i + 1, job.argv[i]);
+    for (int i = 0; i < restore_count; ++i)
+        say("  %s is for this start only", restores[i]);
 
     // ORION closes itself after sending this payload; wait until no app is
     // in front before asking for the next one.
@@ -163,6 +213,8 @@ int main(void)
     {
         say("an app (0x%08x) is still in front after %d ms; not launching", (unsigned)app,
             waited);
+        for (int i = 0; i < restore_count; ++i)
+            restore(restores[i]);
         return 1;
     }
     say("no app in front after %d ms", waited);
@@ -188,5 +240,19 @@ int main(void)
             job.result == 0 ? "accepted" : "refused");
     else
         say("system has not answered after %d ms; the title may still be starting", waited);
+    if (restore_count > 0)
+    {
+        // Give the title time to come up and read the files, then put them back.
+        if (!job.done || job.result == 0)
+        {
+            for (waited = 0; sceSystemServiceGetAppIdOfRunningBigApp() <= 0 &&
+                             waited < WAIT_FOR_TITLE_MS;
+                 waited += 200)
+                usleep(200 * 1000);
+            usleep(TITLE_READS_MS * 1000);
+        }
+        for (int i = 0; i < restore_count; ++i)
+            restore(restores[i]);
+    }
     return job.done && job.result == 0 ? 0 : 1;
 }
