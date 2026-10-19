@@ -6,6 +6,7 @@
 
 #include <arpa/inet.h>
 #include <curl/curl.h>
+#include <fcntl.h>
 #include <mutex>
 #include <cerrno>
 #include <cstdarg>
@@ -151,6 +152,25 @@ int launch_app(const char *title_id)
     return result;
 }
 
+constexpr const char *kArtTrace = "/data/orion/art-trace.txt";
+
+void art_trace(const char *step, bool reset)
+{
+    const int fd = ::open(kArtTrace, O_WRONLY | O_CREAT | (reset ? O_TRUNC : O_APPEND), 0666);
+    if (fd < 0)
+        return;
+    char line[256];
+    const int length = std::snprintf(line, sizeof(line), "%lld ms  %s\n",
+                                     static_cast<long long>(monotonic_us() / 1000), step);
+    if (length > 0)
+    {
+        const ssize_t written = ::write(fd, line, static_cast<std::size_t>(length));
+        (void)written;
+    }
+    ::fsync(fd);
+    ::close(fd);
+}
+
 namespace
 {
 
@@ -182,8 +202,15 @@ std::size_t sink_write(char *data, std::size_t size, std::size_t count, void *us
 bool http_get(const std::string &url, std::size_t limit, std::string *body, std::string *error)
 {
     static std::once_flag once;
-    std::call_once(once, [] { curl_global_init(CURL_GLOBAL_DEFAULT); });
+    std::call_once(once,
+                   []
+                   {
+                       art_trace("curl_global_init");
+                       curl_global_init(CURL_GLOBAL_DEFAULT);
+                       art_trace("curl_global_init done");
+                   });
     body->clear();
+    art_trace("curl_easy_init");
     CURL *curl = curl_easy_init();
     if (curl == nullptr)
     {
@@ -206,7 +233,9 @@ bool http_get(const std::string &url, std::size_t limit, std::string *body, std:
     // Signals and threads do not mix: a worker thread calls this.
     curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
     curl_easy_setopt(curl, CURLOPT_USERAGENT, "ORION-Media-Center/1");
+    art_trace(("perform " + url).c_str());
     const CURLcode code = curl_easy_perform(curl);
+    art_trace(("perform done: " + std::string(curl_easy_strerror(code))).c_str());
     long status = 0;
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status);
     curl_easy_cleanup(curl);

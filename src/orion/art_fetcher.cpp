@@ -129,6 +129,7 @@ void ArtFetcher::wait()
 void ArtFetcher::run(std::vector<ArtJob> jobs, std::string log_path)
 {
     // One index per system, fetched when its first game comes up.
+    append_line(log_path, "art thread running: " + std::to_string(jobs.size()) + " games");
     std::map<std::string, std::vector<std::string>> indexes;
     std::map<std::string, std::string> index_errors;
     int failures_in_a_row = 0;

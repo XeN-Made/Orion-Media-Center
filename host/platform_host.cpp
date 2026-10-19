@@ -60,6 +60,12 @@ bool on_console()
     return false;
 }
 
+void art_trace(const char *step, bool reset)
+{
+    (void)step;
+    (void)reset;
+}
+
 bool http_get(const std::string &url, std::size_t limit, std::string *body, std::string *error)
 {
     (void)url;

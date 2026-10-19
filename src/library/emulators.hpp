@@ -51,6 +51,14 @@ std::string thumbnail_name(std::string_view stem);
 // root is RetroArch's folder. Returns how many ROMs got one.
 int attach_rom_art(std::vector<Title> &roms, const std::string &root, const std::string &art_dir);
 
+// The RetroArch port starts a game in "game mode" (`--ps5-mode=game`): it
+// reads <root>/game-request.txt, a command line as its ES-DE writes one,
+// paths escaped with backslashes as a shell would take them:
+//   /app0/eboot.bin -L /app0/cores/mgba_libretro.so /app0/content/Nintendo\ -\ ...gba
+// Started any other way it shows its frontend picker and ignores the game.
+std::string retroarch_game_request(const std::string &core_file, const std::string &rom);
+constexpr const char *kRetroArchGameMode = "--ps5-mode=game";
+
 // "rom-" and twelve hex digits from the ROM's path: stable across scans.
 std::string rom_id(std::string_view path);
 

@@ -264,6 +264,23 @@ int attach_rom_art(std::vector<Title> &roms, const std::string &root, const std:
     return found;
 }
 
+std::string retroarch_game_request(const std::string &core_file, const std::string &rom)
+{
+    const auto escaped = [](const std::string &text)
+    {
+        std::string out;
+        for (char c : text)
+        {
+            if (std::isalnum(static_cast<unsigned char>(c)) == 0 &&
+                std::string_view("/._-+,:=@%").find(c) == std::string_view::npos)
+                out += '\\';
+            out += c;
+        }
+        return out;
+    };
+    return "/app0/eboot.bin -L " + escaped("/app0/cores/" + core_file) + " " + escaped(rom);
+}
+
 std::string rom_id(std::string_view path)
 {
     std::uint64_t hash = 1469598103934665603ull;

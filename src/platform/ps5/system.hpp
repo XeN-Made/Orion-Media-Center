@@ -49,6 +49,11 @@ int launch_app(const char *title_id);
 // accepted, else the errno of what failed (kLaunchUnsupported on a PC).
 int send_payload(const std::string &elf, int port);
 
+// Appends one line to /data/orion/art-trace.txt and syncs it, so the last
+// line names the step a crash happened in. reset starts the file over.
+// Nothing on a PC.
+void art_trace(const char *step, bool reset = false);
+
 // Fetches an https:// URL into *body (at most limit bytes), verifying the
 // server against the CA list shipped in assets/certs. False with *error set
 // otherwise, a page that is not 200 included. Blocking: call it from a

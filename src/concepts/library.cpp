@@ -421,7 +421,10 @@ class Library final : public app::Concept
         rebuild();
         // New games for an emulator look for their box art in the background.
         if (prefs_.auto_art && sys::on_console())
+        {
+            sys::art_trace("ORION started; looking for box art", true);
             start_art(false);
+        }
     }
 
     const app::ConceptInfo &info() const override
@@ -959,13 +962,22 @@ class Library final : public app::Concept
         // A game for an emulator starts the emulator with the core and the
         // game, as RetroArch's own ES-DE does: -L <core> <game>.
         const std::string core = title->is_rom() ? core_for(*title) : std::string();
-        const std::string request = title->is_rom() ? title->launcher + "\n-L\n/app0/cores/" +
-                                                          core + "\n" + title->rom + "\n"
-                                                    : title->id + "\n";
+        // A game for RetroArch: the game goes in its game-request.txt, and it
+        // is started in game mode (library/emulators.hpp).
+        const std::string request =
+            title->is_rom() ? title->launcher + "\n" + library::kRetroArchGameMode + "\n"
+                            : title->id + "\n";
+        const std::string game_request =
+            title->is_rom() ? context_.library.emulator.root + "/game-request.txt" : std::string();
         if (title->is_rom() && core.empty())
             why = "no core plays " + library::short_system_name(title->system);
         else if (!sys::on_console())
             why = "not on a console";
+        else if (title->is_rom() &&
+                 !save::write_atomic(game_request,
+                                     library::retroarch_game_request(core, title->rom))
+                      .empty())
+            why = "could not write " + game_request;
         else if (dir.empty() || !save::write_atomic(dir + "/launch-request.txt", request).empty())
             why = "could not write the launch request";
         else if (!save::read_file(kLauncherPath, &elf, 4u << 20) || elf.empty())
@@ -1048,8 +1060,10 @@ class Library final : public app::Concept
             return;
         }
         const std::string &state = context_.library.state_dir;
+        sys::art_trace(("starting the art thread for " + std::to_string(count) + " games").c_str());
         if (!art_.start(std::move(jobs), state + "/art.txt"))
             return;
+        sys::art_trace("art thread started");
         art_manual_ = manual;
         const std::string games = std::to_string(count) + (count == 1 ? " game" : " games");
         settings_.set_art_status("Looking for box art for " + games + "\u2026");
