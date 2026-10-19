@@ -109,10 +109,10 @@ TEST_F(LibraryDesign, SquareStarsATitleAndSavesIt)
     EXPECT_TRUE(hui::library::load_favourites(dir).empty());
 }
 
-TEST_F(LibraryDesign, OptionsOpensSettingsAndBackClosesThem)
+TEST_F(LibraryDesign, R3OpensSettingsAndBackClosesThem)
 {
     auto design = with_fixture();
-    send(*design, press(hui::Action::menu));
+    send(*design, press(hui::Action::r3));
     EXPECT_FALSE(last_cues_.empty());
     expect_drawable(*design);
     // The settings have the input: shoulders do not turn the shelves.
@@ -138,8 +138,8 @@ TEST_F(LibraryDesign, CrossMovesATitleToACustomTabAndItIsRemembered)
     library_.state_dir = dir;
     auto design = with_fixture();
 
-    // Cross opens the menu on Ciel Ouvert: Launch, Favourite, then Move to RPGs.
-    send(*design, press(hui::Action::confirm));
+    // Options opens the menu on Ciel Ouvert: Launch, Favourite, then Move to RPGs.
+    send(*design, press(hui::Action::menu));
     EXPECT_FALSE(last_cues_.empty());
     send(*design, nav(Direction::down));
     send(*design, nav(Direction::down));
@@ -169,9 +169,8 @@ TEST_F(LibraryDesign, LaunchSaysWhatHappenedAndLogsIt)
     std::remove((dir + "/launch.txt").c_str());
     library_.state_dir = dir;
     auto design = with_fixture();
-    // Cross, then Cross on Launch: on a PC there is no helper to hand to, so
-    // nothing is launched, the request is withdrawn and ORION stays open.
-    send(*design, press(hui::Action::confirm));
+    // Cross launches: on a PC there is no helper to hand to, so nothing is
+    // launched, the request is withdrawn and ORION stays open.
     send(*design, press(hui::Action::confirm));
     EXPECT_TRUE(played(Cue::error));
     expect_drawable(*design);

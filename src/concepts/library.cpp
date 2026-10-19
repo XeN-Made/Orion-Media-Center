@@ -4,12 +4,11 @@
 //
 // ORION's home: every title ShadowMountPlus can mount (library/library.hpp),
 // as a grid of covers on shelves: All, Games, Homebrew, Media, Favourites,
-// then the player's own tabs. Cross on a cover opens a menu to launch it,
-// star it or move it to a tab; Options opens Settings (orion/settings_panel.hpp), where
-// the look and the library's behaviour are edited live. Everything the
-// player chooses is written to <state_dir> the moment it changes:
-// favourites.json, library.json (tabs, placements, last tab, sort) and
-// theme.json (the look). Titles without artwork get a monogram on a colour
+// then the player's own tabs. Cross launches a title; Options opens its menu
+// (star it, move it to a tab, Settings); R3 opens Settings directly (orion/settings_panel.hpp),
+// where the look and the library's behaviour are edited live. Everything the player chooses is
+// written to <state_dir> the moment it changes: favourites.json, library.json (tabs, placements,
+// last tab, sort) and theme.json (the look). Titles without artwork get a monogram on a colour
 // derived from their ID, so the same title always looks the same.
 
 #include "concepts/concepts.hpp"
@@ -116,6 +115,7 @@ enum : int
     kItemLeft,
     kItemRight,
     kItemDelete,
+    kItemSettings,
     kItemMove = 100, // + the tab's index
 };
 
@@ -136,13 +136,12 @@ constexpr app::TourStep kTour[] = {
     {0.6f, action_bit(Action::west), Direction::none, "homebrew"},
     {0.5f, action_bit(Action::jump_prev)},
     {0.3f, action_bit(Action::jump_prev)},
-    {0.6f, action_bit(Action::confirm), Direction::none, "favourite"},
+    {0.6f, action_bit(Action::menu), Direction::none, "favourite"},
     {0.6f, action_bit(Action::back), Direction::none, "title-menu"},
-    // Launch from the menu: on a PC the card says it needs the console.
-    {0.4f, action_bit(Action::confirm)},
+    // Cross launches: on a PC the card says it needs the console.
     {0.4f, action_bit(Action::confirm)},
     {0.7f, 0, Direction::none, "launch"},
-    {0.4f, action_bit(Action::menu)},
+    {0.4f, action_bit(Action::r3)},
     {0.9f, 0, Direction::down, "settings"},
     {0.5f, action_bit(Action::back)},
     {0.6f, action_bit(Action::north)},
@@ -516,7 +515,7 @@ class Library final : public app::Concept
             feedback.play(audio::Cue::modal_open);
             return;
         }
-        if (input.is_pressed(Action::menu))
+        if (input.is_pressed(Action::r3) || (input.is_pressed(Action::menu) && grid_.count() == 0))
         {
             settings_.open(look_, prefs_, feedback);
             return;
@@ -536,6 +535,11 @@ class Library final : public app::Concept
             return;
         }
         if (input.is_pressed(Action::confirm))
+        {
+            launch(focused().id, feedback);
+            return;
+        }
+        if (input.is_pressed(Action::menu))
         {
             open_title_menu(feedback);
             return;
@@ -682,6 +686,13 @@ class Library final : public app::Concept
             unplace.danger = true;
             items.push_back(unplace);
         }
+        ui::MenuItem rule;
+        rule.separator = true;
+        items.push_back(rule);
+        ui::MenuItem settings = menu_item("Settings");
+        settings.shortcut = "R3";
+        settings.tag = kItemSettings;
+        items.push_back(settings);
         menu_.set_items(std::move(items));
         menu_.open(grid_.cell_rect(grid_.focus()), feedback);
     }
@@ -723,6 +734,11 @@ class Library final : public app::Concept
             if (tag == kItemLaunch)
             {
                 launch(menu_title_, feedback);
+                return;
+            }
+            if (tag == kItemSettings)
+            {
+                settings_.open(look_, prefs_, feedback);
                 return;
             }
             if (tag == kItemFavourite)
@@ -1171,9 +1187,11 @@ class Library final : public app::Concept
     void draw_hints(gfx::DrawList &list, ui::Painter &paint) const
     {
         const ui::Hint hints[] = {
-            {ui::Button::l1, "Shelf", ui::Button::r1}, {ui::Button::cross, "More"},
-            {ui::Button::square, "Favourite"},         {ui::Button::triangle, "Search"},
-            {ui::Button::options, "Settings"},
+            {ui::Button::l1, "Shelf", ui::Button::r1},
+            {ui::Button::cross, "Launch"},
+            {ui::Button::square, "Favourite"},
+            {ui::Button::triangle, "Search"},
+            {ui::Button::options, "More"},
         };
         const float right = gfx::kVirtualWidth - kMargin;
         ui::HintLayout layout;
