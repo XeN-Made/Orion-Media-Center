@@ -1,0 +1,67 @@
+{
+  "format": "orion-theme",
+  "version": 1,
+  "id": "blueprint",
+  "name": "Blueprint",
+  "author": "ORION",
+  "family": "Wireframe",
+  "description": "Strokes only, one colour, monospaced capitals on a drafting grid",
+  "page": {
+    "background": "dots",
+    "colors": ["#0a2747", "#0c3157", "#2f6fa6", "#000000"],
+    "params": [0, 0, 0, 0],
+    "color": "#0b2b4d",
+    "text": "#00000000",
+    "text_muted": "#00000000"
+  },
+  "palette": {
+    "surface": "#8fd3ff0f",
+    "surface_high": "#8fd3ff29",
+    "text": "#dff1ff",
+    "text_muted": "#8fd3ffcc",
+    "primary": "#8fd3ff",
+    "on_primary": "#06203a",
+    "secondary": "#8fd3ff0f",
+    "on_secondary": "#dff1ff",
+    "accent": "#ffe27a",
+    "outline": "#8fd3ffd9",
+    "focus": "#ffe27a",
+    "shadow": "#00000000",
+    "light": "#ffffff",
+    "danger": "#e5484d",
+    "success": "#30a46c",
+    "warning": "#f5a524"
+  },
+  "shape": {
+    "style": "outline",
+    "corner": "round",
+    "radius": 3,
+    "radius_card": 3,
+    "border": 2,
+    "button_border": -1,
+    "pill_chips": false,
+    "pill_switches": false,
+    "shadow_offset": 0,
+    "shadow_blur": 0,
+    "focus_width": 3,
+    "focus_gap": 4,
+    "underline_fields": false
+  },
+  "type": {
+    "heading": "mono",
+    "label": "mono",
+    "caps": true,
+    "tracking": 1
+  },
+  "motion": {
+    "omega": 22,
+    "damping": 1,
+    "sounds": "paper"
+  },
+  "dark": true,
+  "orion": {
+    "clouds": 100,
+    "motion": true,
+    "cover_corners": 22
+  }
+}

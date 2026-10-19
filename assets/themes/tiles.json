@@ -1,0 +1,67 @@
+{
+  "format": "orion-theme",
+  "version": 1,
+  "id": "tiles",
+  "name": "Tiles",
+  "author": "ORION",
+  "family": "Flat",
+  "description": "No depth at all: square colour blocks, big type, capitals",
+  "page": {
+    "background": "gradient",
+    "colors": ["#0e0f13", "#0e0f13", "#000000", "#000000"],
+    "params": [0, 0, 0, 0],
+    "color": "#0e0f13",
+    "text": "#00000000",
+    "text_muted": "#00000000"
+  },
+  "palette": {
+    "surface": "#22242c",
+    "surface_high": "#363944",
+    "text": "#ffffff",
+    "text_muted": "#ffffff9e",
+    "primary": "#1e88ff",
+    "on_primary": "#ffffff",
+    "secondary": "#363944",
+    "on_secondary": "#ffffff",
+    "accent": "#00c2a8",
+    "outline": "#ffffff00",
+    "focus": "#ffffff",
+    "shadow": "#00000000",
+    "light": "#ffffff",
+    "danger": "#e5484d",
+    "success": "#30a46c",
+    "warning": "#f5a524"
+  },
+  "shape": {
+    "style": "flat",
+    "corner": "round",
+    "radius": 0,
+    "radius_card": 0,
+    "border": 0,
+    "button_border": -1,
+    "pill_chips": false,
+    "pill_switches": false,
+    "shadow_offset": 0,
+    "shadow_blur": 0,
+    "focus_width": 4,
+    "focus_gap": 4,
+    "underline_fields": false
+  },
+  "type": {
+    "heading": "display",
+    "label": "semibold",
+    "caps": true,
+    "tracking": 2
+  },
+  "motion": {
+    "omega": 24,
+    "damping": 1,
+    "sounds": "glass"
+  },
+  "dark": true,
+  "orion": {
+    "clouds": 100,
+    "motion": true,
+    "cover_corners": 22
+  }
+}

@@ -1,0 +1,67 @@
+{
+  "format": "orion-theme",
+  "version": 1,
+  "id": "crisp",
+  "name": "Crisp",
+  "author": "ORION",
+  "family": "Minimal and square · after UIkit",
+  "description": "Square edges, small capitals, grey text, one bright blue",
+  "page": {
+    "background": "gradient",
+    "colors": ["#ffffff", "#ffffff", "#000000", "#000000"],
+    "params": [0, 0, 0, 0],
+    "color": "#ffffff",
+    "text": "#00000000",
+    "text_muted": "#00000000"
+  },
+  "palette": {
+    "surface": "#ffffff",
+    "surface_high": "#f8f8f8",
+    "text": "#333333",
+    "text_muted": "#999999",
+    "primary": "#1e87f0",
+    "on_primary": "#ffffff",
+    "secondary": "#ffffff",
+    "on_secondary": "#333333",
+    "accent": "#1e87f0",
+    "outline": "#e5e5e5",
+    "focus": "#1e87f0",
+    "shadow": "#0000001a",
+    "light": "#ffffff",
+    "danger": "#e5484d",
+    "success": "#30a46c",
+    "warning": "#f5a524"
+  },
+  "shape": {
+    "style": "flat",
+    "corner": "round",
+    "radius": 0,
+    "radius_card": 0,
+    "border": 1.5,
+    "button_border": -1,
+    "pill_chips": false,
+    "pill_switches": false,
+    "shadow_offset": 8,
+    "shadow_blur": 20,
+    "focus_width": 2.5,
+    "focus_gap": 3,
+    "underline_fields": false
+  },
+  "type": {
+    "heading": "display",
+    "label": "regular",
+    "caps": true,
+    "tracking": 1
+  },
+  "motion": {
+    "omega": 18,
+    "damping": 1,
+    "sounds": "glass"
+  },
+  "dark": false,
+  "orion": {
+    "clouds": 100,
+    "motion": true,
+    "cover_corners": 22
+  }
+}

@@ -1,0 +1,67 @@
+{
+  "format": "orion-theme",
+  "version": 1,
+  "id": "layers",
+  "name": "Layers",
+  "author": "ORION",
+  "family": "Material Design · after Materialize",
+  "description": "Teal and coral, flat layers stacked by elevation, capitals, underlined fields",
+  "page": {
+    "background": "gradient",
+    "colors": ["#fafafa", "#fafafa", "#000000", "#000000"],
+    "params": [0, 0, 0, 0],
+    "color": "#fafafa",
+    "text": "#00000000",
+    "text_muted": "#00000000"
+  },
+  "palette": {
+    "surface": "#ffffff",
+    "surface_high": "#e0e0e0",
+    "text": "#212121",
+    "text_muted": "#9e9e9e",
+    "primary": "#26a69a",
+    "on_primary": "#ffffff",
+    "secondary": "#ee6e73",
+    "on_secondary": "#ffffff",
+    "accent": "#26a69a",
+    "outline": "#00000000",
+    "focus": "#26a69a73",
+    "shadow": "#00000057",
+    "light": "#ffffff",
+    "danger": "#e5484d",
+    "success": "#30a46c",
+    "warning": "#f5a524"
+  },
+  "shape": {
+    "style": "soft",
+    "corner": "round",
+    "radius": 3,
+    "radius_card": 3,
+    "border": 0,
+    "button_border": -1,
+    "pill_chips": false,
+    "pill_switches": true,
+    "shadow_offset": 3,
+    "shadow_blur": 6,
+    "focus_width": 5,
+    "focus_gap": 0,
+    "underline_fields": true
+  },
+  "type": {
+    "heading": "semibold",
+    "label": "regular",
+    "caps": true,
+    "tracking": 1
+  },
+  "motion": {
+    "omega": 18,
+    "damping": 1,
+    "sounds": "glass"
+  },
+  "dark": false,
+  "orion": {
+    "clouds": 100,
+    "motion": true,
+    "cover_corners": 22
+  }
+}

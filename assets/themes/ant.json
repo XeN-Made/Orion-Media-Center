@@ -1,0 +1,67 @@
+{
+  "format": "orion-theme",
+  "version": 1,
+  "id": "ant",
+  "name": "Enterprise",
+  "author": "ORION",
+  "family": "Structured enterprise · after Ant Design",
+  "description": "Dense, orderly, hairline borders, 6 px corners, one confident blue",
+  "page": {
+    "background": "gradient",
+    "colors": ["#f5f5f5", "#f5f5f5", "#000000", "#000000"],
+    "params": [0, 0, 0, 0],
+    "color": "#f5f5f5",
+    "text": "#00000000",
+    "text_muted": "#00000000"
+  },
+  "palette": {
+    "surface": "#ffffff",
+    "surface_high": "#f0f0f0",
+    "text": "#1f1f1f",
+    "text_muted": "#8c8c8c",
+    "primary": "#1677ff",
+    "on_primary": "#ffffff",
+    "secondary": "#ffffff",
+    "on_secondary": "#1f1f1f",
+    "accent": "#1677ff",
+    "outline": "#d9d9d9",
+    "focus": "#91caff",
+    "shadow": "#00000000",
+    "light": "#ffffff",
+    "danger": "#e5484d",
+    "success": "#30a46c",
+    "warning": "#f5a524"
+  },
+  "shape": {
+    "style": "flat",
+    "corner": "round",
+    "radius": 10,
+    "radius_card": 13,
+    "border": 1.5,
+    "button_border": -1,
+    "pill_chips": false,
+    "pill_switches": true,
+    "shadow_offset": 0,
+    "shadow_blur": 0,
+    "focus_width": 4,
+    "focus_gap": 1,
+    "underline_fields": false
+  },
+  "type": {
+    "heading": "semibold",
+    "label": "regular",
+    "caps": false,
+    "tracking": 0
+  },
+  "motion": {
+    "omega": 20,
+    "damping": 1,
+    "sounds": "glass"
+  },
+  "dark": false,
+  "orion": {
+    "clouds": 100,
+    "motion": true,
+    "cover_corners": 22
+  }
+}

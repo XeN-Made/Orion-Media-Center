@@ -1,0 +1,22 @@
+{
+  "format": "orion-theme",
+  "version": 1,
+  "id": "sunset-nebula",
+  "name": "Sunset Nebula",
+  "author": "ORION examples",
+  "description": "ORION's glass under a warm, ember-coloured sky",
+  "extends": "orion",
+  "page": {
+    "colors": ["#030102", "#0c0406", "#5a2414", "#4a1036"]
+  },
+  "palette": {
+    "primary": "#ffb38a",
+    "on_primary": "#2a0e06",
+    "accent": "#ffc94a",
+    "surface": "#1a0c1066"
+  },
+  "orion": {
+    "clouds": 120,
+    "cover_corners": 28
+  }
+}

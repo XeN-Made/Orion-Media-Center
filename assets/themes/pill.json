@@ -1,0 +1,67 @@
+{
+  "format": "orion-theme",
+  "version": 1,
+  "id": "pill",
+  "name": "Pill",
+  "author": "ORION",
+  "family": "High-contrast dashboard · after Preline UI",
+  "description": "Near-black, white and blue; every control is a smooth pill",
+  "page": {
+    "background": "gradient",
+    "colors": ["#0a0a0a", "#0a0a0a", "#000000", "#000000"],
+    "params": [0, 0, 0, 0],
+    "color": "#0a0a0a",
+    "text": "#00000000",
+    "text_muted": "#00000000"
+  },
+  "palette": {
+    "surface": "#171717",
+    "surface_high": "#262626",
+    "text": "#ffffff",
+    "text_muted": "#a3a3a3",
+    "primary": "#3b82f6",
+    "on_primary": "#ffffff",
+    "secondary": "#ffffff",
+    "on_secondary": "#171717",
+    "accent": "#3b82f6",
+    "outline": "#404040",
+    "focus": "#3b82f699",
+    "shadow": "#00000000",
+    "light": "#ffffff",
+    "danger": "#e5484d",
+    "success": "#30a46c",
+    "warning": "#f5a524"
+  },
+  "shape": {
+    "style": "flat",
+    "corner": "round",
+    "radius": 100,
+    "radius_card": 19,
+    "border": 1.5,
+    "button_border": 0,
+    "pill_chips": true,
+    "pill_switches": true,
+    "shadow_offset": 0,
+    "shadow_blur": 0,
+    "focus_width": 4,
+    "focus_gap": 3,
+    "underline_fields": false
+  },
+  "type": {
+    "heading": "semibold",
+    "label": "semibold",
+    "caps": false,
+    "tracking": 0
+  },
+  "motion": {
+    "omega": 18,
+    "damping": 1,
+    "sounds": "glass"
+  },
+  "dark": true,
+  "orion": {
+    "clouds": 100,
+    "motion": true,
+    "cover_corners": 22
+  }
+}

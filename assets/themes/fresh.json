@@ -1,0 +1,67 @@
+{
+  "format": "orion-theme",
+  "version": 1,
+  "id": "fresh",
+  "name": "Fresh",
+  "author": "ORION",
+  "family": "Modern flat · after Nuxt UI",
+  "description": "Slate night, one vivid green, hairline rings, pill badges",
+  "page": {
+    "background": "gradient",
+    "colors": ["#020618", "#0b1224", "#00dc82", "#000000"],
+    "params": [0.5, -0.1, 0.16, 0],
+    "color": "#070d1f",
+    "text": "#00000000",
+    "text_muted": "#00000000"
+  },
+  "palette": {
+    "surface": "#0f172b",
+    "surface_high": "#1d293d",
+    "text": "#e2e8f0",
+    "text_muted": "#90a1b9",
+    "primary": "#00dc82",
+    "on_primary": "#0f172b",
+    "secondary": "#0f172b",
+    "on_secondary": "#e2e8f0",
+    "accent": "#00dc82",
+    "outline": "#314158",
+    "focus": "#00dc82",
+    "shadow": "#00000000",
+    "light": "#ffffff",
+    "danger": "#e5484d",
+    "success": "#30a46c",
+    "warning": "#f5a524"
+  },
+  "shape": {
+    "style": "flat",
+    "corner": "round",
+    "radius": 10,
+    "radius_card": 13,
+    "border": 1.5,
+    "button_border": -1,
+    "pill_chips": true,
+    "pill_switches": true,
+    "shadow_offset": 0,
+    "shadow_blur": 0,
+    "focus_width": 3,
+    "focus_gap": 3,
+    "underline_fields": false
+  },
+  "type": {
+    "heading": "semibold",
+    "label": "semibold",
+    "caps": false,
+    "tracking": 0
+  },
+  "motion": {
+    "omega": 18,
+    "damping": 1,
+    "sounds": "glass"
+  },
+  "dark": true,
+  "orion": {
+    "clouds": 100,
+    "motion": true,
+    "cover_corners": 22
+  }
+}

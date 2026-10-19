@@ -1,0 +1,67 @@
+{
+  "format": "orion-theme",
+  "version": 1,
+  "id": "orion",
+  "name": "ORION",
+  "author": "ORION",
+  "family": "Galaxy glass",
+  "description": "Star field and nebula behind frosted, glossy glass; pills and soft panels",
+  "page": {
+    "background": "galaxy",
+    "colors": ["#000000", "#02040b", "#16285e", "#0a4a66"],
+    "params": [0, 0, 0, 0],
+    "color": "#04050d",
+    "text": "#f3f1ff",
+    "text_muted": "#c9c6eec7"
+  },
+  "palette": {
+    "surface": "#0d102466",
+    "surface_high": "#ffffff1f",
+    "text": "#f6f4ff",
+    "text_muted": "#ffffffad",
+    "primary": "#a9b8ff",
+    "on_primary": "#0b0b33",
+    "secondary": "#ffffff1a",
+    "on_secondary": "#ffffff",
+    "accent": "#8fe3ff",
+    "outline": "#ffffff38",
+    "focus": "#ffffff",
+    "shadow": "#00000080",
+    "light": "#ffffff7a",
+    "danger": "#e5484d",
+    "success": "#30a46c",
+    "warning": "#f5a524"
+  },
+  "shape": {
+    "style": "glass",
+    "corner": "round",
+    "radius": 100,
+    "radius_card": 26,
+    "border": 1.5,
+    "button_border": -1,
+    "pill_chips": false,
+    "pill_switches": true,
+    "shadow_offset": 12,
+    "shadow_blur": 36,
+    "focus_width": 3,
+    "focus_gap": 5,
+    "underline_fields": false
+  },
+  "type": {
+    "heading": "display",
+    "label": "semibold",
+    "caps": false,
+    "tracking": 0
+  },
+  "motion": {
+    "omega": 18,
+    "damping": 1,
+    "sounds": "glass"
+  },
+  "dark": true,
+  "orion": {
+    "clouds": 100,
+    "motion": true,
+    "cover_corners": 22
+  }
+}

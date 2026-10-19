@@ -1,0 +1,67 @@
+{
+  "format": "orion-theme",
+  "version": 1,
+  "id": "brutal",
+  "name": "Brutal",
+  "author": "ORION",
+  "family": "Neo-brutalism",
+  "description": "Square corners, thick black outlines, hard offset shadows, loud flats",
+  "page": {
+    "background": "gradient",
+    "colors": ["#fff3c9", "#fff3c9", "#000000", "#000000"],
+    "params": [0, 0, 0, 0],
+    "color": "#fff3c9",
+    "text": "#00000000",
+    "text_muted": "#00000000"
+  },
+  "palette": {
+    "surface": "#ffffff",
+    "surface_high": "#a6e3ff",
+    "text": "#000000",
+    "text_muted": "#000000b8",
+    "primary": "#ff5c8a",
+    "on_primary": "#000000",
+    "secondary": "#ffffff",
+    "on_secondary": "#000000",
+    "accent": "#36d67e",
+    "outline": "#000000",
+    "focus": "#2f5bff",
+    "shadow": "#000000",
+    "light": "#ffffff",
+    "danger": "#e5484d",
+    "success": "#30a46c",
+    "warning": "#f5a524"
+  },
+  "shape": {
+    "style": "hard",
+    "corner": "round",
+    "radius": 0,
+    "radius_card": 0,
+    "border": 4,
+    "button_border": -1,
+    "pill_chips": false,
+    "pill_switches": false,
+    "shadow_offset": 8,
+    "shadow_blur": 0,
+    "focus_width": 3,
+    "focus_gap": 4,
+    "underline_fields": false
+  },
+  "type": {
+    "heading": "display",
+    "label": "semibold",
+    "caps": true,
+    "tracking": 1
+  },
+  "motion": {
+    "omega": 26,
+    "damping": 0.5,
+    "sounds": "paper"
+  },
+  "dark": false,
+  "orion": {
+    "clouds": 100,
+    "motion": true,
+    "cover_corners": 22
+  }
+}

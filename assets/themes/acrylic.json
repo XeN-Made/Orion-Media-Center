@@ -1,0 +1,67 @@
+{
+  "format": "orion-theme",
+  "version": 1,
+  "id": "acrylic",
+  "name": "Acrylic",
+  "author": "ORION",
+  "family": "Frosted glass",
+  "description": "Blurred translucent panels, hairline light edges, small radii",
+  "page": {
+    "background": "aurora",
+    "colors": ["#0b1026", "#1b1f4a", "#3a5bd9", "#c04bd6"],
+    "params": [0, 0, 0, 0],
+    "color": "#14182e",
+    "text": "#00000000",
+    "text_muted": "#00000000"
+  },
+  "palette": {
+    "surface": "#1c214080",
+    "surface_high": "#ffffff24",
+    "text": "#ffffff",
+    "text_muted": "#ffffffb3",
+    "primary": "#76d6ff",
+    "on_primary": "#04263a",
+    "secondary": "#ffffff1a",
+    "on_secondary": "#ffffff",
+    "accent": "#76d6ff",
+    "outline": "#ffffff42",
+    "focus": "#ffffff",
+    "shadow": "#00000066",
+    "light": "#ffffff4d",
+    "danger": "#e5484d",
+    "success": "#30a46c",
+    "warning": "#f5a524"
+  },
+  "shape": {
+    "style": "glass",
+    "corner": "round",
+    "radius": 8,
+    "radius_card": 14,
+    "border": 1.5,
+    "button_border": -1,
+    "pill_chips": false,
+    "pill_switches": true,
+    "shadow_offset": 10,
+    "shadow_blur": 28,
+    "focus_width": 3,
+    "focus_gap": 4,
+    "underline_fields": false
+  },
+  "type": {
+    "heading": "display",
+    "label": "semibold",
+    "caps": false,
+    "tracking": 0
+  },
+  "motion": {
+    "omega": 18,
+    "damping": 1,
+    "sounds": "glass"
+  },
+  "dark": true,
+  "orion": {
+    "clouds": 100,
+    "motion": true,
+    "cover_corners": 22
+  }
+}

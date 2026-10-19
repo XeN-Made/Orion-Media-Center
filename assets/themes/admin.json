@@ -1,0 +1,67 @@
+{
+  "format": "orion-theme",
+  "version": 1,
+  "id": "admin",
+  "name": "Admin",
+  "author": "ORION",
+  "family": "Dark admin · after Flowbite",
+  "description": "Blue-grey night panels, rounded 8 px controls, a four pixel focus ring",
+  "page": {
+    "background": "gradient",
+    "colors": ["#111827", "#111827", "#000000", "#000000"],
+    "params": [0, 0, 0, 0],
+    "color": "#111827",
+    "text": "#00000000",
+    "text_muted": "#00000000"
+  },
+  "palette": {
+    "surface": "#1f2937",
+    "surface_high": "#374151",
+    "text": "#ffffff",
+    "text_muted": "#9ca3af",
+    "primary": "#2563eb",
+    "on_primary": "#ffffff",
+    "secondary": "#1f2937",
+    "on_secondary": "#d1d5db",
+    "accent": "#2563eb",
+    "outline": "#4b5563",
+    "focus": "#1e40af",
+    "shadow": "#0000004d",
+    "light": "#ffffff",
+    "danger": "#e5484d",
+    "success": "#30a46c",
+    "warning": "#f5a524"
+  },
+  "shape": {
+    "style": "flat",
+    "corner": "round",
+    "radius": 13,
+    "radius_card": 13,
+    "border": 1.5,
+    "button_border": -1,
+    "pill_chips": false,
+    "pill_switches": true,
+    "shadow_offset": 2,
+    "shadow_blur": 5,
+    "focus_width": 6,
+    "focus_gap": 0,
+    "underline_fields": false
+  },
+  "type": {
+    "heading": "semibold",
+    "label": "semibold",
+    "caps": false,
+    "tracking": 0
+  },
+  "motion": {
+    "omega": 18,
+    "damping": 1,
+    "sounds": "glass"
+  },
+  "dark": true,
+  "orion": {
+    "clouds": 100,
+    "motion": true,
+    "cover_corners": 22
+  }
+}

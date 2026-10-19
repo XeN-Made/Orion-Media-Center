@@ -1,0 +1,67 @@
+{
+  "format": "orion-theme",
+  "version": 1,
+  "id": "daisy",
+  "name": "Daisy",
+  "author": "ORION",
+  "family": "Clean and customisable · after daisyUI",
+  "description": "Indigo, pink and teal on white; small radii; a hint of depth under buttons",
+  "page": {
+    "background": "gradient",
+    "colors": ["#ffffff", "#ffffff", "#000000", "#000000"],
+    "params": [0, 0, 0, 0],
+    "color": "#ffffff",
+    "text": "#00000000",
+    "text_muted": "#00000000"
+  },
+  "palette": {
+    "surface": "#ffffff",
+    "surface_high": "#f4f4f5",
+    "text": "#18181b",
+    "text_muted": "#71717a",
+    "primary": "#422ad5",
+    "on_primary": "#e0e7ff",
+    "secondary": "#f43098",
+    "on_secondary": "#fdf2f8",
+    "accent": "#00d3bb",
+    "outline": "#e4e4e7",
+    "focus": "#18181b",
+    "shadow": "#18181b38",
+    "light": "#ffffff",
+    "danger": "#e5484d",
+    "success": "#30a46c",
+    "warning": "#f5a524"
+  },
+  "shape": {
+    "style": "soft",
+    "corner": "round",
+    "radius": 7,
+    "radius_card": 13,
+    "border": 1.5,
+    "button_border": 0,
+    "pill_chips": true,
+    "pill_switches": true,
+    "shadow_offset": 3,
+    "shadow_blur": 4,
+    "focus_width": 3,
+    "focus_gap": 3,
+    "underline_fields": false
+  },
+  "type": {
+    "heading": "semibold",
+    "label": "semibold",
+    "caps": false,
+    "tracking": 0
+  },
+  "motion": {
+    "omega": 18,
+    "damping": 1,
+    "sounds": "glass"
+  },
+  "dark": false,
+  "orion": {
+    "clouds": 100,
+    "motion": true,
+    "cover_corners": 22
+  }
+}

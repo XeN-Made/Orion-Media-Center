@@ -1,0 +1,67 @@
+{
+  "format": "orion-theme",
+  "version": 1,
+  "id": "clay",
+  "name": "Clay",
+  "author": "ORION",
+  "family": "Neumorphism",
+  "description": "Everything is the page colour, raised and pressed by two shadows",
+  "page": {
+    "background": "gradient",
+    "colors": ["#e6ebf2", "#e6ebf2", "#000000", "#000000"],
+    "params": [0, 0, 0, 0],
+    "color": "#e6ebf2",
+    "text": "#00000000",
+    "text_muted": "#00000000"
+  },
+  "palette": {
+    "surface": "#e6ebf2",
+    "surface_high": "#d9e0ea",
+    "text": "#38445a",
+    "text_muted": "#7a879b",
+    "primary": "#4f86ee",
+    "on_primary": "#ffffff",
+    "secondary": "#e6ebf2",
+    "on_secondary": "#38445a",
+    "accent": "#4f86ee",
+    "outline": "#c3cddb00",
+    "focus": "#4f86ee",
+    "shadow": "#9fb0c8d9",
+    "light": "#fffffff2",
+    "danger": "#e5484d",
+    "success": "#30a46c",
+    "warning": "#f5a524"
+  },
+  "shape": {
+    "style": "neumorphic",
+    "corner": "round",
+    "radius": 20,
+    "radius_card": 34,
+    "border": 0,
+    "button_border": -1,
+    "pill_chips": false,
+    "pill_switches": true,
+    "shadow_offset": 8,
+    "shadow_blur": 14,
+    "focus_width": 3,
+    "focus_gap": 4,
+    "underline_fields": false
+  },
+  "type": {
+    "heading": "display",
+    "label": "semibold",
+    "caps": false,
+    "tracking": 0
+  },
+  "motion": {
+    "omega": 11,
+    "damping": 1,
+    "sounds": "paper"
+  },
+  "dark": false,
+  "orion": {
+    "clouds": 100,
+    "motion": true,
+    "cover_corners": 22
+  }
+}

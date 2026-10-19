@@ -1,0 +1,67 @@
+{
+  "format": "orion-theme",
+  "version": 1,
+  "id": "pixel",
+  "name": "Pixel",
+  "author": "ORION",
+  "family": "8-bit pixel art · after NES.css",
+  "description": "Notched black outlines, a darker band inside each button, a bitmap font",
+  "page": {
+    "background": "gradient",
+    "colors": ["#ffffff", "#ffffff", "#000000", "#000000"],
+    "params": [0, 0, 0, 0],
+    "color": "#ffffff",
+    "text": "#00000000",
+    "text_muted": "#00000000"
+  },
+  "palette": {
+    "surface": "#ffffff",
+    "surface_high": "#ffffff",
+    "text": "#212529",
+    "text_muted": "#212529bf",
+    "primary": "#209cee",
+    "on_primary": "#ffffff",
+    "secondary": "#ffffff",
+    "on_secondary": "#212529",
+    "accent": "#92cc41",
+    "outline": "#212529",
+    "focus": "#f7d51d",
+    "shadow": "#adafbc",
+    "light": "#ffffff",
+    "danger": "#e5484d",
+    "success": "#30a46c",
+    "warning": "#f5a524"
+  },
+  "shape": {
+    "style": "pixel",
+    "corner": "pixel",
+    "radius": 0,
+    "radius_card": 0,
+    "border": 5,
+    "button_border": -1,
+    "pill_chips": false,
+    "pill_switches": false,
+    "shadow_offset": 0,
+    "shadow_blur": 0,
+    "focus_width": 5,
+    "focus_gap": 3,
+    "underline_fields": false
+  },
+  "type": {
+    "heading": "pixel",
+    "label": "pixel",
+    "caps": true,
+    "tracking": 0
+  },
+  "motion": {
+    "omega": 90,
+    "damping": 1,
+    "sounds": "paper"
+  },
+  "dark": false,
+  "orion": {
+    "clouds": 100,
+    "motion": true,
+    "cover_corners": 22
+  }
+}

@@ -1,0 +1,67 @@
+{
+  "format": "orion-theme",
+  "version": 1,
+  "id": "classic",
+  "name": "Classic",
+  "author": "ORION",
+  "family": "Bevelled desktop",
+  "description": "Grey panels with a light and a dark edge; nothing eases, everything clicks",
+  "page": {
+    "background": "gradient",
+    "colors": ["#0a7a7a", "#0a7a7a", "#000000", "#000000"],
+    "params": [0, 0, 0, 0],
+    "color": "#0a7a7a",
+    "text": "#ffffff",
+    "text_muted": "#ffffffcc"
+  },
+  "palette": {
+    "surface": "#c3c3c3",
+    "surface_high": "#ffffff",
+    "text": "#000000",
+    "text_muted": "#3c3c3c",
+    "primary": "#0a0a84",
+    "on_primary": "#ffffff",
+    "secondary": "#c3c3c3",
+    "on_secondary": "#000000",
+    "accent": "#0a0a84",
+    "outline": "#000000",
+    "focus": "#000000",
+    "shadow": "#6f6f6f",
+    "light": "#ffffff",
+    "danger": "#e5484d",
+    "success": "#30a46c",
+    "warning": "#f5a524"
+  },
+  "shape": {
+    "style": "bevel",
+    "corner": "round",
+    "radius": 0,
+    "radius_card": 0,
+    "border": 3,
+    "button_border": -1,
+    "pill_chips": false,
+    "pill_switches": false,
+    "shadow_offset": 0,
+    "shadow_blur": 0,
+    "focus_width": 3,
+    "focus_gap": 4,
+    "underline_fields": false
+  },
+  "type": {
+    "heading": "semibold",
+    "label": "regular",
+    "caps": false,
+    "tracking": 0
+  },
+  "motion": {
+    "omega": 80,
+    "damping": 1,
+    "sounds": "paper"
+  },
+  "dark": true,
+  "orion": {
+    "clouds": 100,
+    "motion": true,
+    "cover_corners": 22
+  }
+}

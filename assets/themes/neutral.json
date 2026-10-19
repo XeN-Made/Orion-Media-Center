@@ -1,0 +1,67 @@
+{
+  "format": "orion-theme",
+  "version": 1,
+  "id": "neutral",
+  "name": "Neutral",
+  "author": "ORION",
+  "family": "Neutral modern · after Shoelace",
+  "description": "Zinc greys, sky blue, 4 px corners, a wide translucent focus ring",
+  "page": {
+    "background": "gradient",
+    "colors": ["#ffffff", "#ffffff", "#000000", "#000000"],
+    "params": [0, 0, 0, 0],
+    "color": "#ffffff",
+    "text": "#00000000",
+    "text_muted": "#00000000"
+  },
+  "palette": {
+    "surface": "#ffffff",
+    "surface_high": "#e4e4e7",
+    "text": "#3f3f46",
+    "text_muted": "#71717a",
+    "primary": "#0284c7",
+    "on_primary": "#ffffff",
+    "secondary": "#ffffff",
+    "on_secondary": "#3f3f46",
+    "accent": "#0284c7",
+    "outline": "#d4d4d8",
+    "focus": "#0ea5e96b",
+    "shadow": "#71717a24",
+    "light": "#ffffff",
+    "danger": "#e5484d",
+    "success": "#30a46c",
+    "warning": "#f5a524"
+  },
+  "shape": {
+    "style": "flat",
+    "corner": "round",
+    "radius": 7,
+    "radius_card": 7,
+    "border": 1.5,
+    "button_border": -1,
+    "pill_chips": false,
+    "pill_switches": true,
+    "shadow_offset": 3,
+    "shadow_blur": 7,
+    "focus_width": 5,
+    "focus_gap": 1,
+    "underline_fields": false
+  },
+  "type": {
+    "heading": "semibold",
+    "label": "semibold",
+    "caps": false,
+    "tracking": 0
+  },
+  "motion": {
+    "omega": 18,
+    "damping": 1,
+    "sounds": "glass"
+  },
+  "dark": false,
+  "orion": {
+    "clouds": 100,
+    "motion": true,
+    "cover_corners": 22
+  }
+}

@@ -1,0 +1,67 @@
+{
+  "format": "orion-theme",
+  "version": 1,
+  "id": "hazard",
+  "name": "Hazard",
+  "author": "ORION",
+  "family": "Sci-fi console",
+  "description": "Cut corners, lit strokes and glow on near-black",
+  "page": {
+    "background": "dots",
+    "colors": ["#07090d", "#0d1118", "#ffd400", "#000000"],
+    "params": [0, 0, 0, 0],
+    "color": "#0a0c11",
+    "text": "#00000000",
+    "text_muted": "#00000000"
+  },
+  "palette": {
+    "surface": "#121722",
+    "surface_high": "#1e2634",
+    "text": "#e9f2ff",
+    "text_muted": "#8ea0b8",
+    "primary": "#ffd400",
+    "on_primary": "#0a0c11",
+    "secondary": "#121722",
+    "on_secondary": "#e9f2ff",
+    "accent": "#00e5ff",
+    "outline": "#3d4a60",
+    "focus": "#00e5ff",
+    "shadow": "#00000099",
+    "light": "#ffffff",
+    "danger": "#e5484d",
+    "success": "#30a46c",
+    "warning": "#f5a524"
+  },
+  "shape": {
+    "style": "glow",
+    "corner": "chamfer",
+    "radius": 12,
+    "radius_card": 22,
+    "border": 2,
+    "button_border": -1,
+    "pill_chips": false,
+    "pill_switches": false,
+    "shadow_offset": 0,
+    "shadow_blur": 0,
+    "focus_width": 3,
+    "focus_gap": 4,
+    "underline_fields": false
+  },
+  "type": {
+    "heading": "display",
+    "label": "semibold",
+    "caps": true,
+    "tracking": 3
+  },
+  "motion": {
+    "omega": 26,
+    "damping": 1,
+    "sounds": "glass"
+  },
+  "dark": true,
+  "orion": {
+    "clouds": 100,
+    "motion": true,
+    "cover_corners": 22
+  }
+}

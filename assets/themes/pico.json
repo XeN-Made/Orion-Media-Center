@@ -1,0 +1,67 @@
+{
+  "format": "orion-theme",
+  "version": 1,
+  "id": "pico",
+  "name": "Pico",
+  "author": "ORION",
+  "family": "Minimal and classless · after Pico.css",
+  "description": "Large calm type, azure actions, soft layered card shadows",
+  "page": {
+    "background": "gradient",
+    "colors": ["#ffffff", "#ffffff", "#000000", "#000000"],
+    "params": [0, 0, 0, 0],
+    "color": "#ffffff",
+    "text": "#00000000",
+    "text_muted": "#00000000"
+  },
+  "palette": {
+    "surface": "#ffffff",
+    "surface_high": "#fbfcfc",
+    "text": "#373c44",
+    "text_muted": "#646b79",
+    "primary": "#0172ad",
+    "on_primary": "#ffffff",
+    "secondary": "#525f7a",
+    "on_secondary": "#ffffff",
+    "accent": "#0172ad",
+    "outline": "#cfd5e2",
+    "focus": "#029ae86b",
+    "shadow": "#8191b54d",
+    "light": "#ffffff",
+    "danger": "#e5484d",
+    "success": "#30a46c",
+    "warning": "#f5a524"
+  },
+  "shape": {
+    "style": "flat",
+    "corner": "round",
+    "radius": 8,
+    "radius_card": 8,
+    "border": 1.5,
+    "button_border": 0,
+    "pill_chips": false,
+    "pill_switches": true,
+    "shadow_offset": 6,
+    "shadow_blur": 22,
+    "focus_width": 5,
+    "focus_gap": 0,
+    "underline_fields": false
+  },
+  "type": {
+    "heading": "semibold",
+    "label": "regular",
+    "caps": false,
+    "tracking": 0
+  },
+  "motion": {
+    "omega": 14,
+    "damping": 1,
+    "sounds": "glass"
+  },
+  "dark": false,
+  "orion": {
+    "clouds": 100,
+    "motion": true,
+    "cover_corners": 22
+  }
+}

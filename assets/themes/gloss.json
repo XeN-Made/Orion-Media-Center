@@ -1,0 +1,67 @@
+{
+  "format": "orion-theme",
+  "version": 1,
+  "id": "gloss",
+  "name": "Gloss",
+  "author": "ORION",
+  "family": "Skeuomorphic",
+  "description": "Gradients, glassy highlights and dark edges: buttons that look pressable",
+  "page": {
+    "background": "gradient",
+    "colors": ["#dfe6ee", "#b9c5d3", "#ffffff", "#000000"],
+    "params": [0.5, 0, 0.6, 0],
+    "color": "#cdd6e0",
+    "text": "#00000000",
+    "text_muted": "#00000000"
+  },
+  "palette": {
+    "surface": "#eef2f6",
+    "surface_high": "#b4c0ce",
+    "text": "#1b2430",
+    "text_muted": "#566579",
+    "primary": "#2f8cf0",
+    "on_primary": "#ffffff",
+    "secondary": "#e3e9f0",
+    "on_secondary": "#1b2430",
+    "accent": "#35b44a",
+    "outline": "#66768c",
+    "focus": "#2f8cf0",
+    "shadow": "#1b243066",
+    "light": "#ffffff8c",
+    "danger": "#e5484d",
+    "success": "#30a46c",
+    "warning": "#f5a524"
+  },
+  "shape": {
+    "style": "gloss",
+    "corner": "round",
+    "radius": 12,
+    "radius_card": 16,
+    "border": 1.5,
+    "button_border": -1,
+    "pill_chips": false,
+    "pill_switches": true,
+    "shadow_offset": 3,
+    "shadow_blur": 7,
+    "focus_width": 3,
+    "focus_gap": 4,
+    "underline_fields": false
+  },
+  "type": {
+    "heading": "display",
+    "label": "semibold",
+    "caps": false,
+    "tracking": 0
+  },
+  "motion": {
+    "omega": 18,
+    "damping": 1,
+    "sounds": "paper"
+  },
+  "dark": false,
+  "orion": {
+    "clouds": 100,
+    "motion": true,
+    "cover_corners": 22
+  }
+}

@@ -1,0 +1,67 @@
+{
+  "format": "orion-theme",
+  "version": 1,
+  "id": "candy",
+  "name": "Candy",
+  "author": "ORION",
+  "family": "Playful pastel",
+  "description": "Fully round, pastel, coloured shadows, everything bounces",
+  "page": {
+    "background": "bokeh",
+    "colors": ["#ffe3f0", "#e6f0ff", "#ffb3d1", "#9fdcff"],
+    "params": [0, 0, 0, 0],
+    "color": "#fde8f3",
+    "text": "#00000000",
+    "text_muted": "#00000000"
+  },
+  "palette": {
+    "surface": "#ffffff",
+    "surface_high": "#ffd3e6",
+    "text": "#5a3a5f",
+    "text_muted": "#9a7a9d",
+    "primary": "#ff6fae",
+    "on_primary": "#ffffff",
+    "secondary": "#ffffff",
+    "on_secondary": "#5a3a5f",
+    "accent": "#57c8ff",
+    "outline": "#ffb3d100",
+    "focus": "#9a6bff",
+    "shadow": "#ff7fb66b",
+    "light": "#ffffff",
+    "danger": "#e5484d",
+    "success": "#30a46c",
+    "warning": "#f5a524"
+  },
+  "shape": {
+    "style": "soft",
+    "corner": "round",
+    "radius": 100,
+    "radius_card": 44,
+    "border": 0,
+    "button_border": -1,
+    "pill_chips": false,
+    "pill_switches": true,
+    "shadow_offset": 9,
+    "shadow_blur": 18,
+    "focus_width": 3,
+    "focus_gap": 4,
+    "underline_fields": false
+  },
+  "type": {
+    "heading": "display",
+    "label": "semibold",
+    "caps": false,
+    "tracking": 0
+  },
+  "motion": {
+    "omega": 15,
+    "damping": 0.42,
+    "sounds": "glass"
+  },
+  "dark": false,
+  "orion": {
+    "clouds": 100,
+    "motion": true,
+    "cover_corners": 22
+  }
+}

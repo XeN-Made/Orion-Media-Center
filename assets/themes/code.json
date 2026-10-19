@@ -1,0 +1,67 @@
+{
+  "format": "orion-theme",
+  "version": 1,
+  "id": "code",
+  "name": "Code",
+  "author": "ORION",
+  "family": "Developer tools · after Primer",
+  "description": "Ink-blue night, hairline borders, a green call to action, blue focus",
+  "page": {
+    "background": "gradient",
+    "colors": ["#0d1117", "#0d1117", "#000000", "#000000"],
+    "params": [0, 0, 0, 0],
+    "color": "#0d1117",
+    "text": "#00000000",
+    "text_muted": "#00000000"
+  },
+  "palette": {
+    "surface": "#161b22",
+    "surface_high": "#21262d",
+    "text": "#e6edf3",
+    "text_muted": "#8b949e",
+    "primary": "#238636",
+    "on_primary": "#ffffff",
+    "secondary": "#21262d",
+    "on_secondary": "#c9d1d9",
+    "accent": "#1f6feb",
+    "outline": "#30363d",
+    "focus": "#1f6feb",
+    "shadow": "#00000000",
+    "light": "#ffffff",
+    "danger": "#e5484d",
+    "success": "#30a46c",
+    "warning": "#f5a524"
+  },
+  "shape": {
+    "style": "flat",
+    "corner": "round",
+    "radius": 10,
+    "radius_card": 10,
+    "border": 1.5,
+    "button_border": -1,
+    "pill_chips": false,
+    "pill_switches": true,
+    "shadow_offset": 0,
+    "shadow_blur": 0,
+    "focus_width": 3,
+    "focus_gap": 0,
+    "underline_fields": false
+  },
+  "type": {
+    "heading": "semibold",
+    "label": "semibold",
+    "caps": false,
+    "tracking": 0
+  },
+  "motion": {
+    "omega": 22,
+    "damping": 1,
+    "sounds": "glass"
+  },
+  "dark": true,
+  "orion": {
+    "clouds": 100,
+    "motion": true,
+    "cover_corners": 22
+  }
+}
