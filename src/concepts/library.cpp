@@ -19,6 +19,7 @@
 #include "orion/look.hpp"
 #include "orion/prefs.hpp"
 #include "orion/settings_panel.hpp"
+#include "orion/theme_file.hpp"
 #include "platform/ps5/system.hpp"
 #include "ui/components/grid.hpp"
 #include "ui/components/keyboard.hpp"
@@ -95,6 +96,7 @@ enum class Typing : std::uint8_t
     new_tab,           // from Settings > Tabs > New tab
     new_tab_for_title, // from a title's menu: the title moves into it
     rename_tab,
+    theme_name, // from Settings > Save as new theme
 };
 
 // Who the open menu is about.
@@ -303,8 +305,7 @@ class Library final : public app::Concept
 {
   public:
     explicit Library(app::Context &context)
-        : context_(context), look_(orion::load_look(context.library.state_dir)),
-          prefs_(orion::load_prefs(context.library.state_dir)),
+        : context_(context), prefs_(orion::load_prefs(context.library.state_dir)),
           favourites_(library::load_favourites(context.library.state_dir))
     {
         tabs_.style.kind = ui::TabKind::pill;
@@ -341,6 +342,18 @@ class Library final : public app::Concept
         menu_.style.backing = 0.86f; // readable over bright covers
         menu_.style.scrim = 0.25f;
 
+        // Every theme ORION can wear: the app's files, then the player's.
+        const std::string &state = context_.library.state_dir;
+        themes_.load(context_.library.themes_dir, state.empty() ? "" : state + "/themes");
+        if (!state.empty() && !themes_.problems().empty())
+        {
+            std::string report;
+            for (const std::string &problem : themes_.problems())
+                report += problem + "\n";
+            save::write_atomic(state + "/themes.txt", report);
+        }
+        look_ = orion::load_look(state, themes_);
+        settings_.set_themes(themes_);
         restyle();
         // ORION reopens where it was left, when asked to.
         std::string start = prefs_.reopen_last_tab ? prefs_.last_tab : std::string("all");
@@ -356,7 +369,7 @@ class Library final : public app::Concept
             "Every title on this console, as ShadowMountPlus sees it",
             "src/concepts/library.cpp",
             audio::SoundSet::glass,
-            orion::base_theme("orion").accent,
+            Color::rgb(0x8fe3ff), // ORION's accent
             kTechniques,
         };
         return kInfo;
@@ -474,7 +487,7 @@ class Library final : public app::Concept
     // The look's theme on every component; called when Settings changes it.
     void restyle()
     {
-        theme_ = orion::themed(look_);
+        theme_ = orion::themed(look_, themes_);
         tabs_.style.theme = grid_.style.theme = menu_.style.theme = theme_;
         keys_.style.theme = clear_glass(theme_);
         grid_.style.card.radius = look_.corners;
@@ -563,6 +576,10 @@ class Library final : public app::Concept
             start_typing(Typing::new_tab, "");
             feedback.play(audio::Cue::modal_open);
             break;
+        case orion::SettingsPanel::Change::save_theme:
+            start_typing(Typing::theme_name, "");
+            feedback.play(audio::Cue::modal_open);
+            break;
         case orion::SettingsPanel::Change::edit_tab:
             open_tab_menu(settings_.tab_id(), feedback);
             break;
@@ -624,6 +641,11 @@ class Library final : public app::Concept
         if (event == ui::Event::cancelled || typing == Typing::search)
             return;
 
+        if (typing == Typing::theme_name)
+        {
+            save_theme(feedback);
+            return;
+        }
         if (typing == Typing::rename_tab)
         {
             prefs_.rename_tab(menu_tab_, name_);
@@ -802,8 +824,10 @@ class Library final : public app::Concept
         launch_ok_ = false;
         std::string elf;
         std::string why;
-        if (dir.empty() ||
-            !save::write_atomic(dir + "/launch-request.txt", title->id + "\n").empty())
+        if (!sys::on_console())
+            why = "not on a console";
+        else if (dir.empty() ||
+                 !save::write_atomic(dir + "/launch-request.txt", title->id + "\n").empty())
             why = "could not write the launch request";
         else if (!save::read_file(kLauncherPath, &elf, 4u << 20) || elf.empty())
             why = std::string("the launch helper is missing (") + kLauncherPath + ")";
@@ -855,6 +879,45 @@ class Library final : public app::Concept
         if (text.size() > 32u << 10)
             text.erase(0, text.find('\n', text.size() - (24u << 10)) + 1);
         save::write_atomic(dir + "/launch.txt", text);
+    }
+
+    // The look as it is now becomes a theme file of the player's, which the
+    // look then wears, so further tweaks start from it.
+    void save_theme(app::Feedback &feedback)
+    {
+        orion::ThemeFile file = orion::theme_of(look_, themes_);
+        const std::string name = name_.empty() ? std::string("My theme") : name_;
+        std::string id = orion::theme_id_from_name(name);
+        if (id.empty())
+            id = "my-theme";
+        // Never take a built-in theme's id; number the player's own instead.
+        const std::string stem = id;
+        for (int n = 2; themes_.find(id) != nullptr && !themes_.find(id)->user; ++n)
+            id = stem + "-" + std::to_string(n);
+        file.id = id;
+        file.name = name;
+        file.author = "";
+        file.description =
+            "Made in ORION from " + std::string(file.family.empty() ? "a theme" : file.family);
+        std::string error;
+        if (themes_.save_user_theme(std::move(file), &error))
+        {
+            look_.base = id;
+            orion::save_look(context_.library.state_dir, look_);
+            restyle();
+            launch_ok_ = true;
+            launch_message_ = "Saved the theme \u201c" + name + "\u201d";
+            feedback.play(audio::Cue::saved);
+        }
+        else
+        {
+            launch_ok_ = false;
+            launch_message_ = "Could not save the theme: " + error;
+            feedback.play(audio::Cue::error);
+        }
+        launch_shown_ = 4.0f;
+        if (settings_.is_open())
+            settings_.refresh(look_, prefs_);
     }
 
     void toggle_favourite(const std::string &id, app::Feedback &feedback)
@@ -1040,7 +1103,7 @@ class Library final : public app::Concept
             {1100.0f, 840.0f, 960.0f, 0.03f, 0x1f5f9a, true, 0.1f},
             {380.0f, 920.0f, 700.0f, 0.06f, 0x1c3a9c, false, 0.12f},
         };
-        const orion::Look designed = orion::default_look();
+        const orion::Look designed = orion::default_look(themes_);
         const bool own = orion::same_rgb(look_.nebula, designed.nebula) &&
                          orion::same_rgb(look_.nebula_far, designed.nebula_far);
         for (int i = 0; i < 4; ++i)
@@ -1260,7 +1323,9 @@ class Library final : public app::Concept
         if (shown <= 0.01f)
             return;
         const ui::Fonts &fonts = context_.fonts;
-        const float width = fonts.semibold.font->measure(launch_message_, 24.0f) + 96.0f;
+        // Long messages (an errno, a path) are shortened to fit the screen.
+        const std::string message = fonts.semibold.font->fit(launch_message_, 24.0f, 1400.0f);
+        const float width = fonts.semibold.font->measure(message, 24.0f) + 96.0f;
         const Rect card{gfx::kVirtualWidth * 0.5f - width * 0.5f, 880.0f + 24.0f * (1.0f - shown),
                         width, 68.0f};
         list.push_opacity(shown);
@@ -1269,7 +1334,7 @@ class Library final : public app::Concept
         list.glow({card.x + 28.0f, card.y + 27.0f, 14.0f, 14.0f}, 7.0f, 10.0f,
                   dot.with_alpha(0.6f));
         list.circle(card.x + 35.0f, card.y + 34.0f, 7.0f, dot);
-        ui::text(list, fonts.semibold, launch_message_.c_str(), card.x + 60.0f, card.y + 43.0f, 24,
+        ui::text(list, fonts.semibold, message.c_str(), card.x + 60.0f, card.y + 43.0f, 24,
                  paint.page_text());
         list.pop_opacity();
     }
@@ -1297,6 +1362,7 @@ class Library final : public app::Concept
         const std::string &text = search ? query_ : name_;
         const char *placeholder = search                          ? "Search titles or IDs"
                                   : typing_ == Typing::rename_tab ? "Rename the tab"
+                                  : typing_ == Typing::theme_name ? "Name the new theme"
                                                                   : "Name the new tab";
         const bool empty = text.empty();
         ui::text(list, fonts.regular, empty ? placeholder : text.c_str(), field.x + 28,
@@ -1313,6 +1379,7 @@ class Library final : public app::Concept
     }
 
     app::Context &context_;
+    orion::ThemeLibrary themes_; // before the look, which is read through it
     orion::Look look_;
     orion::LibraryPrefs prefs_;
     ui::Theme theme_;

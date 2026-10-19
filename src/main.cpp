@@ -210,6 +210,7 @@ int main()
         titles.titles = library::scan(scan);
         titles.scanned = true;
         titles.state_dir = "/data/orion";
+        titles.themes_dir = std::string(kAssets) + "/themes";
         const int icons = library::load_icons(titles, renderer.batch());
         char summary[128];
         std::snprintf(summary, sizeof(summary), "titles=%zu icons=%d in %lld ms",

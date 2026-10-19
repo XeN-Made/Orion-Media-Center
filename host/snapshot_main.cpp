@@ -5,6 +5,7 @@
 // usage: hui_snapshots <assets dir> <output dir> [design id|all] [width height]
 //
 // HUI_LIBRARY=<dir> shows that library instead of tests/fixtures/library.
+// HUI_THEME=<id> wears that theme (built in, or a file in <output>/.data/themes).
 //
 // Runs the same shell, designs and tour script as the console build, through
 // Mesa's surfaceless EGL (llvmpipe), with a fixed 60 Hz clock. Only the frames
@@ -272,8 +273,14 @@ int main(int argc, char **argv)
         titles.scanned = true;
         // Favourites go to the scratch folder and start empty, like settings.
         titles.state_dir = data_root;
-        for (const char *file : {"/favourites.json", "/library.json", "/theme.json"})
+        titles.themes_dir = assets + "/themes";
+        for (const char *file : {"/favourites.json", "/library.json", "/theme.json", "/themes.txt"})
             std::remove((data_root + file).c_str());
+        // HUI_THEME=<id>: wear that theme, built in or one placed in
+        // <output>/.data/themes, as if picked in Settings.
+        if (const char *theme = std::getenv("HUI_THEME"))
+            hui::save::write_atomic(data_root + "/theme.json",
+                                    std::string("{\"base\": \"") + theme + "\"}\n");
         const int icons = hui::library::load_icons(titles, renderer.batch());
         std::fprintf(stderr, "library: %zu titles, %d icons from %s\n", titles.titles.size(), icons,
                      base.c_str());

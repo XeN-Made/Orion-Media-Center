@@ -46,15 +46,21 @@ class SettingsPanel
     enum class Change : std::uint8_t
     {
         none,
-        look,     // the Look was edited
-        prefs,    // the LibraryPrefs were edited
-        new_tab,  // "New tab" was chosen: the screen asks for a name
-        edit_tab, // a tab row was chosen: tab_id() says which
+        look,       // the Look was edited
+        prefs,      // the LibraryPrefs were edited
+        new_tab,    // "New tab" was chosen: the screen asks for a name
+        save_theme, // "Save as new theme" was chosen: the screen asks for a name
+        edit_tab,   // a tab row was chosen: tab_id() says which
     };
 
     SettingsPanel();
 
     void set_theme(const ui::Theme &theme, bool reduced_motion);
+    // The themes the Style row offers; must outlive the panel.
+    void set_themes(const ThemeLibrary &themes)
+    {
+        themes_ = &themes;
+    }
     void open(const Look &look, const LibraryPrefs &prefs, ui::Feedback &feedback);
     void close(ui::Feedback &feedback);
     bool is_open() const
@@ -84,6 +90,7 @@ class SettingsPanel
 
     ui::Sheet sheet_;
     ui::Form form_;
+    const ThemeLibrary *themes_ = nullptr;
     std::vector<std::string> tab_ids_; // the tab of each tab row, by row id
     std::string tab_id_;
 };

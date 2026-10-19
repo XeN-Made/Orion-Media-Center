@@ -97,6 +97,11 @@ void quit()
     park();
 }
 
+bool on_console()
+{
+    return true;
+}
+
 int send_payload(const std::string &elf, int port)
 {
     const int fd = ::socket(AF_INET, SOCK_STREAM, 0);

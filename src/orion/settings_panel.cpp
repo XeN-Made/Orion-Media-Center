@@ -33,26 +33,13 @@ enum : int
     kAccent,
     kCorners,
     kRestore,
+    kSaveTheme,
     kNewTab,
     kTabRow = 100, // + the tab's index
 };
 
 constexpr const char *kSortKeys[] = {"name", "name_reversed", "recent", "platform"};
 constexpr const char *kSortNames[] = {"Name A–Z", "Name Z–A", "Recently added", "Platform"};
-
-// The base styles in the order Settings lists them: ORION first.
-std::vector<const ui::Theme *> bases()
-{
-    std::vector<const ui::Theme *> out;
-    for (const ui::Theme &theme : ui::themes())
-    {
-        if (std::strcmp(theme.id, "orion") == 0)
-            out.insert(out.begin(), &theme);
-        else
-            out.push_back(&theme);
-    }
-    return out;
-}
 
 // A choice over named swatches. The current colour picks its swatch; one that
 // matches none (edited by hand in theme.json) shows as "Custom" at the end.
@@ -116,7 +103,7 @@ SettingsPanel::SettingsPanel()
     form_.style.label_size = 23.0f;
     form_.style.value_size = 22.0f;
     form_.style.description_size = 19.0f;
-    form_.style.control_width = 270.0f;
+    form_.style.control_width = 340.0f; // room for theme names
 }
 
 void SettingsPanel::set_theme(const ui::Theme &theme, bool reduced_motion)
@@ -174,17 +161,20 @@ void SettingsPanel::build(const Look &look, const LibraryPrefs &prefs)
         "A title moved to your own tab leaves Games, Homebrew or Media";
 
     form_.add_header("Appearance");
-    const std::vector<const ui::Theme *> styles = bases();
     std::vector<std::string> style_names;
     int base = 0;
-    for (std::size_t i = 0; i < styles.size(); ++i)
+    for (std::size_t i = 0; themes_ != nullptr && i < themes_->size(); ++i)
     {
-        style_names.emplace_back(styles[i]->name);
-        if (look.base == styles[i]->id)
+        const ThemeFile &file = themes_->at(i);
+        // The player's own themes say so.
+        style_names.push_back(file.user ? file.name + " (yours)" : file.name);
+        if (look.base == file.id)
             base = static_cast<int>(i);
     }
-    form_.add_choice(kBase, "Style", std::move(style_names), base).description =
-        "A starting point; everything below can then be changed";
+    if (style_names.empty())
+        style_names.emplace_back("ORION");
+    form_.add_choice(kBase, "Theme", std::move(style_names), base).description =
+        "Built in, or a theme file of yours; everything below adjusts it";
     std::vector<std::string> background_names;
     int background = 0;
     for (std::size_t i = 0; i < backgrounds().size(); ++i)
@@ -211,6 +201,9 @@ void SettingsPanel::build(const Look &look, const LibraryPrefs &prefs)
     add_swatches(form_, kAccent, "Accent", accents(), look.accent, look.accent, false,
                  "Labels, counts and the text cursor");
     form_.add_slider(kCorners, "Cover corners", look.corners, 0.0f, 40.0f, 2.0f).unit = " px";
+    ui::FormRow &save = form_.add_action(kSaveTheme, "Save as new theme");
+    save.description = "Keeps this look as a theme file in /data/orion/themes, to reuse or share";
+    save.chevron = true;
     form_.add_action(kRestore, "Restore the ORION look").description =
         "Back to the galaxy glass ORION starts with";
 
@@ -235,9 +228,11 @@ SettingsPanel::Change SettingsPanel::handle(const InputFrame &input, ui::Feedbac
     if (event == ui::Event::activated)
     {
         const int id = form_.changed_id();
-        if (id == kRestore)
+        if (id == kSaveTheme)
+            return Change::save_theme;
+        if (id == kRestore && themes_ != nullptr)
         {
-            *look = default_look();
+            *look = default_look(*themes_);
             refresh(*look, *prefs);
             return Change::look;
         }
@@ -267,10 +262,11 @@ SettingsPanel::Change SettingsPanel::handle(const InputFrame &input, ui::Feedbac
         return Change::prefs;
     case kBase:
     {
-        const std::vector<const ui::Theme *> styles = bases();
+        if (themes_ == nullptr || themes_->size() == 0)
+            return Change::none;
         const int index =
-            std::clamp(form_.choice_index(kBase), 0, static_cast<int>(styles.size()) - 1);
-        *look = look_of(*styles[static_cast<std::size_t>(index)]);
+            std::clamp(form_.choice_index(kBase), 0, static_cast<int>(themes_->size()) - 1);
+        *look = look_of(themes_->at(static_cast<std::size_t>(index)));
         refresh(*look, *prefs); // every appearance row starts over
         return Change::look;
     }

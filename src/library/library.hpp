@@ -66,6 +66,9 @@ struct Library
     // Where ORION keeps what the player chooses (favourites, ...); empty
     // keeps nothing. /data/orion on the console, so it survives a reinstall.
     std::string state_dir;
+    // The app's own theme files (orion/theme_file.hpp); the player's are in
+    // <state_dir>/themes. Empty: the kit's themes, built in.
+    std::string themes_dir;
 };
 
 // The three shelves the Library groups titles on.

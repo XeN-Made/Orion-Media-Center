@@ -55,6 +55,11 @@ int launch_app(const char *title_id)
     return kLaunchUnsupported;
 }
 
+bool on_console()
+{
+    return false;
+}
+
 int send_payload(const std::string &elf, int port)
 {
     std::fprintf(stderr, "[HUI] payload of %zu bytes for port %d: not on a console\n", elf.size(),

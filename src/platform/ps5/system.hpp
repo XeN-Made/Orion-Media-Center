@@ -31,6 +31,9 @@ void sleep_us(std::uint32_t microseconds);
 // Parks if the request is refused.
 [[noreturn]] void quit();
 
+// True on the console, false in the PC builds (tests and pictures).
+bool on_console();
+
 // What launch_app returns on a PC, where there is nothing to launch.
 constexpr int kLaunchUnsupported = -1;
 
