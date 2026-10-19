@@ -61,6 +61,8 @@ constexpr std::size_t kMaxName = 24;  // bytes, as orion::LibraryPrefs keeps the
 // The launch helper shipped in the app folder, and the console's ELF loader.
 constexpr const char *kLauncherPath = "/app0/assets/payloads/orion-launcher.elf";
 constexpr int kLoaderPort = 9021;
+// How long Circle is held to close ORION.
+constexpr float kHoldToExit = 1.2f;
 // The search panel sits under the first row of covers, so the results of
 // what is typed stay in view above it.
 constexpr Rect kSearchPanel{544.0f, 590.0f, 832.0f, 378.0f};
@@ -118,6 +120,7 @@ enum : int
     kItemRight,
     kItemDelete,
     kItemSettings,
+    kItemClose,
     kItemMove = 100, // + the tab's index
 };
 
@@ -158,6 +161,10 @@ constexpr app::TourStep kTour[] = {
     {0.2f, action_bit(Action::confirm)},
     {0.6f, action_bit(Action::menu), Direction::none, "typed"},
     {0.6f, 0, Direction::none, "filtered"},
+    // Circle clears the search; held, it starts closing ORION (not long
+    // enough here to finish).
+    {0.1f, action_bit(Action::back)},
+    {0.8f, 0, Direction::none, "hold-exit", 0.0f, 0.0f, action_bit(Action::back)},
 };
 
 // iOS-like clear glass for the search keyboard: keys of frosted white at low
@@ -180,6 +187,40 @@ ui::Theme clear_glass(const ui::Theme &base)
     t.light = Color::rgb(0xffffff, 0.34f);
     t.shadow = Color::rgb(0x000000, 0.25f);
     return t;
+}
+
+// h, s and v in 0..1.
+Color hsv(float h, float s, float v)
+{
+    const float sector = h * 6.0f;
+    const float chroma = v * s;
+    const float x = chroma * (1.0f - std::fabs(std::fmod(sector, 2.0f) - 1.0f));
+    float r = 0.0f;
+    float g = 0.0f;
+    float b = 0.0f;
+    switch (static_cast<int>(sector) % 6)
+    {
+    case 0:
+        r = chroma, g = x;
+        break;
+    case 1:
+        r = x, g = chroma;
+        break;
+    case 2:
+        g = chroma, b = x;
+        break;
+    case 3:
+        g = x, b = chroma;
+        break;
+    case 4:
+        r = x, b = chroma;
+        break;
+    default:
+        r = chroma, b = x;
+        break;
+    }
+    const float m = v - chroma;
+    return Color{r + m, g + m, b + m, 1.0f};
 }
 
 // FNV-1a of the ID, then a finaliser: IDs differ only in their last digits,
@@ -327,8 +368,8 @@ class Library final : public app::Concept
         grid_.style.card.badge_corner = ui::CardCorner::top_right;
         grid_.style.card.glow = true;
         grid_.art = [this](ui::Canvas &canvas, const Rect &art, float radius,
-                           const ui::CardItem &item, float /*focus*/)
-        { draw_art(canvas, art, radius, item); };
+                           const ui::CardItem &item, float focus)
+        { draw_art(canvas, art, radius, item, focus); };
         grid_.set_bounds(
             {kMargin, kGridTop, gfx::kVirtualWidth - 2.0f * kMargin, kGridBottom - kGridTop});
 
@@ -390,6 +431,19 @@ class Library final : public app::Concept
         {
             reduced_ = reduced;
             restyle();
+        }
+
+        const bool browsing = typing_ == Typing::none && !menu_.is_open() && !settings_.is_open();
+        const bool back_held = (input.held & action_bit(Action::back)) != 0;
+        if (browsing && input.is_pressed(Action::back))
+            hold_armed_ = true;
+        if (!back_held || !browsing)
+            hold_armed_ = false;
+        hold_back_ = hold_armed_ ? hold_back_ + dt : 0.0f;
+        if (hold_back_ >= kHoldToExit && !context_.exit_requested)
+        {
+            context_.exit_requested = true;
+            feedback.play(audio::Cue::back);
         }
 
         // One layer has the input: the keyboard, then a menu, then Settings,
@@ -471,6 +525,7 @@ class Library final : public app::Concept
         else
             draw_hints(list, paint);
         draw_launch_card(list, paint);
+        draw_hold_to_exit(list, paint);
         settings_.draw(canvas);
         menu_.draw(canvas); // last: it belongs to whatever it was opened over
         list.pop_opacity();
@@ -491,6 +546,17 @@ class Library final : public app::Concept
         tabs_.style.theme = grid_.style.theme = menu_.style.theme = theme_;
         keys_.style.theme = clear_glass(theme_);
         grid_.style.card.radius = look_.corners;
+        // Plain tabs are text on the page, the active one lit and underlined,
+        // as on the home screen; pills sit on a frosted track.
+        const bool plain = look_.chrome.tabs == orion::TabStyle::plain;
+        tabs_.style.kind = plain ? ui::TabKind::underline : ui::TabKind::pill;
+        tabs_.style.track = !plain;
+        tabs_.style.text_size = plain ? 24.0f : 21.0f;
+        tabs_.style.thickness = 3.0f;
+        // The aurora ring replaces the theme's ring and glow on covers.
+        const bool aurora = look_.chrome.focus == orion::FocusRing::aurora;
+        grid_.style.card.ring = !aurora;
+        grid_.style.card.glow = !aurora;
         tabs_.style.reduced_motion = grid_.style.reduced_motion = keys_.style.reduced_motion =
             menu_.style.reduced_motion = reduced_;
         settings_.set_theme(theme_, reduced_);
@@ -715,6 +781,10 @@ class Library final : public app::Concept
         settings.shortcut = "R3";
         settings.tag = kItemSettings;
         items.push_back(settings);
+        ui::MenuItem close = menu_item("Close ORION");
+        close.shortcut = "Hold Circle";
+        close.tag = kItemClose;
+        items.push_back(close);
         menu_.set_items(std::move(items));
         menu_.open(grid_.cell_rect(grid_.focus()), feedback);
     }
@@ -756,6 +826,11 @@ class Library final : public app::Concept
             if (tag == kItemLaunch)
             {
                 launch(menu_title_, feedback);
+                return;
+            }
+            if (tag == kItemClose)
+            {
+                context_.exit_requested = true;
                 return;
             }
             if (tag == kItemSettings)
@@ -1070,7 +1145,7 @@ class Library final : public app::Concept
             ui::CardItem item;
             item.title = title.name;
             item.subtitle = describe(title);
-            item.badge = title.category == library::Category::media ? "MEDIA" : "";
+            item.badge.clear(); // the art slot draws the category banner
             item.texture = title.texture;
             item.top = hashed_color(title.id, 0.55f, 0.42f);
             item.bottom = hashed_color(title.id, 0.7f, 0.2f);
@@ -1161,8 +1236,55 @@ class Library final : public app::Concept
                  gfx::Align::right);
     }
 
-    void draw_art(ui::Canvas &canvas, const Rect &art, float radius, const ui::CardItem &item) const
+    // The category on a cover: a small coloured banner in its top-right corner.
+    void draw_banner(ui::Canvas &canvas, const Rect &art, const Title &title) const
     {
+        const char *label = "GAME";
+        Color colour = Color::rgb(0x8fe3ff);
+        if (title.platform == library::Platform::ps4)
+            label = "PS4", colour = Color::rgb(0x8fb0ff);
+        else if (library::shelf_of(title) == library::Shelf::media)
+            label = "MEDIA", colour = Color::rgb(0xffc94a);
+        else if (library::shelf_of(title) == library::Shelf::homebrew)
+            label = "HOMEBREW", colour = Color::rgb(0x86efb4);
+        const ui::FontRef &font = canvas.fonts.semibold;
+        constexpr float kSize = 14.0f;
+        constexpr float kTracking = 1.6f;
+        const float width = font.font->measure(label, kSize) +
+                            kTracking * static_cast<float>(std::strlen(label)) + 20.0f;
+        const Rect pill{art.x + art.w - width - 10.0f, art.y + 10.0f, width, 26.0f};
+        canvas.list.shadow({pill.x, pill.y + 3.0f, pill.w, pill.h}, 13.0f, 10.0f,
+                           Color::rgb(0x000000, 0.35f));
+        canvas.list.rounded_rect(pill, 13.0f, colour);
+        ui::text(canvas.list, font, label, pill.cx(), pill.y + 18.5f, kSize, Color::rgb(0x08101c),
+                 gfx::Align::center, kTracking);
+    }
+
+    // The focused cover's ring: light whose colour drifts slowly through the
+    // spectrum, with a second, shifted hue just inside it so the two blend.
+    void draw_aurora_ring(gfx::DrawList &list, const Rect &art, float radius, float focus) const
+    {
+        const float time = context_.settings.reduced_motion ? 0.0f : clock_;
+        const float hue = std::fmod(time * 0.05f, 1.0f);
+        const Color outer = hsv(hue, 0.55f, 1.0f);
+        const Color inner = hsv(std::fmod(hue + 0.22f, 1.0f), 0.5f, 1.0f);
+        list.bordered_rect(art.inset(-5.0f), radius + 5.0f, Color::rgb(0x000000, 0.0f), 3.0f,
+                           outer.with_alpha(0.95f * focus));
+        list.bordered_rect(art.inset(-1.5f), radius + 1.5f, Color::rgb(0x000000, 0.0f), 1.5f,
+                           inner.with_alpha(0.7f * focus));
+    }
+
+    void draw_art(ui::Canvas &canvas, const Rect &art, float radius, const ui::CardItem &item,
+                  float focus) const
+    {
+        const bool aurora = look_.chrome.focus == orion::FocusRing::aurora && focus > 0.01f;
+        if (aurora)
+        {
+            // glow() fills its inside too: drawn first, the art covers that.
+            const float time = context_.settings.reduced_motion ? 0.0f : clock_;
+            const Color light = hsv(std::fmod(time * 0.05f, 1.0f), 0.55f, 1.0f);
+            canvas.list.glow(art, radius, 26.0f * focus, light.with_alpha(0.5f * focus));
+        }
         if (item.texture != 0)
         {
             canvas.list.image(item.texture, art, item.uv, Color::rgb(0xffffff), radius);
@@ -1177,9 +1299,15 @@ class Library final : public app::Concept
         }
         canvas.list.gradient_rect(art, radius, Color::rgb(0xffffff, 0.14f),
                                   Color::rgb(0xffffff, 0.0f));
-        canvas.list.bordered_rect(art, radius, Color::rgb(0x000000, 0.0f), 1.0f,
-                                  Color::rgb(0xffffff, 0.16f));
-        if (favourite_of(titles()[static_cast<std::size_t>(item.tag)].id))
+        if (look_.chrome.cover_rim)
+            canvas.list.bordered_rect(art, radius, Color::rgb(0x000000, 0.0f), 1.0f,
+                                      Color::rgb(0xffffff, 0.16f));
+        const Title &title = titles()[static_cast<std::size_t>(item.tag)];
+        if (look_.chrome.badges)
+            draw_banner(canvas, art, title);
+        if (aurora)
+            draw_aurora_ring(canvas.list, art, radius, focus);
+        if (favourite_of(title.id))
         {
             // A gold star on a dark disc in the corner the badge leaves free.
             const float r = std::max(14.0f, art.w * 0.075f);
@@ -1202,7 +1330,7 @@ class Library final : public app::Concept
         if (favourite_of(title.id))
             line += "   \xc2\xb7   Favourite";
         const float width = context_.fonts.regular.font->measure(line, 21.0f);
-        glass_panel(list, paint, {kMargin - 24.0f, 972.0f, width + 48.0f, 76.0f}, 38.0f);
+        plate(list, paint, {kMargin - 24.0f, 972.0f, width + 48.0f, 76.0f}, 38.0f);
         ui::text(list, context_.fonts.regular, line.c_str(), kMargin, 1018, 21,
                  paint.page_text_muted());
     }
@@ -1262,8 +1390,45 @@ class Library final : public app::Concept
         layout.text_size = 26.0f;
         layout.cy = 1010.0f;
         const float width = ui::measure_hints(context_.fonts, hints, 5, layout);
-        glass_panel(list, paint, {right - width - 30.0f, 972.0f, width + 60.0f, 76.0f}, 38.0f);
+        plate(list, paint, {right - width - 30.0f, 972.0f, width + 60.0f, 76.0f}, 38.0f);
         ui::draw_hints(list, context_.fonts, glyphs(), hints, 5, right, true, layout);
+    }
+
+    // A bar at the bottom of the screen, as the look asks: glass, or its rim.
+    void plate(gfx::DrawList &list, ui::Painter &paint, const Rect &r, float radius) const
+    {
+        if (look_.chrome.plates == orion::Plates::none)
+            return;
+        if (look_.chrome.plates == orion::Plates::outline)
+        {
+            list.bordered_rect(r, radius, Color::rgb(0x000000, 0.0f), 1.5f,
+                               Color::rgb(0xffffff, 0.3f));
+            return;
+        }
+        glass_panel(list, paint, r, radius);
+    }
+
+    // While Circle is held: how long is left before ORION closes.
+    void draw_hold_to_exit(gfx::DrawList &list, ui::Painter &paint) const
+    {
+        constexpr float kShowAfter = 0.2f;
+        if (hold_back_ <= kShowAfter)
+            return;
+        const float progress =
+            std::clamp((hold_back_ - kShowAfter) / (kHoldToExit - kShowAfter), 0.0f, 1.0f);
+        const ui::Fonts &fonts = context_.fonts;
+        const char *label = "Keep holding to close ORION";
+        const float width = fonts.semibold.font->measure(label, 22.0f) + 110.0f;
+        const Rect r{gfx::kVirtualWidth - kMargin - width, 72.0f, width, 64.0f};
+        list.push_opacity(std::min(1.0f, (hold_back_ - kShowAfter) * 6.0f));
+        glass_panel(list, paint, r, 32.0f);
+        const float cx = r.x + 40.0f;
+        const float cy = r.y + 32.0f;
+        list.ring(cx, cy, 14.0f, 3.0f, Color::rgb(0xffffff, 0.2f));
+        list.arc(cx, cy, 14.0f, 3.0f, -1.5707963f, -1.5707963f + 6.2831853f * progress,
+                 theme_.accent);
+        ui::text(list, fonts.semibold, label, r.x + 70.0f, r.y + 40.0f, 22, paint.page_text());
+        list.pop_opacity();
     }
 
     // A frosted panel with a glossy sheen and a polished rim: the glass ORION's
@@ -1306,7 +1471,7 @@ class Library final : public app::Concept
     void draw_tab_sheen(gfx::DrawList &list) const
     {
         const int count = static_cast<int>(tabs_.tabs().size());
-        if (count == 0)
+        if (count == 0 || look_.chrome.tabs != orion::TabStyle::pills)
             return;
         const Rect first = tabs_.tab_rect(context_.fonts, 0);
         const Rect last = tabs_.tab_rect(context_.fonts, count - 1);
@@ -1404,6 +1569,8 @@ class Library final : public app::Concept
     float launch_shown_ = 0.0f;   // seconds the card stays
     float launch_pending_ = 0.0f; // seconds before another launch is taken
     float launch_exit_ = 0.0f;    // seconds until ORION closes for a launch
+    bool hold_armed_ = false;     // Circle went down while browsing
+    float hold_back_ = 0.0f;      // seconds it has been held since
     tween::Spring launch_card_;
     float age_ = 0.0f;
     float clock_ = 0.0f;

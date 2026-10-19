@@ -92,6 +92,7 @@ Look look_of(const ThemeFile &file)
     look.clouds = file.clouds;
     look.motion = file.motion;
     look.corners = file.cover_corners;
+    look.chrome = file.chrome;
     look.background = theme.backdrop.mode;
     look.sky_top = theme.backdrop.colors[0];
     look.sky_bottom = theme.backdrop.colors[1];
@@ -130,6 +131,7 @@ ThemeFile theme_of(const Look &look, const ThemeLibrary &themes)
     file.clouds = look.clouds;
     file.motion = look.motion;
     file.cover_corners = look.corners;
+    file.chrome = look.chrome;
     file.path.clear();
     file.user = false;
     file.bind();
@@ -168,6 +170,21 @@ Look load_look(const std::string &state_dir, const ThemeLibrary &themes)
     look.motion = root["motion"].bool_or(look.motion);
     look.corners =
         std::clamp(static_cast<float>(root["corners"].number_or(look.corners)), 0.0f, 48.0f);
+    const std::string tabs = root["tabs"].string_or("");
+    if (tabs == "pills" || tabs == "plain")
+        look.chrome.tabs = tabs == "plain" ? TabStyle::plain : TabStyle::pills;
+    const std::string ring = root["focus_ring"].string_or("");
+    if (ring == "theme" || ring == "aurora")
+        look.chrome.focus = ring == "aurora" ? FocusRing::aurora : FocusRing::theme;
+    const std::string plates = root["plates"].string_or("");
+    if (plates == "glass")
+        look.chrome.plates = Plates::glass;
+    else if (plates == "outline")
+        look.chrome.plates = Plates::outline;
+    else if (plates == "none")
+        look.chrome.plates = Plates::none;
+    look.chrome.badges = root["badges"].bool_or(look.chrome.badges);
+    look.chrome.cover_rim = root["cover_rim"].bool_or(look.chrome.cover_rim);
     return look;
 }
 
@@ -194,6 +211,19 @@ bool save_look(const std::string &state_dir, const Look &look)
     text += "  \"highlight\": \"" + to_hex(look.highlight) + "\",\n";
     text += "  \"accent\": \"" + to_hex(look.accent) + "\",\n";
     text += numbers;
+    text.pop_back(); // the last number gets a comma: more keys follow
+    text += ",\n";
+    text += std::string("  \"tabs\": \"") +
+            (look.chrome.tabs == TabStyle::plain ? "plain" : "pills") + "\",\n";
+    text += std::string("  \"focus_ring\": \"") +
+            (look.chrome.focus == FocusRing::aurora ? "aurora" : "theme") + "\",\n";
+    text += std::string("  \"plates\": \"") +
+            (look.chrome.plates == Plates::outline ? "outline"
+             : look.chrome.plates == Plates::none  ? "none"
+                                                   : "glass") +
+            "\",\n";
+    text += std::string("  \"badges\": ") + (look.chrome.badges ? "true" : "false") + ",\n";
+    text += std::string("  \"cover_rim\": ") + (look.chrome.cover_rim ? "true" : "false") + "\n";
     text += "}\n";
     return save::write_atomic(file_of(state_dir), text).empty();
 }

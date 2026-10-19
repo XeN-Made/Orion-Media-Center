@@ -46,6 +46,7 @@ struct Look
     gfx::Color highlight;  // the selected tab, the focused key
     gfx::Color accent;     // labels, counts, the caret
     float corners = 22.0f; // radius of the covers
+    Chrome chrome;         // tab bar, focus ring, bars, banners, rim
 };
 
 // A theme's own look: what choosing it in Settings starts from.

@@ -30,6 +30,9 @@ constexpr const char *kStyles[] = {"flat",  "soft",    "hard", "neumorphic", "be
 constexpr const char *kCorners[] = {"round", "chamfer", "pixel"};
 constexpr const char *kFonts[] = {"regular", "semibold", "display", "mono", "pixel", "hand"};
 constexpr const char *kSounds[] = {"paper", "glass"};
+constexpr const char *kTabStyles[] = {"pills", "plain"};
+constexpr const char *kFocusRings[] = {"theme", "aurora"};
+constexpr const char *kPlates[] = {"glass", "outline", "none"};
 
 // The palette keys and the Theme members they fill.
 struct PaletteKey
@@ -171,6 +174,17 @@ const ui::Theme &kit_theme(std::string_view id)
 
 } // namespace
 
+Chrome orion_chrome()
+{
+    Chrome chrome;
+    chrome.tabs = TabStyle::plain;
+    chrome.focus = FocusRing::aurora;
+    chrome.plates = Plates::none;
+    chrome.badges = true;
+    chrome.cover_rim = false;
+    return chrome;
+}
+
 void ThemeFile::bind()
 {
     theme.id = id.c_str();
@@ -188,6 +202,8 @@ ThemeFile from_kit(const ui::Theme &theme)
     file.description = theme.summary != nullptr ? theme.summary : "";
     file.author = "ORION";
     file.theme = theme;
+    if (file.id == "orion")
+        file.chrome = orion_chrome();
     file.bind();
     return file;
 }
@@ -290,6 +306,14 @@ bool parse_theme(std::string_view text, const ThemeResolver &resolve, ThemeFile 
     file.clouds = clouds / 100.0f;
     read_bool(orion, "motion", &file.motion);
     read_number(orion, "cover_corners", 0.0f, 48.0f, &file.cover_corners);
+    if (const int tabs = index_of(kTabStyles, orion["tabs"].string_or("")); tabs >= 0)
+        file.chrome.tabs = static_cast<TabStyle>(tabs);
+    if (const int ring = index_of(kFocusRings, orion["focus_ring"].string_or("")); ring >= 0)
+        file.chrome.focus = static_cast<FocusRing>(ring);
+    if (const int plates = index_of(kPlates, orion["plates"].string_or("")); plates >= 0)
+        file.chrome.plates = static_cast<Plates>(plates);
+    read_bool(orion, "badges", &file.chrome.badges);
+    read_bool(orion, "cover_rim", &file.chrome.cover_rim);
 
     file.bind();
     *out = std::move(file);
@@ -360,7 +384,15 @@ std::string write_theme(const ThemeFile &file)
     out += "  \"orion\": {\n";
     out += "    \"clouds\": " + number_text(std::round(file.clouds * 100.0f)) + ",\n";
     out += std::string("    \"motion\": ") + flag(file.motion) + ",\n";
-    out += "    \"cover_corners\": " + number_text(file.cover_corners) + "\n  }\n}\n";
+    out += "    \"cover_corners\": " + number_text(file.cover_corners) + ",\n";
+    out +=
+        std::string("    \"tabs\": \"") + kTabStyles[static_cast<int>(file.chrome.tabs)] + "\",\n";
+    out += std::string("    \"focus_ring\": \"") +
+           kFocusRings[static_cast<int>(file.chrome.focus)] + "\",\n";
+    out +=
+        std::string("    \"plates\": \"") + kPlates[static_cast<int>(file.chrome.plates)] + "\",\n";
+    out += std::string("    \"badges\": ") + flag(file.chrome.badges) + ",\n";
+    out += std::string("    \"cover_rim\": ") + flag(file.chrome.cover_rim) + "\n  }\n}\n";
     return out;
 }
 

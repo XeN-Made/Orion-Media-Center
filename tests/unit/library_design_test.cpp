@@ -184,6 +184,37 @@ TEST_F(LibraryDesign, LaunchSaysWhatHappenedAndLogsIt)
     EXPECT_FALSE(context_.exit_requested);
 }
 
+TEST_F(LibraryDesign, HoldingCircleClosesOrionButATapDoesNot)
+{
+    auto design = with_fixture();
+    // A tap of Circle is the grid's back, nothing more.
+    send(*design, press(hui::Action::back), 2.0f);
+    EXPECT_FALSE(context_.exit_requested);
+    // Held: the progress shows, then ORION asks to close.
+    hui::InputFrame hold = press(hui::Action::back);
+    send(*design, hold, 0.0f);
+    hold.pressed = 0;
+    for (int frame = 0; frame < 40; ++frame)
+        send(*design, hold, 0.0f);
+    EXPECT_FALSE(context_.exit_requested);
+    expect_drawable(*design);
+    for (int frame = 0; frame < 60; ++frame)
+        send(*design, hold, 0.0f);
+    EXPECT_TRUE(context_.exit_requested);
+}
+
+TEST_F(LibraryDesign, CircleHeldToCloseSettingsDoesNotCloseOrion)
+{
+    auto design = with_fixture();
+    send(*design, press(hui::Action::r3));
+    hui::InputFrame hold = press(hui::Action::back);
+    send(*design, hold, 0.0f); // closes Settings
+    hold.pressed = 0;
+    for (int frame = 0; frame < 120; ++frame)
+        send(*design, hold, 0.0f);
+    EXPECT_FALSE(context_.exit_requested);
+}
+
 TEST_F(LibraryDesign, ItStartsOnAllWhenAskedNotToRemember)
 {
     const std::string dir = ::testing::TempDir() + "orion-design-noreopen";

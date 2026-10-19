@@ -15,6 +15,34 @@
 namespace hui::orion
 {
 
+// How ORION's own pieces are drawn, beyond what the kit's Theme says.
+enum class TabStyle : std::uint8_t
+{
+    pills, // a frosted track with a plate behind the active tab
+    plain, // text only, the active tab lit and underlined (the home screen's way)
+};
+enum class FocusRing : std::uint8_t
+{
+    theme,  // the theme's own focus ring
+    aurora, // a soft ring whose colour drifts through the spectrum
+};
+enum class Plates : std::uint8_t
+{
+    glass,   // the details and hint bars are frosted glass
+    outline, // only their rim: no fill
+    none,    // neither: the text and glyphs sit straight on the sky
+};
+struct Chrome
+{
+    TabStyle tabs = TabStyle::pills;
+    FocusRing focus = FocusRing::theme;
+    Plates plates = Plates::glass;
+    bool badges = true;    // a coloured banner on each cover: GAME, HOMEBREW, MEDIA, PS4
+    bool cover_rim = true; // a hairline of light around each cover
+};
+// ORION's own: plain tabs, the aurora ring, bare bars, banners, no rim.
+Chrome orion_chrome();
+
 // One theme. Built-in themes ship as files in the app folder
 // (assets/themes/*.json); the player's live in <state_dir>/themes/*.json and
 // are read the same way. docs/ORION_THEMES.md describes every key:
@@ -25,7 +53,7 @@ namespace hui::orion
 //     "extends": "orion",
 //     "page":    {"background": "galaxy", "colors": ["#000000", "#02040b", "#3a1f6a", "#0a4a66"]},
 //     "palette": {"accent": "#ffc94a", "primary": "#ffc94a"},
-//     "orion":   {"clouds": 80, "cover_corners": 28}
+//     "orion":   {"clouds": 80, "cover_corners": 28, "tabs": "plain"}
 //   }
 //
 // Every key but id and name is optional: what a file leaves out comes from
@@ -46,6 +74,7 @@ struct ThemeFile
     float clouds = 1.0f;         // 0..2: drifting nebula clouds behind glass
     bool motion = true;          // the backdrop drifts
     float cover_corners = 22.0f; // radius of the covers
+    Chrome chrome;
 
     void bind();
 };

@@ -32,6 +32,11 @@ enum : int
     kHighlight,
     kAccent,
     kCorners,
+    kTabBar,
+    kFocusRing,
+    kBars,
+    kBadges,
+    kRim,
     kRestore,
     kSaveTheme,
     kNewTab,
@@ -201,6 +206,24 @@ void SettingsPanel::build(const Look &look, const LibraryPrefs &prefs)
     add_swatches(form_, kAccent, "Accent", accents(), look.accent, look.accent, false,
                  "Labels, counts and the text cursor");
     form_.add_slider(kCorners, "Cover corners", look.corners, 0.0f, 40.0f, 2.0f).unit = " px";
+    form_
+        .add_choice(kTabBar, "Tab bar", {"Plain", "Pills"},
+                    look.chrome.tabs == TabStyle::plain ? 0 : 1)
+        .description = "Plain text like the home screen, or pills on a frosted track";
+    form_
+        .add_choice(kFocusRing, "Focus ring", {"Aurora", "Theme"},
+                    look.chrome.focus == FocusRing::aurora ? 0 : 1)
+        .description = "A ring that drifts through the colours, or the theme's own";
+    form_
+        .add_choice(kBars, "Bottom bars", {"None", "Outline", "Glass"},
+                    look.chrome.plates == Plates::none      ? 0
+                    : look.chrome.plates == Plates::outline ? 1
+                                                            : 2)
+        .description = "Behind the title details and button hints: nothing, a rim, or glass";
+    form_.add_toggle(kBadges, "Category banners", look.chrome.badges).description =
+        "GAME, HOMEBREW, MEDIA or PS4 on each cover";
+    form_.add_toggle(kRim, "Cover rim", look.chrome.cover_rim).description =
+        "A hairline of light around each cover";
     ui::FormRow &save = form_.add_action(kSaveTheme, "Save as new theme");
     save.description = "Keeps this look as a theme file in /data/orion/themes, to reuse or share";
     save.chevron = true;
@@ -313,6 +336,24 @@ SettingsPanel::Change SettingsPanel::handle(const InputFrame &input, ui::Feedbac
         return Change::look;
     case kCorners:
         look->corners = form_.slider_value(kCorners);
+        return Change::look;
+    case kTabBar:
+        look->chrome.tabs = form_.choice_index(kTabBar) == 0 ? TabStyle::plain : TabStyle::pills;
+        return Change::look;
+    case kFocusRing:
+        look->chrome.focus =
+            form_.choice_index(kFocusRing) == 0 ? FocusRing::aurora : FocusRing::theme;
+        return Change::look;
+    case kBars:
+        look->chrome.plates = form_.choice_index(kBars) == 0   ? Plates::none
+                              : form_.choice_index(kBars) == 1 ? Plates::outline
+                                                               : Plates::glass;
+        return Change::look;
+    case kBadges:
+        look->chrome.badges = form_.toggle_value(kBadges);
+        return Change::look;
+    case kRim:
+        look->chrome.cover_rim = form_.toggle_value(kRim);
         return Change::look;
     default:
         return Change::none;

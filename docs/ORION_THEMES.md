@@ -99,7 +99,12 @@ from the theme it **extends** (ORION's own, when it names none):
   "orion": {
     "clouds": 100,                    // 0-200 %: nebula clouds drifting behind glass
     "motion": true,                   // the background drifts
-    "cover_corners": 22               // 0-48: how round the covers are
+    "cover_corners": 22,              // 0-48: how round the covers are
+    "tabs": "plain",                  // plain (home-screen text) or pills
+    "focus_ring": "aurora",           // aurora (drifting colour) or theme
+    "plates": "none",                 // bottom bars: none, outline or glass
+    "badges": true,                   // GAME / HOMEBREW / MEDIA / PS4 banners
+    "cover_rim": false                // a hairline of light around covers
   }
 }
 ```
