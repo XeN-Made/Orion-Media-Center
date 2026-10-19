@@ -108,7 +108,7 @@ const ui::Theme &library_theme()
 {
     for (const ui::Theme &theme : ui::themes())
     {
-        if (std::strcmp(theme.id, "acrylic") == 0)
+        if (std::strcmp(theme.id, "orion") == 0)
             return theme;
     }
     return ui::themes()[0];
@@ -216,7 +216,7 @@ class Library final : public app::Concept
     {
         tabs_.style.theme = theme_;
         tabs_.style.kind = ui::TabKind::pill;
-        tabs_.style.height = 50.0f;
+        tabs_.style.height = 52.0f;
         tabs_.style.text_size = 21.0f;
         tabs_.style.badge_size = 16.0f;
         tabs_.style.padding = 20.0f;
@@ -234,6 +234,7 @@ class Library final : public app::Concept
         grid_.style.card.subtitle_size = 17.0f;
         grid_.style.card.badge_corner = ui::CardCorner::top_right;
         grid_.style.card.glow = true;
+        grid_.style.card.radius = 22.0f; // soft covers, not tiles
         grid_.art = [this](ui::Canvas &canvas, const Rect &art, float radius,
                            const ui::CardItem &item, float /*focus*/)
         { draw_art(canvas, art, radius, item); };
@@ -308,20 +309,38 @@ class Library final : public app::Concept
 
     void draw(app::Frame &frame) const override
     {
+        const bool still = context_.settings.reduced_motion;
+        const float drift = still ? 0.0f : clock_;
         frame.backdrop = theme_.backdrop;
-        frame.backdrop.time = context_.settings.reduced_motion ? 0.0f : clock_;
+        frame.backdrop.time = drift;
+        // The star layers slide at different fractions of the camera: a slow
+        // pan is enough to make the sky feel deep.
+        frame.backdrop.params[0] = drift * 6.0f;
+        frame.backdrop.params[1] = std::sin(drift * 0.05f) * 40.0f;
         if (theme_.style == ui::SurfaceStyle::glass)
         {
-            // Slow pools of light give the frosted cards something to blur.
-            for (int i = 0; i < 3; ++i)
+            // Nebula clouds: large, faint and slow. They are what the frosted
+            // glass picks its colour up from.
+            struct Cloud
             {
-                const float phase = clock_ * 0.1f + static_cast<float>(i) * 2.1f;
-                const float cx = 420.0f + static_cast<float>(i) * 540.0f + std::sin(phase) * 140.0f;
-                const float cy = 560.0f + std::cos(phase * 1.3f) * 200.0f;
-                frame.scene.shadow(
-                    {cx - 170.0f, cy - 170.0f, 340.0f, 340.0f}, 170.0f, 190.0f,
-                    gfx::mix(theme_.primary, theme_.accent, static_cast<float>(i % 2))
-                        .with_alpha(0.3f));
+                float x, y, size, speed;
+                std::uint32_t colour;
+                float alpha;
+            };
+            constexpr Cloud kClouds[] = {
+                {300.0f, 300.0f, 900.0f, 0.05f, 0x6a3cff, 0.42f},
+                {1520.0f, 240.0f, 820.0f, 0.04f, 0x1aa6d9, 0.34f},
+                {1100.0f, 840.0f, 960.0f, 0.03f, 0xc04bd6, 0.3f},
+                {380.0f, 920.0f, 700.0f, 0.06f, 0x3b4bff, 0.3f},
+            };
+            for (int i = 0; i < 4; ++i)
+            {
+                const Cloud &c = kClouds[i];
+                const float phase = drift * c.speed + static_cast<float>(i) * 1.9f;
+                const float cx = c.x + std::sin(phase) * 120.0f;
+                const float cy = c.y + std::cos(phase * 1.2f) * 80.0f;
+                frame.scene.shadow({cx - c.size * 0.5f, cy - c.size * 0.5f, c.size, c.size},
+                                   c.size * 0.5f, c.size * 0.55f, Color::rgb(c.colour, c.alpha));
             }
             frame.glass = true;
         }
@@ -334,6 +353,7 @@ class Library final : public app::Concept
 
         draw_header(list, paint);
         tabs_.draw(canvas);
+        draw_tab_sheen(list);
         draw_query(list, paint);
         if (grid_.count() > 0)
         {
@@ -347,7 +367,7 @@ class Library final : public app::Concept
         if (keyboard_shown_.value > 0.01f)
             draw_keyboard(canvas, paint);
         else
-            draw_hints(list);
+            draw_hints(list, paint);
         list.pop_opacity();
     }
 
@@ -550,8 +570,13 @@ class Library final : public app::Concept
     void draw_header(gfx::DrawList &list, const ui::Painter &paint) const
     {
         const ui::Fonts &fonts = context_.fonts;
-        ui::text(list, fonts.semibold, "ORION MEDIA CENTER", kMargin, 104, 17, theme_.accent,
-                 gfx::Align::left, 4.0f);
+        const float orbit = context_.settings.reduced_motion ? 0.8f : clock_ * 0.9f;
+        list.glow({kMargin, 88.0f, 22.0f, 22.0f}, 11.0f, 14.0f, theme_.accent.with_alpha(0.45f));
+        list.ring(kMargin + 11.0f, 99.0f, 11.0f, 2.0f, theme_.accent.with_alpha(0.85f));
+        list.circle(kMargin + 11.0f + std::cos(orbit) * 11.0f, 99.0f + std::sin(orbit) * 11.0f,
+                    3.5f, Color::rgb(0xffffff));
+        ui::text(list, fonts.semibold, "ORION MEDIA CENTER", kMargin + 36.0f, 105, 17,
+                 theme_.accent, gfx::Align::left, 4.0f);
         ui::text(list, fonts.display, "Library", kMargin, 172, 62, paint.page_text());
         const std::size_t count = view_.size();
         const std::string summary = std::to_string(count) + (count == 1 ? " title" : " titles") +
@@ -595,6 +620,10 @@ class Library final : public app::Concept
                      art.y + art.h * 0.5f + art.h * 0.13f, art.h * 0.36f,
                      Color::rgb(0xffffff, 0.9f), gfx::Align::center);
         }
+        canvas.list.gradient_rect(art, radius, Color::rgb(0xffffff, 0.14f),
+                                  Color::rgb(0xffffff, 0.0f));
+        canvas.list.bordered_rect(art, radius, Color::rgb(0x000000, 0.0f), 1.0f,
+                                  Color::rgb(0xffffff, 0.16f));
         if (favourite(titles()[static_cast<std::size_t>(item.tag)].id))
         {
             // A gold star on a dark disc in the corner the badge leaves free.
@@ -606,7 +635,7 @@ class Library final : public app::Concept
         }
     }
 
-    void draw_details(gfx::DrawList &list, const ui::Painter &paint) const
+    void draw_details(gfx::DrawList &list, ui::Painter &paint) const
     {
         const Title &title = titles()[static_cast<std::size_t>(view_[focus_index()])];
         std::string line = title.id;
@@ -615,7 +644,9 @@ class Library final : public app::Concept
         line += "   " + std::string(shelf_name(library::shelf_of(title)));
         if (favourite(title.id))
             line += "   \xc2\xb7   Favourite";
-        ui::text(list, context_.fonts.regular, line.c_str(), kMargin, 1024, 21,
+        const float width = context_.fonts.regular.font->measure(line, 21.0f);
+        glass_panel(list, paint, {kMargin - 24.0f, 976.0f, width + 48.0f, 68.0f}, 34.0f);
+        ui::text(list, context_.fonts.regular, line.c_str(), kMargin, 1018, 21,
                  paint.page_text_muted());
     }
 
@@ -653,7 +684,7 @@ class Library final : public app::Concept
                  gfx::Align::center);
     }
 
-    void draw_hints(gfx::DrawList &list) const
+    void draw_hints(gfx::DrawList &list, ui::Painter &paint) const
     {
         const ui::Hint hints[] = {
             {ui::Button::l1, "Shelf", ui::Button::r1},
@@ -661,11 +692,50 @@ class Library final : public app::Concept
             {ui::Button::triangle, "Search"},
             {ui::Button::options, "Sort"},
         };
-        ui::draw_hints(list, context_.fonts, ui::GlyphStyle::dark(), hints, 4, 1824, true);
+        const float right = gfx::kVirtualWidth - kMargin;
+        const float width = ui::measure_hints(context_.fonts, hints, 4);
+        glass_panel(list, paint, {right - width - 28.0f, 976.0f, width + 56.0f, 68.0f}, 34.0f);
+        ui::draw_hints(list, context_.fonts, ui::GlyphStyle::dark(), hints, 4, right, true);
+    }
+
+    // A frosted panel with a glossy sheen and a polished rim: the glass ORION's
+    // menus are made of.
+    void glass_panel(gfx::DrawList &list, ui::Painter &paint, const Rect &r, float radius) const
+    {
+        list.shadow({r.x, r.y + 12.0f, r.w, r.h}, radius, 34.0f, Color::rgb(0x000000, 0.38f));
+        paint.surface(r, radius, theme_.surface, theme_.light, 1.0f);
+        sheen(list, r, radius);
+    }
+
+    // Light falling on glass from above: brightest at the top edge, gone by
+    // the bottom, with a thin specular line just inside the rim.
+    static void sheen(gfx::DrawList &list, const Rect &r, float radius, bool rim = true)
+    {
+        list.gradient_rect(r, radius, Color::rgb(0xffffff, 0.16f), Color::rgb(0xffffff, 0.0f));
+        const float inset = std::min(radius, r.w * 0.25f) * 0.75f + 6.0f;
+        list.rounded_rect({r.x + inset, r.y + 2.0f, r.w - 2.0f * inset, 2.0f}, 1.0f,
+                          Color::rgb(0xffffff, 0.38f));
+        if (rim)
+            list.bordered_rect(r, radius, Color::rgb(0x000000, 0.0f), 1.0f,
+                               Color::rgb(0xffffff, 0.2f));
+    }
+
+    // The tab bar draws its own frosted track; this adds the same gloss.
+    void draw_tab_sheen(gfx::DrawList &list) const
+    {
+        const int count = static_cast<int>(tabs_.tabs().size());
+        if (count == 0)
+            return;
+        const Rect first = tabs_.tab_rect(context_.fonts, 0);
+        const Rect last = tabs_.tab_rect(context_.fonts, count - 1);
+        const float inset = tabs_.style.track_inset;
+        const Rect track{first.x - inset, first.y - inset, last.x + last.w - first.x + 2.0f * inset,
+                         first.h + 2.0f * inset};
+        sheen(list, track, track.h * 0.5f, false); // the bar has a rim of its own
     }
 
     // The search overlay: a veil, the query in a field, the keyboard under it.
-    void draw_keyboard(ui::Canvas &canvas, const ui::Painter &paint) const
+    void draw_keyboard(ui::Canvas &canvas, ui::Painter &paint) const
     {
         gfx::DrawList &list = canvas.list;
         const float shown = tween::cubic_out(keyboard_shown_.value);
@@ -674,21 +744,21 @@ class Library final : public app::Concept
                           theme_.page.with_alpha(0.3f * shown));
         list.push_opacity(shown);
         list.push_transform(1.0f, 0.0f, 0.0f, 0.0f, 40.0f * (1.0f - shown));
-        // Solid under the translucent keys, so the covers do not show through.
-        list.shadow(kSearchPanel, theme_.radius_card, 40.0f, Color::rgb(0x000000, 0.5f));
-        list.rounded_rect(kSearchPanel, theme_.radius_card, theme_.page.with_alpha(0.97f));
-        list.bordered_rect(kSearchPanel, theme_.radius_card, Color::rgb(0x000000, 0.0f), 1.0f,
-                           theme_.outline);
+        // Frosted glass from the sky behind; it is opaque to the covers drawn
+        // in the same layer, so they do not show through the keys.
+        glass_panel(list, paint, kSearchPanel, theme_.radius_card);
         const Rect field = kSearchField;
-        list.rounded_rect(field, theme_.radius, theme_.surface_high);
+        list.rounded_rect(field, field.h * 0.5f, Color::rgb(0x000000, 0.28f));
+        list.bordered_rect(field, field.h * 0.5f, Color::rgb(0x000000, 0.0f), 1.0f,
+                           Color::rgb(0xffffff, 0.18f));
         const ui::Fonts &fonts = context_.fonts;
         const bool empty = query_.empty();
-        ui::text(list, fonts.regular, empty ? "Search titles or IDs" : query_.c_str(), field.x + 24,
-                 field.y + 38, 25, empty ? paint.page_text_muted() : theme_.text);
+        ui::text(list, fonts.regular, empty ? "Search titles or IDs" : query_.c_str(), field.x + 28,
+                 field.y + 37, 25, empty ? paint.page_text_muted() : theme_.text);
         if (!empty || std::fmod(clock_, 1.0f) < 0.5f)
         {
             const float caret =
-                empty ? field.x + 22 : field.x + 26 + fonts.regular.font->measure(query_, 26.0f);
+                empty ? field.x + 26 : field.x + 30 + fonts.regular.font->measure(query_, 25.0f);
             list.rounded_rect({caret, field.y + 13, 2.5f, 30}, 1.0f, theme_.accent);
         }
         keys_.draw(canvas);
