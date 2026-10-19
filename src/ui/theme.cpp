@@ -129,6 +129,41 @@ Theme acrylic()
     return t;
 }
 
+// ORION Media Center's own: deep space behind frosted, glossy glass. The
+// star field's nebula is violet and teal, the glass is tinted with the night
+// it sits in, and its light edge is bright enough to read as a polished rim.
+// Controls are pills and panels have large radii: nothing on it is boxy.
+Theme orion()
+{
+    Theme t = web_dark("orion", "ORION", "Galaxy glass",
+                       "Star field and nebula behind frosted, glossy glass; pills and soft panels");
+    t.backdrop = backdrop(BackdropMode::stars, 0x02030b, 0x0a0d2a, 0x6a3cff, 0x1aa6d9);
+    t.page = rgb(0x070a1e);
+    t.page_text = rgb(0xf3f1ff);
+    t.page_text_muted = rgb(0xc9c6ee, 0.78f);
+    t.surface = rgb(0x1a1c4a, 0.42f);
+    t.surface_high = rgb(0xffffff, 0.12f);
+    t.text = rgb(0xf6f4ff);
+    t.text_muted = rgb(0xffffff, 0.68f);
+    t.primary = rgb(0xa9b8ff);
+    t.on_primary = rgb(0x0b0b33);
+    t.secondary = rgb(0xffffff, 0.1f);
+    t.on_secondary = rgb(0xffffff);
+    t.accent = rgb(0x8fe3ff);
+    t.outline = rgb(0xffffff, 0.22f);
+    t.focus = rgb(0xffffff);
+    t.shadow = rgb(0x000000, 0.5f);
+    t.light = rgb(0xffffff, 0.48f);
+    t.style = SurfaceStyle::glass;
+    t.radius = 100.0f; // pills
+    t.radius_card = 26.0f;
+    t.shadow_offset = 12.0f;
+    t.shadow_blur = 36.0f;
+    t.focus_gap = 5.0f;
+    t.heading = FontRole::display;
+    return t;
+}
+
 Theme brutal()
 {
     Theme t = web_light("brutal", "Brutal", "Neo-brutalism",
@@ -902,7 +937,7 @@ Theme primer()
 
 std::span<const Theme> themes()
 {
-    static const std::array<Theme, 30> kThemes = {
+    static const std::array<Theme, 31> kThemes = {
         // Design languages.
         acrylic(),
         brutal(),
@@ -935,6 +970,8 @@ std::span<const Theme> themes()
         papercss(),
         milligram(),
         primer(),
+        // ORION Media Center's own; last, so themes()[0] stays the default.
+        orion(),
     };
     return kThemes;
 }
