@@ -116,15 +116,37 @@ TEST_F(LibraryDesign, R3OpensSettingsAndBackClosesThem)
     send(*design, press(hui::Action::r3));
     EXPECT_FALSE(last_cues_.empty());
     expect_drawable(*design);
-    // The settings have the input: shoulders do not turn the shelves.
+    // The settings have the input: shoulders step through its sections.
     send(*design, press(hui::Action::page_next));
-    EXPECT_FALSE(played(Cue::tab));
+    EXPECT_TRUE(played(Cue::tab));
     send(*design, nav(Direction::down));
     EXPECT_TRUE(played(Cue::focus));
     send(*design, press(hui::Action::back));
     expect_drawable(*design);
     // Closed again: the grid has the input back.
     send(*design, nav(Direction::right));
+    EXPECT_TRUE(played(Cue::focus));
+}
+
+TEST_F(LibraryDesign, EveryTabHasAPageInSettings)
+{
+    auto design = with_fixture();
+    send(*design, press(hui::Action::r3));
+    send(*design, press(hui::Action::page_next)); // Library -> Tabs
+    send(*design, nav(Direction::right));         // into the rows: "New tab"
+    send(*design, nav(Direction::down));          // "All"
+    send(*design, nav(Direction::down));          // "Games"
+    send(*design, press(hui::Action::confirm));   // its page
+    expect_drawable(*design);
+    // The page's first row shows or hides the tab; Cross on it flips it.
+    send(*design, press(hui::Action::confirm));
+    expect_drawable(*design);
+    send(*design, press(hui::Action::back)); // back to the list of tabs
+    EXPECT_TRUE(played(Cue::back));
+    send(*design, press(hui::Action::back)); // back to the sections
+    send(*design, press(hui::Action::back)); // closed
+    expect_drawable(*design);
+    send(*design, nav(Direction::right)); // the grid has the input again
     EXPECT_TRUE(played(Cue::focus));
 }
 

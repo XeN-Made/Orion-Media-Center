@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - ORION's Settings: library, appearance and tabs in a glass drawer.
+// ps5-homebrew-ui - ORION's Settings: a full screen of sections, with a page for every tab.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 
@@ -9,6 +9,7 @@
 #include "orion/prefs.hpp"
 #include "ui/components/form.hpp"
 #include "ui/components/sheet.hpp"
+#include "ui/components/sidenav.hpp"
 
 #include <string>
 #include <vector>
@@ -16,20 +17,34 @@
 namespace hui::orion
 {
 
-// A drawer from the right with one form in three sections:
+// One tab as Settings lists it: hidden tabs too, so they can come back.
+struct TabEntry
+{
+    std::string key;  // "all", "games", "sys:Nintendo - Nintendo DS", "tab:t1"
+    std::string name; // as the tab bar shows it
+};
+
+// A glass sheet over the whole screen: a rail of sections on the left, the
+// section's rows on the right.
 //
-//   Library     sort order, reopen on the last tab, moved titles leave their shelf
-//   Emulators   per system RetroArch has games for: on or off, and its core
-//   Appearance  base style, background, sky, nebula, clouds, motion, glass,
-//               highlight, accent, cover corners, restore ORION's look
-//   Tabs        new tab, then one row per custom tab
+//   Library      sort order, reopen on the last tab, moved titles leave their shelf
+//   Tabs         new tab, then every tab; each opens a page of its own:
+//                shown, theme, cover shape, sort, (its core,) rename, move, delete
+//   Emulators    per system RetroArch has games for: on or off, and its core
+//   Box art      find it by itself, find it now
+//   Appearance   theme, background, sky, nebula, glass, colours, chrome
+//
+// Up and down move in the rail and show its section; right or Cross goes
+// into the rows; left (on a row that does not take it) or Circle comes back,
+// from a tab's page first to the list of tabs. L1 and R1 step through the
+// sections from anywhere. Circle in the rail closes Settings.
 //
 // It edits the Look and the LibraryPrefs it is handed directly and says what
-// changed, so the screen can restyle, re-sort and save. Choosing another base
-// style starts the appearance over from that theme's own look.
+// changed, so the screen can restyle, re-sort and save.
 //
 //   orion::SettingsPanel settings;
-//   settings.set_theme(theme);
+//   settings.set_theme(theme, reduced_motion);
+//   settings.set_tabs(every_tab);
 //   settings.open(look, prefs, feedback);
 //   ...
 //   switch (settings.handle(input, feedback, &look, &prefs))
@@ -37,7 +52,7 @@ namespace hui::orion
 //   case SettingsPanel::Change::look:  restyle(); save_look(dir, look); break;
 //   case SettingsPanel::Change::prefs: rebuild(); save_prefs(dir, prefs); break;
 //   case SettingsPanel::Change::new_tab: open_keyboard(); break;
-//   case SettingsPanel::Change::edit_tab: open_tab_menu(settings.tab_id()); break;
+//   case SettingsPanel::Change::rename_tab: rename(settings.tab_id()); break;
 //   default: break;
 //   }
 //   settings.update(dt);
@@ -52,32 +67,43 @@ class SettingsPanel
         prefs,      // the LibraryPrefs were edited
         new_tab,    // "New tab" was chosen: the screen asks for a name
         save_theme, // "Save as new theme" was chosen: the screen asks for a name
-        edit_tab,   // a tab row was chosen: tab_id() says which
+        rename_tab, // "Rename" on a tab's page: tab_id() says which custom tab
         fetch_art,  // "Find box art now" was chosen
+    };
+
+    enum class Section : std::uint8_t
+    {
+        library,
+        tabs,
+        emulators,
+        art,
+        appearance,
     };
 
     SettingsPanel();
 
     void set_theme(const ui::Theme &theme, bool reduced_motion);
-    // The themes the Style row offers; must outlive the panel.
+    // The themes the Theme rows offer; must outlive the panel.
     void set_themes(const ThemeLibrary &themes)
     {
         themes_ = &themes;
     }
+    // Every tab, in the tab bar's order, hidden ones included.
+    void set_tabs(std::vector<TabEntry> tabs)
+    {
+        tabs_ = std::move(tabs);
+    }
     // What the box art row says under itself: the last run, or this one.
     void set_art_status(std::string status);
-    // The tab Settings was opened over: its "Theme for" row is about it.
-    void set_tab(std::string key, std::string name)
-    {
-        tab_key_ = std::move(key);
-        tab_name_ = std::move(name);
-    }
     // The systems the Emulators rows offer; must outlive the panel.
     void set_emulator(const library::Emulator &emulator)
     {
         emulator_ = &emulator;
     }
     void open(const Look &look, const LibraryPrefs &prefs, ui::Feedback &feedback);
+    // Opens straight on one tab's page.
+    void open_tab(const std::string &key, const Look &look, const LibraryPrefs &prefs,
+                  ui::Feedback &feedback);
     void close(ui::Feedback &feedback);
     bool is_open() const
     {
@@ -91,28 +117,56 @@ class SettingsPanel
     void refresh(const Look &look, const LibraryPrefs &prefs);
 
     Change handle(const InputFrame &input, ui::Feedback &feedback, Look *look, LibraryPrefs *prefs);
+    // The custom tab a rename is for ("t1").
     const std::string &tab_id() const
     {
         return tab_id_;
     }
-    // Where the focused row is on screen, for anchoring a menu to it.
-    gfx::Rect focused_row() const;
+    Section section() const
+    {
+        return section_;
+    }
+    // The tab whose page is showing, or empty.
+    const std::string &tab_page() const
+    {
+        return page_;
+    }
 
     void update(float dt);
     void draw(ui::Canvas &canvas) const;
 
   private:
     void build(const Look &look, const LibraryPrefs &prefs);
+    void build_library(const LibraryPrefs &prefs);
+    void build_tabs(const LibraryPrefs &prefs);
+    void build_tab_page(const LibraryPrefs &prefs);
+    void build_emulators(const LibraryPrefs &prefs);
+    void build_art(const LibraryPrefs &prefs);
+    void build_appearance(const Look &look);
+    void build_nav();
+    void layout();
+    void show(Section section, const Look &look, const LibraryPrefs &prefs);
+    void enter_rows(bool snap);
+    void leave_rows();
+    Change edit_tab_page(int id, LibraryPrefs *prefs);
+    Change edit_appearance(int id, Look *look, const LibraryPrefs &prefs);
+    std::vector<std::string> theme_names() const;
+    const TabEntry *tab_entry(const std::string &key) const;
+    const library::System *system_of(const std::string &key) const;
+    void draw_content(ui::Canvas &canvas, float opacity) const;
 
     ui::Sheet sheet_;
+    ui::SideNav nav_;
     ui::Form form_;
+    std::vector<Section> sections_; // the rail's entries
+    Section section_ = Section::library;
+    bool in_rows_ = false;
+    std::string page_; // the tab whose page is open; empty: the list
     const ThemeLibrary *themes_ = nullptr;
     const library::Emulator *emulator_ = nullptr;
-    std::vector<std::string> tab_ids_; // the tab of each tab row, by row id
+    std::vector<TabEntry> tabs_;
     std::string tab_id_;
-    std::string tab_key_ = "all";
     std::string art_status_ = "Covers from thumbnails.libretro.com for games without one";
-    std::string tab_name_ = "All";
 };
 
 } // namespace hui::orion

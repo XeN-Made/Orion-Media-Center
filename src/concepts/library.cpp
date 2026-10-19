@@ -103,13 +103,6 @@ enum class Typing : std::uint8_t
     theme_name, // from Settings > Save as new theme
 };
 
-// Who the open menu is about.
-enum class MenuFor : std::uint8_t
-{
-    title,
-    tab,
-};
-
 // Tags of the menu items.
 enum : int
 {
@@ -117,10 +110,6 @@ enum : int
     kItemNewTab,
     kItemUnplace,
     kItemLaunch,
-    kItemRename,
-    kItemLeft,
-    kItemRight,
-    kItemDelete,
     kItemSettings,
     kItemClose,
     kItemMove = 100, // + the tab's index
@@ -148,8 +137,31 @@ constexpr app::TourStep kTour[] = {
     // Cross launches: on a PC the card says it needs the console.
     {0.4f, action_bit(Action::confirm)},
     {0.7f, 0, Direction::none, "launch"},
+    // Settings: the sections, the list of tabs, the last tab's page (the PS2
+    // tab with RetroArch installed), then Appearance; Circle twice closes it.
     {0.4f, action_bit(Action::r3)},
-    {0.9f, 0, Direction::down, "settings"},
+    {0.9f, 0, Direction::none, "settings"},
+    {0.3f, action_bit(Action::jump_next)},
+    {0.2f, 0, Direction::right},
+    {0.12f, 0, Direction::down},
+    {0.12f, 0, Direction::down},
+    {0.12f, 0, Direction::down},
+    {0.12f, 0, Direction::down},
+    {0.12f, 0, Direction::down},
+    {0.12f, 0, Direction::down},
+    {0.12f, 0, Direction::down},
+    {0.12f, 0, Direction::down},
+    {0.7f, 0, Direction::none, "settings-tabs"},
+    {0.3f, action_bit(Action::confirm)},
+    {0.8f, 0, Direction::none, "settings-tab-page"},
+    {0.2f, action_bit(Action::back)},
+    {0.2f, action_bit(Action::back)},
+    {0.2f, action_bit(Action::jump_next)},
+    {0.2f, action_bit(Action::jump_next)},
+    {0.3f, action_bit(Action::jump_next)},
+    {0.2f, 0, Direction::right},
+    {0.8f, 0, Direction::none, "settings-appearance"},
+    {0.2f, action_bit(Action::back)},
     {0.5f, action_bit(Action::back)},
     {0.6f, action_bit(Action::north)},
     {0.7f, 0, Direction::none, "search"},
@@ -596,6 +608,13 @@ class Library final : public app::Concept
         settings_.set_theme(theme_, reduced_);
     }
 
+    // The order of the active tab: its own, else the Library's.
+    std::string sort_key() const
+    {
+        const std::string own = prefs_.tab_sort(active_key());
+        return own.empty() ? prefs_.sort : own;
+    }
+
     // What the screen wears: the active tab's own theme, else the main look.
     orion::Look shown_look() const
     {
@@ -672,12 +691,33 @@ class Library final : public app::Concept
 
     void open_settings(app::Feedback &feedback)
     {
-        const int active = tabs_.active();
-        const std::string name = active >= 0 && active < static_cast<int>(tabs_.tabs().size())
-                                     ? tabs_.tabs()[static_cast<std::size_t>(active)].label
-                                     : std::string("All");
-        settings_.set_tab(active_key(), name);
+        settings_.set_tabs(every_tab());
         settings_.open(look_, prefs_, feedback);
+    }
+
+    // Every tab ORION can show, in tab bar order, hidden ones included.
+    std::vector<orion::TabEntry> every_tab() const
+    {
+        std::vector<orion::TabEntry> tabs;
+        for (const Shelf &shelf : kShelves)
+            tabs.push_back({shelf.key, shelf.name});
+        for (const library::System &system : context_.library.emulator.systems)
+            tabs.push_back({"sys:" + system.name, system.short_name});
+        for (const orion::CustomTab &tab : prefs_.tabs)
+            tabs.push_back({"tab:" + tab.id, tab.name});
+        return tabs;
+    }
+
+    // After the tabs changed: the tab bar, the covers and Settings follow.
+    void tabs_changed()
+    {
+        save_prefs();
+        rebuild_tabs(active_key());
+        restyle();
+        rebuild();
+        settings_.set_tabs(every_tab());
+        if (settings_.is_open())
+            settings_.refresh(look_, prefs_);
     }
 
     void update_settings(const InputFrame &input, app::Feedback &feedback)
@@ -689,10 +729,7 @@ class Library final : public app::Concept
             orion::save_look(context_.library.state_dir, look_);
             break;
         case orion::SettingsPanel::Change::prefs:
-            save_prefs();
-            rebuild_tabs(active_key());
-            restyle();
-            rebuild();
+            tabs_changed();
             break;
         case orion::SettingsPanel::Change::new_tab:
             start_typing(Typing::new_tab, "");
@@ -702,9 +739,14 @@ class Library final : public app::Concept
             start_typing(Typing::theme_name, "");
             feedback.play(audio::Cue::modal_open);
             break;
-        case orion::SettingsPanel::Change::edit_tab:
-            open_tab_menu(settings_.tab_id(), feedback);
+        case orion::SettingsPanel::Change::rename_tab:
+        {
+            menu_tab_ = settings_.tab_id();
+            const orion::CustomTab *tab = prefs_.tab(menu_tab_);
+            start_typing(Typing::rename_tab, tab != nullptr ? tab->name : "");
+            feedback.play(audio::Cue::modal_open);
             break;
+        }
         case orion::SettingsPanel::Change::fetch_art:
             start_art(true);
             feedback.play(art_.running() ? audio::Cue::select : audio::Cue::error);
@@ -782,11 +824,7 @@ class Library final : public app::Concept
             if (typing == Typing::new_tab_for_title)
                 prefs_.place(menu_title_, id);
         }
-        save_prefs();
-        rebuild_tabs(active_key());
-        rebuild();
-        if (settings_.is_open())
-            settings_.refresh(look_, prefs_);
+        tabs_changed();
         feedback.play(audio::Cue::saved);
     }
 
@@ -795,7 +833,6 @@ class Library final : public app::Concept
     void open_title_menu(app::Feedback &feedback)
     {
         const Title &title = focused();
-        menu_for_ = MenuFor::title;
         menu_title_ = title.id;
         const orion::CustomTab *placed = prefs_.placement(title.id);
 
@@ -849,30 +886,6 @@ class Library final : public app::Concept
         menu_.open(grid_.cell_rect(grid_.focus()), feedback);
     }
 
-    void open_tab_menu(const std::string &tab_id, app::Feedback &feedback)
-    {
-        menu_for_ = MenuFor::tab;
-        menu_tab_ = tab_id;
-        std::size_t index = 0;
-        while (index < prefs_.tabs.size() && prefs_.tabs[index].id != tab_id)
-            ++index;
-        ui::MenuItem rename = menu_item("Rename");
-        rename.tag = kItemRename;
-        ui::MenuItem left = menu_item("Move left");
-        left.tag = kItemLeft;
-        left.disabled = index == 0;
-        ui::MenuItem right = menu_item("Move right");
-        right.tag = kItemRight;
-        right.disabled = index + 1 >= prefs_.tabs.size();
-        ui::MenuItem line;
-        line.separator = true;
-        ui::MenuItem remove = menu_item("Delete tab");
-        remove.tag = kItemDelete;
-        remove.danger = true;
-        menu_.set_items({rename, left, right, line, remove});
-        menu_.open(settings_.focused_row(), feedback);
-    }
-
     void update_menu(const InputFrame &input, app::Feedback &feedback)
     {
         if (menu_.handle(input, feedback) != ui::Event::activated)
@@ -881,62 +894,40 @@ class Library final : public app::Concept
         if (menu_.is_open())
             menu_.close(feedback);
 
-        if (menu_for_ == MenuFor::title)
+        if (tag == kItemLaunch)
         {
-            if (tag == kItemLaunch)
-            {
-                launch(menu_title_, feedback);
-                return;
-            }
-            if (tag == kItemClose)
-            {
-                context_.exit_requested = true;
-                return;
-            }
-            if (tag == kItemSettings)
-            {
-                open_settings(feedback);
-                return;
-            }
-            if (tag == kItemFavourite)
-            {
-                toggle_favourite(menu_title_, feedback);
-                return;
-            }
-            if (tag == kItemNewTab)
-            {
-                start_typing(Typing::new_tab_for_title, "");
-                feedback.play(audio::Cue::modal_open);
-                return;
-            }
-            if (tag == kItemUnplace)
-                prefs_.unplace(menu_title_);
-            else if (tag >= kItemMove && tag - kItemMove < static_cast<int>(prefs_.tabs.size()))
-                prefs_.place(menu_title_,
-                             prefs_.tabs[static_cast<std::size_t>(tag - kItemMove)].id);
-            save_prefs();
-            rebuild_tabs(active_key());
-            rebuild();
-            feedback.play(audio::Cue::place);
+            launch(menu_title_, feedback);
             return;
         }
-
-        // A tab, from Settings.
-        if (tag == kItemRename)
+        if (tag == kItemClose)
         {
-            const orion::CustomTab *tab = prefs_.tab(menu_tab_);
-            start_typing(Typing::rename_tab, tab != nullptr ? tab->name : "");
+            context_.exit_requested = true;
+            return;
+        }
+        if (tag == kItemSettings)
+        {
+            open_settings(feedback);
+            return;
+        }
+        if (tag == kItemFavourite)
+        {
+            toggle_favourite(menu_title_, feedback);
+            return;
+        }
+        if (tag == kItemNewTab)
+        {
+            start_typing(Typing::new_tab_for_title, "");
             feedback.play(audio::Cue::modal_open);
             return;
         }
-        if (tag == kItemLeft || tag == kItemRight)
-            prefs_.move_tab(menu_tab_, tag == kItemLeft ? -1 : 1);
-        else if (tag == kItemDelete)
-            prefs_.remove_tab(menu_tab_);
+        if (tag == kItemUnplace)
+            prefs_.unplace(menu_title_);
+        else if (tag >= kItemMove && tag - kItemMove < static_cast<int>(prefs_.tabs.size()))
+            prefs_.place(menu_title_, prefs_.tabs[static_cast<std::size_t>(tag - kItemMove)].id);
         save_prefs();
         rebuild_tabs(active_key());
         rebuild();
-        settings_.refresh(look_, prefs_);
+        feedback.play(audio::Cue::place);
     }
 
     // A title cannot start while ORION is in front (the system refuses with
@@ -964,11 +955,13 @@ class Library final : public app::Concept
         const std::string core = title->is_rom() ? core_for(*title) : std::string();
         // A game for RetroArch: the game goes in its game-request.txt, and it
         // is started in game mode (library/emulators.hpp).
+        const std::string &root = context_.library.emulator.root;
+        const std::string game_request = title->is_rom() ? root + "/game-request.txt" : "";
+        const std::string args = title->is_rom() ? root + "/args.txt" : "";
         const std::string request =
-            title->is_rom() ? title->launcher + "\n" + library::kRetroArchGameMode + "\n"
-                            : title->id + "\n";
-        const std::string game_request =
-            title->is_rom() ? context_.library.emulator.root + "/game-request.txt" : std::string();
+            title->is_rom()
+                ? title->launcher + "\n" + library::kRetroArchGameMode + "\n@args " + args + "\n"
+                : title->id + "\n";
         if (title->is_rom() && core.empty())
             why = "no core plays " + library::short_system_name(title->system);
         else if (!sys::on_console())
@@ -978,6 +971,9 @@ class Library final : public app::Concept
                                      library::retroarch_game_request(core, title->rom))
                       .empty())
             why = "could not write " + game_request;
+        else if (title->is_rom() &&
+                 !save::write_atomic(args, std::string(library::kRetroArchGameMode) + "\n").empty())
+            why = "could not write " + args;
         else if (dir.empty() || !save::write_atomic(dir + "/launch-request.txt", request).empty())
             why = "could not write the launch request";
         else if (!save::read_file(kLauncherPath, &elf, 4u << 20) || elf.empty())
@@ -1334,14 +1330,20 @@ class Library final : public app::Concept
             tab_keys_.push_back(std::move(key));
         };
         for (const Shelf &shelf : kShelves)
-            add(shelf.key, shelf.name);
+        {
+            if (!prefs_.tab_hidden(shelf.key))
+                add(shelf.key, shelf.name);
+        }
         for (const library::System &system : context_.library.emulator.systems)
         {
             if (prefs_.system_enabled(system.name))
                 add("sys:" + system.name, system.short_name);
         }
         for (const orion::CustomTab &tab : prefs_.tabs)
-            add("tab:" + tab.id, tab.name);
+        {
+            if (!prefs_.tab_hidden("tab:" + tab.id))
+                add("tab:" + tab.id, tab.name);
+        }
         tabs_.set_tabs(std::move(tabs));
         int index = 0;
         for (std::size_t i = 0; i < tab_keys_.size(); ++i)
@@ -1380,7 +1382,7 @@ class Library final : public app::Concept
         }
         // The scan already sorted by name; every other order is a stable sort
         // on top of it, so ties stay alphabetical.
-        switch (sort_of(prefs_.sort))
+        switch (sort_of(sort_key()))
         {
         case Sort::name_reversed:
             std::reverse(view_.begin(), view_.end());
@@ -1476,7 +1478,7 @@ class Library final : public app::Concept
         const std::size_t count = view_.size();
         const std::string summary = std::to_string(count) + (count == 1 ? " title" : " titles") +
                                     "  \xc2\xb7  " +
-                                    kSortNames[static_cast<int>(sort_of(prefs_.sort))];
+                                    kSortNames[static_cast<int>(sort_of(sort_key()))];
         ui::text(list, fonts.regular, summary.c_str(), gfx::kVirtualWidth - kMargin, 172, 24,
                  paint.page_text_muted(), gfx::Align::right);
     }
@@ -1864,7 +1866,6 @@ class Library final : public app::Concept
     std::string query_;
     std::string name_; // a tab name being typed
     Typing typing_ = Typing::none;
-    MenuFor menu_for_ = MenuFor::title;
     std::string menu_title_; // the title a menu is about
     std::string menu_tab_;   // the tab a menu (or a rename) is about
     ui::TabBar tabs_;

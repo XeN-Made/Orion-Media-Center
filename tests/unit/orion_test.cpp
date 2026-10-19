@@ -105,7 +105,35 @@ TEST(OrionPrefs, TabsKeepTheirOwnThemes)
     EXPECT_EQ(back.tab_theme("all"), "");
     back.set_tab_theme("games", ""); // back to the main look
     EXPECT_EQ(back.tab_theme("games"), "");
-    EXPECT_EQ(back.tab_themes.size(), 1u);
+    EXPECT_EQ(back.tab_prefs.size(), 1u);
+}
+
+TEST(OrionPrefs, EachTabKeepsItsCoversSortAndPlace)
+{
+    const std::string dir = fresh_dir("orion-prefs-tab-settings");
+    orion::LibraryPrefs prefs;
+    EXPECT_EQ(prefs.tab_cover("games"), orion::CoverShape::automatic);
+    prefs.set_tab_cover("sys:Sony - PlayStation 2", orion::CoverShape::portrait);
+    prefs.set_tab_sort("sys:Sony - PlayStation 2", "recent");
+    prefs.set_tab_hidden("media", true);
+    prefs.set_tab_hidden("all", true); // All always shows
+    ASSERT_TRUE(orion::save_prefs(dir, prefs));
+    orion::LibraryPrefs back = orion::load_prefs(dir);
+    EXPECT_EQ(back.tab_cover("sys:Sony - PlayStation 2"), orion::CoverShape::portrait);
+    EXPECT_EQ(back.tab_sort("sys:Sony - PlayStation 2"), "recent");
+    EXPECT_EQ(back.tab_sort("games"), "");
+    EXPECT_TRUE(back.tab_hidden("media"));
+    EXPECT_FALSE(back.tab_hidden("all"));
+    // Back to every default: the entry goes.
+    back.set_tab_hidden("media", false);
+    back.set_tab_cover("sys:Sony - PlayStation 2", orion::CoverShape::automatic);
+    back.set_tab_sort("sys:Sony - PlayStation 2", "");
+    EXPECT_TRUE(back.tab_prefs.empty());
+
+    // A file from before tab_settings: its themes still apply.
+    ASSERT_TRUE(
+        save::write_atomic(dir + "/library.json", R"({"tab_themes": {"games": "candy"}})").empty());
+    EXPECT_EQ(orion::load_prefs(dir).tab_theme("games"), "candy");
 }
 
 TEST(OrionPrefs, RemovingATabSendsItsTitlesHome)

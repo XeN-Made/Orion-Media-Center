@@ -187,21 +187,111 @@ void LibraryPrefs::set_system_core(const std::string &system, const std::string 
     system_pref(systems, system).core = core;
 }
 
-std::string LibraryPrefs::tab_theme(const std::string &tab) const
+const char *cover_shape_key(CoverShape shape)
 {
-    for (const TabTheme &entry : tab_themes)
+    switch (shape)
+    {
+    case CoverShape::square:
+        return "square";
+    case CoverShape::portrait:
+        return "portrait";
+    case CoverShape::landscape:
+        return "landscape";
+    default:
+        return "auto";
+    }
+}
+
+CoverShape cover_shape_of(std::string_view key)
+{
+    if (key == "square")
+        return CoverShape::square;
+    if (key == "portrait")
+        return CoverShape::portrait;
+    if (key == "landscape")
+        return CoverShape::landscape;
+    return CoverShape::automatic;
+}
+
+namespace
+{
+
+const TabPrefs *find_tab_prefs(const std::vector<TabPrefs> &all, const std::string &tab)
+{
+    for (const TabPrefs &entry : all)
     {
         if (entry.tab == tab)
-            return entry.theme;
+            return &entry;
     }
-    return "";
+    return nullptr;
+}
+
+// Changes one tab's entry, adding it when needed and dropping it once it
+// says nothing the defaults do not.
+template <typename Edit>
+void edit_tab_prefs(std::vector<TabPrefs> &all, const std::string &tab, Edit edit)
+{
+    if (tab.empty() || tab.size() > 96)
+        return;
+    auto at = std::find_if(all.begin(), all.end(), [&](const TabPrefs &e) { return e.tab == tab; });
+    if (at == all.end())
+    {
+        if (all.size() >= 64)
+            return;
+        TabPrefs fresh;
+        fresh.tab = tab;
+        all.push_back(fresh);
+        at = all.end() - 1;
+    }
+    edit(*at);
+    if (at->theme.empty() && at->cover == CoverShape::automatic && at->sort.empty() && !at->hidden)
+        all.erase(at);
+}
+
+} // namespace
+
+std::string LibraryPrefs::tab_theme(const std::string &tab) const
+{
+    const TabPrefs *entry = find_tab_prefs(tab_prefs, tab);
+    return entry != nullptr ? entry->theme : std::string();
 }
 
 void LibraryPrefs::set_tab_theme(const std::string &tab, const std::string &theme)
 {
-    std::erase_if(tab_themes, [&](const TabTheme &entry) { return entry.tab == tab; });
-    if (!theme.empty())
-        tab_themes.push_back({tab, theme});
+    edit_tab_prefs(tab_prefs, tab, [&](TabPrefs &e) { e.theme = theme.size() <= 40 ? theme : ""; });
+}
+
+CoverShape LibraryPrefs::tab_cover(const std::string &tab) const
+{
+    const TabPrefs *entry = find_tab_prefs(tab_prefs, tab);
+    return entry != nullptr ? entry->cover : CoverShape::automatic;
+}
+
+void LibraryPrefs::set_tab_cover(const std::string &tab, CoverShape cover)
+{
+    edit_tab_prefs(tab_prefs, tab, [&](TabPrefs &e) { e.cover = cover; });
+}
+
+std::string LibraryPrefs::tab_sort(const std::string &tab) const
+{
+    const TabPrefs *entry = find_tab_prefs(tab_prefs, tab);
+    return entry != nullptr ? entry->sort : std::string();
+}
+
+void LibraryPrefs::set_tab_sort(const std::string &tab, const std::string &sort)
+{
+    edit_tab_prefs(tab_prefs, tab, [&](TabPrefs &e) { e.sort = sort.size() <= 24 ? sort : ""; });
+}
+
+bool LibraryPrefs::tab_hidden(const std::string &tab) const
+{
+    const TabPrefs *entry = find_tab_prefs(tab_prefs, tab);
+    return tab != "all" && entry != nullptr && entry->hidden;
+}
+
+void LibraryPrefs::set_tab_hidden(const std::string &tab, bool hidden)
+{
+    edit_tab_prefs(tab_prefs, tab, [&](TabPrefs &e) { e.hidden = hidden && tab != "all"; });
 }
 
 LibraryPrefs load_prefs(const std::string &state_dir)
@@ -236,11 +326,14 @@ LibraryPrefs load_prefs(const std::string &state_dir)
         prefs.systems.push_back(std::move(pref));
     }
     for (const auto &member : root["tab_themes"].members())
+        prefs.set_tab_theme(member.first, member.second.string_or(""));
+    for (const auto &member : root["tab_settings"].members())
     {
-        const std::string theme = member.second.string_or("");
-        if (!member.first.empty() && member.first.size() <= 96 && !theme.empty() &&
-            theme.size() <= 40 && prefs.tab_themes.size() < 64)
-            prefs.set_tab_theme(member.first, theme);
+        const json::Value &value = member.second;
+        prefs.set_tab_theme(member.first, value["theme"].string_or(""));
+        prefs.set_tab_cover(member.first, cover_shape_of(value["cover"].string_or("")));
+        prefs.set_tab_sort(member.first, value["sort"].string_or(""));
+        prefs.set_tab_hidden(member.first, value["hidden"].bool_or(false));
     }
     prefs.last_tab = root["last_tab"].string_or(prefs.last_tab);
     prefs.sort = root["sort"].string_or(prefs.sort);
@@ -288,14 +381,17 @@ bool save_prefs(const std::string &state_dir, const LibraryPrefs &prefs)
                 ", \"core\": " + json::quote(pref.core) + "}";
     }
     text += prefs.systems.empty() ? "},\n" : "\n  },\n";
-    text += "  \"tab_themes\": {";
-    for (std::size_t i = 0; i < prefs.tab_themes.size(); ++i)
+    text += "  \"tab_settings\": {";
+    for (std::size_t i = 0; i < prefs.tab_prefs.size(); ++i)
     {
+        const TabPrefs &entry = prefs.tab_prefs[i];
         text += i == 0 ? "\n" : ",\n";
-        text += "    " + json::quote(prefs.tab_themes[i].tab) + ": " +
-                json::quote(prefs.tab_themes[i].theme);
+        text += "    " + json::quote(entry.tab) + ": {\"theme\": " + json::quote(entry.theme) +
+                ", \"cover\": " + json::quote(cover_shape_key(entry.cover)) +
+                ", \"sort\": " + json::quote(entry.sort) +
+                ", \"hidden\": " + (entry.hidden ? "true" : "false") + "}";
     }
-    text += prefs.tab_themes.empty() ? "}\n}\n" : "\n  }\n}\n";
+    text += prefs.tab_prefs.empty() ? "}\n}\n" : "\n  }\n}\n";
     return save::write_atomic(file_of(state_dir), text).empty();
 }
 

@@ -4,7 +4,9 @@
 
 #pragma once
 
+#include <cstdint>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace hui::orion
@@ -26,11 +28,28 @@ struct SystemPref
     std::string core;    // "mgba_libretro.so"; empty: the first that plays it
 };
 
-// A tab that wears its own theme instead of the main look.
-struct TabTheme
+// The shape of the covers on a tab. Automatic follows the pictures: square
+// for console icons, the box's own shape for box art.
+enum class CoverShape : std::uint8_t
+{
+    automatic,
+    square,
+    portrait,  // 5:7, a PS2 or DVD case
+    landscape, // 7:5, a GBA or SNES box
+};
+const char *cover_shape_key(CoverShape shape); // "auto", "square", ...
+CoverShape cover_shape_of(std::string_view key);
+
+// What one tab does differently from the rest. Tabs not listed wear the
+// main look, follow the Library's sort, fit their covers to the pictures and
+// show.
+struct TabPrefs
 {
     std::string tab;   // a tab key: "games", "sys:Nintendo - Game Boy Advance", "tab:t1"
-    std::string theme; // a theme file's id
+    std::string theme; // a theme file's id; empty: the main look
+    CoverShape cover = CoverShape::automatic;
+    std::string sort; // a sort key; empty: the Library's
+    bool hidden = false;
 };
 
 // Where a title was moved to.
@@ -52,7 +71,11 @@ struct Placement
 //     "tabs": [{"id": "t1", "name": "RPGs"}],
 //     "placements": {"PPSA01234": "t1"},
 //     "systems": {"Nintendo - Game Boy Advance": {"enabled": true, "core": "mgba_libretro.so"}},
-//     "tab_themes": {"sys:Nintendo - Game Boy Advance": "sunset-nebula"}
+//     "tab_settings": {"sys:Nintendo - Sony - PlayStation 2": {"theme": "sunset-nebula",
+//                      "cover": "portrait", "sort": "recent", "hidden": false}}
+//
+// (Files from before tab_settings kept themes alone in "tab_themes", which is
+// still read.)
 //   }
 //
 // Unknown keys are ignored, so the file can be edited by hand.
@@ -61,7 +84,7 @@ struct LibraryPrefs
     std::vector<CustomTab> tabs;
     std::vector<Placement> placements;
     std::vector<SystemPref> systems;
-    std::vector<TabTheme> tab_themes;
+    std::vector<TabPrefs> tab_prefs;
     // "all", "games", "homebrew", "media", "favourites" or "tab:<id>".
     std::string last_tab = "all";
     std::string sort = "name"; // "name", "name_reversed", "recent", "platform"
@@ -97,6 +120,14 @@ struct LibraryPrefs
     std::string tab_theme(const std::string &tab) const;
     // Empty theme: the tab goes back to the main look.
     void set_tab_theme(const std::string &tab, const std::string &theme);
+    CoverShape tab_cover(const std::string &tab) const;
+    void set_tab_cover(const std::string &tab, CoverShape cover);
+    // The tab's own sort key, or empty for the Library's.
+    std::string tab_sort(const std::string &tab) const;
+    void set_tab_sort(const std::string &tab, const std::string &sort);
+    // "all" never hides; a system's tab hides by switching the system off.
+    bool tab_hidden(const std::string &tab) const;
+    void set_tab_hidden(const std::string &tab, bool hidden);
 };
 
 LibraryPrefs load_prefs(const std::string &state_dir);
