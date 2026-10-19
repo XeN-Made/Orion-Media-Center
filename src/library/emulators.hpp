@@ -56,6 +56,9 @@ int attach_rom_art(std::vector<Title> &roms, const std::string &root, const std:
 // paths escaped with backslashes as a shell would take them:
 //   /app0/eboot.bin -L /app0/cores/mgba_libretro.so /app0/content/Nintendo\ -\ ...gba
 // Started any other way it shows its frontend picker and ignores the game.
+// The mode is not taken from a launch's arguments (the system does not hand
+// them to the port's main): it goes in <root>/args.txt, which the launch
+// helper removes again once RetroArch has read it.
 std::string retroarch_game_request(const std::string &core_file, const std::string &rom);
 constexpr const char *kRetroArchGameMode = "--ps5-mode=game";
 

@@ -12,6 +12,12 @@
 // up, as it does for a launch from the home screen. Every step is appended to
 // /data/orion/launch-helper.txt: a file of its own, since launch.txt belongs to
 // ORION's sandbox and the helper may not be allowed to write to it.
+//
+// A request line "@args <path>" is not an argument: it names an args.txt
+// ORION wrote for this one start (the RetroArch port takes `--ps5-mode=game`
+// from /app0/args.txt, not from the launch's arguments). Once the title has
+// had time to read it, the helper removes it, so the next start from the
+// home screen is an ordinary one.
 
 #include <fcntl.h>
 #include <pthread.h>
@@ -27,6 +33,9 @@
 #define WAIT_FOR_EXIT_MS 20000
 #define WAIT_FOR_LAUNCH_MS 15000
 #define MAX_ARGUMENTS 16
+#define ARGS_LINE "@args "
+#define ARGS_CONTENT "--ps5-mode=game"
+#define ARGS_READ_MS 20000
 
 // The launch parameters as the PS5 homebrew loader passes them: only the
 // user is filled in.
@@ -64,6 +73,36 @@ static void say(const char *format, ...)
 }
 
 // Four capital letters and five digits.
+// Removes an args.txt ORION wrote, and nothing else: the path must be an
+// args.txt under /data/homebrew and the file must still say what ORION put
+// there.
+static void remove_args(const char *path)
+{
+    const size_t length = strlen(path);
+    if (strncmp(path, "/data/homebrew/", 15) != 0 || length < 9 ||
+        strcmp(path + length - 9, "/args.txt") != 0 || strstr(path, "..") != NULL)
+    {
+        say("not removing %s: not an args.txt under /data/homebrew", path);
+        return;
+    }
+    char content[64];
+    memset(content, 0, sizeof(content));
+    FILE *file = fopen(path, "r");
+    if (file == NULL)
+    {
+        say("%s is already gone", path);
+        return;
+    }
+    fread(content, 1, sizeof(content) - 1, file);
+    fclose(file);
+    if (strncmp(content, ARGS_CONTENT, strlen(ARGS_CONTENT)) != 0)
+    {
+        say("not removing %s: someone else's arguments", path);
+        return;
+    }
+    say(remove(path) == 0 ? "removed %s" : "could not remove %s", path);
+}
+
 static int is_title_id(const char *text)
 {
     if (strlen(text) != 9)
@@ -143,11 +182,20 @@ int main(void)
         return 1;
     }
     strcpy(job.title, lines[0]);
+    const char *args_file = NULL;
+    int arguments = 0;
     for (int i = 1; i < count; ++i)
-        job.argv[i - 1] = lines[i];
-    say("started for %s with %d argument(s)", job.title, count - 1);
-    for (int i = 1; i < count; ++i)
-        say("  argument %d: %s", i, lines[i]);
+    {
+        if (strncmp(lines[i], ARGS_LINE, strlen(ARGS_LINE)) == 0)
+            args_file = lines[i] + strlen(ARGS_LINE);
+        else
+            job.argv[arguments++] = lines[i];
+    }
+    say("started for %s with %d argument(s)", job.title, arguments);
+    for (int i = 0; i < arguments; ++i)
+        say("  argument %d: %s", i + 1, job.argv[i]);
+    if (args_file != NULL)
+        say("  %s is for this start only", args_file);
 
     // ORION closes itself after sending this payload; wait until no app is
     // in front before asking for the next one.
@@ -188,5 +236,12 @@ int main(void)
             job.result == 0 ? "accepted" : "refused");
     else
         say("system has not answered after %d ms; the title may still be starting", waited);
+    if (args_file != NULL)
+    {
+        // A refused start leaves nothing to read it: remove it now.
+        if (!job.done || job.result == 0)
+            usleep(ARGS_READ_MS * 1000);
+        remove_args(args_file);
+    }
     return job.done && job.result == 0 ? 0 : 1;
 }
