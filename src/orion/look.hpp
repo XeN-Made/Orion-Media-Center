@@ -6,6 +6,7 @@
 
 #include "gfx/backdrop_spec.hpp"
 #include "gfx/draw_list.hpp"
+#include "orion/theme_file.hpp"
 #include "ui/theme.hpp"
 
 #include <span>
@@ -29,7 +30,8 @@ namespace hui::orion
 //   }
 //
 // Every key is optional: a missing one keeps the base theme's own value, so
-// the file can be as short as {"base": "acrylic"}.
+// the file can be as short as {"base": "acrylic"}. The base is any theme in
+// the ThemeLibrary: a built-in one or one of the player's theme files.
 struct Look
 {
     std::string base = "orion"; // a ui::Theme id: the starting point
@@ -46,16 +48,16 @@ struct Look
     float corners = 22.0f; // radius of the covers
 };
 
-// The base theme with this id, or ORION's when there is none.
-const ui::Theme &base_theme(std::string_view id);
-// A base theme's own look: what choosing it in Settings starts from.
-Look look_of(const ui::Theme &theme);
+// A theme's own look: what choosing it in Settings starts from.
+Look look_of(const ThemeFile &theme);
 // ORION's look, as designed.
-Look default_look();
+Look default_look(const ThemeLibrary &themes);
 // The base theme with the look applied: what the screens draw with.
-ui::Theme themed(const Look &look);
+ui::Theme themed(const Look &look, const ThemeLibrary &themes);
+// The theme file a look describes, for saving it as a theme of its own.
+ThemeFile theme_of(const Look &look, const ThemeLibrary &themes);
 
-Look load_look(const std::string &state_dir);
+Look load_look(const std::string &state_dir, const ThemeLibrary &themes);
 bool save_look(const std::string &state_dir, const Look &look);
 
 // ---- the choices Settings offers ----

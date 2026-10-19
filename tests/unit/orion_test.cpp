@@ -6,6 +6,7 @@
 #include "library/json.hpp"
 #include "orion/look.hpp"
 #include "orion/prefs.hpp"
+#include "orion/theme_file.hpp"
 
 #include <gtest/gtest.h>
 
@@ -106,22 +107,36 @@ TEST(OrionPrefs, BrokenOrHandEditedFilesAreForgiven)
     EXPECT_FALSE(orion::save_prefs("", prefs));
 }
 
+// The kit's themes, as a library: what ORION falls back to with no files.
+const orion::ThemeLibrary &kit()
+{
+    static const orion::ThemeLibrary themes = []
+    {
+        orion::ThemeLibrary library;
+        library.load("", "");
+        return library;
+    }();
+    return themes;
+}
+
 TEST(OrionLook, DefaultIsTheOrionTheme)
 {
-    const orion::Look look = orion::default_look();
+    const orion::Look look = orion::default_look(kit());
     EXPECT_EQ(look.base, "orion");
     EXPECT_EQ(look.background, gfx::BackdropMode::stars);
-    const ui::Theme theme = orion::themed(look);
+    const ui::Theme theme = orion::themed(look, kit());
     EXPECT_STREQ(theme.id, "orion");
-    EXPECT_TRUE(orion::same_rgb(theme.accent, orion::base_theme("orion").accent));
+    EXPECT_TRUE(orion::same_rgb(theme.accent, kit().find("orion")->theme.accent));
     // An unknown base falls back to ORION.
-    EXPECT_STREQ(orion::base_theme("no such theme").id, "orion");
+    orion::Look lost = look;
+    lost.base = "no such theme";
+    EXPECT_STREQ(orion::themed(lost, kit()).id, "orion");
 }
 
 TEST(OrionLook, ChoicesSurviveASaveAndShortFilesKeepTheBase)
 {
     const std::string dir = fresh_dir("orion-look");
-    orion::Look look = orion::default_look();
+    orion::Look look = orion::default_look(kit());
     look.background = gfx::BackdropMode::aurora;
     look.accent = gfx::Color::rgb(0xffc94a);
     look.glass = gfx::Color::rgb(0xffffff, 0.25f);
@@ -130,7 +145,7 @@ TEST(OrionLook, ChoicesSurviveASaveAndShortFilesKeepTheBase)
     look.corners = 30.0f;
     ASSERT_TRUE(orion::save_look(dir, look));
 
-    const orion::Look back = orion::load_look(dir);
+    const orion::Look back = orion::load_look(dir, kit());
     EXPECT_EQ(back.background, gfx::BackdropMode::aurora);
     EXPECT_TRUE(orion::same_rgb(back.accent, gfx::Color::rgb(0xffc94a)));
     EXPECT_NEAR(back.glass.a, 0.25f, 0.01f);
@@ -140,17 +155,144 @@ TEST(OrionLook, ChoicesSurviveASaveAndShortFilesKeepTheBase)
 
     // A file that names only a base takes everything else from that theme.
     ASSERT_TRUE(save::write_atomic(dir + "/theme.json", R"({"base": "acrylic"})").empty());
-    const orion::Look acrylic = orion::load_look(dir);
+    const orion::Look acrylic = orion::load_look(dir, kit());
     EXPECT_EQ(acrylic.base, "acrylic");
-    EXPECT_TRUE(orion::same_rgb(acrylic.accent, orion::base_theme("acrylic").accent));
+    EXPECT_TRUE(orion::same_rgb(acrylic.accent, kit().find("acrylic")->theme.accent));
     // Junk values are clamped or ignored.
     ASSERT_TRUE(save::write_atomic(dir + "/theme.json",
                                    R"({"accent": "pink", "clouds": 900, "corners": -5})")
                     .empty());
-    const orion::Look junk = orion::load_look(dir);
-    EXPECT_TRUE(orion::same_rgb(junk.accent, orion::default_look().accent));
+    const orion::Look junk = orion::load_look(dir, kit());
+    EXPECT_TRUE(orion::same_rgb(junk.accent, orion::default_look(kit()).accent));
     EXPECT_FLOAT_EQ(junk.clouds, 2.0f);
     EXPECT_FLOAT_EQ(junk.corners, 0.0f);
+}
+
+TEST(OrionThemeFile, EveryKitThemeSurvivesAWriteAndARead)
+{
+    for (const ui::Theme &theme : ui::themes())
+    {
+        const orion::ThemeFile file = orion::from_kit(theme);
+        orion::ThemeFile back;
+        std::string error;
+        ASSERT_TRUE(orion::parse_theme(orion::write_theme(file), nullptr, &back, &error))
+            << theme.id << ": " << error;
+        EXPECT_EQ(back.id, file.id);
+        EXPECT_STREQ(back.theme.id, theme.id);
+        EXPECT_EQ(back.theme.style, theme.style) << theme.id;
+        EXPECT_EQ(back.theme.corner, theme.corner) << theme.id;
+        EXPECT_EQ(back.theme.backdrop.mode, theme.backdrop.mode) << theme.id;
+        EXPECT_FLOAT_EQ(back.theme.radius, theme.radius) << theme.id;
+        EXPECT_EQ(back.theme.heading, theme.heading) << theme.id;
+        EXPECT_EQ(back.theme.sounds, theme.sounds) << theme.id;
+        EXPECT_TRUE(orion::same_rgb(back.theme.accent, theme.accent)) << theme.id;
+        EXPECT_NEAR(back.theme.surface.a, theme.surface.a, 0.01f) << theme.id;
+        EXPECT_TRUE(orion::same_rgb(back.theme.backdrop.colors[2], theme.backdrop.colors[2]))
+            << theme.id;
+    }
+}
+
+TEST(OrionThemeFile, AShortFileExtendsAnotherTheme)
+{
+    const char *text = R"({
+        "format": "orion-theme", "version": 1,
+        "id": "nebula-noir", "name": "Nebula Noir", "author": "test",
+        "extends": "acrylic",
+        "page": {"background": "galaxy", "colors": ["#000000", "#010203"]},
+        "palette": {"accent": "#ffc94a80"},
+        "shape": {"radius": 999, "style": "no such style"},
+        "orion": {"clouds": 50, "cover_corners": 30}
+    })";
+    orion::ThemeFile file;
+    std::string error;
+    ASSERT_TRUE(orion::parse_theme(text, nullptr, &file, &error)) << error;
+    const ui::Theme &acrylic = kit().find("acrylic")->theme;
+    EXPECT_STREQ(file.theme.id, "nebula-noir");
+    EXPECT_EQ(file.author, "test");
+    EXPECT_EQ(file.theme.backdrop.mode, gfx::BackdropMode::stars);
+    EXPECT_TRUE(orion::same_rgb(file.theme.backdrop.colors[1], gfx::Color::rgb(0x010203)));
+    // What the file leaves out is Acrylic's.
+    EXPECT_TRUE(orion::same_rgb(file.theme.backdrop.colors[2], acrylic.backdrop.colors[2]));
+    EXPECT_EQ(file.theme.style, acrylic.style);
+    EXPECT_TRUE(orion::same_rgb(file.theme.accent, gfx::Color::rgb(0xffc94a)));
+    EXPECT_NEAR(file.theme.accent.a, 128.0f / 255.0f, 0.01f);
+    EXPECT_FLOAT_EQ(file.theme.radius, 200.0f); // clamped
+    EXPECT_FLOAT_EQ(file.clouds, 0.5f);
+    EXPECT_FLOAT_EQ(file.cover_corners, 30.0f);
+}
+
+TEST(OrionThemeFile, RefusesWhatIsNotATheme)
+{
+    const char *broken[] = {
+        "{",
+        R"([1, 2])",
+        R"({"format": "something-else", "id": "a", "name": "A"})",
+        R"({"version": 9, "id": "a", "name": "A"})",
+        R"({"id": "Has Spaces", "name": "A"})",
+        R"({"id": "ok"})",
+    };
+    for (const char *text : broken)
+    {
+        orion::ThemeFile file;
+        std::string error;
+        EXPECT_FALSE(orion::parse_theme(text, nullptr, &file, &error)) << text;
+        EXPECT_FALSE(error.empty()) << text;
+    }
+    EXPECT_EQ(orion::theme_id_from_name("Nebula Noir!"), "nebula-noir");
+    EXPECT_EQ(orion::theme_id_from_name("  --  "), "");
+}
+
+TEST(OrionThemeFile, TheLibraryReadsBothFoldersAndSavesThePlayers)
+{
+    const std::string root = ::testing::TempDir() + "orion-themes";
+    const std::string builtin = root + "/builtin";
+    const std::string user = root + "/user";
+    for (const std::string &dir : {root, builtin, user})
+        ASSERT_TRUE(save::ensure_directory(dir));
+    for (const char *name : {"/zeta.json", "/orion.json"})
+        std::remove((builtin + name).c_str());
+    for (const char *name : {"/mine.json", "/broken.json", "/clash.json", "/saved.json"})
+        std::remove((user + name).c_str());
+
+    ASSERT_TRUE(save::write_atomic(builtin + "/zeta.json",
+                                   R"({"id": "zeta", "name": "Zeta", "extends": "brutal"})")
+                    .empty());
+    ASSERT_TRUE(save::write_atomic(builtin + "/orion.json",
+                                   orion::write_theme(orion::from_kit(kit().find("orion")->theme)))
+                    .empty());
+    ASSERT_TRUE(save::write_atomic(user + "/mine.json",
+                                   R"({"id": "mine", "name": "Mine", "extends": "zeta"})")
+                    .empty());
+    ASSERT_TRUE(save::write_atomic(user + "/broken.json", "{nope").empty());
+    ASSERT_TRUE(
+        save::write_atomic(user + "/clash.json", R"({"id": "zeta", "name": "Again"})").empty());
+
+    orion::ThemeLibrary themes;
+    themes.load(builtin, user);
+    ASSERT_EQ(themes.size(), 3u);
+    EXPECT_EQ(themes.at(0).id, "orion"); // ORION leads
+    EXPECT_FALSE(themes.at(0).user);
+    const orion::ThemeFile *mine = themes.find("mine");
+    ASSERT_NE(mine, nullptr);
+    EXPECT_TRUE(mine->user);
+    // "mine" extends "zeta", which extends Brutal.
+    EXPECT_EQ(mine->theme.style, kit().find("brutal")->theme.style);
+    EXPECT_EQ(themes.problems().size(), 2u); // broken.json and the clashing id
+
+    orion::ThemeFile saved = *mine;
+    saved.id = "saved";
+    saved.name = "Saved";
+    std::string error;
+    ASSERT_TRUE(themes.save_user_theme(saved, &error)) << error;
+    EXPECT_NE(themes.find("saved"), nullptr);
+    orion::ThemeFile builtin_clash = saved;
+    builtin_clash.id = "orion";
+    EXPECT_FALSE(themes.save_user_theme(builtin_clash, &error));
+
+    // Read again from disk: the saved theme is there.
+    orion::ThemeLibrary again;
+    again.load(builtin, user);
+    EXPECT_NE(again.find("saved"), nullptr);
 }
 
 TEST(OrionLook, HexRoundTrips)

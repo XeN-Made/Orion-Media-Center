@@ -76,25 +76,22 @@ Color ink_on(Color fill)
     return luma > 0.55f ? Color::rgb(0x0a0c16) : Color::rgb(0xffffff);
 }
 
-} // namespace
-
-const ui::Theme &base_theme(std::string_view id)
+const ThemeFile &base_of(const Look &look, const ThemeLibrary &themes)
 {
-    const ui::Theme *orion = nullptr;
-    for (const ui::Theme &theme : ui::themes())
-    {
-        if (id == theme.id)
-            return theme;
-        if (std::strcmp(theme.id, "orion") == 0)
-            orion = &theme;
-    }
-    return orion != nullptr ? *orion : ui::themes()[0];
+    const ThemeFile *file = themes.find(look.base);
+    return file != nullptr ? *file : themes.fallback();
 }
 
-Look look_of(const ui::Theme &theme)
+} // namespace
+
+Look look_of(const ThemeFile &file)
 {
+    const ui::Theme &theme = file.theme;
     Look look;
-    look.base = theme.id;
+    look.base = file.id;
+    look.clouds = file.clouds;
+    look.motion = file.motion;
+    look.corners = file.cover_corners;
     look.background = theme.backdrop.mode;
     look.sky_top = theme.backdrop.colors[0];
     look.sky_bottom = theme.backdrop.colors[1];
@@ -106,14 +103,14 @@ Look look_of(const ui::Theme &theme)
     return look;
 }
 
-Look default_look()
+Look default_look(const ThemeLibrary &themes)
 {
-    return look_of(base_theme("orion"));
+    return look_of(themes.fallback());
 }
 
-ui::Theme themed(const Look &look)
+ui::Theme themed(const Look &look, const ThemeLibrary &themes)
 {
-    ui::Theme theme = base_theme(look.base);
+    ui::Theme theme = base_of(look, themes).theme;
     theme.backdrop.mode = look.background;
     theme.backdrop.colors[0] = look.sky_top;
     theme.backdrop.colors[1] = look.sky_bottom;
@@ -126,16 +123,30 @@ ui::Theme themed(const Look &look)
     return theme;
 }
 
-Look load_look(const std::string &state_dir)
+ThemeFile theme_of(const Look &look, const ThemeLibrary &themes)
+{
+    ThemeFile file = base_of(look, themes);
+    file.theme = themed(look, themes);
+    file.clouds = look.clouds;
+    file.motion = look.motion;
+    file.cover_corners = look.corners;
+    file.path.clear();
+    file.user = false;
+    file.bind();
+    return file;
+}
+
+Look load_look(const std::string &state_dir, const ThemeLibrary &themes)
 {
     std::string text;
     json::Value root;
     if (state_dir.empty() || !save::read_file(file_of(state_dir), &text, 1u << 20) ||
         !json::parse(text, &root) || !root.is_object())
-        return default_look();
+        return default_look(themes);
 
     // The base theme's own look first; every key present then overrides it.
-    Look look = look_of(base_theme(root["base"].string_or("orion")));
+    const ThemeFile *base = themes.find(root["base"].string_or("orion"));
+    Look look = look_of(base != nullptr ? *base : themes.fallback());
     const std::string background = root["background"].string_or("");
     for (const Background &kind : kBackgrounds)
     {
