@@ -56,9 +56,11 @@ int attach_rom_art(std::vector<Title> &roms, const std::string &root, const std:
 // paths escaped with backslashes as a shell would take them:
 //   /app0/eboot.bin -L /app0/cores/mgba_libretro.so /app0/content/Nintendo\ -\ ...gba
 // Started any other way it shows its frontend picker and ignores the game.
-// The mode is not taken from a launch's arguments (the system does not hand
-// them to the port's main): it goes in <root>/args.txt, which the launch
-// helper removes again once RetroArch has read it.
+// The mode decides before anything else is read (its args.txt only adds to
+// RetroArch's own arguments later), so it must come with the launch. A
+// launch with the mode as its only argument still reached the picker: the
+// system seems to take the first argument for the program's name, so ORION
+// passes the mode twice.
 std::string retroarch_game_request(const std::string &core_file, const std::string &rom);
 constexpr const char *kRetroArchGameMode = "--ps5-mode=game";
 

@@ -585,6 +585,7 @@ class Library final : public app::Concept
         tabs_.style.theme = grid_.style.theme = menu_.style.theme = theme_;
         keys_.style.theme = clear_glass(theme_);
         grid_.style.card.radius = shown_.corners;
+        apply_cover_shape();
         if (!shown_.chrome.cover_rim)
         {
             // The card strokes the theme's border over every picture.
@@ -606,6 +607,54 @@ class Library final : public app::Concept
         tabs_.style.reduced_motion = grid_.style.reduced_motion = keys_.style.reduced_motion =
             menu_.style.reduced_motion = reduced_;
         settings_.set_theme(theme_, reduced_);
+    }
+
+    // The shape of the active tab's covers: the one chosen in Settings, else
+    // the one most of its pictures have (console icons are square; box art
+    // is often a tall case or a wide box).
+    orion::CoverShape cover_shape() const
+    {
+        const std::string key = active_key();
+        const orion::CoverShape chosen = prefs_.tab_cover(key);
+        if (chosen != orion::CoverShape::automatic)
+            return chosen;
+        int square = 0;
+        int portrait = 0;
+        int landscape = 0;
+        for (const Title &title : titles())
+        {
+            if (title.icon_width <= 0 || title.icon_height <= 0 || !on_tab(title, key))
+                continue;
+            const float aspect =
+                static_cast<float>(title.icon_width) / static_cast<float>(title.icon_height);
+            (aspect < 0.85f ? portrait : aspect > 1.18f ? landscape : square) += 1;
+        }
+        if (portrait > square && portrait >= landscape)
+            return orion::CoverShape::portrait;
+        if (landscape > square && landscape > portrait)
+            return orion::CoverShape::landscape;
+        return orion::CoverShape::square;
+    }
+
+    // Tall cases want narrower columns, wide boxes wider ones, so a row of
+    // covers keeps about the same weight whatever their shape.
+    void apply_cover_shape()
+    {
+        switch (cover_shape())
+        {
+        case orion::CoverShape::portrait:
+            grid_.style.columns = kColumns + 1;
+            grid_.style.card.art_aspect = 5.0f / 7.0f;
+            break;
+        case orion::CoverShape::landscape:
+            grid_.style.columns = kColumns - 2;
+            grid_.style.card.art_aspect = 7.0f / 5.0f;
+            break;
+        default:
+            grid_.style.columns = kColumns;
+            grid_.style.card.art_aspect = 1.0f;
+            break;
+        }
     }
 
     // The order of the active tab: its own, else the Library's.
@@ -957,11 +1006,11 @@ class Library final : public app::Concept
         // is started in game mode (library/emulators.hpp).
         const std::string &root = context_.library.emulator.root;
         const std::string game_request = title->is_rom() ? root + "/game-request.txt" : "";
-        const std::string args = title->is_rom() ? root + "/args.txt" : "";
+        // The mode goes twice: the system may take the first of a launch's
+        // arguments for the program's own name, as argv[0] (library/emulators.hpp).
+        const std::string mode = std::string(library::kRetroArchGameMode) + "\n";
         const std::string request =
-            title->is_rom()
-                ? title->launcher + "\n" + library::kRetroArchGameMode + "\n@args " + args + "\n"
-                : title->id + "\n";
+            title->is_rom() ? title->launcher + "\n" + mode + mode : title->id + "\n";
         if (title->is_rom() && core.empty())
             why = "no core plays " + library::short_system_name(title->system);
         else if (!sys::on_console())
@@ -971,9 +1020,6 @@ class Library final : public app::Concept
                                      library::retroarch_game_request(core, title->rom))
                       .empty())
             why = "could not write " + game_request;
-        else if (title->is_rom() &&
-                 !save::write_atomic(args, std::string(library::kRetroArchGameMode) + "\n").empty())
-            why = "could not write " + args;
         else if (dir.empty() || !save::write_atomic(dir + "/launch-request.txt", request).empty())
             why = "could not write the launch request";
         else if (!save::read_file(kLauncherPath, &elf, 4u << 20) || elf.empty())
@@ -1135,6 +1181,10 @@ class Library final : public app::Concept
                 item.image_aspect =
                     static_cast<float>(title.icon_width) / static_cast<float>(title.icon_height);
         }
+        const int columns = grid_.style.columns;
+        apply_cover_shape();
+        if (grid_.style.columns != columns)
+            rebuild();
     }
 
     // The card above the hints, for a note that is not a launch.
@@ -1562,10 +1612,31 @@ class Library final : public app::Concept
             canvas.list.glow(art, radius, 26.0f * focus, light.with_alpha(0.5f * focus));
         }
         const Title &title = titles()[static_cast<std::size_t>(item.tag)];
-        if (item.texture != 0 && title.is_rom())
+        const float picture = std::max(0.2f, item.image_aspect);
+        const float cover = art.w / std::max(art.h, 1.0f);
+        if (item.texture != 0 && std::fabs(std::log(picture / cover)) < 0.18f)
         {
-            // Box art keeps its shape, fitted inside the cover over the
-            // game's own colours.
+            // About the cover's own shape: it fills the cover, trimmed evenly
+            // at the edges that differ.
+            Rect uv = item.uv;
+            if (picture > cover)
+            {
+                const float keep = cover / picture;
+                uv.x += uv.w * (1.0f - keep) * 0.5f;
+                uv.w *= keep;
+            }
+            else
+            {
+                const float keep = picture / cover;
+                uv.y += uv.h * (1.0f - keep) * 0.5f;
+                uv.h *= keep;
+            }
+            canvas.list.image(item.texture, art, uv, Color::rgb(0xffffff), radius);
+        }
+        else if (item.texture != 0)
+        {
+            // Another shape: the whole picture, fitted inside the cover over
+            // the game's own colours.
             canvas.list.gradient_rect(art, radius, item.top, item.bottom);
             const float pad = art.w * 0.06f;
             Rect fit = {art.x + pad, art.y + pad, art.w - 2.0f * pad, art.h - 2.0f * pad};
@@ -1583,10 +1654,6 @@ class Library final : public app::Concept
                 fit.w = w;
             }
             canvas.list.image(item.texture, fit, item.uv, Color::rgb(0xffffff), radius * 0.4f);
-        }
-        else if (item.texture != 0)
-        {
-            canvas.list.image(item.texture, art, item.uv, Color::rgb(0xffffff), radius);
         }
         else
         {
