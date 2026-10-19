@@ -209,6 +209,7 @@ int main()
         const std::int64_t scan_start = sys::monotonic_us();
         titles.titles = library::scan(scan);
         titles.scanned = true;
+        titles.state_dir = "/data/orion";
         const int icons = library::load_icons(titles, renderer.batch());
         char summary[128];
         std::snprintf(summary, sizeof(summary), "titles=%zu icons=%d in %lld ms",

@@ -144,10 +144,15 @@ void Shell::update(const InputFrame &input, float dt)
 
     // The active design sees everything the shell does not use; nothing at
     // all while the info panel covers it.
+    // A single design has no switch to make: L1 and R1 are its own then.
+    const std::uint32_t taken =
+        count > 1
+            ? kShellActions
+            : kShellActions & ~(action_bit(Action::page_next) | action_bit(Action::page_prev));
     InputFrame forwarded = input;
-    forwarded.pressed &= ~kShellActions;
-    forwarded.released &= ~kShellActions;
-    forwarded.held &= ~kShellActions;
+    forwarded.pressed &= ~taken;
+    forwarded.released &= ~taken;
+    forwarded.held &= ~taken;
     if (info_open_)
     {
         forwarded = InputFrame{};

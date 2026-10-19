@@ -45,8 +45,14 @@ struct Title
     Category category = Category::game;
     Platform platform = Platform::unknown;
     Source source = Source::folder;
+    // Homebrew is what declares no DRM ("applicationDrmType": "free");
+    // retail titles say "standard" or "upgradable", and images are dumps.
+    bool homebrew = false;
     std::string path; // the folder or image file it was found at
     std::string icon; // a PNG to show for it; empty when there is none
+    // When the folder or image last changed (seconds since 1970): the best
+    // "recently added" the file system offers. 0 when unknown.
+    std::int64_t added = 0;
     // The icon's texture, once something has uploaded it (0 until then).
     std::uint32_t texture = 0;
 };
@@ -57,7 +63,19 @@ struct Library
     std::vector<Title> titles;
     // True once a scan ran (an empty list then means "nothing installed").
     bool scanned = false;
+    // Where ORION keeps what the player chooses (favourites, ...); empty
+    // keeps nothing. /data/orion on the console, so it survives a reinstall.
+    std::string state_dir;
 };
+
+// The three shelves the Library groups titles on.
+enum class Shelf : std::uint8_t
+{
+    games,    // retail titles in the Games area
+    homebrew, // DRM-free apps in the Games area
+    media,    // anything in the Media area
+};
+Shelf shelf_of(const Title &title);
 
 struct ScanOptions
 {

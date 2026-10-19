@@ -3,18 +3,24 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // ORION's home: every title ShadowMountPlus can mount (library/library.hpp),
-// as a grid of covers with the focused title's details underneath. Titles
-// without artwork get a monogram on a colour derived from their ID, so the
-// same title always looks the same.
+// as a grid of covers on five shelves (All, Games, Homebrew, Media,
+// Favourites), sorted four ways and filtered live from the on-screen
+// keyboard. Favourites are written to <state_dir>/favourites.json the moment
+// they change. Titles without artwork get a monogram on a colour derived from
+// their ID, so the same title always looks the same.
 
 #include "concepts/concepts.hpp"
 
 #include "core/tween.hpp"
+#include "library/favourites.hpp"
 #include "ui/components/grid.hpp"
+#include "ui/components/keyboard.hpp"
+#include "ui/components/tabs.hpp"
 #include "ui/glyphs.hpp"
 #include "ui/motion.hpp"
 #include "ui/widgets.hpp"
 
+#include <algorithm>
 #include <cctype>
 #include <cmath>
 #include <cstdint>
@@ -30,26 +36,72 @@ namespace
 
 using gfx::Color;
 using gfx::Rect;
+using library::Title;
 
 constexpr float kMargin = 96.0f;
-constexpr float kGridTop = 222.0f;
+constexpr float kTabsTop = 204.0f;
+constexpr float kGridTop = 280.0f;
 constexpr float kGridBottom = 972.0f;
 // Seven columns keep two whole rows in view, so scrolling never leaves a
 // single row alone on the screen.
 constexpr int kColumns = 7;
+constexpr std::size_t kMaxQuery = 40; // bytes
+// The search panel sits under the first row of covers, so the results of
+// what is typed stay in view above it.
+constexpr Rect kSearchPanel{544.0f, 590.0f, 832.0f, 378.0f};
+constexpr Rect kSearchField{560.0f, 606.0f, 800.0f, 56.0f};
+constexpr Rect kKeysRect{560.0f, 670.0f, 800.0f, 290.0f};
+
+enum Tab : int
+{
+    kAll,
+    kGames,
+    kHomebrew,
+    kMedia,
+    kFavourites,
+    kTabCount,
+};
+constexpr const char *kTabNames[kTabCount] = {"All", "Games", "Homebrew", "Media", "Favourites"};
+
+enum class Sort : int
+{
+    name,
+    name_reversed,
+    recent,
+    platform,
+    count,
+};
+constexpr const char *kSortNames[] = {"Name A\u2013Z", "Name Z\u2013A", "Recently added",
+                                      "Platform"};
 
 constexpr const char *kTechniques[] = {
     "Reads the console's library the way ShadowMountPlus does: folders, images, icon cache",
-    "GridView over the real titles: one gliding focus, spring scrolling, soft edges",
+    "Shelves from the metadata itself: DRM-free titles are homebrew, the Media area is media",
+    "Live search from the on-screen keyboard; the grid filters as you type",
+    "Favourites kept in a JSON file that survives reinstalling the app",
     "Monogram covers in a colour hashed from the title ID for titles without art",
-    "An empty state that says where ORION looked",
 };
 
 constexpr app::TourStep kTour[] = {
     {0.5f, 0, Direction::right},
-    {0.3f, 0, Direction::right},
-    {0.3f, 0, Direction::down},
-    {0.6f, 0, Direction::none, "browse"},
+    {0.4f, action_bit(Action::jump_next)},
+    {0.6f, action_bit(Action::jump_next), Direction::none, "games"},
+    {0.6f, action_bit(Action::west), Direction::none, "homebrew"},
+    {0.5f, action_bit(Action::jump_prev)},
+    {0.3f, action_bit(Action::jump_prev)},
+    {0.6f, action_bit(Action::menu), Direction::none, "favourite"},
+    {0.6f, action_bit(Action::north), Direction::none, "sorted"},
+    {0.7f, 0, Direction::none, "search"},
+    // Type "re": down to the letters, along to r, then back to e.
+    {0.15f, 0, Direction::down},
+    {0.15f, 0, Direction::right},
+    {0.15f, 0, Direction::right},
+    {0.15f, 0, Direction::right},
+    {0.2f, action_bit(Action::confirm)},
+    {0.15f, 0, Direction::left},
+    {0.2f, action_bit(Action::confirm)},
+    {0.6f, action_bit(Action::menu), Direction::none, "typed"},
+    {0.6f, 0, Direction::none, "filtered"},
 };
 
 const ui::Theme &library_theme()
@@ -124,7 +176,7 @@ std::string monogram(const std::string &name)
     return letters;
 }
 
-std::string describe(const library::Title &title)
+std::string describe(const Title &title)
 {
     std::string text = library::platform_name(title.platform);
     if (!text.empty())
@@ -133,11 +185,45 @@ std::string describe(const library::Title &title)
     return text;
 }
 
+const char *shelf_name(library::Shelf shelf)
+{
+    switch (shelf)
+    {
+    case library::Shelf::games:
+        return "Game";
+    case library::Shelf::homebrew:
+        return "Homebrew";
+    case library::Shelf::media:
+        return "Media";
+    }
+    return "";
+}
+
+std::string folded(std::string_view text)
+{
+    std::string out(text);
+    for (char &c : out)
+        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    return out;
+}
+
 class Library final : public app::Concept
 {
   public:
-    explicit Library(app::Context &context) : context_(context), theme_(library_theme())
+    explicit Library(app::Context &context)
+        : context_(context), theme_(library_theme()),
+          favourites_(library::load_favourites(context.library.state_dir))
     {
+        tabs_.style.theme = theme_;
+        tabs_.style.kind = ui::TabKind::pill;
+        tabs_.style.height = 50.0f;
+        tabs_.style.text_size = 21.0f;
+        tabs_.style.badge_size = 16.0f;
+        tabs_.style.padding = 20.0f;
+        tabs_.style.on_page = true;
+        tabs_.style.focus_ring = false;
+        tabs_.set_bounds({kMargin, kTabsTop, 1080.0f, 56.0f});
+
         grid_.style.theme = theme_;
         grid_.style.columns = kColumns;
         grid_.style.gap_x = 28.0f;
@@ -151,23 +237,33 @@ class Library final : public app::Concept
         grid_.art = [this](ui::Canvas &canvas, const Rect &art, float radius,
                            const ui::CardItem &item, float /*focus*/)
         { draw_art(canvas, art, radius, item); };
-
-        std::vector<ui::CardItem> items;
-        for (const library::Title &title : context_.library.titles)
-        {
-            ui::CardItem item;
-            item.title = title.name;
-            item.subtitle = describe(title);
-            item.badge = title.category == library::Category::media ? "MEDIA" : "";
-            item.texture = title.texture;
-            item.top = hashed_color(title.id, 0.55f, 0.42f);
-            item.bottom = hashed_color(title.id, 0.7f, 0.2f);
-            item.accent = hashed_color(title.id, 0.6f, 1.0f);
-            items.push_back(std::move(item));
-        }
-        grid_.set_items(std::move(items));
         grid_.set_bounds(
             {kMargin, kGridTop, gfx::kVirtualWidth - 2.0f * kMargin, kGridBottom - kGridTop});
+
+        keys_.style.theme = theme_;
+        keys_.style.bindings = ui::KeyboardBindings::standard();
+        keys_.style.bindings.done = Action::menu;
+        keys_.style.max_length = static_cast<int>(kMaxQuery);
+        keys_.set_bounds(kKeysRect);
+        keys_.on_text = [this](std::string_view utf8)
+        {
+            if (query_.size() + utf8.size() <= kMaxQuery)
+            {
+                query_ += utf8;
+                rebuild();
+            }
+        };
+        keys_.on_backspace = [this]
+        {
+            // Drop one whole UTF-8 character: continuation bytes, then its lead.
+            while (!query_.empty() && (static_cast<unsigned char>(query_.back()) & 0xc0) == 0x80)
+                query_.pop_back();
+            if (!query_.empty())
+                query_.pop_back();
+            rebuild();
+        };
+
+        rebuild();
     }
 
     const app::ConceptInfo &info() const override
@@ -194,10 +290,20 @@ class Library final : public app::Concept
     {
         age_ += dt;
         clock_ += dt;
-        grid_.style.reduced_motion = context_.settings.reduced_motion;
-        if (grid_.count() > 0)
-            grid_.handle(input, feedback);
+        const bool reduced = context_.settings.reduced_motion;
+        grid_.style.reduced_motion = tabs_.style.reduced_motion = keys_.style.reduced_motion =
+            reduced;
+
+        if (searching_)
+            update_search(input, feedback);
+        else
+            update_browse(input, feedback);
+
+        tabs_.update(dt);
         grid_.update(dt);
+        keys_.update(dt);
+        keyboard_shown_.target = searching_ ? 1.0f : 0.0f;
+        keyboard_shown_.update(dt, reduced ? 60.0f : 16.0f);
     }
 
     void draw(app::Frame &frame) const override
@@ -227,6 +333,8 @@ class Library final : public app::Concept
         list.push_opacity(tween::cubic_out(age_ / 0.35f));
 
         draw_header(list, paint);
+        tabs_.draw(canvas);
+        draw_query(list, paint);
         if (grid_.count() > 0)
         {
             grid_.draw(canvas);
@@ -236,12 +344,10 @@ class Library final : public app::Concept
         {
             draw_empty(list, paint);
         }
-
-        const ui::Hint hints[] = {
-            {ui::Button::dpad, "Browse"},
-            {ui::Button::touchpad, "About"},
-        };
-        ui::draw_hints(list, context_.fonts, ui::GlyphStyle::dark(), hints, 2, 1824, true);
+        if (keyboard_shown_.value > 0.01f)
+            draw_keyboard(canvas, paint);
+        else
+            draw_hints(list);
         list.pop_opacity();
     }
 
@@ -251,16 +357,228 @@ class Library final : public app::Concept
     }
 
   private:
+    // ---- input ----
+
+    void update_browse(const InputFrame &input, app::Feedback &feedback)
+    {
+        // L1 / R1 change shelf; L2 / R2 do too, which is also what the tour
+        // uses, since L1 / R1 belong to the shell wherever it holds several
+        // designs (the PC tools).
+        const bool next =
+            input.is_pressed(Action::page_next) || input.is_pressed(Action::jump_next);
+        const bool previous =
+            input.is_pressed(Action::page_prev) || input.is_pressed(Action::jump_prev);
+        if (next || previous)
+        {
+            const int direction = next ? 1 : -1;
+            if (tabs_.step(direction, input, feedback) == ui::Event::changed)
+                rebuild();
+            return;
+        }
+        if (input.is_pressed(Action::north))
+        {
+            searching_ = true;
+            keys_.set_length(static_cast<int>(query_.size()));
+            feedback.play(audio::Cue::modal_open);
+            return;
+        }
+        if (input.is_pressed(Action::menu))
+        {
+            sort_ =
+                static_cast<Sort>((static_cast<int>(sort_) + 1) % static_cast<int>(Sort::count));
+            feedback.play(audio::Cue::tab);
+            rebuild();
+            return;
+        }
+        if (input.is_pressed(Action::back) && !query_.empty())
+        {
+            query_.clear();
+            feedback.play(audio::Cue::erase);
+            rebuild();
+            return;
+        }
+        if (input.is_pressed(Action::west) && grid_.count() > 0)
+        {
+            toggle_favourite(feedback);
+            return;
+        }
+        if (grid_.count() > 0)
+            grid_.handle(input, feedback);
+    }
+
+    void update_search(const InputFrame &input, app::Feedback &feedback)
+    {
+        keys_.set_length(static_cast<int>(query_.size()));
+        const ui::Event event = keys_.handle(input, feedback);
+        if (event == ui::Event::activated || event == ui::Event::cancelled)
+        {
+            searching_ = false;
+            feedback.play(audio::Cue::modal_close);
+        }
+    }
+
+    void toggle_favourite(app::Feedback &feedback)
+    {
+        const Title &title = titles()[static_cast<std::size_t>(view_[focus_index()])];
+        const auto found = std::find(favourites_.begin(), favourites_.end(), title.id);
+        if (found == favourites_.end())
+        {
+            favourites_.push_back(title.id);
+            feedback.play(audio::Cue::favorite_on);
+        }
+        else
+        {
+            favourites_.erase(found);
+            feedback.play(audio::Cue::favorite_off);
+        }
+        library::save_favourites(context_.library.state_dir, favourites_);
+        // On the Favourites shelf an unstarred title leaves the view.
+        rebuild();
+    }
+
+    // ---- the view ----
+
+    const std::vector<Title> &titles() const
+    {
+        return context_.library.titles;
+    }
+
+    bool favourite(const std::string &id) const
+    {
+        return std::find(favourites_.begin(), favourites_.end(), id) != favourites_.end();
+    }
+
+    bool on_tab(const Title &title, int tab) const
+    {
+        switch (tab)
+        {
+        case kGames:
+            return library::shelf_of(title) == library::Shelf::games;
+        case kHomebrew:
+            return library::shelf_of(title) == library::Shelf::homebrew;
+        case kMedia:
+            return library::shelf_of(title) == library::Shelf::media;
+        case kFavourites:
+            return favourite(title.id);
+        default:
+            return true;
+        }
+    }
+
+    int focus_index() const
+    {
+        return std::clamp(grid_.focus(), 0, std::max(0, static_cast<int>(view_.size()) - 1));
+    }
+
+    // Recomputes what the grid shows from the tab, the query and the sort,
+    // keeping the focus on the same title when it is still there.
+    void rebuild()
+    {
+        std::string focused;
+        if (!view_.empty())
+            focused = titles()[static_cast<std::size_t>(view_[focus_index()])].id;
+
+        std::vector<ui::TabItem> tabs;
+        for (int tab = 0; tab < kTabCount; ++tab)
+        {
+            ui::TabItem item;
+            item.label = kTabNames[tab];
+            item.badge = static_cast<int>(std::count_if(
+                titles().begin(), titles().end(), [&](const Title &t) { return on_tab(t, tab); }));
+            tabs.push_back(std::move(item));
+        }
+        const int active = tabs_.tabs().empty() ? 0 : tabs_.active();
+        tabs_.set_tabs(std::move(tabs));
+        tabs_.set_active(active, true);
+
+        const std::string needle = folded(query_);
+        view_.clear();
+        for (std::size_t i = 0; i < titles().size(); ++i)
+        {
+            const Title &title = titles()[i];
+            if (!on_tab(title, active))
+                continue;
+            if (!needle.empty() && folded(title.name).find(needle) == std::string::npos &&
+                folded(title.id).find(needle) == std::string::npos)
+                continue;
+            view_.push_back(static_cast<int>(i));
+        }
+        // The scan already sorted by name; every other order is a stable sort
+        // on top of it, so ties stay alphabetical.
+        switch (sort_)
+        {
+        case Sort::name_reversed:
+            std::reverse(view_.begin(), view_.end());
+            break;
+        case Sort::recent:
+            std::stable_sort(view_.begin(), view_.end(),
+                             [&](int a, int b) { return titles()[a].added > titles()[b].added; });
+            break;
+        case Sort::platform:
+            std::stable_sort(view_.begin(), view_.end(), [&](int a, int b)
+                             { return titles()[a].platform < titles()[b].platform; });
+            break;
+        default:
+            break;
+        }
+
+        std::vector<ui::CardItem> items;
+        int focus = 0;
+        for (std::size_t i = 0; i < view_.size(); ++i)
+        {
+            const Title &title = titles()[static_cast<std::size_t>(view_[i])];
+            if (title.id == focused)
+                focus = static_cast<int>(i);
+            ui::CardItem item;
+            item.title = title.name;
+            item.subtitle = describe(title);
+            item.badge = title.category == library::Category::media ? "MEDIA" : "";
+            item.texture = title.texture;
+            item.top = hashed_color(title.id, 0.55f, 0.42f);
+            item.bottom = hashed_color(title.id, 0.7f, 0.2f);
+            item.accent = hashed_color(title.id, 0.6f, 1.0f);
+            item.tag = view_[i];
+            items.push_back(std::move(item));
+        }
+        grid_.set_items(std::move(items));
+        if (!view_.empty())
+            grid_.set_focus(focus, true);
+    }
+
+    // ---- drawing ----
+
     void draw_header(gfx::DrawList &list, const ui::Painter &paint) const
     {
         const ui::Fonts &fonts = context_.fonts;
         ui::text(list, fonts.semibold, "ORION MEDIA CENTER", kMargin, 104, 17, theme_.accent,
                  gfx::Align::left, 4.0f);
         ui::text(list, fonts.display, "Library", kMargin, 172, 62, paint.page_text());
-        const std::size_t count = context_.library.titles.size();
-        const std::string summary = std::to_string(count) + (count == 1 ? " title" : " titles");
+        const std::size_t count = view_.size();
+        const std::string summary = std::to_string(count) + (count == 1 ? " title" : " titles") +
+                                    "  \xc2\xb7  " + kSortNames[static_cast<int>(sort_)];
         ui::text(list, fonts.regular, summary.c_str(), gfx::kVirtualWidth - kMargin, 172, 24,
                  paint.page_text_muted(), gfx::Align::right);
+    }
+
+    // The active search, at the right of the tab row, with how to clear it.
+    void draw_query(gfx::DrawList &list, const ui::Painter &paint) const
+    {
+        if (query_.empty())
+            return;
+        const ui::Fonts &fonts = context_.fonts;
+        const float right = gfx::kVirtualWidth - kMargin;
+        const float y = kTabsTop + 37.0f;
+        float x = right;
+        if (!searching_)
+        {
+            const float w = ui::button_width(ui::Button::circle, 30);
+            ui::draw_button(list, fonts, ui::GlyphStyle::dark(), ui::Button::circle, right - w,
+                            y - 9, 30);
+            x -= w + 12.0f;
+        }
+        const std::string label = "\xe2\x80\x9c" + query_ + "\xe2\x80\x9d";
+        ui::text(list, fonts.semibold, label.c_str(), x, y, 22, paint.page_text(),
+                 gfx::Align::right);
     }
 
     void draw_art(ui::Canvas &canvas, const Rect &art, float radius, const ui::CardItem &item) const
@@ -268,23 +586,35 @@ class Library final : public app::Concept
         if (item.texture != 0)
         {
             canvas.list.image(item.texture, art, item.uv, Color::rgb(0xffffff), radius);
-            return;
         }
-        canvas.list.gradient_rect(art, radius, item.top, item.bottom);
-        const std::string letters = monogram(item.title);
-        ui::text(canvas.list, canvas.fonts.display, letters.c_str(), art.cx(),
-                 art.y + art.h * 0.5f + art.h * 0.13f, art.h * 0.36f, Color::rgb(0xffffff, 0.9f),
-                 gfx::Align::center);
+        else
+        {
+            canvas.list.gradient_rect(art, radius, item.top, item.bottom);
+            const std::string letters = monogram(item.title);
+            ui::text(canvas.list, canvas.fonts.display, letters.c_str(), art.cx(),
+                     art.y + art.h * 0.5f + art.h * 0.13f, art.h * 0.36f,
+                     Color::rgb(0xffffff, 0.9f), gfx::Align::center);
+        }
+        if (favourite(titles()[static_cast<std::size_t>(item.tag)].id))
+        {
+            // A gold star on a dark disc in the corner the badge leaves free.
+            const float r = std::max(14.0f, art.w * 0.075f);
+            const float cx = art.x + r + 8.0f;
+            const float cy = art.y + r + 8.0f;
+            canvas.list.circle(cx, cy, r, Color::rgb(0x0b0e20, 0.72f));
+            canvas.list.star(cx, cy, r * 0.72f, Color::rgb(0xffc94a));
+        }
     }
 
     void draw_details(gfx::DrawList &list, const ui::Painter &paint) const
     {
-        const library::Title &title =
-            context_.library.titles[static_cast<std::size_t>(grid_.focus())];
+        const Title &title = titles()[static_cast<std::size_t>(view_[focus_index()])];
         std::string line = title.id;
         if (!title.version.empty())
             line += "   v" + title.version;
-        line += "   " + std::string(library::category_name(title.category));
+        line += "   " + std::string(shelf_name(library::shelf_of(title)));
+        if (favourite(title.id))
+            line += "   \xc2\xb7   Favourite";
         ui::text(list, context_.fonts.regular, line.c_str(), kMargin, 1024, 21,
                  paint.page_text_muted());
     }
@@ -293,18 +623,90 @@ class Library final : public app::Concept
     {
         const ui::Fonts &fonts = context_.fonts;
         const float cx = gfx::kVirtualWidth * 0.5f;
-        ui::text(list, fonts.display, "No titles yet", cx, 520, 46, paint.page_text(),
+        const char *title = "No titles yet";
+        const char *first = "ORION shows what ShadowMountPlus can mount from /data/homebrew,";
+        const char *second = "/mnt/ext0/homebrew and USB drives.";
+        std::string searched;
+        if (!titles().empty() && !query_.empty())
+        {
+            searched = "Nothing matches \xe2\x80\x9c" + query_ + "\xe2\x80\x9d";
+            title = searched.c_str();
+            first = "Try fewer letters, or press Circle to clear the search.";
+            second = "";
+        }
+        else if (!titles().empty() && tabs_.active() == kFavourites)
+        {
+            title = "No favourites yet";
+            first = "Press Square on any title to star it.";
+            second = "Starred titles collect here and keep their star.";
+        }
+        else if (!titles().empty())
+        {
+            title = "Nothing on this shelf";
+            first = "Press L1 or R1 to look at another one.";
+            second = "";
+        }
+        ui::text(list, fonts.display, title, cx, 560, 46, paint.page_text(), gfx::Align::center);
+        ui::text(list, fonts.regular, first, cx, 616, 24, paint.page_text_muted(),
                  gfx::Align::center);
-        ui::text(list, fonts.regular,
-                 "ORION shows what ShadowMountPlus can mount from /data/homebrew,", cx, 576, 24,
-                 paint.page_text_muted(), gfx::Align::center);
-        ui::text(list, fonts.regular, "/mnt/ext0/homebrew and USB drives.", cx, 610, 24,
-                 paint.page_text_muted(), gfx::Align::center);
+        ui::text(list, fonts.regular, second, cx, 650, 24, paint.page_text_muted(),
+                 gfx::Align::center);
+    }
+
+    void draw_hints(gfx::DrawList &list) const
+    {
+        const ui::Hint hints[] = {
+            {ui::Button::l1, "Shelf", ui::Button::r1},
+            {ui::Button::square, "Favourite"},
+            {ui::Button::triangle, "Search"},
+            {ui::Button::options, "Sort"},
+        };
+        ui::draw_hints(list, context_.fonts, ui::GlyphStyle::dark(), hints, 4, 1824, true);
+    }
+
+    // The search overlay: a veil, the query in a field, the keyboard under it.
+    void draw_keyboard(ui::Canvas &canvas, const ui::Painter &paint) const
+    {
+        gfx::DrawList &list = canvas.list;
+        const float shown = tween::cubic_out(keyboard_shown_.value);
+        // A light veil: the filtered covers above the panel are the point.
+        list.rounded_rect({0, 0, gfx::kVirtualWidth, gfx::kVirtualHeight}, 0,
+                          theme_.page.with_alpha(0.3f * shown));
+        list.push_opacity(shown);
+        list.push_transform(1.0f, 0.0f, 0.0f, 0.0f, 40.0f * (1.0f - shown));
+        // Solid under the translucent keys, so the covers do not show through.
+        list.shadow(kSearchPanel, theme_.radius_card, 40.0f, Color::rgb(0x000000, 0.5f));
+        list.rounded_rect(kSearchPanel, theme_.radius_card, theme_.page.with_alpha(0.97f));
+        list.bordered_rect(kSearchPanel, theme_.radius_card, Color::rgb(0x000000, 0.0f), 1.0f,
+                           theme_.outline);
+        const Rect field = kSearchField;
+        list.rounded_rect(field, theme_.radius, theme_.surface_high);
+        const ui::Fonts &fonts = context_.fonts;
+        const bool empty = query_.empty();
+        ui::text(list, fonts.regular, empty ? "Search titles or IDs" : query_.c_str(), field.x + 24,
+                 field.y + 38, 25, empty ? paint.page_text_muted() : theme_.text);
+        if (!empty || std::fmod(clock_, 1.0f) < 0.5f)
+        {
+            const float caret =
+                empty ? field.x + 22 : field.x + 26 + fonts.regular.font->measure(query_, 26.0f);
+            list.rounded_rect({caret, field.y + 13, 2.5f, 30}, 1.0f, theme_.accent);
+        }
+        keys_.draw(canvas);
+        list.pop_transform();
+        list.pop_opacity();
     }
 
     app::Context &context_;
     const ui::Theme &theme_;
+    std::vector<std::string> favourites_;
+    std::vector<int> view_; // indices into the library, in display order
+    std::string query_;
+    Sort sort_ = Sort::name;
+    bool searching_ = false;
+    ui::TabBar tabs_;
     ui::GridView grid_;
+    ui::Keyboard keys_;
+    tween::Spring keyboard_shown_;
     float age_ = 0.0f;
     float clock_ = 0.0f;
 };

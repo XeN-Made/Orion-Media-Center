@@ -20,6 +20,7 @@ src/demo/catalog.cpp
 src/gfx/draw_list.cpp
 src/gfx/font.cpp
 src/gfx/triangulate.cpp
+src/library/favourites.cpp
 src/library/icon.cpp
 src/library/json.cpp
 src/library/library.cpp

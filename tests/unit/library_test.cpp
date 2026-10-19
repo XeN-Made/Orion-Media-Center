@@ -6,10 +6,13 @@
 // in homebrew/ (folders, images and things that are not titles) and
 // ShadowMountPlus's icon cache.
 
+#include "core/save_file.hpp"
+#include "library/favourites.hpp"
 #include "library/library.hpp"
 
 #include <gtest/gtest.h>
 
+#include <cstdio>
 #include <string>
 
 namespace hui
@@ -171,6 +174,44 @@ TEST(Library, RefusesMetadataWithoutAValidId)
     // A title without any name shows its ID.
     ASSERT_TRUE(library::read_param_json(R"({"titleId": "PPSA01234"})", &title));
     EXPECT_EQ(title.name, "PPSA01234");
+}
+
+TEST(Library, ShelvesFollowTheMetadata)
+{
+    const std::vector<Title> titles = scan_fixture();
+    const auto shelf = [&](const char *id) { return library::shelf_of(*find(titles, id)); };
+    EXPECT_EQ(shelf("PPSA90101"), library::Shelf::games);    // DRM "standard"
+    EXPECT_EQ(shelf("PPSA90108"), library::Shelf::homebrew); // DRM "free"
+    EXPECT_EQ(shelf("PPSA90103"), library::Shelf::homebrew);
+    EXPECT_EQ(shelf("PPSA90102"), library::Shelf::media); // the Media area wins
+    EXPECT_EQ(shelf("CUSA90106"), library::Shelf::games); // PS4 titles are games
+    EXPECT_EQ(shelf("PPSA90104"), library::Shelf::games); // so are images
+    EXPECT_FALSE(find(titles, "PPSA90101")->homebrew);
+    EXPECT_TRUE(find(titles, "PPSA90108")->homebrew);
+    for (const Title &title : titles)
+        EXPECT_GT(title.added, 0) << title.id;
+}
+
+TEST(Library, FavouritesRoundTripAndIgnoreJunk)
+{
+    const std::string dir = ::testing::TempDir() + "orion-favourites";
+    ASSERT_TRUE(save::ensure_directory(dir));
+    std::remove((dir + "/favourites.json").c_str());
+    EXPECT_TRUE(library::load_favourites(dir).empty());
+
+    ASSERT_TRUE(library::save_favourites(dir, {"PPSA90101", "CUSA90106", "not an id"}));
+    EXPECT_EQ(library::load_favourites(dir), (std::vector<std::string>{"PPSA90101", "CUSA90106"}));
+
+    // A hand-edited file: duplicates, other keys and wrong types are ignored.
+    ASSERT_TRUE(
+        save::write_atomic(dir + "/favourites.json",
+                           R"({"note": 1, "favourites": ["PPSA90101", 7, "PPSA90101", "x"]})")
+            .empty());
+    EXPECT_EQ(library::load_favourites(dir), (std::vector<std::string>{"PPSA90101"}));
+
+    ASSERT_TRUE(save::write_atomic(dir + "/favourites.json", "{broken").empty());
+    EXPECT_TRUE(library::load_favourites(dir).empty());
+    EXPECT_FALSE(library::save_favourites("", {"PPSA90101"}));
 }
 
 TEST(Library, RecognisesTitleIds)

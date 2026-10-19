@@ -1,5 +1,6 @@
 {
   "applicationCategoryType": 0,
+  "applicationDrmType": "standard",
   "contentVersion": "01.002.000",
   "localizedParameters": {
     "defaultLanguage": "en-US",

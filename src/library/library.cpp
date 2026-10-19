@@ -43,6 +43,12 @@ std::vector<Entry> visible_entries(const std::string &path, save::ListingStats *
     return entries;
 }
 
+std::int64_t modified_time(const std::string &path)
+{
+    struct stat info = {};
+    return ::stat(path.c_str(), &info) == 0 ? static_cast<std::int64_t>(info.st_mtime) : 0;
+}
+
 bool file_exists(const std::string &path)
 {
     struct stat info = {};
@@ -173,6 +179,7 @@ bool read_param_json(std::string_view text, Title *title)
     title->name = name.empty() ? id : trim(name);
     title->version = root["contentVersion"].string_or("");
     title->platform = Platform::ps5;
+    title->homebrew = root["applicationDrmType"].string_or("") == "free";
     // 0 is the Games area and 65536 Media (docs/platform/CONFIGURATION.md).
     const double type = root["applicationCategoryType"].number_or(0.0);
     title->category = type == 0.0       ? Category::game
@@ -333,6 +340,7 @@ std::vector<Title> scan(const ScanOptions &options)
                     continue;
                 title.source = Source::folder;
                 title.path = path;
+                title.added = modified_time(path);
                 if (file_exists(path + "/sce_sys/icon0.png"))
                     title.icon = path + "/sce_sys/icon0.png";
                 titles.push_back(std::move(title));
@@ -340,6 +348,7 @@ std::vector<Title> scan(const ScanOptions &options)
             else if (parse_image_name(entry.name, &title))
             {
                 title.path = path;
+                title.added = modified_time(path);
                 images.push_back(std::move(title));
             }
         }
@@ -392,6 +401,13 @@ std::vector<Title> scan(const ScanOptions &options)
                   return fa != fb ? fa < fb : a.id < b.id;
               });
     return titles;
+}
+
+Shelf shelf_of(const Title &title)
+{
+    if (title.category == Category::media)
+        return Shelf::media;
+    return title.homebrew ? Shelf::homebrew : Shelf::games;
 }
 
 const char *category_name(Category category)
