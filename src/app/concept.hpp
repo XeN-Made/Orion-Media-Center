@@ -14,6 +14,8 @@
 #include "ui/feedback.hpp"
 #include "ui/fonts.hpp"
 
+#include <utility>
+#include <string>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -69,6 +71,9 @@ struct Context
     // A design that needs the app gone (to hand the console to another
     // title) sets this; the app closes itself cleanly on the next frame.
     bool exit_requested = false;
+    // Pictures a design found while running (title id, PNG path): the app
+    // loads them as it loaded the scan's icons (see Shell::take_new_icons).
+    std::vector<std::pair<std::string, std::string>> new_icons = {};
 };
 
 // One frame of a design, back to front:

@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
 
@@ -47,5 +48,11 @@ int launch_app(const char *title_id);
 // (127.0.0.1:port), which runs it outside any app. 0 when every byte was
 // accepted, else the errno of what failed (kLaunchUnsupported on a PC).
 int send_payload(const std::string &elf, int port);
+
+// Fetches an https:// URL into *body (at most limit bytes), verifying the
+// server against the CA list shipped in assets/certs. False with *error set
+// otherwise, a page that is not 200 included. Blocking: call it from a
+// worker thread. On a PC it always says there is no network.
+bool http_get(const std::string &url, std::size_t limit, std::string *body, std::string *error);
 
 } // namespace hui::sys

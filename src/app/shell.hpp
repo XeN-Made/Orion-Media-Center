@@ -42,6 +42,11 @@ class Shell
     {
         return context_.exit_requested;
     }
+    // Pictures the designs found since the last call (title id, PNG path).
+    std::vector<std::pair<std::string, std::string>> take_new_icons()
+    {
+        return std::exchange(context_.new_icons, {});
+    }
 
     void update(const InputFrame &input, float dt);
     // Queues this frame's layers; the caller presents them.

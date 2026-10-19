@@ -5,6 +5,8 @@
 #include "platform/ps5/system.hpp"
 
 #include <arpa/inet.h>
+#include <curl/curl.h>
+#include <mutex>
 #include <cerrno>
 #include <cstdarg>
 #include <netinet/in.h>
@@ -147,6 +149,78 @@ int launch_app(const char *title_id)
     log("[HUI] launch %s user=0x%08x result=0x%08x", title_id, static_cast<unsigned>(user),
         static_cast<unsigned>(result));
     return result;
+}
+
+namespace
+{
+
+// Mozilla's CA list, as Ubuntu's ca-certificates ships it (THIRD_PARTY_NOTICES.md).
+constexpr const char *kCaBundle = "/app0/assets/certs/cacert.pem";
+
+struct Sink
+{
+    std::string *body;
+    std::size_t limit;
+    bool over = false;
+};
+
+std::size_t sink_write(char *data, std::size_t size, std::size_t count, void *user)
+{
+    auto *sink = static_cast<Sink *>(user);
+    const std::size_t bytes = size * count;
+    if (sink->body->size() + bytes > sink->limit)
+    {
+        sink->over = true;
+        return 0; // curl stops with CURLE_WRITE_ERROR
+    }
+    sink->body->append(data, bytes);
+    return bytes;
+}
+
+} // namespace
+
+bool http_get(const std::string &url, std::size_t limit, std::string *body, std::string *error)
+{
+    static std::once_flag once;
+    std::call_once(once, [] { curl_global_init(CURL_GLOBAL_DEFAULT); });
+    body->clear();
+    CURL *curl = curl_easy_init();
+    if (curl == nullptr)
+    {
+        *error = "curl did not start";
+        return false;
+    }
+    Sink sink{body, limit};
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, sink_write);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &sink);
+    curl_easy_setopt(curl, CURLOPT_CAINFO, kCaBundle);
+    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+    curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 3L);
+#if LIBCURL_VERSION_NUM >= 0x075500
+    curl_easy_setopt(curl, CURLOPT_PROTOCOLS_STR, "https");
+    curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS_STR, "https");
+#endif
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 10L);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 60L);
+    // Signals and threads do not mix: a worker thread calls this.
+    curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, "ORION-Media-Center/1");
+    const CURLcode code = curl_easy_perform(curl);
+    long status = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status);
+    curl_easy_cleanup(curl);
+    if (code != CURLE_OK)
+    {
+        *error = sink.over ? std::string("too large") : std::string(curl_easy_strerror(code));
+        return false;
+    }
+    if (status != 200)
+    {
+        *error = "HTTP " + std::to_string(status);
+        return false;
+    }
+    return true;
 }
 
 } // namespace hui::sys

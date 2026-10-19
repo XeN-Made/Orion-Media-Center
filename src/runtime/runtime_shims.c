@@ -6,8 +6,14 @@
 // the never-return main policy, and libc entry points the clean-room libc
 // shim does not provide but the statically linked Mesa runtime references.
 
+#include <dlfcn.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <net/if.h>
+#include <pwd.h>
+#include <sys/socket.h>
+#include <time.h>
+#include <unistd.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -158,4 +164,175 @@ int pclose(FILE *stream)
     (void)stream;
     errno = ENOSYS;
     return -1;
+}
+
+// --- What libcurl and OpenSSL reference (ORION's box art) ---
+
+// OpenSSL checks certificate dates with it: it has to be right. Days to a
+// civil date as in Howard Hinnant's "chrono-compatible low-level date
+// algorithms" (public domain).
+struct tm *gmtime_r(const time_t *clock, struct tm *result)
+{
+    static const int kBefore[12] = {0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334};
+    int64_t seconds = (int64_t)*clock;
+    int64_t days = seconds / 86400;
+    int64_t rest = seconds % 86400;
+    if (rest < 0)
+    {
+        rest += 86400;
+        --days;
+    }
+    result->tm_hour = (int)(rest / 3600);
+    result->tm_min = (int)(rest % 3600 / 60);
+    result->tm_sec = (int)(rest % 60);
+    int64_t weekday = (days + 4) % 7; // 1970-01-01 was a Thursday
+    result->tm_wday = (int)(weekday < 0 ? weekday + 7 : weekday);
+    const int64_t shifted = days + 719468;
+    const int64_t era = (shifted >= 0 ? shifted : shifted - 146096) / 146097;
+    const int64_t day_of_era = shifted - era * 146097;
+    const int64_t year_of_era =
+        (day_of_era - day_of_era / 1460 + day_of_era / 36524 - day_of_era / 146096) / 365;
+    const int64_t day_of_year =
+        day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
+    const int64_t month_index = (5 * day_of_year + 2) / 153;
+    const int64_t day = day_of_year - (153 * month_index + 2) / 5 + 1;
+    const int64_t month = month_index < 10 ? month_index + 3 : month_index - 9;
+    const int64_t year = year_of_era + era * 400 + (month <= 2 ? 1 : 0);
+    const int leap = (year % 4 == 0 && year % 100 != 0) || year % 400 == 0;
+    result->tm_year = (int)(year - 1900);
+    result->tm_mon = (int)(month - 1);
+    result->tm_mday = (int)day;
+    result->tm_yday = kBefore[month - 1] + (int)day - 1 + (leap && month > 2 ? 1 : 0);
+    result->tm_isdst = 0;
+    result->tm_gmtoff = 0;
+    result->tm_zone = (char *)"UTC";
+    return result;
+}
+
+// curl wakes its own waits through a pipe.
+int pipe2(int descriptors[2], int flags)
+{
+    if (pipe(descriptors) != 0)
+        return -1;
+    for (int i = 0; i < 2; ++i)
+    {
+        if ((flags & O_NONBLOCK) != 0)
+            fcntl(descriptors[i], F_SETFL, fcntl(descriptors[i], F_GETFL) | O_NONBLOCK);
+        if ((flags & O_CLOEXEC) != 0)
+            fcntl(descriptors[i], F_SETFD, FD_CLOEXEC);
+    }
+    return 0;
+}
+
+// A title has no user database: OpenSSL then looks no further for a home.
+int getpwuid_r(uid_t uid, struct passwd *entry, char *buffer, size_t size, struct passwd **result)
+{
+    (void)uid;
+    (void)entry;
+    (void)buffer;
+    (void)size;
+    *result = NULL;
+    return 0;
+}
+
+// Scoped IPv6 addresses, batched UDP (HTTP/3) and symbol lookup: unused by
+// plain HTTPS, so they say "not here".
+unsigned int if_nametoindex(const char *name)
+{
+    (void)name;
+    errno = ENXIO;
+    return 0;
+}
+
+ssize_t sendmmsg(int socket, struct mmsghdr *messages, size_t count, int flags)
+{
+    (void)socket;
+    (void)messages;
+    (void)count;
+    (void)flags;
+    errno = ENOSYS;
+    return -1;
+}
+
+ssize_t recvmmsg(int socket, struct mmsghdr *__restrict messages, size_t count, int flags,
+                 const struct timespec *__restrict timeout)
+{
+    (void)socket;
+    (void)messages;
+    (void)count;
+    (void)flags;
+    (void)timeout;
+    errno = ENOSYS;
+    return -1;
+}
+
+int dladdr(const void *address, Dl_info *info)
+{
+    (void)address;
+    (void)info;
+    return 0;
+}
+
+// _setjmp and _longjmp (no signal mask) for x86-64: the registers a callee
+// must preserve, the stack pointer and the return address, in a FreeBSD
+// jmp_buf (12 longs; 8 are used).
+__asm__(".text\n"
+        ".globl _setjmp\n"
+        ".type _setjmp,@function\n"
+        "_setjmp:\n"
+        "    movq (%rsp), %rdx\n"
+        "    movq %rdx, 0(%rdi)\n"
+        "    movq %rbx, 8(%rdi)\n"
+        "    leaq 8(%rsp), %rdx\n"
+        "    movq %rdx, 16(%rdi)\n"
+        "    movq %rbp, 24(%rdi)\n"
+        "    movq %r12, 32(%rdi)\n"
+        "    movq %r13, 40(%rdi)\n"
+        "    movq %r14, 48(%rdi)\n"
+        "    movq %r15, 56(%rdi)\n"
+        "    xorl %eax, %eax\n"
+        "    ret\n"
+        ".size _setjmp, .-_setjmp\n"
+        ".globl _longjmp\n"
+        ".type _longjmp,@function\n"
+        "_longjmp:\n"
+        "    movq 0(%rdi), %rdx\n"
+        "    movq 8(%rdi), %rbx\n"
+        "    movq 16(%rdi), %rsp\n"
+        "    movq 24(%rdi), %rbp\n"
+        "    movq 32(%rdi), %r12\n"
+        "    movq 40(%rdi), %r13\n"
+        "    movq 48(%rdi), %r14\n"
+        "    movq 56(%rdi), %r15\n"
+        "    movl %esi, %eax\n"
+        "    testl %eax, %eax\n"
+        "    jnz 1f\n"
+        "    incl %eax\n"
+        "1:  jmp *%rdx\n"
+        ".size _longjmp, .-_longjmp\n");
+
+// zstd (curl decompresses with it) asks for optional tracing hooks; 0 from a
+// begin hook turns tracing off.
+unsigned long long ZSTD_trace_compress_begin(const void *context)
+{
+    (void)context;
+    return 0;
+}
+
+void ZSTD_trace_compress_end(unsigned long long context, const void *trace)
+{
+    (void)context;
+    (void)trace;
+}
+
+unsigned long long ZSTD_trace_decompress_begin(const void *context)
+{
+    (void)context;
+    return 0;
+}
+
+void ZSTD_trace_decompress_end(unsigned long long context, const void *trace)
+{
+    (void)context;
+    (void)trace;
 }

@@ -128,6 +128,21 @@ replace the pinned SDK or install files globally. PacBrew recipes and every
 linked third-party library retain their upstream licenses; applications must
 review those terms before redistribution.
 
+ORION links these ports statically (`PACBREW_PACKAGES=libcurl` in the
+Makefile) to download box art over HTTPS:
+
+| Library | Version | License |
+| --- | --- | --- |
+| [curl](https://curl.se/) (libcurl) | 8.18.0 | curl license (MIT/X derivative) |
+| [OpenSSL](https://www.openssl.org/) (libssl, libcrypto) | 3.5.2 | Apache-2.0 |
+| [libpsl](https://github.com/rockdaboot/libpsl) | 0.21.5 | MIT |
+| [zstd](https://github.com/facebook/zstd) | 1.5.x | BSD-3-Clause (dual-licensed with GPL-2.0) |
+| [zlib](https://zlib.net/) | 1.3.2 | zlib license |
+
+`assets/certs/cacert.pem` is Mozilla's CA certificate list as Ubuntu's
+`ca-certificates` package bundles it, used to verify the box art server. It is
+distributed under the [Mozilla Public License 2.0](https://www.mozilla.org/MPL/2.0/).
+
 ## Independently authored runtime shim
 
 `tooling/native/libc_builder.cpp` and the manifests under

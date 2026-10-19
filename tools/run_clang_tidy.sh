@@ -51,12 +51,23 @@ if (( ${#app_c_sources[@]} )); then
     run_tidy app_c_sources -std=c11 -isystem "$sdk/target/include"
 fi
 
+# The headers of the PacBrew ports the app links (libcurl, for ORION's box
+# art), as system headers: the analyzer checks this code, not theirs.
+pacbrew_includes=()
+if [[ -n ${PACBREW_PACKAGES:-} ]]; then
+    read -r -a packages <<< "$PACBREW_PACKAGES"
+    resolution=$(bash "$root/tools/setup-pacbrew-dependencies.sh" --resolve "${packages[@]}")
+    mapfile -d '' pacbrew_includes < <(python3 -c \
+        'import json,sys; [print("-isystem" + v[2:], end="\0") for v in json.loads(sys.argv[1])["cflags"] if v.startswith("-I")]' \
+        "$resolution")
+fi
+
 mapfile -d '' app_cpp_sources < <(find "$root/src" -path "$root/src/third_party" -prune \
     -o -type f \( -name '*.cc' -o -name '*.cpp' \) -print0)
 app_cpp_sources+=("$root/tooling/native/app_crt.cpp" "$root/tooling/native/app_cpp_runtime.cpp")
 if (( ${#app_cpp_sources[@]} )); then
     run_tidy app_cpp_sources -std=c++20 -fno-exceptions -fno-rtti --target=x86_64-sie-ps5 \
         -DGL_GLEXT_PROTOTYPES=1 -I"$root/src" \
-        -isystem "$opengl" \
+        -isystem "$opengl" "${pacbrew_includes[@]}" \
         -isystem "$sdk/target/include/c++/v1" -isystem "$sdk/target/include"
 fi
