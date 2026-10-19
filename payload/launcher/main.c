@@ -9,8 +9,10 @@
 // app: it waits until no app is in front, then asks the system to start the
 // title for the foreground user. ShadowMountPlus mounts the title on its way
 // up, as it does for a launch from the home screen. Every step is appended to
-// /data/orion/launch.txt.
+// /data/orion/launch-helper.txt: a file of its own, since launch.txt belongs to
+// ORION's sandbox and the helper may not be allowed to write to it.
 
+#include <fcntl.h>
 #include <pthread.h>
 #include <stdarg.h>
 #include <stdint.h>
@@ -20,7 +22,7 @@
 #include <unistd.h>
 
 #define REQUEST_PATH "/data/orion/launch-request.txt"
-#define LOG_PATH "/data/orion/launch.txt"
+#define LOG_PATH "/data/orion/launch-helper.txt"
 #define WAIT_FOR_EXIT_MS 20000
 #define WAIT_FOR_LAUNCH_MS 15000
 
@@ -42,16 +44,21 @@ int sceUserServiceGetForegroundUser(int *user);
 
 static void say(const char *format, ...)
 {
-    FILE *log = fopen(LOG_PATH, "a");
-    if (log == NULL)
-        return;
-    fprintf(log, "%lld  helper  ", (long long)time(NULL));
+    char line[512];
+    int length = snprintf(line, sizeof(line), "%lld  helper  ", (long long)time(NULL));
     va_list arguments;
     va_start(arguments, format);
-    vfprintf(log, format, arguments);
+    length += vsnprintf(line + length, sizeof(line) - (size_t)length - 1, format, arguments);
     va_end(arguments);
-    fputc('\n', log);
-    fclose(log);
+    if (length > (int)sizeof(line) - 2)
+        length = (int)sizeof(line) - 2;
+    line[length++] = '\n';
+    // Plain appends, readable by everyone: the PC reads this file over FTP.
+    const int fd = open(LOG_PATH, O_WRONLY | O_CREAT | O_APPEND, 0666);
+    if (fd < 0)
+        return;
+    write(fd, line, (size_t)length);
+    close(fd);
 }
 
 // Four capital letters and five digits.
