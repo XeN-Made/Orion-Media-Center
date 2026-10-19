@@ -24,6 +24,7 @@ src/library/favourites.cpp
 src/library/icon.cpp
 src/library/json.cpp
 src/library/library.cpp
+src/orion/*.cpp
 src/third_party/stb/image.c
 src/third_party/stb/vorbis.c
 src/ui/components/*.cpp

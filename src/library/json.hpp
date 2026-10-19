@@ -81,6 +81,9 @@ class Value
     std::vector<std::pair<std::string, Value>> members_;
 };
 
+// text as a JSON string literal, quotes included: what a writer needs.
+std::string quote(std::string_view text);
+
 // Parses a whole document (RFC 8259; a UTF-8 byte order mark is skipped).
 // Nesting deeper than 64 levels is refused. On failure *out is left null and
 // *error, when given, says where.

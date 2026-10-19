@@ -385,6 +385,44 @@ class Parser
     std::string error_;
 };
 
+std::string quote(std::string_view text)
+{
+    std::string out = "\"";
+    for (char c : text)
+    {
+        switch (c)
+        {
+        case '"':
+            out += "\\\"";
+            break;
+        case '\\':
+            out += "\\\\";
+            break;
+        case '\n':
+            out += "\\n";
+            break;
+        case '\r':
+            out += "\\r";
+            break;
+        case '\t':
+            out += "\\t";
+            break;
+        default:
+            if (static_cast<unsigned char>(c) < 0x20)
+            {
+                char escape[8];
+                std::snprintf(escape, sizeof(escape), "\\u%04x", static_cast<unsigned>(c));
+                out += escape;
+            }
+            else
+            {
+                out += c;
+            }
+        }
+    }
+    return out + "\"";
+}
+
 bool parse(std::string_view text, Value *out, std::string *error)
 {
     Parser parser(text);
