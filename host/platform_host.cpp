@@ -49,4 +49,10 @@ void quit()
     std::exit(0);
 }
 
+int launch_app(const char *title_id)
+{
+    std::fprintf(stderr, "[HUI] launch %s: not on a console\n", title_id);
+    return kLaunchUnsupported;
+}
+
 } // namespace hui::sys

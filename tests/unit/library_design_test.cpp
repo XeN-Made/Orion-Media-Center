@@ -138,9 +138,10 @@ TEST_F(LibraryDesign, CrossMovesATitleToACustomTabAndItIsRemembered)
     library_.state_dir = dir;
     auto design = with_fixture();
 
-    // Cross opens the menu on Ciel Ouvert: Favourite, then Move to RPGs.
+    // Cross opens the menu on Ciel Ouvert: Launch, Favourite, then Move to RPGs.
     send(*design, press(hui::Action::confirm));
     EXPECT_FALSE(last_cues_.empty());
+    send(*design, nav(Direction::down));
     send(*design, nav(Direction::down));
     send(*design, press(hui::Action::confirm));
     expect_drawable(*design);
@@ -159,6 +160,24 @@ TEST_F(LibraryDesign, CrossMovesATitleToACustomTabAndItIsRemembered)
     auto again = hui::concepts::make_library(context_);
     send(*again, nav(Direction::right));
     EXPECT_TRUE(played(Cue::error));
+}
+
+TEST_F(LibraryDesign, LaunchSaysWhatHappenedAndLogsIt)
+{
+    const std::string dir = ::testing::TempDir() + "orion-design-launch";
+    ASSERT_TRUE(hui::save::ensure_directory(dir));
+    std::remove((dir + "/launch.txt").c_str());
+    library_.state_dir = dir;
+    auto design = with_fixture();
+    // Cross, then Cross on Launch: on a PC the system launcher is absent.
+    send(*design, press(hui::Action::confirm));
+    send(*design, press(hui::Action::confirm));
+    EXPECT_TRUE(played(Cue::error));
+    expect_drawable(*design);
+    std::string log;
+    ASSERT_TRUE(hui::save::read_file(dir + "/launch.txt", &log));
+    EXPECT_NE(log.find("PPSA90108"), std::string::npos);
+    EXPECT_NE(log.find("refused"), std::string::npos);
 }
 
 TEST_F(LibraryDesign, ItStartsOnAllWhenAskedNotToRemember)

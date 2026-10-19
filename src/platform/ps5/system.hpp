@@ -30,4 +30,13 @@ void sleep_us(std::uint32_t microseconds);
 // Parks if the request is refused.
 [[noreturn]] void quit();
 
+// What launch_app returns on a PC, where there is nothing to launch.
+constexpr int kLaunchUnsupported = -1;
+
+// Asks the system to start an installed title for the foreground user
+// (sceSystemServiceLaunchApp). 0 means the request was accepted and the
+// system takes it from there (it closes this app to start the other); any
+// other value is the system's refusal code.
+int launch_app(const char *title_id);
+
 } // namespace hui::sys

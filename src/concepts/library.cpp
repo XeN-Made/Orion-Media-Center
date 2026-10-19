@@ -4,8 +4,8 @@
 //
 // ORION's home: every title ShadowMountPlus can mount (library/library.hpp),
 // as a grid of covers on shelves: All, Games, Homebrew, Media, Favourites,
-// then the player's own tabs. Cross on a cover opens a menu to star it or
-// move it to a tab; Options opens Settings (orion/settings_panel.hpp), where
+// then the player's own tabs. Cross on a cover opens a menu to launch it,
+// star it or move it to a tab; Options opens Settings (orion/settings_panel.hpp), where
 // the look and the library's behaviour are edited live. Everything the
 // player chooses is written to <state_dir> the moment it changes:
 // favourites.json, library.json (tabs, placements, last tab, sort) and
@@ -14,11 +14,13 @@
 
 #include "concepts/concepts.hpp"
 
+#include "core/save_file.hpp"
 #include "core/tween.hpp"
 #include "library/favourites.hpp"
 #include "orion/look.hpp"
 #include "orion/prefs.hpp"
 #include "orion/settings_panel.hpp"
+#include "platform/ps5/system.hpp"
 #include "ui/components/grid.hpp"
 #include "ui/components/keyboard.hpp"
 #include "ui/components/menu.hpp"
@@ -31,7 +33,9 @@
 #include <cctype>
 #include <cmath>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
+#include <ctime>
 #include <string>
 #include <vector>
 
@@ -118,6 +122,7 @@ constexpr const char *kTechniques[] = {
     "Custom tabs and placements, the last tab and the sort kept in library.json",
     "A look edited live in Settings and kept in theme.json, over any base theme",
     "Live search from the on-screen keyboard; the grid filters as you type",
+    "Launches through the system launcher and logs every attempt to launch.txt",
 };
 
 constexpr app::TourStep kTour[] = {
@@ -129,6 +134,10 @@ constexpr app::TourStep kTour[] = {
     {0.3f, action_bit(Action::jump_prev)},
     {0.6f, action_bit(Action::confirm), Direction::none, "favourite"},
     {0.6f, action_bit(Action::back), Direction::none, "title-menu"},
+    // Launch from the menu: on a PC the card says it needs the console.
+    {0.4f, action_bit(Action::confirm)},
+    {0.4f, action_bit(Action::confirm)},
+    {0.7f, 0, Direction::none, "launch"},
     {0.4f, action_bit(Action::menu)},
     {0.9f, 0, Direction::down, "settings"},
     {0.5f, action_bit(Action::back)},
@@ -383,6 +392,10 @@ class Library final : public app::Concept
         keys_.update(dt);
         menu_.update(dt);
         settings_.update(dt);
+        launch_shown_ = std::max(0.0f, launch_shown_ - dt);
+        launch_pending_ = std::max(0.0f, launch_pending_ - dt);
+        launch_card_.target = launch_shown_ > 0.0f ? 1.0f : 0.0f;
+        launch_card_.update(dt, reduced ? 60.0f : 14.0f);
         keyboard_shown_.target = typing_ != Typing::none ? 1.0f : 0.0f;
         keyboard_shown_.update(dt, reduced ? 60.0f : 16.0f);
     }
@@ -435,6 +448,7 @@ class Library final : public app::Concept
             draw_keyboard(canvas, paint);
         else
             draw_hints(list, paint);
+        draw_launch_card(list, paint);
         settings_.draw(canvas);
         menu_.draw(canvas); // last: it belongs to whatever it was opened over
         list.pop_opacity();
@@ -624,6 +638,13 @@ class Library final : public app::Concept
         const orion::CustomTab *placed = prefs_.placement(title.id);
 
         std::vector<ui::MenuItem> items;
+        ui::MenuItem launch = menu_item("Launch");
+        launch.tag = kItemLaunch;
+        launch.disabled = launch_pending_ > 0.0f;
+        items.push_back(launch);
+        ui::MenuItem gap;
+        gap.separator = true;
+        items.push_back(gap);
         ui::MenuItem favourite =
             menu_item(favourite_of(title.id) ? "Remove from Favourites" : "Add to Favourites");
         favourite.shortcut = "Square";
@@ -651,12 +672,6 @@ class Library final : public app::Concept
             unplace.danger = true;
             items.push_back(unplace);
         }
-        items.push_back(line);
-        ui::MenuItem launch = menu_item("Launch");
-        launch.shortcut = "Coming soon";
-        launch.disabled = true;
-        launch.tag = kItemLaunch;
-        items.push_back(launch);
         menu_.set_items(std::move(items));
         menu_.open(grid_.cell_rect(grid_.focus()), feedback);
     }
@@ -695,6 +710,11 @@ class Library final : public app::Concept
 
         if (menu_for_ == MenuFor::title)
         {
+            if (tag == kItemLaunch)
+            {
+                launch(menu_title_, feedback);
+                return;
+            }
             if (tag == kItemFavourite)
             {
                 toggle_favourite(menu_title_, feedback);
@@ -734,6 +754,55 @@ class Library final : public app::Concept
         rebuild_tabs(active_key());
         rebuild();
         settings_.refresh(look_, prefs_);
+    }
+
+    // Hands the title to the system launcher. Accepted, the system closes
+    // ORION and starts it (ShadowMountPlus mounts it on the way); refused,
+    // the card says so with the system's code. Every attempt is appended to
+    // <state_dir>/launch.txt, so a run on the console can be read back.
+    void launch(const std::string &id, app::Feedback &feedback)
+    {
+        const Title *title = nullptr;
+        for (const Title &t : titles())
+        {
+            if (t.id == id)
+                title = &t;
+        }
+        if (title == nullptr || launch_pending_ > 0.0f)
+            return;
+        const int result = sys::launch_app(title->id.c_str());
+        char code[16];
+        std::snprintf(code, sizeof(code), "0x%08x", static_cast<unsigned>(result));
+        launch_ok_ = result == 0;
+        if (launch_ok_)
+            launch_message_ = "Starting " + title->name + "\u2026";
+        else if (result == sys::kLaunchUnsupported)
+            launch_message_ = "Launching works on the console only";
+        else
+            launch_message_ = "The console did not start " + title->name + " (" + code + ")";
+        launch_shown_ = 6.0f;
+        // A request in flight is not repeated while the system acts on it.
+        launch_pending_ = launch_ok_ ? 15.0f : 0.0f;
+        feedback.play(launch_ok_ ? audio::Cue::launch : audio::Cue::error);
+        log_launch(*title, code, launch_ok_);
+    }
+
+    void log_launch(const Title &title, const char *code, bool accepted) const
+    {
+        const std::string &dir = context_.library.state_dir;
+        if (dir.empty() || !save::ensure_directory(dir))
+            return;
+        std::string text;
+        save::read_file(dir + "/launch.txt", &text, 64u << 10);
+        char line[256];
+        std::snprintf(line, sizeof(line), "%lld  %s  %s  result=%s  %s\n",
+                      static_cast<long long>(std::time(nullptr)), title.id.c_str(),
+                      title.name.c_str(), code, accepted ? "accepted" : "refused");
+        // The newest lines are the ones that matter; keep the file small.
+        text += line;
+        if (text.size() > 32u << 10)
+            text.erase(0, text.find('\n', text.size() - (24u << 10)) + 1);
+        save::write_atomic(dir + "/launch.txt", text);
     }
 
     void toggle_favourite(const std::string &id, app::Feedback &feedback)
@@ -1130,6 +1199,27 @@ class Library final : public app::Concept
         sheen(list, track, track.h * 0.5f, false); // the bar has a rim of its own
     }
 
+    // What the system said to a launch: a glass card rising above the hints.
+    void draw_launch_card(gfx::DrawList &list, ui::Painter &paint) const
+    {
+        const float shown = tween::cubic_out(launch_card_.value);
+        if (shown <= 0.01f)
+            return;
+        const ui::Fonts &fonts = context_.fonts;
+        const float width = fonts.semibold.font->measure(launch_message_, 24.0f) + 96.0f;
+        const Rect card{gfx::kVirtualWidth * 0.5f - width * 0.5f, 880.0f + 24.0f * (1.0f - shown),
+                        width, 68.0f};
+        list.push_opacity(shown);
+        glass_panel(list, paint, card, 34.0f);
+        const Color dot = launch_ok_ ? theme_.success : theme_.warning;
+        list.glow({card.x + 28.0f, card.y + 27.0f, 14.0f, 14.0f}, 7.0f, 10.0f,
+                  dot.with_alpha(0.6f));
+        list.circle(card.x + 35.0f, card.y + 34.0f, 7.0f, dot);
+        ui::text(list, fonts.semibold, launch_message_.c_str(), card.x + 60.0f, card.y + 43.0f, 24,
+                 paint.page_text());
+        list.pop_opacity();
+    }
+
     // The keyboard overlay: a veil, what is being typed in a field, the keys.
     void draw_keyboard(ui::Canvas &canvas, ui::Painter &paint) const
     {
@@ -1188,6 +1278,11 @@ class Library final : public app::Concept
     ui::Menu menu_;
     orion::SettingsPanel settings_;
     tween::Spring keyboard_shown_;
+    std::string launch_message_;
+    bool launch_ok_ = false;
+    float launch_shown_ = 0.0f;   // seconds the card stays
+    float launch_pending_ = 0.0f; // seconds before another launch is taken
+    tween::Spring launch_card_;
     float age_ = 0.0f;
     float clock_ = 0.0f;
 };

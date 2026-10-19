@@ -5,6 +5,7 @@
 #include "platform/ps5/system.hpp"
 
 #include <cstdarg>
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <ctime>
@@ -15,6 +16,20 @@ extern "C"
     int sceKernelUsleep(unsigned int microseconds);
     int sceSystemServiceHideSplashScreen(void);
     int sceSystemServiceLoadExec(const char *path, const char **arguments);
+    int sceUserServiceGetForegroundUser(int *user);
+    int sceUserServiceGetInitialUser(int *user);
+
+    // The launch parameters as the PS5 homebrew loader passes them
+    // (github.com/ps5-payload-dev, hbldr.c): only the user is filled in.
+    struct HuiLaunchParam
+    {
+        std::uint32_t structsize;
+        std::uint32_t user_id;
+        std::uint32_t app_opt;
+        std::uint64_t crash_report;
+        std::uint32_t check_flag;
+    };
+    int sceSystemServiceLaunchApp(const char *title_id, char **argv, HuiLaunchParam *param);
 }
 
 extern "C" void hui_release_splash(void) __attribute__((weak));
@@ -75,6 +90,19 @@ void quit()
     const int refused = sceSystemServiceLoadExec("exit", nullptr);
     log("[HUI] quit refused rc=0x%x", static_cast<unsigned>(refused));
     park();
+}
+
+int launch_app(const char *title_id)
+{
+    int user = 0;
+    if (sceUserServiceGetForegroundUser(&user) != 0)
+        sceUserServiceGetInitialUser(&user);
+    HuiLaunchParam param = {};
+    param.user_id = static_cast<std::uint32_t>(user);
+    const int result = sceSystemServiceLaunchApp(title_id, nullptr, &param);
+    log("[HUI] launch %s user=0x%08x result=0x%08x", title_id, static_cast<unsigned>(user),
+        static_cast<unsigned>(result));
+    return result;
 }
 
 } // namespace hui::sys
