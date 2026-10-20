@@ -361,6 +361,7 @@ LibraryPrefs load_prefs(const std::string &state_dir)
     prefs.last_tab = root["last_tab"].string_or(prefs.last_tab);
     prefs.sort = root["sort"].string_or(prefs.sort);
     prefs.reopen_last_tab = root["reopen_last_tab"].bool_or(prefs.reopen_last_tab);
+    prefs.group_systems = root["group_systems"].bool_or(prefs.group_systems);
     prefs.moved_leave_shelf = root["moved_leave_shelf"].bool_or(prefs.moved_leave_shelf);
     prefs.auto_art = root["auto_art"].bool_or(prefs.auto_art);
     prefs.return_on_close = root["return_on_close"].bool_or(prefs.return_on_close);
@@ -395,6 +396,7 @@ bool save_prefs(const std::string &state_dir, const LibraryPrefs &prefs)
     text += "  \"sort\": " + json::quote(prefs.sort) + ",\n";
     text +=
         std::string("  \"reopen_last_tab\": ") + (prefs.reopen_last_tab ? "true" : "false") + ",\n";
+    text += std::string("  \"group_systems\": ") + (prefs.group_systems ? "true" : "false") + ",\n";
     text += std::string("  \"moved_leave_shelf\": ") +
             (prefs.moved_leave_shelf ? "true" : "false") + ",\n";
     text += std::string("  \"auto_art\": ") + (prefs.auto_art ? "true" : "false") + ",\n";

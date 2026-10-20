@@ -86,6 +86,7 @@ struct Placement
 //     "last_tab": "tab:t1",
 //     "sort": "recent",
 //     "reopen_last_tab": true,
+//     "group_systems": false,
 //     "moved_leave_shelf": true,
 //     "auto_art": true,
 //     "return_on_close": true,
@@ -117,6 +118,8 @@ struct LibraryPrefs
     std::string last_tab = "all";
     std::string sort = "name"; // "name", "name_reversed", "recent", "platform"
     bool reopen_last_tab = true;
+    // The emulated systems share one Emulators tab, a row of their own under it.
+    bool group_systems = false;
     // A title moved to a custom tab leaves its Games / Homebrew / Media
     // shelf; it always stays in All.
     bool moved_leave_shelf = true;

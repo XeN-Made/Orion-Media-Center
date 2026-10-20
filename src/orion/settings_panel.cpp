@@ -24,6 +24,7 @@ enum : int
 {
     kSort = 1,
     kReopen,
+    kGroupSystems,
     kLeaveShelf,
     kBase,
     kBackground,
@@ -403,6 +404,8 @@ void SettingsPanel::build_tabs(const LibraryPrefs &prefs)
     ui::FormRow &add = form_.add_action(kNewTab, "New tab");
     add.chevron = true;
     add.description = "A shelf of your own: move any game into it from its menu";
+    form_.add_toggle(kGroupSystems, "Group emulator tabs", prefs.group_systems).description =
+        "One Emulators tab, with a row for each system under it: L2 and R2 change system";
     for (std::size_t i = 0; i < tabs_.size(); ++i)
     {
         const TabEntry &tab = tabs_[i];
@@ -462,7 +465,7 @@ void SettingsPanel::build_tab_page(const LibraryPrefs &prefs)
         .add_choice(kPageCover, "Cover shape", {kCoverNames, kCoverNames + 4},
                     static_cast<int>(prefs.tab_cover(page_)))
         .description = "Square for console icons; the box's own shape for box art";
-    std::vector<std::string> sorts = {std::string("Library's (") +
+    std::vector<std::string> sorts = {std::string("Default (") +
                                       kSortNames[sort_index(prefs.sort)] + ")"};
     sorts.insert(sorts.end(), kSortNames, kSortNames + kSortCount);
     const std::string sort = prefs.tab_sort(page_);
@@ -976,6 +979,9 @@ SettingsPanel::Change SettingsPanel::handle(const InputFrame &input, ui::Feedbac
     {
     case kSort:
         prefs->sort = kSortKeys[std::clamp(form_.choice_index(kSort), 0, kSortCount - 1)];
+        return Change::prefs;
+    case kGroupSystems:
+        prefs->group_systems = form_.toggle_value(kGroupSystems);
         return Change::prefs;
     case kReopen:
         prefs->reopen_last_tab = form_.toggle_value(kReopen);

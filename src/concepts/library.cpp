@@ -65,6 +65,9 @@ constexpr float kTabEdge = 76.0f;     // room for L1 (and R1 after the tabs)
 constexpr float kTabsWidth = 1180.0f; // the tab bar between them
 constexpr float kSortWidth = 330.0f;  // the sort picker in the header
 constexpr float kGridTop = 280.0f;
+constexpr float kSubTop = 262.0f;                  // the systems' row under the Emulators tab
+constexpr float kSubRoom = 56.0f;                  // how far the covers move down for it
+constexpr const char *kEmulatorsTab = "emulators"; // its key
 constexpr float kGridBottom = 972.0f;
 // Seven columns keep two whole rows in view, so scrolling never leaves a
 // single row alone on the screen.
@@ -192,6 +195,7 @@ constexpr app::TourStep kTour[] = {
     {0.12f, 0, Direction::down},
     {0.12f, 0, Direction::down},
     {0.12f, 0, Direction::down},
+    {0.12f, 0, Direction::down}, // past Group emulator tabs
     {0.7f, 0, Direction::none, "settings-tabs"},
     {0.3f, action_bit(Action::confirm)},
     {0.8f, 0, Direction::none, "settings-tab-page"},
@@ -449,6 +453,17 @@ class Library final : public app::Concept
         tabs_.style.focus_ring = false;
         // Between L1 and R1, which say there is more to either side.
         tabs_.set_bounds({kMargin + kTabEdge, kTabsTop, kTabsWidth, 56.0f});
+        // The systems, when they share the Emulators tab: a lighter row.
+        subtabs_.style.kind = ui::TabKind::underline;
+        subtabs_.style.track = false;
+        subtabs_.style.height = 42.0f;
+        subtabs_.style.text_size = 19.0f;
+        subtabs_.style.badge_size = 14.0f;
+        subtabs_.style.padding = 16.0f;
+        subtabs_.style.thickness = 3.0f;
+        subtabs_.style.on_page = true;
+        subtabs_.style.focus_ring = false;
+        subtabs_.set_bounds({kMargin + kTabEdge, kSubTop, kTabsWidth, 44.0f});
 
         // The tab's order, at the header's right.
         sort_.style.label = ui::SelectLabel::none;
@@ -651,6 +666,7 @@ class Library final : public app::Concept
             update_browse(input, feedback);
 
         tabs_.update(dt);
+        subtabs_.update(dt);
         grid_.set_active(!header_focus_);
         grid_.update(dt);
         sort_.set_active(header_focus_);
@@ -715,7 +731,12 @@ class Library final : public app::Concept
         draw_header(list, paint);
         sort_.draw(canvas);
         tabs_.draw(canvas);
-        draw_tab_edges(list, paint);
+        draw_tab_edges(list, paint, tabs_, ui::Button::l1, ui::Button::r1, 40.0f, false);
+        if (on_emulators_tab())
+        {
+            subtabs_.draw(canvas);
+            draw_tab_edges(list, paint, subtabs_, ui::Button::l2, ui::Button::r2, 34.0f, true);
+        }
         draw_tab_sheen(list);
         draw_query(list, paint);
         if (grid_.count() > 0)
@@ -753,6 +774,7 @@ class Library final : public app::Concept
         shown_ = shown_look();
         theme_ = orion::themed(shown_, themes_);
         tabs_.style.theme = grid_.style.theme = menu_.style.theme = sort_.style.theme = theme_;
+        subtabs_.style.theme = theme_;
         sort_.style.reduced_motion = context_.settings.reduced_motion;
         keys_.style.theme = clear_glass(theme_);
         grid_.style.card.radius = shown_.corners;
@@ -934,6 +956,20 @@ class Library final : public app::Concept
             input.is_pressed(Action::page_next) || input.is_pressed(Action::jump_next);
         const bool previous =
             input.is_pressed(Action::page_prev) || input.is_pressed(Action::jump_prev);
+        // On the Emulators tab, L2 and R2 change system instead.
+        const bool sub_next = input.is_pressed(Action::jump_next);
+        const bool sub_previous = input.is_pressed(Action::jump_prev);
+        if (on_emulators_tab() && (sub_next || sub_previous))
+        {
+            if (subtabs_.step(sub_next ? 1 : -1, input, feedback) == ui::Event::changed)
+            {
+                prefs_.last_tab = active_key();
+                save_prefs();
+                restyle();
+                rebuild();
+            }
+            return;
+        }
         if (next || previous)
         {
             if (tabs_.step(next ? 1 : -1, input, feedback) == ui::Event::changed)
@@ -2053,12 +2089,29 @@ class Library final : public app::Concept
         return std::find(favourites_.begin(), favourites_.end(), id) != favourites_.end();
     }
 
+    // The tab whose covers show: on the Emulators tab, the system picked
+    // under it, so each system keeps its own theme, sort and covers.
     std::string active_key() const
+    {
+        const std::string bar = bar_key();
+        const int sub = subtabs_.active();
+        if (bar == kEmulatorsTab && sub >= 0 && sub < static_cast<int>(sub_keys_.size()))
+            return sub_keys_[static_cast<std::size_t>(sub)];
+        return bar;
+    }
+
+    // The tab active in the tab bar itself.
+    std::string bar_key() const
     {
         const int active = tabs_.active();
         return active >= 0 && active < static_cast<int>(tab_keys_.size())
                    ? tab_keys_[static_cast<std::size_t>(active)]
                    : std::string("all");
+    }
+
+    bool on_emulators_tab() const
+    {
+        return bar_key() == kEmulatorsTab;
     }
 
     bool on_tab(const Title &title, const std::string &key) const
@@ -2070,6 +2123,8 @@ class Library final : public app::Concept
         {
             if (!prefs_.system_enabled(title.system))
                 return false;
+            if (key == kEmulatorsTab)
+                return true;
             if (key == "favourites")
                 return favourite_of(title.id);
             if (key.rfind("sys:", 0) == 0)
@@ -2124,10 +2179,28 @@ class Library final : public app::Concept
             if (!prefs_.tab_hidden(shelf.key))
                 add(shelf.key, shelf.name);
         }
+        // The systems: a tab each, or one Emulators tab with a row of them.
+        sub_keys_.clear();
+        std::vector<ui::TabItem> systems;
         for (const library::System &system : context_.library.emulator.systems)
         {
-            if (prefs_.system_enabled(system.name))
-                add("sys:" + system.name, system.short_name);
+            if (!prefs_.system_enabled(system.name))
+                continue;
+            ui::TabItem item;
+            item.label = system.short_name;
+            item.badge = system.games;
+            systems.push_back(std::move(item));
+            sub_keys_.push_back("sys:" + system.name);
+        }
+        const bool grouped = prefs_.group_systems && !sub_keys_.empty();
+        if (grouped)
+            add(kEmulatorsTab, "Emulators");
+        else
+        {
+            for (std::size_t i = 0; i < sub_keys_.size(); ++i)
+                add(sub_keys_[i], systems[i].label);
+            sub_keys_.clear();
+            systems.clear();
         }
         for (const orion::CustomTab &tab : prefs_.tabs)
         {
@@ -2135,10 +2208,21 @@ class Library final : public app::Concept
                 add("tab:" + tab.id, tab.name);
         }
         tabs_.set_tabs(std::move(tabs));
+        subtabs_.set_tabs(std::move(systems));
+        // A system asked for while grouped is the Emulators tab and its row.
+        int sub = 0;
+        for (std::size_t i = 0; i < sub_keys_.size(); ++i)
+        {
+            if (sub_keys_[i] == active)
+                sub = static_cast<int>(i);
+        }
+        subtabs_.set_active(sub, true);
+        const std::string bar =
+            grouped && active.rfind("sys:", 0) == 0 ? std::string(kEmulatorsTab) : active;
         int index = 0;
         for (std::size_t i = 0; i < tab_keys_.size(); ++i)
         {
-            if (tab_keys_[i] == active)
+            if (tab_keys_[i] == bar)
                 index = static_cast<int>(i);
         }
         tabs_.set_active(index, true);
@@ -2157,6 +2241,13 @@ class Library final : public app::Concept
             tabs_.tab(static_cast<int>(i)).badge =
                 static_cast<int>(std::count_if(titles().begin(), titles().end(), [&](const Title &t)
                                                { return on_tab(t, tab_keys_[i]); }));
+        for (std::size_t i = 0; i < sub_keys_.size(); ++i)
+            subtabs_.tab(static_cast<int>(i)).badge =
+                static_cast<int>(std::count_if(titles().begin(), titles().end(), [&](const Title &t)
+                                               { return on_tab(t, sub_keys_[i]); }));
+        // The covers make room for the systems' row on the Emulators tab.
+        const float top = on_emulators_tab() ? kGridTop + kSubRoom : kGridTop;
+        grid_.set_bounds({kMargin, top, gfx::kVirtualWidth - 2.0f * kMargin, kGridBottom - top});
 
         const std::string key = active_key();
         const std::string needle = folded(query_);
@@ -2310,39 +2401,42 @@ class Library final : public app::Concept
         list.pop_opacity();
     }
 
-    // L1 and R1 either side of the tab bar: bright, with how many, where
-    // tabs are out of view on that side; faint where there are none.
-    void draw_tab_edges(gfx::DrawList &list, const ui::Painter &paint) const
+    // The buttons that turn a tab row, either side of it: bright, with how
+    // many, where tabs are out of view on that side; faint where there are
+    // none. The count on the left goes above the button, or below it
+    // (below: the row under the main one).
+    void draw_tab_edges(gfx::DrawList &list, const ui::Painter &paint, const ui::TabBar &row,
+                        ui::Button previous, ui::Button next, float size, bool below) const
     {
         const ui::Fonts &fonts = context_.fonts;
-        const Rect bar = tabs_.bounds();
+        const Rect bar = row.bounds();
         int left = 0;
         int right = 0;
-        for (int i = 0; i < static_cast<int>(tabs_.tabs().size()); ++i)
+        for (int i = 0; i < static_cast<int>(row.tabs().size()); ++i)
         {
-            const Rect tab = tabs_.tab_rect(fonts, i);
+            const Rect tab = row.tab_rect(fonts, i);
             if (tab.cx() < bar.x)
                 ++left;
             else if (tab.cx() > bar.x + bar.w)
                 ++right;
         }
-        constexpr float kSize = 40.0f;
         const float cy = bar.y + bar.h * 0.5f; // draw_button centres on it
         const auto edge = [&](ui::Button button, float x, int hidden, bool after)
         {
             list.push_opacity(hidden > 0 ? 1.0f : 0.35f);
-            ui::draw_button(list, fonts, glyphs(), button, x, cy, kSize);
+            ui::draw_button(list, fonts, glyphs(), button, x, cy, size);
             list.pop_opacity();
             if (hidden <= 0)
                 return;
             const std::string more = "+" + std::to_string(hidden);
-            const float w = ui::button_width(button, kSize);
-            ui::text(list, fonts.semibold, more.c_str(), after ? x + w + 10.0f : x + w * 0.5f,
-                     after ? cy + 7.0f : cy + 38.0f, after ? 20.0f : 17.0f, paint.page_text_muted(),
+            const float w = ui::button_width(button, size);
+            const float y = after ? cy + 7.0f : below ? cy + size * 0.95f : cy - size * 0.5f;
+            ui::text(list, fonts.semibold, more.c_str(), after ? x + w + 10.0f : x + w * 0.5f, y,
+                     after ? 20.0f : 16.0f, paint.page_text_muted(),
                      after ? gfx::Align::left : gfx::Align::center);
         };
-        edge(ui::Button::l1, kMargin, left, false);
-        edge(ui::Button::r1, bar.x + bar.w + 12.0f, right, true);
+        edge(previous, kMargin, left, false);
+        edge(next, bar.x + bar.w + 12.0f, right, true);
     }
 
     // The active search, at the right of the tab row, with how to clear it.
@@ -2568,21 +2662,26 @@ class Library final : public app::Concept
 
     void draw_hints(gfx::DrawList &list, ui::Painter &paint) const
     {
+        // On the Emulators tab, L2 / R2 change system: said first.
+        const bool systems = on_emulators_tab();
         const ui::Hint hints[] = {
+            {ui::Button::l2, "System", ui::Button::r2},
             {ui::Button::l1, "Shelf", ui::Button::r1},
             {ui::Button::cross, "Launch"},
             {ui::Button::square, "Favourite"},
             {ui::Button::triangle, "Search"},
             {ui::Button::options, "More"},
         };
+        const ui::Hint *shown = systems ? hints : hints + 1;
+        const int count = systems ? 6 : 5;
         const float right = gfx::kVirtualWidth - kMargin;
         ui::HintLayout layout;
         layout.size = 46.0f;
         layout.text_size = 26.0f;
         layout.cy = 1010.0f;
-        const float width = ui::measure_hints(context_.fonts, hints, 5, layout);
+        const float width = ui::measure_hints(context_.fonts, shown, count, layout);
         plate(list, paint, {right - width - 30.0f, 972.0f, width + 60.0f, 76.0f}, 38.0f);
-        ui::draw_hints(list, context_.fonts, glyphs(), hints, 5, right, true, layout);
+        ui::draw_hints(list, context_.fonts, glyphs(), shown, count, right, true, layout);
     }
 
     // A bar at the bottom of the screen, as the look asks: glass, or its rim.
@@ -2766,6 +2865,8 @@ class Library final : public app::Concept
     std::string menu_title_; // the title a menu is about
     std::string menu_tab_;   // the tab a menu (or a rename) is about
     ui::TabBar tabs_;
+    ui::TabBar subtabs_;                // the systems, under the Emulators tab (grouped)
+    std::vector<std::string> sub_keys_; // "sys:..." for each of them
     ui::GridView grid_;
     ui::Select sort_;           // the tab's order, in the header (Up from the top row)
     bool header_focus_ = false; // the sort picker has the focus

@@ -43,6 +43,11 @@ TEST(OrionPrefs, TabsAndPlacementsRoundTrip)
     EXPECT_TRUE(prefs.tabs.empty());
     EXPECT_EQ(prefs.last_tab, "all");
     EXPECT_TRUE(prefs.reopen_last_tab);
+    EXPECT_FALSE(prefs.group_systems); // a tab per system until asked
+    prefs.group_systems = true;
+    ASSERT_TRUE(orion::save_prefs(dir, prefs));
+    EXPECT_TRUE(orion::load_prefs(dir).group_systems);
+    prefs.group_systems = false;
 
     const std::string rpgs = prefs.add_tab("  RPGs \"2026\"  ").id;
     const std::string kids = prefs.add_tab("").id;
