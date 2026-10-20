@@ -93,6 +93,41 @@ TEST_F(LibraryDesign, TheSetupWalksThroughEveryStep)
     EXPECT_TRUE(hui::orion::load_prefs(dir).setup_done);
 }
 
+// With something played, the All tab has a Continue playing row between the
+// covers and the sort picker: up from the first row reaches it, up again the
+// picker, and down comes back the same way.
+TEST_F(LibraryDesign, ContinuePlayingSitsAboveTheCovers)
+{
+    const std::string dir = ::testing::TempDir() + "orion-design-continue";
+    ASSERT_TRUE(hui::save::ensure_directory(dir));
+    std::remove((dir + "/library.json").c_str());
+    ASSERT_TRUE(hui::save::write_atomic(dir + "/play-log.txt", "100 200 PPSA90101\n").empty());
+    library_.state_dir = dir;
+    auto design = with_fixture();
+    send(*design, nav(Direction::up));
+    EXPECT_TRUE(played(Cue::focus));
+    // One title in the row: left and right refuse.
+    send(*design, nav(Direction::right));
+    EXPECT_TRUE(played(Cue::error));
+    expect_drawable(*design);
+    send(*design, nav(Direction::up)); // the sort picker
+    EXPECT_TRUE(played(Cue::focus));
+    send(*design, nav(Direction::down)); // the row again
+    send(*design, nav(Direction::down)); // the covers
+    send(*design, nav(Direction::right));
+    EXPECT_TRUE(played(Cue::focus));
+    // Off in the prefs, the row is gone: up goes straight to the picker.
+    hui::orion::LibraryPrefs prefs;
+    prefs.continue_row = false;
+    ASSERT_TRUE(hui::orion::save_prefs(dir, prefs));
+    auto without = with_fixture();
+    send(*without, nav(Direction::up));
+    EXPECT_TRUE(played(Cue::focus));
+    send(*without, nav(Direction::up)); // nothing above the picker
+    EXPECT_TRUE(played(Cue::error));
+    std::remove((dir + "/play-log.txt").c_str());
+}
+
 // Without offer_setup (tests, the PC tour) the library starts as it is.
 TEST_F(LibraryDesign, NoSetupUnlessTheAppOffersIt)
 {

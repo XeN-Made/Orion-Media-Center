@@ -24,6 +24,7 @@ enum : int
 {
     kSort = 1,
     kReopen,
+    kContinueRow,
     kGroupSystems,
     kAutostart,
     kPayloadInfo,
@@ -383,6 +384,8 @@ void SettingsPanel::build_library(const LibraryPrefs &prefs)
         .description = "The order of the covers, on every tab without an order of its own";
     form_.add_toggle(kReopen, "Reopen on last tab", prefs.reopen_last_tab).description =
         "ORION starts on the tab you left it on";
+    form_.add_toggle(kContinueRow, "Continue playing", prefs.continue_row).description =
+        "A row of what you played last over the All tab's covers";
     form_.add_toggle(kLeaveShelf, "Moved titles leave shelf", prefs.moved_leave_shelf).description =
         "A title moved to your own tab leaves Games, Homebrew or Media";
     form_.add_toggle(kReturn, "Return to ORION after a game", prefs.return_on_close).description =
@@ -988,6 +991,9 @@ SettingsPanel::Change SettingsPanel::handle(const InputFrame &input, ui::Feedbac
         return Change::prefs;
     case kGroupSystems:
         prefs->group_systems = form_.toggle_value(kGroupSystems);
+        return Change::prefs;
+    case kContinueRow:
+        prefs->continue_row = form_.toggle_value(kContinueRow);
         return Change::prefs;
     case kReopen:
         prefs->reopen_last_tab = form_.toggle_value(kReopen);

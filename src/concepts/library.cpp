@@ -28,6 +28,7 @@
 #include "orion/storage.hpp"
 #include "orion/theme_file.hpp"
 #include "platform/ps5/system.hpp"
+#include "ui/components/carousel.hpp"
 #include "ui/components/grid.hpp"
 #include "ui/components/keyboard.hpp"
 #include "ui/components/menu.hpp"
@@ -69,6 +70,8 @@ constexpr float kGridTop = 280.0f;
 constexpr float kSubTop = 262.0f;                  // the systems' row under the Emulators tab
 constexpr float kSubRoom = 56.0f;                  // how far the covers move down for it
 constexpr const char *kEmulatorsTab = "emulators"; // its key
+constexpr float kContinueRoom = 196.0f;    // the Continue playing row over the All tab's covers
+constexpr std::size_t kContinueCount = 10; // titles in it
 constexpr float kGridBottom = 972.0f;
 // Seven columns keep two whole rows in view, so scrolling never leaves a
 // single row alone on the screen.
@@ -507,6 +510,24 @@ class Library final : public app::Concept
         grid_.set_bounds(
             {kMargin, kGridTop, gfx::kVirtualWidth - 2.0f * kMargin, kGridBottom - kGridTop});
 
+        // Continue playing: small covers in a row, the name under each.
+        continue_.title = "Continue playing";
+        continue_.style.title_size = 20.0f;
+        continue_.style.title_gap = 10.0f;
+        continue_.style.counter = false;
+        continue_.style.item_width = 118.0f;
+        continue_.style.gap = 20.0f;
+        continue_.style.peek = 0.0f;
+        continue_.style.card.art_aspect = 1.0f;
+        continue_.style.card.title_size = 16.0f;
+        continue_.style.card.subtitle_size = 0.0f;
+        continue_.style.card.text_gap = 8.0f;
+        continue_.style.card.focus_scale = 1.04f;
+        continue_.style.card.glow = true;
+        continue_.art = grid_.art;
+        continue_.set_bounds(
+            {kMargin, kGridTop - 6.0f, gfx::kVirtualWidth - 2.0f * kMargin, kContinueRoom});
+
         keys_.style.bindings = ui::KeyboardBindings::standard();
         keys_.style.bindings.done = Action::menu;
         keys_.set_bounds(kKeysRect);
@@ -697,8 +718,10 @@ class Library final : public app::Concept
 
         tabs_.update(dt);
         subtabs_.update(dt);
-        grid_.set_active(!header_focus_);
+        grid_.set_active(!header_focus_ && !continue_focus_);
         grid_.update(dt);
+        continue_.set_active(continue_focus_ && !header_focus_);
+        continue_.update(dt);
         sort_.set_active(header_focus_);
         sort_.update(dt);
         header_refusal_.update(dt);
@@ -755,6 +778,13 @@ class Library final : public app::Concept
             ui::Canvas covers{frame.scene, context_.fonts, 0, clock_};
             frame.scene.push_opacity(intro);
             grid_.draw(covers);
+            frame.scene.pop_opacity();
+        }
+        if (continue_shown())
+        {
+            ui::Canvas row{frame.scene, context_.fonts, 0, clock_};
+            frame.scene.push_opacity(intro);
+            continue_.draw(row);
             frame.scene.pop_opacity();
         }
         list.push_opacity(intro);
@@ -829,8 +859,13 @@ class Library final : public app::Concept
         const bool aurora = shown_.chrome.focus == orion::FocusRing::aurora;
         grid_.style.card.ring = !aurora;
         grid_.style.card.glow = !aurora;
+        // The Continue playing row wears the covers' look.
+        continue_.style.theme = grid_.style.theme;
+        continue_.style.card.radius = shown_.corners;
+        continue_.style.card.ring = !aurora;
+        continue_.style.card.glow = !aurora;
         tabs_.style.reduced_motion = grid_.style.reduced_motion = keys_.style.reduced_motion =
-            menu_.style.reduced_motion = reduced_;
+            menu_.style.reduced_motion = continue_.style.reduced_motion = reduced_;
         settings_.set_theme(theme_, reduced_);
         setup_.set_theme(theme_, reduced_);
     }
@@ -976,6 +1011,7 @@ class Library final : public app::Concept
         if (input.nav == Direction::down || input.is_pressed(Action::back))
         {
             header_focus_ = false;
+            continue_focus_ = input.nav == Direction::down && continue_shown();
             feedback.play(input.nav == Direction::down ? audio::Cue::focus : audio::Cue::back);
         }
         else if (input.nav == Direction::up || input.nav == Direction::left ||
@@ -1046,11 +1082,34 @@ class Library final : public app::Concept
             rebuild();
             return;
         }
-        // Up from the first row (or from an empty tab) reaches the sort picker.
-        if (grid_.count() == 0)
+        // The Continue playing row: left and right in it, down to the covers,
+        // up to the sort picker; the buttons act on its title.
+        if (continue_focus_ && continue_shown())
+        {
+            if (input.nav == Direction::down && grid_.count() > 0)
+            {
+                continue_focus_ = false;
+                feedback.play(audio::Cue::focus);
+                return;
+            }
+            if (input.nav == Direction::up)
+            {
+                continue_focus_ = false;
+                focus_header(feedback);
+                return;
+            }
+            if (input.nav == Direction::left || input.nav == Direction::right)
+            {
+                continue_.handle(input, feedback);
+                return;
+            }
+        }
+        // Up from the first row (or from an empty tab) reaches the row above
+        // it: Continue playing, else the sort picker.
+        if (grid_.count() == 0 && !continue_focus_)
         {
             if (input.nav == Direction::up)
-                focus_header(feedback);
+                focus_above_grid(feedback);
             return;
         }
         if (input.is_pressed(Action::west))
@@ -1068,9 +1127,22 @@ class Library final : public app::Concept
             open_title_menu(feedback);
             return;
         }
+        if (continue_focus_)
+            return; // the row's other input is above
         grid_.handle(input, feedback);
         if (grid_.exit() == Direction::up)
+            focus_above_grid(feedback);
+    }
+
+    void focus_above_grid(app::Feedback &feedback)
+    {
+        if (!continue_shown())
+        {
             focus_header(feedback);
+            return;
+        }
+        continue_focus_ = true;
+        feedback.play(audio::Cue::focus);
     }
 
     void focus_header(app::Feedback &feedback)
@@ -1701,18 +1773,25 @@ class Library final : public app::Concept
         const int first = std::max(0, focus - focus % kColumns - 2 * kColumns);
         const int last = std::min(static_cast<int>(view_.size()), focus + 5 * kColumns);
         bool asked = false;
-        for (int i = first; i < last; ++i)
+        const auto want = [&](int index)
         {
-            const Title &title =
-                titles()[static_cast<std::size_t>(view_[static_cast<std::size_t>(i)])];
+            const Title &title = titles()[static_cast<std::size_t>(index)];
             if (!title.is_rom() || title.texture != 0 || title.icon.empty())
-                continue;
+                return;
             std::string &wanted = wanted_icons_[title.id];
             if (wanted == title.icon)
-                continue;
+                return;
             wanted = title.icon;
             context_.wanted_icons.push_back(title.id);
             asked = true;
+        };
+        for (int i = first; i < last; ++i)
+            want(view_[static_cast<std::size_t>(i)]);
+        // The Continue playing row is in view whenever it shows.
+        if (continue_shown())
+        {
+            for (int index : continue_view_)
+                want(index);
         }
         if (asked)
             art_sweep_ = std::max(art_sweep_, 2);
@@ -1821,6 +1900,18 @@ class Library final : public app::Concept
             if (title.icon_width > 0 && title.icon_height > 0)
                 item.image_aspect =
                     static_cast<float>(title.icon_width) / static_cast<float>(title.icon_height);
+        }
+        for (std::size_t i = 0; i < continue_view_.size(); ++i)
+        {
+            ui::CardItem &item = continue_.item(static_cast<int>(i));
+            const Title &title = titles()[static_cast<std::size_t>(item.tag)];
+            if (item.texture == title.texture)
+                continue;
+            item.texture = title.texture;
+            if (title.icon_width > 0 && title.icon_height > 0)
+                item.image_aspect =
+                    static_cast<float>(title.icon_width) / static_cast<float>(title.icon_height);
+            item.bare = std::fabs(std::log(std::max(0.2f, item.image_aspect))) >= 0.18f;
         }
         const int columns = grid_.style.columns;
         apply_cover_shape();
@@ -2166,9 +2257,26 @@ class Library final : public app::Concept
         return context_.library.titles;
     }
 
+    // The title the buttons act on: the Continue playing row's while it has
+    // the focus, else the grid's.
     const Title &focused() const
     {
+        if (continue_focus_ && continue_shown())
+            return titles()[static_cast<std::size_t>(
+                continue_view_[static_cast<std::size_t>(continue_.focus())])];
+        return grid_focused();
+    }
+
+    const Title &grid_focused() const
+    {
         return titles()[static_cast<std::size_t>(view_[focus_index()])];
+    }
+
+    // The row of what was played last, over the All tab's covers.
+    bool continue_shown() const
+    {
+        return !continue_view_.empty() && bar_key() == "all" && query_.empty() &&
+               prefs_.continue_row;
     }
 
     bool favourite_of(const std::string &id) const
@@ -2322,7 +2430,7 @@ class Library final : public app::Concept
         sync_sort();
         std::string keep;
         if (!view_.empty())
-            keep = focused().id;
+            keep = grid_focused().id;
         // The counts follow favourites and placements.
         for (std::size_t i = 0; i < tab_keys_.size(); ++i)
             tabs_.tab(static_cast<int>(i)).badge =
@@ -2332,8 +2440,12 @@ class Library final : public app::Concept
             subtabs_.tab(static_cast<int>(i)).badge =
                 static_cast<int>(std::count_if(titles().begin(), titles().end(), [&](const Title &t)
                                                { return on_tab(t, sub_keys_[i]); }));
-        // The covers make room for the systems' row on the Emulators tab.
-        const float top = on_emulators_tab() ? kGridTop + kSubRoom : kGridTop;
+        rebuild_continue();
+        // The covers make room for the systems' row on the Emulators tab, and
+        // for Continue playing on All.
+        const float top = on_emulators_tab() ? kGridTop + kSubRoom
+                          : continue_shown() ? kGridTop + kContinueRoom
+                                             : kGridTop;
         grid_.set_bounds({kMargin, top, gfx::kVirtualWidth - 2.0f * kMargin, kGridBottom - top});
 
         const std::string key = active_key();
@@ -2383,24 +2495,73 @@ class Library final : public app::Concept
             const Title &title = titles()[static_cast<std::size_t>(view_[i])];
             if (title.id == keep)
                 focus = static_cast<int>(i);
-            ui::CardItem item;
-            item.title = title.name;
-            item.subtitle = describe(title, emulator_name(title));
-            item.badge.clear(); // the art slot draws the category banner
-            item.texture = title.texture;
-            if (title.icon_width > 0 && title.icon_height > 0)
-                item.image_aspect =
-                    static_cast<float>(title.icon_width) / static_cast<float>(title.icon_height);
-            item.top = hashed_color(title.id, 0.55f, 0.42f);
-            item.bottom = hashed_color(title.id, 0.7f, 0.2f);
-            item.accent = hashed_color(title.id, 0.6f, 1.0f);
-            item.tag = view_[i];
-            items.push_back(std::move(item));
+            items.push_back(card_of(title, view_[i]));
         }
         grid_.set_items(std::move(items));
         mark_bare_covers();
         if (!view_.empty())
             grid_.set_focus(focus, true);
+    }
+
+    // A title's cover, for the grid and the Continue playing row; index is
+    // its place in titles().
+    ui::CardItem card_of(const Title &title, int index) const
+    {
+        ui::CardItem item;
+        item.title = title.name;
+        item.subtitle = describe(title, emulator_name(title));
+        item.badge.clear(); // the art slot draws the category banner
+        item.texture = title.texture;
+        if (title.icon_width > 0 && title.icon_height > 0)
+            item.image_aspect =
+                static_cast<float>(title.icon_width) / static_cast<float>(title.icon_height);
+        item.top = hashed_color(title.id, 0.55f, 0.42f);
+        item.bottom = hashed_color(title.id, 0.7f, 0.2f);
+        item.accent = hashed_color(title.id, 0.6f, 1.0f);
+        item.tag = index;
+        return item;
+    }
+
+    // What was played last through ORION, newest first: console titles and
+    // emulators' games alike, for the row over the All tab.
+    void rebuild_continue()
+    {
+        std::string kept;
+        if (!continue_view_.empty() && continue_.focus() >= 0 &&
+            continue_.focus() < static_cast<int>(continue_view_.size()))
+            kept = titles()[static_cast<std::size_t>(
+                                continue_view_[static_cast<std::size_t>(continue_.focus())])]
+                       .id;
+        continue_view_.clear();
+        for (std::size_t i = 0; i < titles().size(); ++i)
+        {
+            const Title &title = titles()[i];
+            if (played(title).sessions > 0 &&
+                (!title.is_rom() || prefs_.system_enabled(title.system)))
+                continue_view_.push_back(static_cast<int>(i));
+        }
+        std::stable_sort(continue_view_.begin(), continue_view_.end(), [&](int a, int b)
+                         { return played(titles()[a]).last > played(titles()[b]).last; });
+        if (continue_view_.size() > kContinueCount)
+            continue_view_.resize(kContinueCount);
+        std::vector<ui::CardItem> items;
+        int focus = 0;
+        for (std::size_t i = 0; i < continue_view_.size(); ++i)
+        {
+            const Title &title = titles()[static_cast<std::size_t>(continue_view_[i])];
+            items.push_back(card_of(title, continue_view_[i]));
+            items.back().subtitle.clear(); // a short row: the name is enough
+            items.back().bare =
+                items.back().texture != 0 &&
+                std::fabs(std::log(std::max(0.2f, items.back().image_aspect))) >= 0.18f;
+            if (title.id == kept)
+                focus = static_cast<int>(i);
+        }
+        continue_.set_items(std::move(items));
+        if (!continue_view_.empty())
+            continue_.set_focus(focus, true);
+        if (!continue_shown())
+            continue_focus_ = false;
     }
 
     // A picture of another shape than the tiles (a box among square icons)
@@ -2680,7 +2841,8 @@ class Library final : public app::Concept
         if (shown_.chrome.cover_rim)
             canvas.list.bordered_rect(shown, radius, Color::rgb(0x000000, 0.0f), 1.0f,
                                       Color::rgb(0xffffff, 0.16f));
-        if (shown_.chrome.badges)
+        // Small covers (Continue playing) leave the banner out: it would cover them.
+        if (shown_.chrome.badges && art.w >= 160.0f)
             draw_banner(canvas, shown, title);
         if (aurora)
             draw_aurora_ring(canvas.list, shown, radius, focus);
@@ -2974,8 +3136,11 @@ class Library final : public app::Concept
     ui::TabBar subtabs_;                // the systems, under the Emulators tab (grouped)
     std::vector<std::string> sub_keys_; // "sys:..." for each of them
     ui::GridView grid_;
-    ui::Select sort_;           // the tab's order, in the header (Up from the top row)
-    bool header_focus_ = false; // the sort picker has the focus
+    ui::Carousel continue_;          // what was played last, over the All tab
+    std::vector<int> continue_view_; // indices into the library, newest first
+    bool continue_focus_ = false;    // the row has the focus
+    ui::Select sort_;                // the tab's order, in the header (Up from the top row)
+    bool header_focus_ = false;      // the sort picker has the focus
     ui::Pulse header_refusal_;
     std::string status_;            // what ORION is doing in the background, or empty
     float status_progress_ = -1.0f; // 0..1 when it can be measured
