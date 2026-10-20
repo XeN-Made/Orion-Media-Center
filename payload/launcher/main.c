@@ -54,8 +54,8 @@
 #define WAIT_FOR_LAUNCH_MS 15000
 #define WAIT_FOR_TITLE_MS 20000
 #define TITLE_READS_MS 15000 // after it is up, before its files go back
-#define GONE_FOR_MS 3000     // no app in front this long: the title has closed
-#define POLL_MS 250
+#define GONE_FOR_MS 1000     // no app in front this long: the title has closed
+#define POLL_MS 100
 #define SHORTCUT_HOLD_MS 2000
 #define MAX_ARGUMENTS 16
 #define MAX_INSTALLS 4
