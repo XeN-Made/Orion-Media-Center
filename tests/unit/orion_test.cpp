@@ -182,6 +182,24 @@ TEST(OrionPrefs, RomFoldersAreKept)
     EXPECT_EQ(back.rom_folders[1].system, "Sony - PlayStation Portable");
 }
 
+TEST(OrionPrefs, BackgroundsCanBeToldApart)
+{
+    const std::string dir = fresh_dir("orion-prefs-backgrounds");
+    orion::LibraryPrefs prefs;
+    EXPECT_TRUE(prefs.game_backgrounds);
+    EXPECT_TRUE(prefs.blurred_covers);
+    EXPECT_FLOAT_EQ(prefs.background_strength, 1.0f);
+    prefs.blurred_covers = false;
+    prefs.background_strength = 0.5f;
+    ASSERT_TRUE(orion::save_prefs(dir, prefs));
+    orion::LibraryPrefs back = orion::load_prefs(dir);
+    EXPECT_FALSE(back.blurred_covers);
+    EXPECT_NEAR(back.background_strength, 0.5f, 0.01f);
+    // Out of range by hand: kept within it.
+    ASSERT_TRUE(save::write_atomic(dir + "/library.json", R"({"background_strength": 7})").empty());
+    EXPECT_FLOAT_EQ(orion::load_prefs(dir).background_strength, 1.0f);
+}
+
 TEST(OrionPrefs, RemovingATabSendsItsTitlesHome)
 {
     orion::LibraryPrefs prefs;

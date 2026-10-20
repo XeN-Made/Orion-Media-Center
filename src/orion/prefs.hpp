@@ -87,6 +87,8 @@ struct Placement
 //     "return_on_close": true,
 //     "shortcut_test": false,
 //     "game_backgrounds": true,
+//     "blurred_covers": true,
+//     "background_strength": 1.0,
 //     "rom_folders": [{"path": "/mnt/usb0/roms", "system": ""}],
 //     "art_dir": "/mnt/usb0/ORION/art",
 //     "tabs": [{"id": "t1", "name": "RPGs"}],
@@ -121,8 +123,12 @@ struct LibraryPrefs
     // Experiment: during a game, L3 + R3 held shows a notification if the
     // launch helper can see the controller. Nothing is closed.
     bool shortcut_test = false;
-    // The focused game's home-screen picture behind the library.
+    // The focused game's home-screen picture behind the library; for games
+    // with none, their cover blurred (blurred_covers). Strength 0.2 to 1:
+    // below 1 the sky and its clouds show through.
     bool game_backgrounds = true;
+    bool blurred_covers = true;
+    float background_strength = 1.0f;
     // Where box art is looked for first and downloaded to; empty: ORION's
     // own <state_dir>/art. Always a folder under /data or /mnt.
     std::string art_dir;

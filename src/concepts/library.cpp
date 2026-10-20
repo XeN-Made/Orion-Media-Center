@@ -1499,7 +1499,7 @@ class Library final : public app::Concept
                     return "file:" + place;
             }
         }
-        return title.texture != 0 ? "icon:" + title.id : std::string();
+        return prefs_.blurred_covers && title.texture != 0 ? "icon:" + title.id : std::string();
     }
 
     // Asks the shell for a picture once the focus has rested on a cover a
@@ -1560,7 +1560,8 @@ class Library final : public app::Concept
     {
         if (backdrop_alpha_ <= 0.0f || backdrop_drawn_.empty())
             return;
-        const float a = tween::smoothstep(backdrop_alpha_);
+        // Below full strength the sky and its clouds show through.
+        const float a = tween::smoothstep(backdrop_alpha_) * prefs_.background_strength;
         const Rect screen = {0.0f, 0.0f, gfx::kVirtualWidth, gfx::kVirtualHeight};
         const Color page = theme_.page;
         if (backdrop_drawn_.rfind("file:", 0) == 0)

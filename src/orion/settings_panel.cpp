@@ -48,6 +48,8 @@ enum : int
     kReturn,
     kShortcut,
     kGameBackgrounds,
+    kBlurredCovers,
+    kBackgroundStrength,
     kArtNow,
     kArtFolder,
     kAddRomFolder,
@@ -659,7 +661,13 @@ void SettingsPanel::build_appearance(const Look &look, const LibraryPrefs &prefs
     form_.add_toggle(kRim, "Cover rim", look.chrome.cover_rim).description =
         "A hairline of light around each cover";
     form_.add_toggle(kGameBackgrounds, "Game backgrounds", prefs.game_backgrounds).description =
-        "The focused game's home-screen picture fades in behind the library";
+        "The focused game's home-screen picture fades in behind the library; off keeps the sky";
+    form_.add_toggle(kBlurredCovers, "Blurred covers", prefs.blurred_covers).description =
+        "For games with no picture of their own: their cover, blurred. Off keeps the sky for them";
+    form_
+        .add_slider(kBackgroundStrength, "Background strength", prefs.background_strength * 100.0f,
+                    20.0f, 100.0f, 10.0f)
+        .unit = " %";
     ui::FormRow &save = form_.add_action(kSaveTheme, "Save as new theme");
     save.description = "Keeps this look as a theme file in /data/orion/themes, to reuse or share";
     save.chevron = true;
@@ -866,6 +874,12 @@ SettingsPanel::Change SettingsPanel::handle(const InputFrame &input, ui::Feedbac
         return Change::prefs;
     case kGameBackgrounds:
         prefs->game_backgrounds = form_.toggle_value(kGameBackgrounds);
+        return Change::prefs;
+    case kBlurredCovers:
+        prefs->blurred_covers = form_.toggle_value(kBlurredCovers);
+        return Change::prefs;
+    case kBackgroundStrength:
+        prefs->background_strength = form_.slider_value(kBackgroundStrength) / 100.0f;
         return Change::prefs;
     case kArtFolder:
     {

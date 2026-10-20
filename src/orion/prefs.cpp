@@ -358,6 +358,10 @@ LibraryPrefs load_prefs(const std::string &state_dir)
     prefs.return_on_close = root["return_on_close"].bool_or(prefs.return_on_close);
     prefs.shortcut_test = root["shortcut_test"].bool_or(prefs.shortcut_test);
     prefs.game_backgrounds = root["game_backgrounds"].bool_or(prefs.game_backgrounds);
+    prefs.blurred_covers = root["blurred_covers"].bool_or(prefs.blurred_covers);
+    prefs.background_strength = std::clamp(
+        static_cast<float>(root["background_strength"].number_or(prefs.background_strength)), 0.2f,
+        1.0f);
     for (const json::Value &value : root["rom_folders"].elements())
     {
         RomFolder folder;
@@ -389,6 +393,11 @@ bool save_prefs(const std::string &state_dir, const LibraryPrefs &prefs)
         std::string("  \"return_on_close\": ") + (prefs.return_on_close ? "true" : "false") + ",\n";
     text += std::string("  \"shortcut_test\": ") + (prefs.shortcut_test ? "true" : "false") + ",\n";
     text += std::string("  \"game_backgrounds\": ") + (prefs.game_backgrounds ? "true" : "false") +
+            ",\n";
+    text +=
+        std::string("  \"blurred_covers\": ") + (prefs.blurred_covers ? "true" : "false") + ",\n";
+    text += "  \"background_strength\": " +
+            std::to_string(static_cast<int>(prefs.background_strength * 100.0f + 0.5f) / 100.0) +
             ",\n";
     text += "  \"art_dir\": " + json::quote(prefs.art_dir) + ",\n";
     text += "  \"rom_folders\": [";
