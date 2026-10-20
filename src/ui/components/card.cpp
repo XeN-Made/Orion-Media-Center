@@ -270,7 +270,7 @@ void draw_card(Canvas &canvas, const ComponentStyle &style, const CardLook &look
     Rect picture = card_art(look, body);
     float picture_radius = look.plate ? std::max(radius - look.plate_padding, 0.0f) : radius;
     const Color well = item.top.a > 0.0f ? item.top : theme.surface_high;
-    if (!look.plate)
+    if (!look.plate && !item.bare)
     {
         // The art is a surface of the theme: it gets the language's shadow,
         // edge and pressed state, and shows through until a picture arrives.

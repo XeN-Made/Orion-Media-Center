@@ -1741,6 +1741,8 @@ class Library final : public app::Concept
         apply_cover_shape();
         if (grid_.style.columns != columns)
             rebuild();
+        else
+            mark_bare_covers();
     }
 
     // The card above the hints, for a note that is not a launch.
@@ -2311,8 +2313,23 @@ class Library final : public app::Concept
             items.push_back(std::move(item));
         }
         grid_.set_items(std::move(items));
+        mark_bare_covers();
         if (!view_.empty())
             grid_.set_focus(focus, true);
+    }
+
+    // A picture of another shape than the tiles (a box among square icons)
+    // lies on the page, with no plate in the game's colours behind it: every
+    // tile stays the same size and every picture looks as on its own tab.
+    void mark_bare_covers()
+    {
+        const float tile = std::max(0.2f, grid_.style.card.art_aspect);
+        for (int i = 0; i < grid_.count(); ++i)
+        {
+            ui::CardItem &item = grid_.item(i);
+            item.bare = item.texture != 0 &&
+                        std::fabs(std::log(std::max(0.2f, item.image_aspect) / tile)) >= 0.18f;
+        }
     }
 
     // ---- drawing ----
@@ -2520,6 +2537,9 @@ class Library final : public app::Concept
         const Title &title = titles()[static_cast<std::size_t>(item.tag)];
         const float picture = std::max(0.2f, item.image_aspect);
         const float cover = art.w / std::max(art.h, 1.0f);
+        // What the cover's dressing (sheen, rim, badge, star) goes on: the
+        // tile, or a picture of another shape where it sits in the tile.
+        Rect shown = art;
         if (item.texture != 0 && std::fabs(std::log(picture / cover)) < 0.18f)
         {
             // About the cover's own shape: it fills the cover, trimmed evenly
@@ -2541,16 +2561,16 @@ class Library final : public app::Concept
         }
         else if (item.texture != 0)
         {
-            // Another shape: the whole picture, fitted inside the cover over
-            // the game's own colours.
-            canvas.list.gradient_rect(art, radius, item.top, item.bottom);
-            const float pad = art.w * 0.06f;
-            Rect fit = {art.x + pad, art.y + pad, art.w - 2.0f * pad, art.h - 2.0f * pad};
+            // Another shape (a box on a tab of square icons, as Favourites
+            // mixes them): the whole picture as large as the tile allows,
+            // centred, with no plate behind it, so every tile is the same
+            // size and every picture looks as it does on its own tab.
             const float aspect = std::max(0.2f, item.image_aspect);
+            Rect fit = art;
             if (aspect > fit.w / fit.h)
             {
                 const float h = fit.w / aspect;
-                fit.y += (fit.h - h) * 0.5f;
+                fit.y += fit.h - h; // on the tile's bottom edge, by the title
                 fit.h = h;
             }
             else
@@ -2559,7 +2579,8 @@ class Library final : public app::Concept
                 fit.x += (fit.w - w) * 0.5f;
                 fit.w = w;
             }
-            canvas.list.image(item.texture, fit, item.uv, Color::rgb(0xffffff), radius * 0.4f);
+            canvas.list.image(item.texture, fit, item.uv, Color::rgb(0xffffff), radius);
+            shown = fit;
         }
         else
         {
@@ -2569,21 +2590,21 @@ class Library final : public app::Concept
                      art.y + art.h * 0.5f + art.h * 0.13f, art.h * 0.36f,
                      Color::rgb(0xffffff, 0.9f), gfx::Align::center);
         }
-        canvas.list.gradient_rect(art, radius, Color::rgb(0xffffff, 0.14f),
+        canvas.list.gradient_rect(shown, radius, Color::rgb(0xffffff, 0.14f),
                                   Color::rgb(0xffffff, 0.0f));
         if (shown_.chrome.cover_rim)
-            canvas.list.bordered_rect(art, radius, Color::rgb(0x000000, 0.0f), 1.0f,
+            canvas.list.bordered_rect(shown, radius, Color::rgb(0x000000, 0.0f), 1.0f,
                                       Color::rgb(0xffffff, 0.16f));
         if (shown_.chrome.badges)
-            draw_banner(canvas, art, title);
+            draw_banner(canvas, shown, title);
         if (aurora)
-            draw_aurora_ring(canvas.list, art, radius, focus);
+            draw_aurora_ring(canvas.list, shown, radius, focus);
         if (favourite_of(title.id))
         {
             // A gold star on a dark disc in the corner the badge leaves free.
             const float r = std::max(14.0f, art.w * 0.075f);
-            const float cx = art.x + r + 8.0f;
-            const float cy = art.y + r + 8.0f;
+            const float cx = shown.x + r + 8.0f;
+            const float cy = shown.y + r + 8.0f;
             canvas.list.circle(cx, cy, r, Color::rgb(0x0b0e20, 0.72f));
             canvas.list.star(cx, cy, r * 0.72f, Color::rgb(0xffc94a));
         }

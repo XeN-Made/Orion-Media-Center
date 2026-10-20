@@ -62,6 +62,7 @@ containers call.
 | `progress` | 0..1 draws a bar along the bottom of the art; negative draws none |
 | `selected` | Draws the check |
 | `disabled` | Dimmed; containers refuse confirm on it |
+| `bare` | No surface under the art: for a picture that does not fill it (a box among square icons), drawn by the `art` slot straight on the page |
 | `tag` | An integer of yours |
 
 ### Style (`ui::CardLook`; `ui::CardStyle` is `ComponentStyle` plus this)

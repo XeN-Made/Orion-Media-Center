@@ -259,8 +259,35 @@ class LibraryWithRetroArch : public LibraryDesign
     }
 };
 
+TEST_F(LibraryWithRetroArch, TheSystemsShareTheEmulatorsTab)
+{
+    auto design = with_retroarch();
+    ASSERT_EQ(library_.emulator.systems.size(), 2u);
+    // All, Games, Homebrew, Media, Favourites, Emulators: DS first under it.
+    for (int i = 0; i < 5; ++i)
+        send(*design, press(hui::Action::page_next));
+    send(*design, nav(Direction::right));
+    EXPECT_TRUE(played(Cue::error)); // DS holds one game
+    // R2: GBA, which holds two.
+    send(*design, press(hui::Action::jump_next));
+    send(*design, nav(Direction::right));
+    EXPECT_TRUE(played(Cue::focus));
+    expect_drawable(*design);
+    // Past GBA there is no system, and past Emulators no tab.
+    send(*design, press(hui::Action::jump_next));
+    EXPECT_TRUE(played(Cue::error));
+    send(*design, press(hui::Action::page_next));
+    EXPECT_TRUE(played(Cue::error));
+}
+
 TEST_F(LibraryWithRetroArch, EachSystemGetsATabOfItsGames)
 {
+    const std::string dir = ::testing::TempDir() + "orion-design-ungrouped";
+    ASSERT_TRUE(hui::save::ensure_directory(dir));
+    hui::orion::LibraryPrefs prefs;
+    prefs.group_systems = false;
+    ASSERT_TRUE(hui::orion::save_prefs(dir, prefs));
+    library_.state_dir = dir;
     auto design = with_retroarch();
     ASSERT_EQ(library_.emulator.systems.size(), 2u);
     // All, Games, Homebrew, Media, Favourites, DS, GBA: GBA holds two games.

@@ -34,7 +34,10 @@ struct CardItem
     float progress = -1.0f;        // 0..1 draws a bar along the bottom of the art
     bool selected = false;         // draws the check
     bool disabled = false;         // dimmed; containers refuse confirm on it
-    int tag = 0;                   // yours
+    // No surface under the art: for a picture that does not fill it (a box
+    // among square icons), drawn by the `art` slot straight on the page.
+    bool bare = false;
+    int tag = 0; // yours
 };
 
 enum class CardText : std::uint8_t
