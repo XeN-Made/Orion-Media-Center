@@ -23,4 +23,4 @@ export PS5_PAYLOAD_SDK="$sdk"
 }
 mkdir -p "$(dirname -- "$output")"
 "$compiler" -Wall -Wextra -Werror -O2 -o "$output" "$here/main.c" \
-    -lSceSystemService -lSceUserService -lkernel_sys
+    -lSceSystemService -lSceUserService -lScePad -lkernel_sys

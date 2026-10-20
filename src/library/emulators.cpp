@@ -264,10 +264,11 @@ int attach_rom_art(std::vector<Title> &roms, const std::string &root, const std:
     return found;
 }
 
-std::string retroarch_args(const std::string &core_file, const std::string &rom)
+std::string retroarch_args(const std::string &core_file, const std::string &rom,
+                           const std::string &token)
 {
-    return "# ORION: this start only; put back when RetroArch is up\n-L\n/app0/cores/" + core_file +
-           "\n" + rom + "\n";
+    return "# ORION " + token + ": this start only\n-L\n/app0/cores/" + core_file + "\n" + rom +
+           "\n";
 }
 
 std::string rom_id(std::string_view path)

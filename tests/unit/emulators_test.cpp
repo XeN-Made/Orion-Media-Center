@@ -135,8 +135,9 @@ TEST(Emulators, TellsRetroArchsLauncherWhichGame)
     // One argument per line, spaces and all: the launcher splits on lines.
     EXPECT_EQ(library::retroarch_args(
                   "mgba_libretro.so",
-                  "/app0/content/Nintendo - Game Boy Advance/007 - Nightfire (UE) (M3) [!].gba"),
-              "# ORION: this start only; put back when RetroArch is up\n-L\n"
+                  "/app0/content/Nintendo - Game Boy Advance/007 - Nightfire (UE) (M3) [!].gba",
+                  "1792457611-42"),
+              "# ORION 1792457611-42: this start only\n-L\n"
               "/app0/cores/mgba_libretro.so\n"
               "/app0/content/Nintendo - Game Boy Advance/007 - Nightfire (UE) (M3) [!].gba\n");
 }

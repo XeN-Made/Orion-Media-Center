@@ -68,6 +68,8 @@ struct Placement
 //     "reopen_last_tab": true,
 //     "moved_leave_shelf": true,
 //     "auto_art": true,
+//     "return_on_close": true,
+//     "shortcut_test": false,
 //     "art_dir": "/mnt/usb0/ORION/art",
 //     "tabs": [{"id": "t1", "name": "RPGs"}],
 //     "placements": {"PPSA01234": "t1"},
@@ -95,6 +97,11 @@ struct LibraryPrefs
     bool moved_leave_shelf = true;
     // New games for an emulator get box art from the internet on start.
     bool auto_art = true;
+    // A game started from ORION brings ORION back when it closes.
+    bool return_on_close = true;
+    // Experiment: during a game, L3 + R3 held shows a notification if the
+    // launch helper can see the controller. Nothing is closed.
+    bool shortcut_test = false;
     // Where box art is looked for first and downloaded to; empty: ORION's
     // own <state_dir>/art. Always a folder under /data or /mnt.
     std::string art_dir;

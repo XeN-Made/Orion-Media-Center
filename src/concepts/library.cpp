@@ -17,6 +17,7 @@
 #include "core/tween.hpp"
 #include "library/emulators.hpp"
 #include "library/favourites.hpp"
+#include "library/json.hpp"
 #include "orion/art_fetcher.hpp"
 #include "orion/look.hpp"
 #include "orion/prefs.hpp"
@@ -1059,10 +1060,20 @@ class Library final : public app::Concept
         const std::string test_run = root + "/test-run.txt";
         const std::string staged_args = dir + "/retroarch-args.txt";
         const std::string staged_test_run = dir + "/retroarch-test-run.txt";
-        const std::string request =
-            title->is_rom() ? title->launcher + "\n@install " + staged_args + "\t" + args +
-                                  "\n@install " + staged_test_run + "\t" + test_run + "\n"
-                            : title->id + "\n";
+        // Unique to this start: the helper tells its files from a later start's.
+        const std::string token = std::to_string(std::time(nullptr)) + "-" +
+                                  std::to_string(sys::monotonic_us() % 1000000);
+        std::string request = title->is_rom()
+                                  ? title->launcher + "\n@install " + staged_args + "\t" + args +
+                                        "\n@install " + staged_test_run + "\t" + test_run + "\n"
+                                  : title->id + "\n";
+        // Coming back: the helper waits for the game to close, then starts ORION.
+        const std::string self = own_title_id();
+        if (prefs_.return_on_close && !self.empty())
+            request += "@return " + self + "\n@notify Close " + one_line(title->name) +
+                       " from the PS button menu to return to ORION\n";
+        if (prefs_.shortcut_test)
+            request += "@shortcut\n";
         if (title->is_rom() && core.empty())
             why = "no core plays " + library::short_system_name(title->system);
         else if (!sys::on_console())
@@ -1070,9 +1081,9 @@ class Library final : public app::Concept
         else if (title->is_rom() && title->rom.size() > library::kRetroArchArgMax)
             why = "its path is longer than RetroArch reads";
         else if (title->is_rom() &&
-                 !write_shared(staged_args, library::retroarch_args(core, title->rom)))
+                 !write_shared(staged_args, library::retroarch_args(core, title->rom, token)))
             why = "could not write " + staged_args;
-        else if (title->is_rom() && !write_shared(staged_test_run, ""))
+        else if (title->is_rom() && !write_shared(staged_test_run, "ORION " + token + "\n"))
             why = "could not write " + staged_test_run;
         else if (dir.empty() || !save::write_atomic(dir + "/launch-request.txt", request).empty())
             why = "could not write the launch request";
@@ -1286,6 +1297,32 @@ class Library final : public app::Concept
     static bool write_shared(const std::string &file, std::string_view bytes)
     {
         return save::write_atomic(file, bytes).empty() && ::chmod(file.c_str(), 0666) == 0;
+    }
+
+    // ORION's own title ID, from its param.json; empty off the console.
+    static std::string own_title_id()
+    {
+        static const std::string id = []
+        {
+            std::string text;
+            json::Value root;
+            if (!save::read_file("/app0/sce_sys/param.json", &text, 1u << 20) ||
+                !json::parse(text, &root))
+                return std::string();
+            return root["titleId"].string_or("");
+        }();
+        return id;
+    }
+
+    // A name for one line of the launch request.
+    static std::string one_line(std::string text)
+    {
+        for (char &c : text)
+        {
+            if (c == '\n' || c == '\r' || c == '\t')
+                c = ' ';
+        }
+        return text;
     }
 
     // The undoing of what the launch helper does for a game of RetroArch's,

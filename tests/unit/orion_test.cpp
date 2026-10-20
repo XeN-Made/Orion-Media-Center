@@ -154,6 +154,20 @@ TEST(OrionPrefs, BoxArtLivesWhereThePlayerSays)
     EXPECT_EQ(orion::load_prefs(dir).art_dir, "");
 }
 
+TEST(OrionPrefs, GamesBringOrionBackUnlessToldNot)
+{
+    const std::string dir = fresh_dir("orion-prefs-return");
+    orion::LibraryPrefs prefs;
+    EXPECT_TRUE(prefs.return_on_close);
+    EXPECT_FALSE(prefs.shortcut_test);
+    prefs.return_on_close = false;
+    prefs.shortcut_test = true;
+    ASSERT_TRUE(orion::save_prefs(dir, prefs));
+    const orion::LibraryPrefs back = orion::load_prefs(dir);
+    EXPECT_FALSE(back.return_on_close);
+    EXPECT_TRUE(back.shortcut_test);
+}
+
 TEST(OrionPrefs, RemovingATabSendsItsTitlesHome)
 {
     orion::LibraryPrefs prefs;

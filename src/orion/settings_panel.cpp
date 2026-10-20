@@ -44,6 +44,8 @@ enum : int
     kSaveTheme,
     kNewTab,
     kArtAuto,
+    kReturn,
+    kShortcut,
     kArtNow,
     kArtFolder,
     // A tab's page.
@@ -328,6 +330,10 @@ void SettingsPanel::build_library(const LibraryPrefs &prefs)
         "ORION starts on the tab you left it on";
     form_.add_toggle(kLeaveShelf, "Moved titles leave shelf", prefs.moved_leave_shelf).description =
         "A title moved to your own tab leaves Games, Homebrew or Media";
+    form_.add_toggle(kReturn, "Return to ORION after a game", prefs.return_on_close).description =
+        "Close a game from the PS button menu and ORION opens again";
+    form_.add_toggle(kShortcut, "Shortcut test (L3 + R3)", prefs.shortcut_test).description =
+        "Experiment: hold L3 + R3 in a game to see if ORION notices. Nothing is closed";
 }
 
 void SettingsPanel::build_tabs(const LibraryPrefs &prefs)
@@ -722,6 +728,12 @@ SettingsPanel::Change SettingsPanel::handle(const InputFrame &input, ui::Feedbac
         return Change::prefs;
     case kArtAuto:
         prefs->auto_art = form_.toggle_value(kArtAuto);
+        return Change::prefs;
+    case kReturn:
+        prefs->return_on_close = form_.toggle_value(kReturn);
+        return Change::prefs;
+    case kShortcut:
+        prefs->shortcut_test = form_.toggle_value(kShortcut);
         return Change::prefs;
     case kArtFolder:
     {

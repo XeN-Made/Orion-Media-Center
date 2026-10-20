@@ -66,8 +66,11 @@ int attach_rom_art(std::vector<Title> &roms, const std::string &root, const std:
 // line asks. args.txt may be the player's too: ORION keeps what it replaced
 // and the launch helper puts it back once RetroArch is up (payload/launcher).
 //
-// The args.txt for a game: "-L", the core in /app0/cores, the game.
-std::string retroarch_args(const std::string &core_file, const std::string &rom);
+// The args.txt for a game: "-L", the core in /app0/cores, the game. The
+// token (unique to the start) sits in a comment, so the launch helper can tell
+// this start's file from a later one's.
+std::string retroarch_args(const std::string &core_file, const std::string &rom,
+                           const std::string &token);
 // Lines RetroArch's launcher reads no longer than this.
 constexpr std::size_t kRetroArchArgMax = 255;
 
