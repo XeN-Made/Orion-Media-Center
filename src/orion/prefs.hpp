@@ -87,7 +87,7 @@ struct Placement
 //     "return_on_close": true,
 //     "shortcut_test": false,
 //     "game_backgrounds": true,
-//     "blurred_covers": true,
+//     "blurred_covers": false,
 //     "background_strength": 1.0,
 //     "rom_folders": [{"path": "/mnt/usb0/roms", "system": ""}],
 //     "art_dir": "/mnt/usb0/ORION/art",
@@ -127,7 +127,7 @@ struct LibraryPrefs
     // with none, their cover blurred (blurred_covers). Strength 0.2 to 1:
     // below 1 the sky and its clouds show through.
     bool game_backgrounds = true;
-    bool blurred_covers = true;
+    bool blurred_covers = false;
     float background_strength = 1.0f;
     // Where box art is looked for first and downloaded to; empty: ORION's
     // own <state_dir>/art. Always a folder under /data or /mnt.
