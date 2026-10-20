@@ -70,6 +70,8 @@ constexpr std::size_t kMaxPath = 160; // bytes, as orion::valid_art_dir takes th
 // The launch helper shipped in the app folder, and the console's ELF loader.
 constexpr const char *kLauncherPath = "/app0/assets/payloads/orion-launcher.elf";
 constexpr int kLoaderPort = 9021;
+// The launch helper reads a request of 4 KiB; a game's path is one line of it.
+constexpr std::size_t kMaxRequestPath = 1024;
 // The FTP server payload players commonly run (ftpsrv): it can read what
 // ORION's sandbox cannot, the system's copies of home-screen pictures.
 constexpr int kFtpPort = 2121;
@@ -182,7 +184,17 @@ constexpr app::TourStep kTour[] = {
     {0.8f, 0, Direction::none, "settings-tab-page"},
     {0.2f, action_bit(Action::back)},
     {0.2f, action_bit(Action::back)},
-    {0.2f, action_bit(Action::jump_next)},
+    // Emulators: Scan, every emulator found, then the second one's page (its
+    // game folders) when there are two.
+    {0.3f, action_bit(Action::jump_next)},
+    {0.2f, 0, Direction::right},
+    {0.8f, 0, Direction::none, "settings-emulators"},
+    {0.12f, 0, Direction::down},
+    {0.12f, 0, Direction::down},
+    {0.3f, action_bit(Action::confirm)},
+    {0.8f, 0, Direction::none, "settings-emulator-page"},
+    {0.2f, action_bit(Action::back)},
+    {0.2f, action_bit(Action::back)},
     {0.3f, action_bit(Action::jump_next)},
     {0.2f, 0, Direction::right},
     {0.12f, 0, Direction::down},
@@ -347,10 +359,11 @@ std::string monogram(const std::string &name)
     return letters;
 }
 
-std::string describe(const Title &title)
+// emulator: the app that plays a game for an emulator ("RetroArch").
+std::string describe(const Title &title, const std::string &emulator)
 {
     if (title.is_rom())
-        return library::short_system_name(title.system) + "  \xc2\xb7  RetroArch";
+        return library::short_system_name(title.system) + "  \xc2\xb7  " + emulator;
     std::string text = library::platform_name(title.platform);
     if (!text.empty())
         text += "  \xc2\xb7  ";
@@ -471,12 +484,13 @@ class Library final : public app::Concept
         rebuild();
         // RetroArch's own files, if the launch helper could not put them back
         // after a game (library/emulators.hpp): ORION does it now.
-        if (!context_.library.emulator.root.empty())
+        if (const library::EmulatorApp *retroarch = context_.library.emulator.app("retroarch"))
         {
-            put_back(context_.library.emulator.root + "/args.txt");
-            put_back(context_.library.emulator.root + "/test-run.txt");
-            put_back(context_.library.emulator.root + "/config/frontend.cfg"); // earlier builds
+            put_back(retroarch->root + "/args.txt");
+            put_back(retroarch->root + "/test-run.txt");
+            put_back(retroarch->root + "/config/frontend.cfg"); // earlier builds
         }
+        generation_ = context_.library.generation;
         // New games for an emulator look for their box art in the background.
         if (prefs_.auto_art && sys::on_console())
         {
@@ -566,6 +580,13 @@ class Library final : public app::Concept
 
     void update(const InputFrame &input, float dt, app::Feedback &feedback) override
     {
+        // The app scanned the emulators again: indices into the titles are
+        // stale until everything is rebuilt.
+        if (context_.library.generation != generation_)
+        {
+            generation_ = context_.library.generation;
+            emulators_scanned(feedback);
+        }
         age_ += dt;
         clock_ += dt;
         follow_backdrop(dt);
@@ -866,6 +887,40 @@ class Library final : public app::Concept
         return tabs;
     }
 
+    // Scan for emulators: the app does it between frames (it owns the
+    // titles and their pictures), then update() sees a new generation.
+    void scan_emulators(app::Feedback &feedback)
+    {
+        context_.rescan_requested = true;
+        settings_.set_scan_status("Looking for emulators and their games…");
+        if (settings_.is_open())
+            settings_.refresh(look_, prefs_);
+        feedback.play(audio::Cue::select);
+    }
+
+    void emulators_scanned(app::Feedback &feedback)
+    {
+        const library::Emulator &emulator = context_.library.emulator;
+        int games = 0;
+        for (const library::EmulatorApp &app : emulator.apps)
+            games += app.games;
+        const std::string found = "Found " + std::to_string(emulator.apps.size()) +
+                                  (emulator.apps.size() == 1 ? " emulator, " : " emulators, ") +
+                                  std::to_string(games) + (games == 1 ? " game" : " games");
+        settings_.set_scan_status(found);
+        rebuild_tabs(active_key());
+        restyle();
+        rebuild();
+        settings_.set_tabs(every_tab());
+        if (settings_.is_open())
+            settings_.rebuild_nav(look_, prefs_);
+        show_note(true, found);
+        feedback.play(audio::Cue::complete);
+        // New games look for their box art, as at start-up.
+        if (prefs_.auto_art && sys::on_console())
+            start_art(false);
+    }
+
     // After the tabs changed: the tab bar, the covers and Settings follow.
     void tabs_changed()
     {
@@ -913,8 +968,18 @@ class Library final : public app::Concept
             feedback.play(audio::Cue::modal_open);
             break;
         case orion::SettingsPanel::Change::add_rom_folder:
-            start_typing(Typing::rom_folder, "/mnt/usb0/roms");
+            folder_emulator_ = settings_.emulator_page();
+            start_typing(Typing::rom_folder, folder_emulator_ == "porpoise" ? "/mnt/usb0/games"
+                                             : folder_emulator_ == "ps5sx2" ? "/mnt/usb0/PS2"
+                                                                            : "/mnt/usb0/roms");
             feedback.play(audio::Cue::modal_open);
+            break;
+        case orion::SettingsPanel::Change::folders:
+            save_prefs();
+            scan_emulators(feedback);
+            break;
+        case orion::SettingsPanel::Change::scan_emulators:
+            scan_emulators(feedback);
             break;
         case orion::SettingsPanel::Change::copy_backdrops:
         {
@@ -1014,10 +1079,10 @@ class Library final : public app::Concept
                 return;
             }
             if (prefs_.rom_folders.size() < 16)
-                prefs_.rom_folders.push_back({name_, ""});
-            tabs_changed();
-            show_note(true, "Added " + name_ + ": its games appear when ORION next starts");
-            feedback.play(audio::Cue::saved);
+                prefs_.rom_folders.push_back({name_, "", folder_emulator_});
+            save_prefs();
+            scan_emulators(feedback);
+            show_note(true, "Added " + name_ + ": looking for its games");
             return;
         }
         if (typing == Typing::art_folder)
@@ -1216,15 +1281,19 @@ class Library final : public app::Concept
         launch_ok_ = false;
         std::string elf;
         std::string why;
-        // A game for an emulator starts the emulator with the core and the
-        // game, as RetroArch's own ES-DE does: -L <core> <game>.
-        const std::string core = title->is_rom() ? core_for(*title) : std::string();
-        // A game for RetroArch: its launcher is told through args.txt and
-        // test-run.txt (library/emulators.hpp). ORION stages them in its own
-        // folder; the helper, outside any sandbox, puts them in RetroArch's
-        // and the originals back afterwards (payload/launcher). Files ORION
-        // writes there itself the launcher cannot read before it decides.
-        const std::string &root = context_.library.emulator.root;
+        // A game for an emulator starts in the app that plays it, each the
+        // way it takes a game (library/emulators.hpp).
+        const library::EmulatorApp *app =
+            title->is_rom() ? context_.library.emulator.app_of(*title) : nullptr;
+        const bool retroarch = app != nullptr && app->key == "retroarch";
+        // RetroArch, as its own ES-DE does: -L <core> <game>.
+        const std::string core = retroarch ? core_for(*title) : std::string();
+        // Its launcher is told through args.txt and test-run.txt. ORION
+        // stages them in its own folder; the helper, outside any sandbox,
+        // puts them in RetroArch's and the originals back afterwards
+        // (payload/launcher). Files ORION writes there itself the launcher
+        // cannot read before it decides.
+        const std::string root = app != nullptr ? app->root : std::string();
         const std::string args = root + "/args.txt";
         const std::string test_run = root + "/test-run.txt";
         const std::string staged_args = dir + "/retroarch-args.txt";
@@ -1232,10 +1301,17 @@ class Library final : public app::Concept
         // Unique to this start: the helper tells its files from a later start's.
         const std::string token = std::to_string(std::time(nullptr)) + "-" +
                                   std::to_string(sys::monotonic_us() % 1000000);
-        std::string request = title->is_rom()
-                                  ? title->launcher + "\n@install " + staged_args + "\t" + args +
-                                        "\n@install " + staged_test_run + "\t" + test_run + "\n"
-                                  : title->id + "\n";
+        std::string request = title->id + "\n";
+        if (retroarch)
+            request = title->launcher + "\n@install " + staged_args + "\t" + args + "\n@install " +
+                      staged_test_run + "\t" + test_run + "\n";
+        else if (app != nullptr && app->key == "porpoise")
+            // Porpoise closes itself when the game ends, so ORION comes back.
+            request =
+                title->launcher + "\n" +
+                library::porpoise_arguments(title->launcher, title->rom, prefs_.return_on_close);
+        else if (app != nullptr)
+            request = title->launcher + "\n"; // opens it; the game is picked there
         // Coming back: the helper waits for the game to close, then starts ORION.
         const std::string self = own_title_id();
         if (prefs_.return_on_close && !self.empty())
@@ -1248,16 +1324,20 @@ class Library final : public app::Concept
         const std::string &self_path = context_.library.self_path;
         if (!self_path.empty())
             request += "@record " + title->id + "\t" + self_path + "/play-log.txt\n";
-        if (title->is_rom() && core.empty())
+        if (title->is_rom() && app == nullptr)
+            why = "the emulator for it is not installed (Settings, Emulators: Scan)";
+        else if (retroarch && core.empty())
             why = "no core plays " + library::short_system_name(title->system);
         else if (!sys::on_console())
             why = "not on a console";
-        else if (title->is_rom() && title->rom.size() > library::kRetroArchArgMax)
+        else if (retroarch && title->rom.size() > library::kRetroArchArgMax)
             why = "its path is longer than RetroArch reads";
-        else if (title->is_rom() &&
+        else if (title->is_rom() && title->rom.size() > kMaxRequestPath)
+            why = "its path is too long";
+        else if (retroarch &&
                  !write_shared(staged_args, library::retroarch_args(core, title->rom, token)))
             why = "could not write " + staged_args;
-        else if (title->is_rom() && !write_shared(staged_test_run, "ORION " + token + "\n"))
+        else if (retroarch && !write_shared(staged_test_run, "ORION " + token + "\n"))
             why = "could not write " + staged_test_run;
         else if (dir.empty() || !save::write_atomic(dir + "/launch-request.txt", request).empty())
             why = "could not write the launch request";
@@ -1279,7 +1359,9 @@ class Library final : public app::Concept
             log_launch(*title, "sent the helper (" + std::to_string(elf.size()) +
                                    " bytes) to 127.0.0.1:" + std::to_string(kLoaderPort) +
                                    "; closing ORION");
-            launch_message_ = "Starting " + title->name + "\u2026";
+            launch_message_ = app != nullptr && !app->starts_games
+                                  ? "Opening " + app->name + ": choose " + title->name + " there"
+                                  : "Starting " + title->name + "\u2026";
             // Long enough to read the card, then ORION gets out of the way.
             launch_exit_ = 0.9f;
             launch_pending_ = 30.0f;
@@ -1426,7 +1508,8 @@ class Library final : public app::Concept
             if (title.is_rom() && title.icon.empty())
                 roms.push_back(title);
         }
-        library::attach_rom_art(roms, context_.library.emulator.root,
+        const library::EmulatorApp *retroarch = context_.library.emulator.app("retroarch");
+        library::attach_rom_art(roms, retroarch != nullptr ? retroarch->root : std::string(),
                                 orion::art_folder(prefs_, context_.library.state_dir));
         int found = 0;
         for (const Title &rom : roms)
@@ -1700,6 +1783,13 @@ class Library final : public app::Concept
         return chosen;
     }
 
+    // The app a game for an emulator starts in, by name.
+    std::string emulator_name(const Title &title) const
+    {
+        const library::EmulatorApp *app = context_.library.emulator.app_of(title);
+        return app != nullptr ? app->name : std::string("not installed");
+    }
+
     std::string core_name(const std::string &file) const
     {
         for (const library::Core &core : context_.library.emulator.cores)
@@ -1954,7 +2044,7 @@ class Library final : public app::Concept
                 focus = static_cast<int>(i);
             ui::CardItem item;
             item.title = title.name;
-            item.subtitle = describe(title);
+            item.subtitle = describe(title, emulator_name(title));
             item.badge.clear(); // the art slot draws the category banner
             item.texture = title.texture;
             if (title.icon_width > 0 && title.icon_height > 0)
@@ -2183,9 +2273,13 @@ class Library final : public app::Concept
     {
         const Title &title = focused();
         std::string line = title.id;
-        if (title.is_rom())
+        const library::EmulatorApp *app =
+            title.is_rom() ? context_.library.emulator.app_of(title) : nullptr;
+        if (app != nullptr && app->key == "retroarch")
             line = library::short_system_name(title.system) + "   RetroArch, " +
                    core_name(core_for(title));
+        else if (title.is_rom())
+            line = library::short_system_name(title.system) + "   " + emulator_name(title);
         else
         {
             if (!title.version.empty())
@@ -2461,8 +2555,10 @@ class Library final : public app::Concept
     tween::Spring launch_card_;
     float age_ = 0.0f;
     float clock_ = 0.0f;
-    bool art_manual_ = false; // the run was asked for in Settings: report it
-    int art_sweep_ = 0;       // frames until the covers take new textures
+    bool art_manual_ = false;     // the run was asked for in Settings: report it
+    int art_sweep_ = 0;           // frames until the covers take new textures
+    int generation_ = 0;          // the library's, as last rebuilt for
+    std::string folder_emulator_; // the emulator a game folder being typed is for
     // Last, so it is destroyed first: its thread stops before what it uses.
     orion::ArtFetcher art_{
         [](const std::string &url, std::size_t limit, std::string *body, std::string *error)

@@ -44,7 +44,9 @@ TEST(Emulators, TurnsContentFoldersIntoSystemsAndGames)
 {
     std::vector<library::Title> roms;
     const library::Emulator emulator = library::scan_retroarch(retroarch(), &roms);
-    EXPECT_EQ(emulator.title_id, "PPSA90120");
+    ASSERT_EQ(emulator.apps.size(), 1u);
+    EXPECT_EQ(emulator.apps.front().key, "retroarch");
+    EXPECT_EQ(emulator.apps.front().title_id, "PPSA90120");
     EXPECT_EQ(emulator.cores.size(), 3u);
     ASSERT_EQ(emulator.systems.size(), 2u); // Saturn and Game Boy have no games
     const library::System &ds = emulator.systems[0];
@@ -216,6 +218,159 @@ TEST(Emulators, CleansNamesAndShortensSystems)
     EXPECT_TRUE(library::is_item_id("rom-0123456789ab"));
     EXPECT_FALSE(library::is_item_id("rom-0123456789aB"));
     EXPECT_FALSE(library::is_item_id("rom-123"));
+}
+
+// A GameCube or Wii disc header at `at` in a kilobyte of zeros.
+std::string disc_head(std::size_t at, const std::string &id, const std::string &title, bool wii)
+{
+    std::string head(1024, '\0');
+    head.replace(at, id.size(), id);
+    const std::size_t magic = at + (wii ? 0x18 : 0x1c);
+    const char gamecube_magic[] = {'\xC2', '\x33', '\x9F', '\x3D'};
+    const char wii_magic[] = {'\x5D', '\x1C', '\x9E', '\xA3'};
+    head.replace(magic, 4, wii ? wii_magic : gamecube_magic, 4);
+    head.replace(at + 0x20, title.size(), title);
+    return head;
+}
+
+TEST(Emulators, ReadsNintendoDiscHeaders)
+{
+    library::Disc disc;
+    ASSERT_TRUE(library::read_nintendo_disc(disc_head(0, "GQBE01", "Quiet Bay", false), &disc));
+    EXPECT_EQ(disc.id, "GQBE01");
+    EXPECT_EQ(disc.title, "Quiet Bay");
+    EXPECT_EQ(disc.system, "Nintendo - GameCube");
+
+    // RVZ (and WIA) keep a copy of the header at 0x58.
+    std::string rvz = disc_head(0x58, "RLNP01", "Lantern Night", true);
+    rvz.replace(0, 4, std::string("RVZ\x01", 4));
+    ASSERT_TRUE(library::read_nintendo_disc(rvz, &disc));
+    EXPECT_EQ(disc.id, "RLNP01");
+    EXPECT_EQ(disc.title, "Lantern Night");
+    EXPECT_EQ(disc.system, "Nintendo - Wii");
+
+    // GCZ says which console only; WBFS holds Wii discs.
+    std::string gcz(64, '\0');
+    gcz.replace(0, 4, std::string("\x01\xC0\x0B\xB1", 4));
+    ASSERT_TRUE(library::read_nintendo_disc(gcz, &disc));
+    EXPECT_EQ(disc.system, "Nintendo - GameCube");
+    EXPECT_TRUE(disc.id.empty());
+    gcz[4] = 1;
+    ASSERT_TRUE(library::read_nintendo_disc(gcz, &disc));
+    EXPECT_EQ(disc.system, "Nintendo - Wii");
+    ASSERT_TRUE(library::read_nintendo_disc(std::string("WBFS") + std::string(64, '\0'), &disc));
+    EXPECT_EQ(disc.system, "Nintendo - Wii");
+
+    // A PS2 disc (ISO 9660) is none of them.
+    EXPECT_FALSE(library::read_nintendo_disc(std::string(1024, '\0'), &disc));
+    EXPECT_FALSE(library::read_nintendo_disc("", &disc));
+}
+
+TEST(Emulators, PorpoiseTakesItsGameAsItsTilesGiveIt)
+{
+    EXPECT_EQ(library::porpoise_arguments("PPSA90130", "/data/games/Quiet Bay.rvz", false),
+              "PPSA90130\n--rom\n/data/games/Quiet Bay.rvz\n");
+    EXPECT_EQ(library::porpoise_arguments("PPSA90130", "/app0/porpoise/games/a.iso", true),
+              "PPSA90130\n--rom\n/app0/porpoise/games/a.iso\n--exit-after-game\n");
+}
+
+library::Title app_title(const std::string &id, const std::string &name, const std::string &path)
+{
+    library::Title title;
+    title.id = id;
+    title.name = name;
+    title.path = path;
+    title.source = library::Source::folder;
+    return title;
+}
+
+void write_file(const std::filesystem::path &path, const std::string &bytes)
+{
+    std::filesystem::create_directories(path.parent_path());
+    std::ofstream(path, std::ios::binary) << bytes;
+}
+
+TEST(Emulators, FindsPorpoiseAndPs5sx2AndTheirGames)
+{
+    namespace fs = std::filesystem;
+    const fs::path root = fs::temp_directory_path() / "hui-emulators-test";
+    fs::remove_all(root);
+    const fs::path porpoise = root / "PPSA90130";
+    const fs::path ps5sx2 = root / "PPSA90131";
+    fs::create_directories(ps5sx2);
+    write_file(porpoise / "porpoise/games/Quiet Bay (Europe).iso",
+               disc_head(0, "GQBP01", "Quiet Bay", false));
+    std::string rvz = disc_head(0x58, "RLNP01", "Lantern Night", true);
+    rvz.replace(0, 4, std::string("RVZ\x01", 4));
+    write_file(porpoise / "porpoise/games/wii/lantern.rvz", rvz);
+    write_file(porpoise / "porpoise/games/notes.txt", "not a disc");
+    write_file(porpoise / "porpoise/games/gba/Starfall.iso", disc_head(0, "GSFE01", "X", false));
+    // The player's own folder for PS5SX2, beside a GameCube disc it must not take.
+    write_file(root / "drive/PS2/Paper Tiger (USA).iso", std::string(1024, '\0'));
+    write_file(root / "drive/PS2/Cube.iso", disc_head(0, "GCBE01", "Cube", false));
+    write_file(root / "drive/PS2/Tower.chd", "chd");
+
+    const std::vector<library::Title> titles = {
+        app_title("PPSA90130", "Porpoise (DolphinPS5)", porpoise.string()),
+        app_title("PPSA90131", "PS5SX2", ps5sx2.string()),
+        app_title("PPSA90132", "Starfall Arcade", (root / "other").string()),
+    };
+    EXPECT_EQ(library::emulator_key(titles[0]), "porpoise");
+    EXPECT_EQ(library::emulator_key(titles[1]), "ps5sx2");
+    EXPECT_EQ(library::emulator_key(titles[2]), "");
+
+    std::vector<library::Title> roms;
+    const library::Emulator emulator =
+        library::scan_emulators(titles, {{(root / "drive/PS2").string(), "", "ps5sx2"}}, &roms);
+    ASSERT_EQ(emulator.apps.size(), 2u);
+    const library::EmulatorApp *dolphin = emulator.app("porpoise");
+    const library::EmulatorApp *sx2 = emulator.app("ps5sx2");
+    ASSERT_NE(dolphin, nullptr);
+    ASSERT_NE(sx2, nullptr);
+    EXPECT_TRUE(dolphin->starts_games);
+    EXPECT_FALSE(sx2->starts_games);
+    EXPECT_EQ(dolphin->games, 2); // the gba folder is another system's
+    EXPECT_EQ(sx2->games, 2);     // the GameCube disc is Porpoise's kind
+    ASSERT_FALSE(dolphin->folders.empty());
+    EXPECT_EQ(dolphin->folders.front(), (porpoise / "porpoise/games").string());
+
+    std::vector<std::string> systems;
+    for (const library::System &system : emulator.systems)
+        systems.push_back(system.short_name);
+    EXPECT_EQ(systems, (std::vector<std::string>{"GameCube", "PS2", "Wii"}));
+
+    const library::Title *quiet = nullptr;
+    const library::Title *lantern = nullptr;
+    const library::Title *paper = nullptr;
+    for (const library::Title &rom : roms)
+    {
+        if (rom.name == "Quiet Bay")
+            quiet = &rom;
+        if (rom.name == "Lantern Night")
+            lantern = &rom;
+        if (rom.name == "Paper Tiger")
+            paper = &rom;
+    }
+    ASSERT_NE(quiet, nullptr);
+    ASSERT_NE(lantern, nullptr);
+    ASSERT_NE(paper, nullptr);
+    // Porpoise's own folder is /app0 to it; names come from the discs.
+    EXPECT_EQ(quiet->rom, "/app0/porpoise/games/Quiet Bay (Europe).iso");
+    EXPECT_EQ(quiet->system, "Nintendo - GameCube");
+    EXPECT_EQ(quiet->launcher, "PPSA90130");
+    EXPECT_EQ(lantern->system, "Nintendo - Wii");
+    EXPECT_EQ(paper->system, "Sony - PlayStation 2");
+    EXPECT_EQ(paper->launcher, "PPSA90131");
+    EXPECT_EQ(paper->rom, (root / "drive/PS2/Paper Tiger (USA).iso").string());
+    EXPECT_EQ(emulator.app_of(*paper), sx2);
+
+    // Scanning again into a library replaces the games, never doubles them.
+    library::Library library;
+    library.titles = titles;
+    EXPECT_EQ(library::add_emulator_games(library, {}, (root / "art").string()), 2);
+    EXPECT_EQ(library::add_emulator_games(library, {}, (root / "art").string()), 2);
+    EXPECT_EQ(library.titles.size(), titles.size() + 2u);
+    fs::remove_all(root);
 }
 
 } // namespace

@@ -52,6 +52,11 @@ class Shell
     {
         return std::exchange(context_.new_icons, {});
     }
+    // True once since a design asked for the emulators to be scanned again.
+    bool take_rescan_request()
+    {
+        return std::exchange(context_.rescan_requested, false);
+    }
 
     void update(const InputFrame &input, float dt);
     // Queues this frame's layers; the caller presents them.

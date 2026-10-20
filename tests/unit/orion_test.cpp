@@ -172,14 +172,19 @@ TEST(OrionPrefs, RomFoldersAreKept)
 {
     const std::string dir = fresh_dir("orion-prefs-rom-folders");
     orion::LibraryPrefs prefs;
-    prefs.rom_folders.push_back({"/mnt/usb0/roms", ""});
-    prefs.rom_folders.push_back({"/data/games/psp", "Sony - PlayStation Portable"});
-    prefs.rom_folders.push_back({"/etc/nope", ""}); // not under /data or /mnt: dropped on load
+    prefs.rom_folders.push_back({"/mnt/usb0/roms", "", ""});
+    prefs.rom_folders.push_back({"/data/games/psp", "Sony - PlayStation Portable", ""});
+    prefs.rom_folders.push_back({"/mnt/usb0/games", "", "porpoise"});
+    prefs.rom_folders.push_back({"/etc/nope", "", ""}); // not under /data or /mnt: dropped on load
     ASSERT_TRUE(orion::save_prefs(dir, prefs));
     const orion::LibraryPrefs back = orion::load_prefs(dir);
-    ASSERT_EQ(back.rom_folders.size(), 2u);
+    ASSERT_EQ(back.rom_folders.size(), 3u);
     EXPECT_EQ(back.rom_folders[0].path, "/mnt/usb0/roms");
     EXPECT_EQ(back.rom_folders[1].system, "Sony - PlayStation Portable");
+    EXPECT_EQ(back.rom_folders[1].emulator, ""); // RetroArch
+    EXPECT_EQ(back.rom_folders[2].emulator, "porpoise");
+    ASSERT_EQ(orion::game_folders(back).size(), 3u);
+    EXPECT_EQ(orion::game_folders(back)[2].emulator, "porpoise");
 }
 
 TEST(OrionPrefs, BackgroundsCanBeToldApart)

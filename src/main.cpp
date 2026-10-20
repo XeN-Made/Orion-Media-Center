@@ -40,6 +40,7 @@
 #include <memory>
 #include <span>
 #include <string>
+#include <utility>
 #include <vector>
 
 extern "C" void hui_heap_stats(std::size_t *live_bytes, std::size_t *peak_bytes,
@@ -200,6 +201,14 @@ int main()
     // The installed titles, as ShadowMountPlus sees them. /data is visible
     // here only because ShadowMountPlus mounts it into the titles it launches.
     library::Library titles;
+    // The emulators' games: at start-up, and again when Settings asks (Scan
+    // for emulators). The prefs hold the player's folders.
+    const auto scan_emulators = [&titles]()
+    {
+        const orion::LibraryPrefs prefs = orion::load_prefs(titles.state_dir);
+        return library::add_emulator_games(titles, orion::game_folders(prefs),
+                                           orion::art_folder(prefs, titles.state_dir));
+    };
     {
         library::ScanOptions scan = library::console_defaults();
         std::string param;
@@ -225,24 +234,7 @@ int main()
         titles.scanned = true;
         titles.state_dir = "/data/orion";
         titles.themes_dir = std::string(kAssets) + "/themes";
-        // RetroArch's games, when it is installed: one more library source.
-        for (std::size_t i = 0; i < titles.titles.size(); ++i)
-        {
-            if (!library::is_retroarch(titles.titles[i]))
-                continue;
-            const library::Title retroarch = titles.titles[i];
-            std::vector<library::Title> roms;
-            titles.emulator = library::scan_retroarch(retroarch, &roms);
-            const orion::LibraryPrefs prefs = orion::load_prefs(titles.state_dir);
-            // The player's own ROM folders, on a drive or anywhere in /data.
-            for (const orion::RomFolder &folder : prefs.rom_folders)
-                library::scan_rom_folder(titles.emulator, folder.path, folder.system, &roms);
-            library::attach_rom_art(roms, retroarch.path,
-                                    orion::art_folder(prefs, titles.state_dir));
-            for (library::Title &rom : roms)
-                titles.titles.push_back(std::move(rom));
-            break;
-        }
+        scan_emulators();
         const int icons = library::load_icons(titles, renderer.batch());
         char summary[128];
         std::snprintf(summary, sizeof(summary), "titles=%zu icons=%d in %lld ms",
@@ -371,6 +363,41 @@ int main()
         if (tour)
             input = tour->step(dt);
 
+        // Before the design's update, which rebuilds on the new generation
+        // before it touches an index into the titles.
+        if (shell.take_rescan_request())
+        {
+            std::vector<library::Title> before;
+            for (const library::Title &title : titles.titles)
+            {
+                if (title.is_rom() && title.texture != 0)
+                    before.push_back(title);
+            }
+            const int games = scan_emulators();
+            // A game still there keeps its picture; the others' go.
+            for (library::Title &title : titles.titles)
+            {
+                for (library::Title &old : before)
+                {
+                    if (old.texture == 0 || old.id != title.id ||
+                        !(title.icon.empty() || title.icon == old.icon))
+                        continue;
+                    title.icon = old.icon;
+                    title.texture = std::exchange(old.texture, 0u);
+                    title.icon_width = old.icon_width;
+                    title.icon_height = old.icon_height;
+                }
+            }
+            for (const library::Title &old : before)
+            {
+                if (old.texture != 0)
+                    renderer.batch().delete_texture(old.texture);
+            }
+            library::load_icons(titles, renderer.batch());
+            ++titles.generation;
+            sys::log("[ORION] emulators scanned again: %zu apps, %d games",
+                     titles.emulator.apps.size(), games);
+        }
         shell.update(input, dt);
         // Box art ORION downloaded: loaded as the scan's icons were.
         if (auto icons = shell.take_new_icons(); !icons.empty())

@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Emulated systems: RetroArch's cores and content as library entries.
+// ps5-homebrew-ui - Emulated systems: the emulators' games as library entries.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 
@@ -6,6 +6,7 @@
 
 #include "library/library.hpp"
 
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -26,6 +27,69 @@ bool is_retroarch(const Title &title);
 // are left out of the systems.
 Emulator scan_retroarch(const Title &retroarch, std::vector<Title> *roms);
 
+// The emulators ORION knows. Each is found by its title's name (or a folder
+// only it has) and brings its own folders, which are looked in when they exist:
+//
+//   retroarch  RetroArch: <root>/content/<system>/, any system a core plays.
+//              Starts a game through args.txt and test-run.txt (below).
+//   porpoise   Porpoise (DolphinPS5): GameCube and Wii discs in
+//              <root>/porpoise/games (/app0/porpoise/games to it),
+//              /data/porpoise/games, /data/games, /data/roms, /data/iso.
+//              Starts a game from its command line, as its own home-screen
+//              tiles do: <title id> --rom <disc> [--exit-after-game].
+//   ps5sx2     PS5SX2: PS2 discs in /data/PCSX2/games, /data/PCSX2 and a
+//              drive's PS2/ or PCSX2/games/. It takes no game from outside
+//              that ORION can use yet, so its games open PS5SX2.
+struct KnownEmulator
+{
+    const char *key;   // what the prefs name it by
+    const char *name;  // as Settings shows it
+    const char *plays; // "GameCube, Wii"
+};
+std::span<const KnownEmulator> known_emulators();
+// Which of them an installed title is ("porpoise"), or empty.
+std::string emulator_key(const Title &title);
+
+// A folder of games the player added for one emulator: a system's folder or
+// a folder of them, the system given or worked out (see scan_rom_folder).
+struct GameFolder
+{
+    std::string path;
+    std::string system;   // empty: worked out
+    std::string emulator; // a key above; empty is RetroArch
+};
+
+// Everything at once: finds the emulators among titles, reads their own
+// folders and the player's, and appends their games to *roms. What
+// start-up and Settings' Scan for emulators both run.
+Emulator scan_emulators(const std::vector<Title> &titles, const std::vector<GameFolder> &folders,
+                        std::vector<Title> *roms);
+// The library's emulators and their games, (re)made: games found by an
+// earlier scan leave library.titles, scan_emulators runs over the rest, box
+// art is attached (attach_rom_art, art_dir) and the games are appended.
+// Returns how many there are.
+int add_emulator_games(Library &library, const std::vector<GameFolder> &folders,
+                       const std::string &art_dir);
+// One of the player's folders, for its emulator when that one is installed.
+// Returns how many games were added.
+int scan_game_folder(Emulator &emulator, const GameFolder &folder, std::vector<Title> *roms);
+
+// A GameCube or Wii disc's header: plain (.iso, .gcm), inside a WIA or RVZ
+// file, or the kind a GCZ or WBFS file says. head is the file's first
+// kilobyte. Empty id and title when the format keeps them elsewhere.
+struct Disc
+{
+    std::string id;     // "GATP51"
+    std::string title;  // "ATV: Quad Power Racing 2"
+    std::string system; // "Nintendo - GameCube" or "Nintendo - Wii"
+};
+bool read_nintendo_disc(std::string_view head, Disc *disc);
+
+// The command line Porpoise starts a disc with (one argument a line, the
+// launch helper's request format after the title ID).
+std::string porpoise_arguments(const std::string &title_id, const std::string &disc,
+                               bool exit_after_game);
+
 // The player's own ROM folders (as ORION and RetroArch both see them, under
 // /data or /mnt): a folder of one system, the system given or worked out from
 // its name ("gba", "GBA" or "Nintendo - Game Boy Advance"), or a folder of
@@ -38,6 +102,8 @@ int scan_rom_folder(Emulator &emulator, const std::string &path, const std::stri
 std::string system_of_folder(std::string_view name, const Emulator &emulator);
 // Every system a core of RetroArch's plays, by short name.
 std::vector<std::string> known_systems(const Emulator &emulator);
+// What one emulator plays: RetroArch's cores, the others' own systems.
+std::vector<std::string> known_systems(const Emulator &emulator, std::string_view key);
 
 // Parts of the scan, exposed for tests.
 bool read_core_info(std::string_view text, const std::string &file, Core *core);

@@ -59,6 +59,9 @@ enum : int
     kThemesInfo,
     kFolderSystem,
     kFolderRemove,
+    kScanEmulators,
+    kAppInfo,
+    kAppStarts,
     // A tab's page.
     kPageShow,
     kPageTheme,
@@ -73,7 +76,16 @@ enum : int
     kSystemRow = 200,    // + the system's index: on or off
     kCoreRow = 300,      // + the system's index: which core
     kRomFolderRow = 400, // + the folder's index in prefs.rom_folders
+    kEmulatorRow = 500,  // + the emulator's index in emulator_->apps
+    kOwnFolderRow = 600, // + the index of a folder the emulator looks in by itself
+    kMissingRow = 700,   // + the index of a known emulator that is not installed
 };
+
+// The emulator a game folder is for: empty in the prefs is RetroArch.
+std::string folder_key(const RomFolder &folder)
+{
+    return folder.emulator.empty() ? std::string("retroarch") : folder.emulator;
+}
 
 // Where box art can live: ORION's folder, a USB drive, the extended storage,
 // or a folder the player types.
@@ -251,12 +263,10 @@ void SettingsPanel::refresh(const Look &look, const LibraryPrefs &prefs)
 
 void SettingsPanel::build_nav()
 {
-    sections_ = {Section::library, Section::tabs};
+    // Emulators always, so Scan for emulators is there before one is found.
+    sections_ = {Section::library, Section::tabs, Section::emulators};
     if (emulator_ != nullptr && !emulator_->systems.empty())
-    {
-        sections_.push_back(Section::emulators);
         sections_.push_back(Section::art);
-    }
     sections_.push_back(Section::storage);
     sections_.push_back(Section::appearance);
     std::vector<ui::NavEntry> entries;
@@ -267,6 +277,26 @@ void SettingsPanel::build_nav()
         entries.push_back(std::move(entry));
     }
     nav_.set_entries(std::move(entries));
+}
+
+void SettingsPanel::rebuild_nav(const Look &look, const LibraryPrefs &prefs)
+{
+    build_nav();
+    auto at = std::find(sections_.begin(), sections_.end(), section_);
+    if (at == sections_.end())
+    {
+        section_ = Section::emulators;
+        at = std::find(sections_.begin(), sections_.end(), section_);
+    }
+    const int index = static_cast<int>(at - sections_.begin());
+    nav_.set_focus(index);
+    nav_.set_current(index);
+    if (!emulator_page_.empty() && page_app() == nullptr)
+    {
+        emulator_page_.clear();
+        folder_page_ = -1;
+    }
+    refresh(look, prefs);
 }
 
 void SettingsPanel::layout()
@@ -283,6 +313,8 @@ void SettingsPanel::show(Section section, const Look &look, const LibraryPrefs &
 {
     section_ = section;
     page_.clear();
+    emulator_page_.clear();
+    folder_page_ = -1;
     const auto at = std::find(sections_.begin(), sections_.end(), section);
     const int index = at == sections_.end() ? 0 : static_cast<int>(at - sections_.begin());
     nav_.set_focus(index);
@@ -323,19 +355,25 @@ void SettingsPanel::build(const Look &look, const LibraryPrefs &prefs)
             build_tab_page(prefs);
         break;
     case Section::emulators:
-        build_emulators(prefs);
+    {
+        const library::EmulatorApp *app = page_app();
+        if (app == nullptr)
+            emulator_page_.clear();
+        if (folder_page_ >= static_cast<int>(prefs.rom_folders.size()))
+            folder_page_ = -1;
+        if (app != nullptr && folder_page_ >= 0)
+            build_folder_page(prefs);
+        else if (app != nullptr)
+            build_emulator_page(*app, prefs);
+        else
+            build_emulators(prefs);
         break;
+    }
     case Section::art:
         build_art(prefs);
         break;
     case Section::storage:
-        if (folder_page_ >= 0 && folder_page_ < static_cast<int>(prefs.rom_folders.size()))
-            build_folder_page(prefs);
-        else
-        {
-            folder_page_ = -1;
-            build_storage(prefs);
-        }
+        build_storage(prefs);
         break;
     case Section::appearance:
         build_appearance(look, prefs);
@@ -462,10 +500,45 @@ void SettingsPanel::build_tab_page(const LibraryPrefs &prefs)
     }
 }
 
+const library::EmulatorApp *SettingsPanel::page_app() const
+{
+    return emulator_ != nullptr && !emulator_page_.empty() ? emulator_->app(emulator_page_)
+                                                           : nullptr;
+}
+
 void SettingsPanel::build_emulators(const LibraryPrefs &prefs)
 {
     form_.add_header("Emulators");
-    for (std::size_t i = 0; emulator_ != nullptr && i < emulator_->systems.size(); ++i)
+    form_.add_action(kScanEmulators, "Scan for emulators").description = scan_status_;
+    for (std::size_t i = 0; emulator_ != nullptr && i < emulator_->apps.size(); ++i)
+    {
+        const library::EmulatorApp &app = emulator_->apps[i];
+        ui::FormRow &row = form_.add_action(kEmulatorRow + static_cast<int>(i), app.name);
+        row.chevron = true;
+        row.text = std::to_string(app.games) + (app.games == 1 ? " game" : " games");
+        std::string plays;
+        for (const library::KnownEmulator &known : library::known_emulators())
+        {
+            if (app.key == known.key)
+                plays = known.plays;
+        }
+        row.description =
+            plays + (app.starts_games ? ". ORION starts its games"
+                                      : ". Its games open it; you pick the game there");
+    }
+    int missing = 0;
+    for (const library::KnownEmulator &known : library::known_emulators())
+    {
+        if (emulator_ != nullptr && emulator_->app(known.key) != nullptr)
+            continue;
+        form_.add_value(kMissingRow + missing++, known.name, "Not installed").description =
+            std::string(known.plays) + ". Install it, then scan";
+    }
+
+    if (emulator_ == nullptr || emulator_->systems.empty())
+        return;
+    form_.add_header("Systems");
+    for (std::size_t i = 0; i < emulator_->systems.size(); ++i)
     {
         const library::System &system = emulator_->systems[i];
         const std::string games =
@@ -473,7 +546,7 @@ void SettingsPanel::build_emulators(const LibraryPrefs &prefs)
         form_
             .add_toggle(kSystemRow + static_cast<int>(i), system.short_name + "  (" + games + ")",
                         prefs.system_enabled(system.name))
-            .description = system.name + ", played by RetroArch: on shows its tab";
+            .description = system.name + ": on shows its tab";
         if (system.cores.size() < 2)
             continue;
         std::vector<std::string> names;
@@ -507,22 +580,38 @@ void SettingsPanel::build_art(const LibraryPrefs &prefs)
         "Chosen under Storage";
 }
 
-void SettingsPanel::build_storage(const LibraryPrefs &prefs)
+void SettingsPanel::build_emulator_page(const library::EmulatorApp &app, const LibraryPrefs &prefs)
 {
-    form_.add_header("ROM folders");
-    ui::FormRow &add = form_.add_action(kAddRomFolder, "Add a ROM folder");
+    form_.add_header("Emulators  ·  " + app.name);
+    form_.add_value(kAppInfo, "App", app.title_id).description = app.root;
+    form_.add_value(kAppStarts, "Games", std::to_string(app.games)).description =
+        app.starts_games ? "Cross on a game starts it in " + app.name
+                         : "Cross on a game opens " + app.name + "; pick the game there";
+
+    form_.add_header("Game folders");
+    ui::FormRow &add = form_.add_action(kAddRomFolder, "Add a game folder");
     add.chevron = true;
-    add.description =
-        "A system's folder (roms/gba) or a folder of them (roms), under /data or /mnt";
+    add.description = app.key == "retroarch"
+                          ? "A system's folder (roms/gba) or a folder of them (roms), under /data "
+                            "or /mnt"
+                          : "A folder of discs (and the folders in it), under /data or /mnt";
     for (std::size_t i = 0; i < prefs.rom_folders.size(); ++i)
     {
         const RomFolder &folder = prefs.rom_folders[i];
+        if (folder_key(folder) != app.key)
+            continue;
         ui::FormRow &row = form_.add_action(kRomFolderRow + static_cast<int>(i), folder.path);
         row.chevron = true;
         row.text = folder.system.empty() ? "Auto" : library::short_system_name(folder.system);
-        row.description = "Its games join their systems' tabs when ORION starts";
+        row.description = "Yours: its games join their systems' tabs";
     }
+    for (std::size_t i = 0; i < app.folders.size(); ++i)
+        form_.add_value(kOwnFolderRow + static_cast<int>(i), app.folders[i], "Built in")
+            .description = "Where " + app.name + " looks by itself; ORION looks there too";
+}
 
+void SettingsPanel::build_storage(const LibraryPrefs &prefs)
+{
     form_.add_header("Folders");
     form_
         .add_choice(kArtFolder, "Box art folder", {kArtPlaces, kArtPlaces + 4},
@@ -546,12 +635,15 @@ void SettingsPanel::build_storage(const LibraryPrefs &prefs)
 void SettingsPanel::build_folder_page(const LibraryPrefs &prefs)
 {
     const RomFolder &folder = prefs.rom_folders[static_cast<std::size_t>(folder_page_)];
-    form_.add_header("ROM folders  \u00b7  " + folder.path);
-    std::vector<std::string> names = {"Auto (from the folder's name)"};
+    form_.add_header("Game folders  \u00b7  " + folder.path);
+    std::vector<std::string> names = {folder_key(folder) == "retroarch"
+                                          ? "Auto (from the folder's name)"
+                                          : "Auto (from each disc)"};
     int chosen = 0;
     if (emulator_ != nullptr)
     {
-        const std::vector<std::string> systems = library::known_systems(*emulator_);
+        const std::vector<std::string> systems =
+            library::known_systems(*emulator_, folder_key(folder));
         for (std::size_t i = 0; i < systems.size(); ++i)
         {
             names.push_back(library::short_system_name(systems[i]));
@@ -575,17 +667,18 @@ SettingsPanel::Change SettingsPanel::edit_folder_page(int id, LibraryPrefs *pref
     {
         const int index = form_.choice_index(kFolderSystem);
         const std::vector<std::string> systems =
-            emulator_ != nullptr ? library::known_systems(*emulator_) : std::vector<std::string>();
+            emulator_ != nullptr ? library::known_systems(*emulator_, folder_key(folder))
+                                 : std::vector<std::string>();
         folder.system = index > 0 && index <= static_cast<int>(systems.size())
                             ? systems[static_cast<std::size_t>(index - 1)]
                             : std::string();
-        return Change::prefs;
+        return Change::folders;
     }
     if (id == kFolderRemove)
     {
         prefs->rom_folders.erase(prefs->rom_folders.begin() + folder_page_);
-        folder_page_ = -1; // its page is gone: back to the list
-        return Change::prefs;
+        folder_page_ = -1; // its page is gone: back to the emulator's
+        return Change::folders;
     }
     return Change::none;
 }
@@ -767,6 +860,18 @@ SettingsPanel::Change SettingsPanel::handle(const InputFrame &input, ui::Feedbac
             layout();
             form_.focus_row(kRomFolderRow + was);
         }
+        else if (!emulator_page_.empty())
+        {
+            const std::string was = emulator_page_;
+            emulator_page_.clear();
+            build(*look, *prefs);
+            layout();
+            for (std::size_t i = 0; emulator_ != nullptr && i < emulator_->apps.size(); ++i)
+            {
+                if (emulator_->apps[i].key == was)
+                    form_.focus_row(kEmulatorRow + static_cast<int>(i));
+            }
+        }
         else if (!page_.empty())
         {
             const std::string was = page_;
@@ -804,6 +909,18 @@ SettingsPanel::Change SettingsPanel::handle(const InputFrame &input, ui::Feedbac
             return Change::add_rom_folder;
         if (id == kBackdropsAgain)
             return Change::copy_backdrops;
+        if (id == kScanEmulators)
+            return Change::scan_emulators;
+        if (emulator_ != nullptr && id >= kEmulatorRow &&
+            id - kEmulatorRow < static_cast<int>(emulator_->apps.size()))
+        {
+            emulator_page_ = emulator_->apps[static_cast<std::size_t>(id - kEmulatorRow)].key;
+            build(*look, *prefs);
+            layout();
+            form_.set_focus(0);
+            form_.enter();
+            return Change::none;
+        }
         if (id >= kRomFolderRow && id - kRomFolderRow < static_cast<int>(prefs->rom_folders.size()))
         {
             folder_page_ = id - kRomFolderRow;

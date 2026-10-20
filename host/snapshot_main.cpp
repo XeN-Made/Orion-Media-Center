@@ -30,6 +30,7 @@
 #include "library/icon.hpp"
 #include "library/library.hpp"
 #include "manifest.hpp"
+#include "orion/prefs.hpp"
 #include "ui/fonts.hpp"
 
 #include <EGL/egl.h>
@@ -276,19 +277,6 @@ int main(int argc, char **argv)
         // Favourites go to the scratch folder and start empty, like settings.
         titles.state_dir = data_root;
         titles.themes_dir = assets + "/themes";
-        // RetroArch's games, when it is installed: one more library source.
-        for (std::size_t i = 0; i < titles.titles.size(); ++i)
-        {
-            if (!hui::library::is_retroarch(titles.titles[i]))
-                continue;
-            const hui::library::Title retroarch = titles.titles[i];
-            std::vector<hui::library::Title> roms;
-            titles.emulator = hui::library::scan_retroarch(retroarch, &roms);
-            hui::library::attach_rom_art(roms, retroarch.path, titles.state_dir + "/art");
-            for (hui::library::Title &rom : roms)
-                titles.titles.push_back(std::move(rom));
-            break;
-        }
         for (const char *file : {"/favourites.json", "/library.json", "/theme.json", "/themes.txt"})
             std::remove((data_root + file).c_str());
         // HUI_THEME=<id>: wear that theme, built in or one placed in
@@ -298,6 +286,10 @@ int main(int argc, char **argv)
                                     std::string("{\"base\": \"") + theme + "\"}\n");
         if (const char *prefs = std::getenv("HUI_PREFS"))
             hui::save::write_atomic(data_root + "/library.json", std::string(prefs) + "\n");
+        // The emulators' games, with the folders HUI_PREFS names.
+        const hui::orion::LibraryPrefs prefs = hui::orion::load_prefs(titles.state_dir);
+        hui::library::add_emulator_games(titles, hui::orion::game_folders(prefs),
+                                         titles.state_dir + "/art");
         const int icons = hui::library::load_icons(titles, renderer.batch());
         std::fprintf(stderr, "library: %zu titles, %d icons from %s\n", titles.titles.size(), icons,
                      base.c_str());
@@ -439,6 +431,15 @@ int main(int argc, char **argv)
         telemetry.voices = static_cast<int>(frames / 40 % 4);
         telemetry.draw_calls = renderer.last_draw_calls();
         telemetry.instances = renderer.last_instances();
+        // Scan for emulators, as main.cpp does it (pictures are not kept here).
+        if (shell.take_rescan_request())
+        {
+            const hui::orion::LibraryPrefs prefs = hui::orion::load_prefs(titles.state_dir);
+            hui::library::add_emulator_games(titles, hui::orion::game_folders(prefs),
+                                             titles.state_dir + "/art");
+            hui::library::load_icons(titles, renderer.batch());
+            ++titles.generation;
+        }
         shell.update(input, kDt);
         ++frames;
         if (!tour.capture().empty())

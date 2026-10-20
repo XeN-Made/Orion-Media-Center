@@ -74,6 +74,10 @@ struct Context
     // Pictures a design found while running (title id, PNG path): the app
     // loads them as it loaded the scan's icons (see Shell::take_new_icons).
     std::vector<std::pair<std::string, std::string>> new_icons = {};
+    // A design that wants the emulators and their games found again (Settings,
+    // Scan for emulators) sets this; the app scans between frames and bumps
+    // library.generation.
+    bool rescan_requested = false;
     // A large picture a design wants behind it (a PNG path; empty for none).
     // The shell decodes it off the main thread and uploads it; backdrop_shown
     // says which picture backdrop_texture holds (it lags behind a change).

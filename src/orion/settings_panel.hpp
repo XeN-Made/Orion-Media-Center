@@ -30,7 +30,9 @@ struct TabEntry
 //   Library      sort order, reopen on the last tab, moved titles leave their shelf
 //   Tabs         new tab, then every tab; each opens a page of its own:
 //                shown, theme, cover shape, sort, (its core,) rename, move, delete
-//   Emulators    per system RetroArch has games for: on or off, and its core
+//   Emulators    scan for emulators; every emulator found, each with a page:
+//                its folders and the player's game folders (each with a page:
+//                system, remove); then per system with games: on or off, its core
 //   Box art      find it by itself, find it now
 //   Appearance   theme, background, sky, nebula, glass, colours, chrome
 //
@@ -71,8 +73,10 @@ class SettingsPanel
         fetch_art,       // "Find box art now" was chosen
         art_folder,      // the box art folder changed (prefs.art_dir)
         type_art_folder, // "Your own folder" was chosen: the screen asks for a path
-        add_rom_folder,  // "Add a ROM folder" was chosen: the screen asks for a path
+        add_rom_folder,  // "Add a game folder": the screen asks for a path, for emulator_page()
         copy_backdrops,  // "Copy them again": the screen asks the helper anew
+        folders,         // a game folder changed or went: save and scan again
+        scan_emulators,  // "Scan for emulators" was chosen
     };
 
     enum class Section : std::uint8_t
@@ -112,11 +116,24 @@ class SettingsPanel
     {
         state_dir_ = std::move(dir);
     }
-    // The systems the Emulators rows offer; must outlive the panel.
+    // The emulators and systems the Emulators rows offer; must outlive the panel.
     void set_emulator(const library::Emulator &emulator)
     {
         emulator_ = &emulator;
     }
+    // What Scan for emulators says under itself: the last scan, or this one.
+    void set_scan_status(std::string status)
+    {
+        scan_status_ = std::move(status);
+    }
+    // The emulator whose page is open ("porpoise"), or empty.
+    const std::string &emulator_page() const
+    {
+        return emulator_page_;
+    }
+    // After a scan: the rail (Box art comes and goes with the systems) and
+    // the rows, staying in the section that is showing.
+    void rebuild_nav(const Look &look, const LibraryPrefs &prefs);
     void open(const Look &look, const LibraryPrefs &prefs, ui::Feedback &feedback);
     // Opens straight on one tab's page.
     void open_tab(const std::string &key, const Look &look, const LibraryPrefs &prefs,
@@ -158,6 +175,8 @@ class SettingsPanel
     void build_tabs(const LibraryPrefs &prefs);
     void build_tab_page(const LibraryPrefs &prefs);
     void build_emulators(const LibraryPrefs &prefs);
+    void build_emulator_page(const library::EmulatorApp &app, const LibraryPrefs &prefs);
+    const library::EmulatorApp *page_app() const;
     void build_art(const LibraryPrefs &prefs);
     void build_storage(const LibraryPrefs &prefs);
     void build_folder_page(const LibraryPrefs &prefs);
@@ -189,7 +208,9 @@ class SettingsPanel
     std::string state_dir_ = "/data/orion";
     std::string self_path_;
     int backdrops_ = 0;
-    int folder_page_ = -1; // the ROM folder whose page is open; -1: the list
+    std::string emulator_page_; // the emulator whose page is open; empty: the list
+    int folder_page_ = -1; // the game folder whose page is open (in prefs.rom_folders); -1: none
+    std::string scan_status_ = "Finds RetroArch, Porpoise and PS5SX2, and their games";
     std::string art_status_ = "Covers from thumbnails.libretro.com for games without one";
 };
 

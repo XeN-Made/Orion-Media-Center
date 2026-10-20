@@ -309,6 +309,14 @@ std::string art_folder(const LibraryPrefs &prefs, const std::string &state_dir)
     return valid_art_dir(prefs.art_dir) ? prefs.art_dir : state_dir + "/art";
 }
 
+std::vector<library::GameFolder> game_folders(const LibraryPrefs &prefs)
+{
+    std::vector<library::GameFolder> folders;
+    for (const RomFolder &folder : prefs.rom_folders)
+        folders.push_back({folder.path, folder.system, folder.emulator});
+    return folders;
+}
+
 LibraryPrefs load_prefs(const std::string &state_dir)
 {
     LibraryPrefs prefs;
@@ -367,8 +375,9 @@ LibraryPrefs load_prefs(const std::string &state_dir)
         RomFolder folder;
         folder.path = value["path"].string_or("");
         folder.system = value["system"].string_or("");
+        folder.emulator = value["emulator"].string_or("");
         if (valid_art_dir(folder.path) && folder.system.size() <= 80 &&
-            prefs.rom_folders.size() < 16)
+            folder.emulator.size() <= 16 && prefs.rom_folders.size() < 16)
             prefs.rom_folders.push_back(std::move(folder));
     }
     const std::string art_dir = root["art_dir"].string_or("");
@@ -405,7 +414,8 @@ bool save_prefs(const std::string &state_dir, const LibraryPrefs &prefs)
     {
         text += i == 0 ? "\n" : ",\n";
         text += "    {\"path\": " + json::quote(prefs.rom_folders[i].path) +
-                ", \"system\": " + json::quote(prefs.rom_folders[i].system) + "}";
+                ", \"system\": " + json::quote(prefs.rom_folders[i].system) +
+                ", \"emulator\": " + json::quote(prefs.rom_folders[i].emulator) + "}";
     }
     text += prefs.rom_folders.empty() ? "],\n" : "\n  ],\n";
     text += "  \"tabs\": [";

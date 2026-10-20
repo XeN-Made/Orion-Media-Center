@@ -89,13 +89,46 @@ struct System
     int games = 0;
 };
 
-// RetroArch as found on this console: where it is and what it can play.
-struct Emulator
+// One emulator app found on this console (library/emulators.hpp knows which).
+struct EmulatorApp
 {
+    std::string key;      // "retroarch", "porpoise", "ps5sx2": what the prefs name it by
+    std::string name;     // "RetroArch"
     std::string title_id; // the app to start ("PPSA99169")
     std::string root;     // its folder as ORION sees it
-    std::vector<Core> cores;
-    std::vector<System> systems; // with content, sorted by name
+    std::vector<std::string> systems; // what it plays ("Nintendo - GameCube")
+    // The folders it looks in by itself that exist here, as ORION sees them.
+    std::vector<std::string> folders;
+    int games = 0;
+    // ORION can start a chosen game in it; otherwise it only opens the app.
+    bool starts_games = false;
+};
+
+// Every emulator found, and the systems they have games for.
+struct Emulator
+{
+    std::vector<EmulatorApp> apps; // in the order emulators.hpp knows them
+    std::vector<Core> cores;       // RetroArch's
+    std::vector<System> systems;   // with games, sorted by name
+    const EmulatorApp *app(std::string_view key) const
+    {
+        for (const EmulatorApp &app : apps)
+        {
+            if (app.key == key)
+                return &app;
+        }
+        return nullptr;
+    }
+    // The app a game for an emulator starts in (Title::launcher).
+    const EmulatorApp *app_of(const Title &title) const
+    {
+        for (const EmulatorApp &app : apps)
+        {
+            if (app.title_id == title.launcher)
+                return &app;
+        }
+        return nullptr;
+    }
 };
 
 // What the designs receive: the titles found at start-up.
@@ -113,9 +146,12 @@ struct Library
     // The app's own theme files (orion/theme_file.hpp); the player's are in
     // <state_dir>/themes. Empty: the kit's themes, built in.
     std::string themes_dir;
-    // RetroArch, when there is one, and the systems it has games for. Its
+    // The emulators installed and the systems they have games for. Their
     // games are in `titles` too, marked by Title::system.
     Emulator emulator;
+    // Grows each time the library is scanned again while ORION runs: a design
+    // that keeps indices into titles rebuilds when it changes.
+    int generation = 0;
 };
 
 // The three shelves the Library groups titles on.

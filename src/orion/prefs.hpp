@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include "library/emulators.hpp"
+
 #include <cstdint>
 #include <string>
 #include <string_view>
@@ -27,12 +29,14 @@ struct CustomTab
     std::string name;
 };
 
-// A folder of games for RetroArch the player added: under /data or /mnt. An
-// empty system means "worked out from the folder's name" (library/emulators.hpp).
+// A folder of games the player added for one emulator: under /data or /mnt.
+// An empty system means "worked out from the folder's name", an empty
+// emulator RetroArch (library/emulators.hpp, GameFolder).
 struct RomFolder
 {
     std::string path;
     std::string system;
+    std::string emulator; // "porpoise", "ps5sx2"; empty: RetroArch
 };
 
 // What the player chose for one emulated system. Systems not listed are on,
@@ -89,7 +93,7 @@ struct Placement
 //     "game_backgrounds": true,
 //     "blurred_covers": false,
 //     "background_strength": 1.0,
-//     "rom_folders": [{"path": "/mnt/usb0/roms", "system": ""}],
+//     "rom_folders": [{"path": "/mnt/usb0/roms", "system": "", "emulator": ""}],
 //     "art_dir": "/mnt/usb0/ORION/art",
 //     "tabs": [{"id": "t1", "name": "RPGs"}],
 //     "placements": {"PPSA01234": "t1"},
@@ -173,6 +177,8 @@ struct LibraryPrefs
 bool valid_art_dir(std::string_view path);
 // The folder box art goes in: the player's, else <state_dir>/art.
 std::string art_folder(const LibraryPrefs &prefs, const std::string &state_dir);
+// The player's game folders as the emulator scan takes them.
+std::vector<library::GameFolder> game_folders(const LibraryPrefs &prefs);
 
 LibraryPrefs load_prefs(const std::string &state_dir);
 // Atomic; false when state_dir is empty or unwritable.
