@@ -8,6 +8,7 @@
 #include "orion/art_fetcher.hpp"
 #include "orion/local_ftp.hpp"
 
+#include <cstdio>
 #include <utility>
 
 namespace hui::orion
@@ -74,6 +75,8 @@ void BackdropCopies::run(std::vector<std::string> ids, std::string folder, int p
             ++result.none;
     }
     ftp.close();
+    // The run ended: the next start may fetch again (see request_backdrops).
+    std::remove((folder + "/.fetching").c_str());
     result.finished = true;
     {
         const std::lock_guard<std::mutex> lock(mutex_);

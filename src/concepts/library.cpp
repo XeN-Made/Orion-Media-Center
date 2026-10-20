@@ -528,7 +528,19 @@ class Library final : public app::Concept
                 continue;
             ids.push_back(title.id);
         }
-        if (!ids.empty())
+        // A run that never ended (ORION closed, or worse, during it) leaves
+        // its marker: then this start does without, so a failing fetch can
+        // never keep ORION from opening.
+        const std::string marker = folder + "/.fetching";
+        struct stat info = {};
+        if (::stat(marker.c_str(), &info) == 0)
+        {
+            std::remove(marker.c_str());
+            sys::art_trace("background copies skipped: the last run did not finish");
+            return;
+        }
+        if (!ids.empty() && orion::make_directories(folder) &&
+            save::write_atomic(marker, "").empty())
             backdrop_copies_.start(std::move(ids), folder, kFtpPort);
     }
 

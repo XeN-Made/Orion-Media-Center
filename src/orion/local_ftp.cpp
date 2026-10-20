@@ -12,6 +12,7 @@
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <unistd.h>
+#include <vector>
 
 namespace hui::orion
 {
@@ -189,11 +190,13 @@ bool LocalFtp::get(const std::string &path, std::size_t limit, std::string *byte
         ::close(data);
         return false; // 550: no such file
     }
-    char buffer[64 * 1024];
+    // On the heap: this runs on a worker thread, and a console thread's
+    // stack is far smaller than a PC's (64 KB here overflowed it).
+    std::vector<char> buffer(64 * 1024);
     bool whole = true;
     for (;;)
     {
-        const ssize_t got = ::recv(data, buffer, sizeof(buffer), 0);
+        const ssize_t got = ::recv(data, buffer.data(), buffer.size(), 0);
         if (got == 0)
             break;
         if (got < 0 || bytes->size() + static_cast<std::size_t>(got) > limit)
@@ -201,7 +204,7 @@ bool LocalFtp::get(const std::string &path, std::size_t limit, std::string *byte
             whole = false;
             break;
         }
-        bytes->append(buffer, static_cast<std::size_t>(got));
+        bytes->append(buffer.data(), static_cast<std::size_t>(got));
     }
     ::close(data);
     const bool done = reply() / 100 == 2; // 226: transfer complete
