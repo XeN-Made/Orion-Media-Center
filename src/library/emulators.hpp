@@ -54,19 +54,20 @@ int attach_rom_art(std::vector<Title> &roms, const std::string &root, const std:
 // How the RetroArch port's launcher can be made to start a game. It picks a
 // mode (picker, RetroArch, ES-DE, game) from its own command line, which a
 // launch from outside cannot set: the system hands the title no arguments.
-// So ORION uses the two files the launcher reads on every start:
-//   <root>/config/frontend.cfg   frontend_start = "retroarch" skips the picker
-//   <root>/args.txt              one argument per line (up to 255 bytes, '#'
-//                                comments, "--ps5-" lines are the launcher's),
-//                                added to RetroArch's own: -L <core> <game>
-// RetroArch then starts the game as its own command line asks. The files are
-// the player's too: ORION keeps what it replaced and the launch helper puts
-// it back once RetroArch is up (payload/launcher).
+// So ORION uses the launcher's own test run, two files in its folder:
+//   <root>/test-run.txt   any content: this start is a test run, which goes
+//                         straight to RetroArch (no picker, whatever
+//                         frontend.cfg remembers); the launcher deletes it
+//   <root>/args.txt       one argument per line (up to 255 bytes, '#'
+//                         comments, "--ps5-" lines are the launcher's), added
+//                         to RetroArch's own: -L <core> <game>
+// Without test-run.txt the launcher deletes args.txt, with its other test
+// files, before reading it. RetroArch then starts the game as its own command
+// line asks. args.txt may be the player's too: ORION keeps what it replaced
+// and the launch helper puts it back once RetroArch is up (payload/launcher).
 //
 // The args.txt for a game: "-L", the core in /app0/cores, the game.
 std::string retroarch_args(const std::string &core_file, const std::string &rom);
-// frontend.cfg with frontend_start set to "retroarch", other lines kept.
-std::string retroarch_frontend(std::string_view current);
 // Lines RetroArch's launcher reads no longer than this.
 constexpr std::size_t kRetroArchArgMax = 255;
 

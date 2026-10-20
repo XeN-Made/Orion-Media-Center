@@ -270,33 +270,6 @@ std::string retroarch_args(const std::string &core_file, const std::string &rom)
            "\n" + rom + "\n";
 }
 
-std::string retroarch_frontend(std::string_view current)
-{
-    std::string out;
-    bool set = false;
-    std::size_t start = 0;
-    while (start < current.size())
-    {
-        std::size_t end = current.find('\n', start);
-        if (end == std::string_view::npos)
-            end = current.size();
-        const std::string_view line = current.substr(start, end - start);
-        start = end + 1;
-        if (trim(line).rfind("frontend_start", 0) == 0)
-        {
-            if (!set)
-                out += "frontend_start = \"retroarch\"\n";
-            set = true;
-            continue;
-        }
-        if (!trim(line).empty())
-            out += std::string(line) + "\n";
-    }
-    if (!set)
-        out += "frontend_start = \"retroarch\"\n";
-    return out;
-}
-
 std::string rom_id(std::string_view path)
 {
     std::uint64_t hash = 1469598103934665603ull;

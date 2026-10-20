@@ -446,7 +446,8 @@ class Library final : public app::Concept
         if (!context_.library.emulator.root.empty())
         {
             put_back(context_.library.emulator.root + "/args.txt");
-            put_back(context_.library.emulator.root + "/config/frontend.cfg");
+            put_back(context_.library.emulator.root + "/test-run.txt");
+            put_back(context_.library.emulator.root + "/config/frontend.cfg"); // earlier builds
         }
         // New games for an emulator look for their box art in the background.
         if (prefs_.auto_art && sys::on_console())
@@ -1049,18 +1050,18 @@ class Library final : public app::Concept
         // game, as RetroArch's own ES-DE does: -L <core> <game>.
         const std::string core = title->is_rom() ? core_for(*title) : std::string();
         // A game for RetroArch: its launcher is told through args.txt and
-        // frontend.cfg (library/emulators.hpp). ORION stages them in its own
+        // test-run.txt (library/emulators.hpp). ORION stages them in its own
         // folder; the helper, outside any sandbox, puts them in RetroArch's
         // and the originals back afterwards (payload/launcher). Files ORION
         // writes there itself the launcher cannot read before it decides.
         const std::string &root = context_.library.emulator.root;
         const std::string args = root + "/args.txt";
-        const std::string frontend = root + "/config/frontend.cfg";
+        const std::string test_run = root + "/test-run.txt";
         const std::string staged_args = dir + "/retroarch-args.txt";
-        const std::string staged_frontend = dir + "/retroarch-frontend.cfg";
+        const std::string staged_test_run = dir + "/retroarch-test-run.txt";
         const std::string request =
             title->is_rom() ? title->launcher + "\n@install " + staged_args + "\t" + args +
-                                  "\n@install " + staged_frontend + "\t" + frontend + "\n"
+                                  "\n@install " + staged_test_run + "\t" + test_run + "\n"
                             : title->id + "\n";
         if (title->is_rom() && core.empty())
             why = "no core plays " + library::short_system_name(title->system);
@@ -1071,9 +1072,8 @@ class Library final : public app::Concept
         else if (title->is_rom() &&
                  !write_shared(staged_args, library::retroarch_args(core, title->rom)))
             why = "could not write " + staged_args;
-        else if (title->is_rom() && !write_shared(staged_frontend, library::retroarch_frontend(
-                                                                       players_frontend(frontend))))
-            why = "could not write " + staged_frontend;
+        else if (title->is_rom() && !write_shared(staged_test_run, ""))
+            why = "could not write " + staged_test_run;
         else if (dir.empty() || !save::write_atomic(dir + "/launch-request.txt", request).empty())
             why = "could not write the launch request";
         else if (!save::read_file(kLauncherPath, &elf, 4u << 20) || elf.empty())
@@ -1306,15 +1306,6 @@ class Library final : public app::Concept
             std::remove(file.c_str());
             std::remove(absent.c_str());
         }
-    }
-
-    // The player's own frontend.cfg (a backup left from an earlier start is it).
-    static std::string players_frontend(const std::string &file)
-    {
-        std::string current;
-        if (!save::read_file(file + ".orion-backup", &current, 1u << 20))
-            save::read_file(file, &current, 1u << 20);
-        return current;
     }
 
     // The core a game for an emulator runs with: the player's choice for

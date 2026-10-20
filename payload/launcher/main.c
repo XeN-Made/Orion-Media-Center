@@ -15,7 +15,7 @@
 //
 // A request line "@install <staged>\t<file>" is not an argument either: for
 // this one start the title is to read <staged> (a file ORION wrote in
-// /data/orion) as its <file> (RetroArch's args.txt and frontend.cfg). The
+// /data/orion) as its <file> (RetroArch's args.txt and test-run.txt). The
 // helper keeps the original as <file>.orion-backup (or leaves
 // <file>.orion-absent when there was none), writes the staged copy, readable
 // by every app, and once the title is up and has read it puts the original
@@ -82,14 +82,21 @@ static void say(const char *format, ...)
 }
 
 // Four capital letters and five digits.
-// Only args.txt and config/frontend.cfg of a title under /data/homebrew.
+static int ends_with(const char *text, const char *end)
+{
+    const size_t length = strlen(text);
+    const size_t tail = strlen(end);
+    return length > tail && strcmp(text + length - tail, end) == 0;
+}
+
+// Only args.txt, test-run.txt (and config/frontend.cfg, which earlier builds
+// changed) of a title under /data/homebrew.
 static int changeable(const char *path)
 {
-    const size_t length = strlen(path);
-    const int args = length > 9 && strcmp(path + length - 9, "/args.txt") == 0;
-    const int frontend = length > 20 && strcmp(path + length - 20, "/config/frontend.cfg") == 0;
     return strncmp(path, "/data/homebrew/", 15) == 0 && strstr(path, "..") == NULL &&
-           length <= 400 && (args || frontend);
+           strlen(path) <= 400 &&
+           (ends_with(path, "/args.txt") || ends_with(path, "/test-run.txt") ||
+            ends_with(path, "/config/frontend.cfg"));
 }
 
 // Writes bytes as a file every app can read, whatever the umask.

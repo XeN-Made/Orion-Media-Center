@@ -139,12 +139,6 @@ TEST(Emulators, TellsRetroArchsLauncherWhichGame)
               "# ORION: this start only; put back when RetroArch is up\n-L\n"
               "/app0/cores/mgba_libretro.so\n"
               "/app0/content/Nintendo - Game Boy Advance/007 - Nightfire (UE) (M3) [!].gba\n");
-    // The picker is skipped; whatever else frontend.cfg says stays.
-    EXPECT_EQ(library::retroarch_frontend("frontend_start = \"ask\"\n"),
-              "frontend_start = \"retroarch\"\n");
-    EXPECT_EQ(library::retroarch_frontend("other = \"x\"\n  frontend_start = \"es-de\"\n"),
-              "other = \"x\"\nfrontend_start = \"retroarch\"\n");
-    EXPECT_EQ(library::retroarch_frontend(""), "frontend_start = \"retroarch\"\n");
 }
 
 TEST(Emulators, NamesThumbnailsAsRetroArchDoes)
