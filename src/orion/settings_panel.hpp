@@ -12,6 +12,7 @@
 #include "ui/components/sidenav.hpp"
 
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace hui::orion
@@ -73,11 +74,13 @@ class SettingsPanel
         fetch_art,       // "Find box art now" was chosen
         art_folder,      // the box art folder changed (prefs.art_dir)
         type_art_folder, // "Your own folder" was chosen: the screen asks for a path
-        add_rom_folder,  // "Add a game folder": the screen asks for a path, for emulator_page()
-        copy_backdrops,  // "Copy them again": the screen asks the helper anew
-        folders,         // a game folder changed or went: save and scan again
-        scan_emulators,  // "Scan for emulators" was chosen
-        run_setup,       // "Run setup again": the screen closes Settings and opens the setup
+        add_rom_folder,  // "Type a path" in the folder browser: the screen asks for one, for
+                         // emulator_page()
+        add_folder, // "Use this folder" in the folder browser: browse_result(), for emulator_page()
+        copy_backdrops, // "Copy them again": the screen asks the helper anew
+        folders,        // a game folder changed or went: save and scan again
+        scan_emulators, // "Scan for emulators" was chosen
+        run_setup,      // "Run setup again": the screen closes Settings and opens the setup
     };
 
     enum class Section : std::uint8_t
@@ -137,6 +140,17 @@ class SettingsPanel
     {
         return emulator_page_;
     }
+    // Where the folder browser starts: the drives and folders a game folder
+    // can be in, as (name, path). Ones that do not exist are left out.
+    void set_browse_places(std::vector<std::pair<std::string, std::string>> places)
+    {
+        places_ = std::move(places);
+    }
+    // The folder "Use this folder" chose.
+    const std::string &browse_result() const
+    {
+        return browse_path_;
+    }
     // After a scan: the rail (Box art comes and goes with the systems) and
     // the rows, staying in the section that is showing.
     void rebuild_nav(const Look &look, const LibraryPrefs &prefs);
@@ -182,6 +196,9 @@ class SettingsPanel
     void build_tab_page(const LibraryPrefs &prefs);
     void build_emulators(const LibraryPrefs &prefs);
     void build_emulator_page(const library::EmulatorApp &app, const LibraryPrefs &prefs);
+    void build_browser();
+    void browse(std::string path, const Look &look, const LibraryPrefs &prefs);
+    void browse_up(const Look &look, const LibraryPrefs &prefs);
     const library::EmulatorApp *page_app() const;
     void build_art(const LibraryPrefs &prefs);
     void build_storage(const LibraryPrefs &prefs);
@@ -215,6 +232,12 @@ class SettingsPanel
     std::string self_path_;
     int backdrops_ = 0;
     std::string emulator_page_; // the emulator whose page is open; empty: the list
+    // The folder browser, open over an emulator's page: where it is (empty:
+    // the places), and the folders in it.
+    bool browsing_ = false;
+    std::string browse_path_;
+    std::vector<std::string> browse_folders_;
+    std::vector<std::pair<std::string, std::string>> places_;
     int folder_page_ = -1; // the game folder whose page is open (in prefs.rom_folders); -1: none
     std::string scan_status_ = "Finds RetroArch, Porpoise and PS5SX2, and their games";
     std::string payload_ = "/data/homebrew/PPSA99061/assets/payloads/orion-autostart.elf";

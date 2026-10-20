@@ -561,6 +561,17 @@ class Library final : public app::Concept
         setup_.set_titles(static_cast<int>(std::count_if(
             titles().begin(), titles().end(), [](const Title &t) { return !t.is_rom(); })));
         setup_.set_autostart_payload(autostart_payload());
+        // Where the folder browser starts; the ones not plugged in are left out.
+        std::vector<std::pair<std::string, std::string>> places;
+        for (int i = 0; i < 8; ++i)
+            places.emplace_back("USB drive " + std::to_string(i + 1),
+                                "/mnt/usb" + std::to_string(i));
+        places.emplace_back("Extended storage", "/mnt/ext0");
+        places.emplace_back("Extended storage 2", "/mnt/ext1");
+        places.emplace_back("The console's storage", "/data");
+        if (!sys::on_console())
+            places.emplace_back("This folder (PC preview)", ".");
+        settings_.set_browse_places(std::move(places));
         settings_.set_autostart_payload(autostart_payload());
         // A console that has not been set up yet starts on the setup.
         setup_pending_ = context_.library.offer_setup && !prefs_.setup_done;
@@ -1301,6 +1312,24 @@ class Library final : public app::Concept
                                                                             : "/mnt/usb0/roms");
             feedback.play(audio::Cue::modal_open);
             break;
+        case orion::SettingsPanel::Change::add_folder:
+        {
+            const std::string path = settings_.browse_result();
+            if (!orion::valid_art_dir(path))
+            {
+                show_note(false, "A game folder goes under /data or /mnt: " + path);
+                feedback.play(audio::Cue::error);
+                break;
+            }
+            if (std::none_of(prefs_.rom_folders.begin(), prefs_.rom_folders.end(),
+                             [&](const orion::RomFolder &f) { return f.path == path; }) &&
+                prefs_.rom_folders.size() < 16)
+                prefs_.rom_folders.push_back({path, "", settings_.emulator_page()});
+            save_prefs();
+            scan_emulators(feedback);
+            show_note(true, "Added " + path + ": looking for its games");
+            break;
+        }
         case orion::SettingsPanel::Change::folders:
             save_prefs();
             scan_emulators(feedback);

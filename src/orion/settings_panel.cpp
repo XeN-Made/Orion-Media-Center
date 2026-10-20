@@ -4,6 +4,7 @@
 
 #include "orion/settings_panel.hpp"
 
+#include "core/save_file.hpp"
 #include "gfx/draw_list.hpp"
 #include "library/emulators.hpp"
 #include "ui/glyphs.hpp"
@@ -11,6 +12,8 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+
+#include <sys/stat.h>
 
 namespace hui::orion
 {
@@ -65,6 +68,9 @@ enum : int
     kThemesInfo,
     kFolderSystem,
     kFolderRemove,
+    kBrowseUse,
+    kBrowseUp,
+    kBrowseType,
     kScanEmulators,
     kAppInfo,
     kAppStarts,
@@ -85,6 +91,7 @@ enum : int
     kEmulatorRow = 500,  // + the emulator's index in emulator_->apps
     kOwnFolderRow = 600, // + the index of a folder the emulator looks in by itself
     kMissingRow = 700,   // + the index of a known emulator that is not installed
+    kBrowseRow = 800,    // + the folder's index in browse_folders_ (or in places_)
 };
 
 // The emulator a game folder is for: empty in the prefs is RetroArch.
@@ -310,6 +317,7 @@ void SettingsPanel::show(Section section, const Look &look, const LibraryPrefs &
     page_.clear();
     emulator_page_.clear();
     folder_page_ = -1;
+    browsing_ = false;
     const auto at = std::find(sections_.begin(), sections_.end(), section);
     const int index = at == sections_.end() ? 0 : static_cast<int>(at - sections_.begin());
     nav_.set_focus(index);
@@ -356,7 +364,11 @@ void SettingsPanel::build(const Look &look, const LibraryPrefs &prefs)
             emulator_page_.clear();
         if (folder_page_ >= static_cast<int>(prefs.rom_folders.size()))
             folder_page_ = -1;
-        if (app != nullptr && folder_page_ >= 0)
+        if (app == nullptr)
+            browsing_ = false;
+        if (browsing_)
+            build_browser();
+        else if (app != nullptr && folder_page_ >= 0)
             build_folder_page(prefs);
         else if (app != nullptr)
             build_emulator_page(*app, prefs);
@@ -620,6 +632,93 @@ void SettingsPanel::build_emulator_page(const library::EmulatorApp &app, const L
                                : "Where " + app.name + " looks by itself; ORION looks there too";
 }
 
+void SettingsPanel::browse(std::string path, const Look &look, const LibraryPrefs &prefs)
+{
+    browsing_ = true;
+    browse_path_ = std::move(path);
+    browse_folders_.clear();
+    if (!browse_path_.empty())
+    {
+        for (const save::DirectoryEntry &entry : save::list_directory(browse_path_))
+        {
+            if (entry.directory && entry.name.front() != '.' && browse_folders_.size() < 300)
+                browse_folders_.push_back(entry.name);
+        }
+        std::sort(browse_folders_.begin(), browse_folders_.end());
+    }
+    build(look, prefs);
+    layout();
+    form_.set_focus(0);
+    form_.enter();
+}
+
+// Up one folder; from a place itself (/mnt/usb0), back to the places.
+void SettingsPanel::browse_up(const Look &look, const LibraryPrefs &prefs)
+{
+    const bool place = std::any_of(places_.begin(), places_.end(),
+                                   [&](const auto &p) { return p.second == browse_path_; });
+    const std::size_t slash = browse_path_.rfind('/');
+    const std::string was = browse_path_;
+    browse(place || slash == std::string::npos || slash == 0 ? std::string()
+                                                             : browse_path_.substr(0, slash),
+           look, prefs);
+    // The focus lands on the folder just left.
+    const std::string left = was.substr(was.rfind('/') + 1);
+    for (std::size_t i = 0; i < browse_folders_.size(); ++i)
+    {
+        if (browse_folders_[i] == left)
+            form_.focus_row(kBrowseRow + static_cast<int>(i));
+    }
+    for (std::size_t i = 0; browse_path_.empty() && i < places_.size(); ++i)
+    {
+        if (places_[i].second == was)
+            form_.focus_row(kBrowseRow + static_cast<int>(i));
+    }
+}
+
+void SettingsPanel::build_browser()
+{
+    const library::EmulatorApp *app = page_app();
+    const std::string name = app != nullptr ? app->name : std::string("the emulator");
+    if (browse_path_.empty())
+    {
+        form_.add_header("Add a game folder  ·  " + name);
+        int shown = 0;
+        for (std::size_t i = 0; i < places_.size(); ++i)
+        {
+            struct stat info = {};
+            if (::stat(places_[i].second.c_str(), &info) != 0 || !S_ISDIR(info.st_mode))
+                continue;
+            ui::FormRow &row = form_.add_action(kBrowseRow + static_cast<int>(i), places_[i].first);
+            row.chevron = true;
+            row.text = places_[i].second;
+            row.description = "Open it and pick the folder your games are in";
+            ++shown;
+        }
+        if (shown == 0)
+            form_.add_value(kBrowseUp, "No drive found", "Plug one in, or type a path");
+    }
+    else
+    {
+        form_.add_header("Add a game folder  ·  " + browse_path_);
+        form_.add_action(kBrowseUse, "Use this folder").description =
+            "Its games join " + name + "'s; the folders in it are looked in too";
+        ui::FormRow &up = form_.add_action(kBrowseUp, "Up one folder");
+        up.description = "Circle does the same";
+        for (std::size_t i = 0; i < browse_folders_.size(); ++i)
+        {
+            ui::FormRow &row =
+                form_.add_action(kBrowseRow + static_cast<int>(i), browse_folders_[i]);
+            row.chevron = true;
+            row.description = "Open it";
+        }
+        if (browse_folders_.empty())
+            form_.add_value(kBrowseRow, "No folders in here", "");
+    }
+    form_.add_action(kBrowseType, "Type a path instead").description =
+        "Any folder under /data or /mnt, with the keyboard";
+}
+
 void SettingsPanel::build_storage(const LibraryPrefs &prefs)
 {
     form_.add_header("Folders");
@@ -862,7 +961,16 @@ SettingsPanel::Change SettingsPanel::handle(const InputFrame &input, ui::Feedbac
     if (input.is_pressed(Action::back) || left_out)
     {
         feedback.play(audio::Cue::back);
-        if (folder_page_ >= 0)
+        if (browsing_ && !browse_path_.empty())
+            browse_up(*look, *prefs);
+        else if (browsing_)
+        {
+            browsing_ = false;
+            build(*look, *prefs);
+            layout();
+            form_.focus_row(kAddRomFolder);
+        }
+        else if (folder_page_ >= 0)
         {
             const int was = folder_page_;
             folder_page_ = -1;
@@ -916,7 +1024,41 @@ SettingsPanel::Change SettingsPanel::handle(const InputFrame &input, ui::Feedbac
         if (id == kArtNow)
             return Change::fetch_art;
         if (id == kAddRomFolder)
-            return Change::add_rom_folder;
+        {
+            browse("", *look, *prefs);
+            return Change::none;
+        }
+        if (browsing_)
+        {
+            if (id == kBrowseUse)
+            {
+                browsing_ = false;
+                build(*look, *prefs);
+                layout();
+                form_.focus_row(kAddRomFolder);
+                return Change::add_folder;
+            }
+            if (id == kBrowseUp)
+            {
+                browse_up(*look, *prefs);
+                return Change::none;
+            }
+            if (id == kBrowseType)
+            {
+                browsing_ = false;
+                build(*look, *prefs);
+                layout();
+                form_.focus_row(kAddRomFolder);
+                return Change::add_rom_folder;
+            }
+            const int index = id - kBrowseRow;
+            if (browse_path_.empty() && index >= 0 && index < static_cast<int>(places_.size()))
+                browse(places_[static_cast<std::size_t>(index)].second, *look, *prefs);
+            else if (index >= 0 && index < static_cast<int>(browse_folders_.size()))
+                browse(browse_path_ + "/" + browse_folders_[static_cast<std::size_t>(index)], *look,
+                       *prefs);
+            return Change::none;
+        }
         if (id == kBackdropsAgain)
             return Change::copy_backdrops;
         if (id == kRunSetup)
