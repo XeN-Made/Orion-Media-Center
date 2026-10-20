@@ -140,6 +140,11 @@ constexpr app::TourStep kTour[] = {
     {0.2f, 0, Direction::right},
     {0.6f, 0, Direction::none, "backdrop-loading"},
     {1.2f, 0, Direction::none, "backdrop"},
+    {0.2f, 0, Direction::right},
+    {0.2f, 0, Direction::right},
+    {1.6f, 0, Direction::none, "backdrop-icon"},
+    {0.2f, 0, Direction::left},
+    {0.2f, 0, Direction::left},
     {0.2f, 0, Direction::left},
     {0.2f, 0, Direction::left},
     {0.4f, action_bit(Action::jump_next)},
@@ -1363,20 +1368,42 @@ class Library final : public app::Concept
 
     // The focused game's home-screen picture, once the focus has rested on it
     // a moment (as the home screen does); the shell loads it (app::Context).
+    // What the focused game shows behind the library: "file:<png>" (its
+    // home-screen picture, from its folder or the console's copy in
+    // /user/appmeta), else "icon:<id>" (its cover, blurred), else nothing.
     std::string backdrop_of(const Title &title) const
     {
-        if (!prefs_.game_backgrounds || title.is_rom() || title.source != library::Source::folder)
+        if (!prefs_.game_backgrounds)
             return "";
-        for (const char *name : {"/sce_sys/pic0.png", "/sce_sys/pic1.png"})
+        const auto is_file = [](const std::string &file)
         {
             struct stat info = {};
-            const std::string path = title.path + name;
-            if (::stat(path.c_str(), &info) == 0 && S_ISREG(info.st_mode))
-                return path;
+            return ::stat(file.c_str(), &info) == 0 && S_ISREG(info.st_mode);
+        };
+        if (!title.is_rom())
+        {
+            std::vector<std::string> places;
+            if (title.source == library::Source::folder)
+            {
+                places.push_back(title.path + "/sce_sys/pic0.png");
+                places.push_back(title.path + "/sce_sys/pic1.png");
+            }
+            // The system keeps a copy of every registered title's pictures,
+            // disc images included, if the sandbox lets ORION see it.
+            places.push_back("/user/appmeta/" + title.id + "/pic0.png");
+            places.push_back("/user/appmeta/" + title.id + "/pic1.png");
+            for (const std::string &place : places)
+            {
+                if (is_file(place))
+                    return "file:" + place;
+            }
         }
-        return "";
+        return title.texture != 0 ? "icon:" + title.id : std::string();
     }
 
+    // Asks the shell for a picture once the focus has rested on a cover a
+    // moment (as the home screen does), and cross-fades through the sky: the
+    // old one fades out before the new one fades in.
     void follow_backdrop(float dt)
     {
         constexpr float kDwell = 0.45f; // seconds on a cover before its picture is asked for
@@ -1388,42 +1415,83 @@ class Library final : public app::Concept
             backdrop_dwell_ = 0.0f;
         }
         backdrop_dwell_ += dt;
-        if (backdrop_dwell_ >= kDwell)
-            context_.backdrop_path = backdrop_candidate_;
-        // In when the shell holds the picture asked for, out otherwise.
-        const bool showing = !backdrop_candidate_.empty() &&
-                             context_.backdrop_shown == backdrop_candidate_ &&
-                             context_.backdrop_texture != 0 && backdrop_dwell_ >= kDwell;
+        const bool rested = backdrop_dwell_ >= kDwell;
+        const bool file = backdrop_candidate_.rfind("file:", 0) == 0;
+        if (rested && file)
+            context_.backdrop_path = backdrop_candidate_.substr(5);
+        const bool ready = rested && !backdrop_candidate_.empty() &&
+                           (!file || (context_.backdrop_shown == backdrop_candidate_.substr(5) &&
+                                      context_.backdrop_texture != 0));
+        // Swap what is drawn only once the old one has gone.
+        if (backdrop_drawn_ != backdrop_candidate_ && backdrop_alpha_ <= 0.0f && ready)
+            backdrop_drawn_ = backdrop_candidate_;
+        const bool in = ready && backdrop_drawn_ == backdrop_candidate_;
         const float speed = context_.settings.reduced_motion ? 10.0f : 2.2f;
-        backdrop_alpha_ = std::clamp(backdrop_alpha_ + (showing ? speed : -speed) * dt, 0.0f, 1.0f);
+        backdrop_alpha_ = std::clamp(backdrop_alpha_ + (in ? speed : -speed) * dt, 0.0f, 1.0f);
     }
 
-    // The picture fills the screen (cropped to it), under a veil of the page
-    // colour that deepens towards the covers, so text stays readable.
-    void draw_backdrop(gfx::DrawList &scene) const
+    // The part of a picture of this aspect that fills the screen.
+    static Rect fill_uv(float picture)
     {
-        if (backdrop_alpha_ <= 0.0f || context_.backdrop_texture == 0)
-            return;
-        const float a = tween::smoothstep(backdrop_alpha_);
-        const Rect screen = {0.0f, 0.0f, gfx::kVirtualWidth, gfx::kVirtualHeight};
-        const float screen_aspect = screen.w / screen.h;
+        const float screen = gfx::kVirtualWidth / gfx::kVirtualHeight;
         Rect uv = gfx::kFullUv;
-        const float picture = std::max(0.2f, context_.backdrop_aspect);
-        if (picture > screen_aspect)
+        picture = std::max(0.2f, picture);
+        if (picture > screen)
         {
-            const float keep = screen_aspect / picture;
+            const float keep = screen / picture;
             uv.x += (1.0f - keep) * 0.5f;
             uv.w = keep;
         }
         else
         {
-            const float keep = picture / screen_aspect;
+            const float keep = picture / screen;
             uv.y += (1.0f - keep) * 0.5f;
             uv.h = keep;
         }
-        scene.image(context_.backdrop_texture, screen, uv, Color::rgb(0xffffff, a), 0.0f);
+        return uv;
+    }
+
+    // The picture fills the screen (cropped to it), under a veil of the page
+    // colour that deepens towards the covers, so text stays readable. A cover
+    // icon is a few hundred pixels: stretched over the screen and drawn again
+    // at small offsets around itself it becomes a soft blur of its colours.
+    void draw_backdrop(gfx::DrawList &scene) const
+    {
+        if (backdrop_alpha_ <= 0.0f || backdrop_drawn_.empty())
+            return;
+        const float a = tween::smoothstep(backdrop_alpha_);
+        const Rect screen = {0.0f, 0.0f, gfx::kVirtualWidth, gfx::kVirtualHeight};
         const Color page = theme_.page;
-        scene.gradient_rect(screen, 0.0f, page.with_alpha(0.55f * a), page.with_alpha(0.9f * a));
+        if (backdrop_drawn_.rfind("file:", 0) == 0)
+        {
+            if (context_.backdrop_texture == 0)
+                return;
+            scene.image(context_.backdrop_texture, screen, fill_uv(context_.backdrop_aspect),
+                        Color::rgb(0xffffff, a), 0.0f);
+            scene.gradient_rect(screen, 0.0f, page.with_alpha(0.55f * a),
+                                page.with_alpha(0.9f * a));
+            return;
+        }
+        const Title *title = find_title(backdrop_drawn_.substr(5));
+        if (title == nullptr || title->texture == 0)
+            return;
+        const float aspect =
+            title->icon_width > 0 && title->icon_height > 0
+                ? static_cast<float>(title->icon_width) / static_cast<float>(title->icon_height)
+                : 1.0f;
+        const Rect uv = fill_uv(aspect);
+        // Grown a little, so the offset copies still cover the edges.
+        const Rect big = {-60.0f, -60.0f, screen.w + 120.0f, screen.h + 120.0f};
+        scene.image(title->texture, big, uv, Color::rgb(0xffffff, 0.55f * a), 0.0f);
+        constexpr int kTaps = 8;
+        for (int i = 0; i < kTaps; ++i)
+        {
+            const float angle = 6.2831853f * static_cast<float>(i) / kTaps;
+            const Rect moved = {big.x + std::cos(angle) * 44.0f, big.y + std::sin(angle) * 44.0f,
+                                big.w, big.h};
+            scene.image(title->texture, moved, uv, Color::rgb(0xffffff, 0.16f * a), 0.0f);
+        }
+        scene.gradient_rect(screen, 0.0f, page.with_alpha(0.62f * a), page.with_alpha(0.93f * a));
     }
 
     // The play records: what the launch helper wrote in ORION's folder
@@ -2248,7 +2316,8 @@ class Library final : public app::Concept
     bool reduced_ = false;
     std::vector<std::string> favourites_;
     orion::PlayLog plays_;
-    std::string backdrop_candidate_; // the picture of the focused game
+    std::string backdrop_candidate_; // what the focused game shows (backdrop_of)
+    std::string backdrop_drawn_;     // what is drawn now; it changes once faded out
     float backdrop_dwell_ = 0.0f;    // seconds the focus has rested on it
     float backdrop_alpha_ = 0.0f;
     std::vector<std::string> tab_keys_; // the key of each tab, in tab order
