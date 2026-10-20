@@ -481,15 +481,15 @@ class Library final : public app::Concept
     // backdrops folder. Each title is asked about once (<ID>.png or <ID>.none).
     void request_backdrops() const
     {
-        const Title *self = find_title(own_title_id());
+        const std::string &self_path = context_.library.self_path;
         const std::string &dir = context_.library.state_dir;
-        if (self == nullptr || dir.empty())
+        if (self_path.empty() || dir.empty())
             return;
-        std::string request = self->path + "/backdrops\n";
+        std::string request = self_path + "/backdrops\n";
         int count = 0;
         for (const Title &title : titles())
         {
-            if (title.is_rom() || title.id == self->id)
+            if (title.is_rom())
                 continue;
             struct stat info = {};
             const auto exists = [&](const std::string &file)
@@ -1177,8 +1177,9 @@ class Library final : public app::Concept
             request += "@shortcut\n";
         // How long it is played goes in ORION's own folder, which the helper
         // can write to (orion/playtime.hpp).
-        if (const Title *self_title = find_title(self))
-            request += "@record " + title->id + "\t" + self_title->path + "/play-log.txt\n";
+        const std::string &self_path = context_.library.self_path;
+        if (!self_path.empty())
+            request += "@record " + title->id + "\t" + self_path + "/play-log.txt\n";
         if (title->is_rom() && core.empty())
             why = "no core plays " + library::short_system_name(title->system);
         else if (!sys::on_console())

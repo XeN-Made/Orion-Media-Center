@@ -34,6 +34,7 @@
 #include <sys/stat.h>
 
 #include <cstddef>
+#include <algorithm>
 #include <cstdint>
 #include <cstdio>
 #include <memory>
@@ -203,13 +204,24 @@ int main()
         library::ScanOptions scan = library::console_defaults();
         std::string param;
         library::Title self;
-        if (save::read_file("/app0/sce_sys/param.json", &param) &&
-            library::read_param_json(param, &self))
-            scan.exclude.push_back(self.id);
+        const bool known = save::read_file("/app0/sce_sys/param.json", &param) &&
+                           library::read_param_json(param, &self);
         std::vector<std::string> report;
         scan.report = &report;
         const std::int64_t scan_start = sys::monotonic_us();
         titles.titles = library::scan(scan);
+        // ORION is found like any title, so its folder is known, then left
+        // out of what it lists.
+        if (known)
+        {
+            const auto own = std::find_if(titles.titles.begin(), titles.titles.end(),
+                                          [&](const library::Title &t) { return t.id == self.id; });
+            if (own != titles.titles.end())
+            {
+                titles.self_path = own->path;
+                titles.titles.erase(own);
+            }
+        }
         titles.scanned = true;
         titles.state_dir = "/data/orion";
         titles.themes_dir = std::string(kAssets) + "/themes";

@@ -135,8 +135,15 @@ void Shell::load_backdrop()
         constexpr int kSize = 1280;
         std::string bytes;
         library::Image image;
-        const bool ok =
-            save::read_file(path, &bytes, 24u << 20) && library::decode_png(bytes, kSize, &image);
+        const bool read = save::read_file(path, &bytes, 24u << 20);
+        const bool ok = read && library::decode_png(bytes, kSize, &image);
+        // Which pictures came in, in the console's step log.
+        const std::string note =
+            "backdrop " + path +
+            (ok     ? ": " + std::to_string(image.width) + "x" + std::to_string(image.height)
+             : read ? std::string(": not decoded (") + library::png_failure() + ")"
+                    : std::string(": not read"));
+        sys::art_trace(note.c_str());
         {
             const std::lock_guard<std::mutex> lock(backdrop_mutex_);
             backdrop_image_ = ok ? std::move(image) : library::Image();

@@ -13,6 +13,12 @@
 namespace hui::library
 {
 
+const char *png_failure()
+{
+    const char *reason = stbi_failure_reason();
+    return reason != nullptr ? reason : "unknown";
+}
+
 bool decode_png(std::string_view bytes, int max_size, Image *out)
 {
     *out = Image();

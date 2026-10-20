@@ -107,6 +107,9 @@ struct Library
     // Where ORION keeps what the player chooses (favourites, ...); empty
     // keeps nothing. /data/orion on the console, so it survives a reinstall.
     std::string state_dir;
+    // ORION's own folder as the launch helper sees it ("/data/homebrew/PPSA99061"):
+    // where its play log and backdrops go. ORION is not in titles itself.
+    std::string self_path;
     // The app's own theme files (orion/theme_file.hpp); the player's are in
     // <state_dir>/themes. Empty: the kit's themes, built in.
     std::string themes_dir;

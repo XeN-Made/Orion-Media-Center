@@ -34,6 +34,8 @@ struct Image
 // down by a whole factor until neither side exceeds max_size. False, with
 // *out emptied, for anything that is not a readable PNG.
 bool decode_png(std::string_view bytes, int max_size, Image *out);
+// Why the last decode_png failed, as stb_image says it ("outofmem", ...).
+const char *png_failure();
 
 // Reads, decodes and uploads every title's icon (needs a GL context); titles
 // whose icon is missing or broken keep texture 0. Returns the count uploaded.
