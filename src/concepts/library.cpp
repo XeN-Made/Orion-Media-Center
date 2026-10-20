@@ -479,6 +479,13 @@ class Library final : public app::Concept
             sys::art_trace("ORION started; looking for box art", true);
             start_art(false);
         }
+        // Requests are read once, by a helper that cannot remove them: any
+        // still here are leftovers, never to be taken for new ones.
+        if (sys::on_console())
+        {
+            std::remove((state + "/launch-request.txt").c_str());
+            std::remove((state + "/backdrop-request.txt").c_str());
+        }
         if (prefs_.game_backgrounds && sys::on_console())
             request_backdrops();
     }
