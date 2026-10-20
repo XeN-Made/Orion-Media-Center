@@ -472,6 +472,44 @@ class Library final : public app::Concept
             sys::art_trace("ORION started; looking for box art", true);
             start_art(false);
         }
+        if (prefs_.game_backgrounds && sys::on_console())
+            request_backdrops();
+    }
+
+    // Titles with no home-screen picture in their own folder: the launch
+    // helper, outside the sandbox, copies the system's into ORION's
+    // backdrops folder. Each title is asked about once (<ID>.png or <ID>.none).
+    void request_backdrops() const
+    {
+        const Title *self = find_title(own_title_id());
+        const std::string &dir = context_.library.state_dir;
+        if (self == nullptr || dir.empty())
+            return;
+        std::string request = self->path + "/backdrops\n";
+        int count = 0;
+        for (const Title &title : titles())
+        {
+            if (title.is_rom() || title.id == self->id)
+                continue;
+            struct stat info = {};
+            const auto exists = [&](const std::string &file)
+            { return ::stat(file.c_str(), &info) == 0; };
+            if (title.source == library::Source::folder &&
+                (exists(title.path + "/sce_sys/pic0.png") ||
+                 exists(title.path + "/sce_sys/pic1.png")))
+                continue;
+            if (exists("/app0/backdrops/" + title.id + ".png") ||
+                exists("/app0/backdrops/" + title.id + ".none"))
+                continue;
+            request += title.id + "\n";
+            ++count;
+        }
+        std::string elf;
+        if (count == 0 || !save::write_atomic(dir + "/backdrop-request.txt", request).empty() ||
+            !save::read_file(kLauncherPath, &elf, 4u << 20) || elf.empty())
+            return;
+        const int error = sys::send_payload(elf, kLoaderPort);
+        sys::log("[ORION] backdrops for %d titles asked of the helper: %d", count, error);
     }
 
     const app::ConceptInfo &info() const override
@@ -1389,7 +1427,10 @@ class Library final : public app::Concept
                 places.push_back(title.path + "/sce_sys/pic1.png");
             }
             // The system keeps a copy of every registered title's pictures,
-            // disc images included, if the sandbox lets ORION see it.
+            // disc images included, which the launch helper copies into
+            // ORION's folder (request_backdrops), and which ORION may be
+            // allowed to read itself.
+            places.push_back("/app0/backdrops/" + title.id + ".png");
             places.push_back("/user/appmeta/" + title.id + "/pic0.png");
             places.push_back("/user/appmeta/" + title.id + "/pic1.png");
             for (const std::string &place : places)
