@@ -70,6 +70,7 @@ constexpr float kGridTop = 280.0f;
 constexpr float kSubTop = 262.0f;                  // the systems' row under the Emulators tab
 constexpr float kSubRoom = 56.0f;                  // how far the covers move down for it
 constexpr const char *kEmulatorsTab = "emulators"; // its key
+constexpr const char *kHiddenTab = "hidden";       // the titles the player hid, last
 constexpr float kContinueRoom = 196.0f;    // the Continue playing row over the All tab's covers
 constexpr std::size_t kContinueCount = 10; // titles in it
 constexpr float kGridBottom = 972.0f;
@@ -140,6 +141,7 @@ enum : int
     kItemSettings,
     kItemClose,
     kItemSort,
+    kItemHide,
     kItemMove = 100,       // + the tab's index
     kItemSortChoice = 200, // 0: the Library's order, then 1 + an orion::kSortKeys index
 };
@@ -1464,6 +1466,10 @@ class Library final : public app::Concept
         favourite.shortcut = "Square";
         favourite.tag = kItemFavourite;
         items.push_back(favourite);
+        const bool hidden = prefs_.title_hidden(title.id);
+        ui::MenuItem hide = menu_item(hidden ? "Show this title" : "Hide this title");
+        hide.tag = kItemHide;
+        items.push_back(hide);
         ui::MenuItem line;
         line.separator = true;
         items.push_back(line);
@@ -1572,6 +1578,22 @@ class Library final : public app::Concept
         if (tag == kItemFavourite)
         {
             toggle_favourite(menu_title_, feedback);
+            return;
+        }
+        if (tag == kItemHide)
+        {
+            const bool hide = !prefs_.title_hidden(menu_title_);
+            const Title *title = find_title(menu_title_);
+            const std::string name = title != nullptr ? title->name : menu_title_;
+            if (!prefs_.set_title_hidden(menu_title_, hide))
+            {
+                feedback.play(audio::Cue::error);
+                return;
+            }
+            tabs_changed();
+            show_note(true, hide ? name + " is hidden: it is on the Hidden tab, at the end"
+                                 : name + " is back on its shelves");
+            feedback.play(audio::Cue::select);
             return;
         }
         if (tag == kItemNewTab)
@@ -2311,6 +2333,11 @@ class Library final : public app::Concept
 
     bool on_tab(const Title &title, const std::string &key) const
     {
+        // A hidden title is on the Hidden tab and nowhere else.
+        if (prefs_.title_hidden(title.id))
+            return key == kHiddenTab;
+        if (key == kHiddenTab)
+            return false;
         // Games for an emulator live on their system's tab (and in
         // Favourites and the player's tabs), never on the console's shelves:
         // a few hundred ROMs would bury everything else.
@@ -2402,6 +2429,10 @@ class Library final : public app::Concept
             if (!prefs_.tab_hidden("tab:" + tab.id))
                 add("tab:" + tab.id, tab.name);
         }
+        // Hidden, last, while something is hidden.
+        if (std::any_of(titles().begin(), titles().end(),
+                        [&](const Title &t) { return prefs_.title_hidden(t.id); }))
+            add(kHiddenTab, "Hidden");
         tabs_.set_tabs(std::move(tabs));
         subtabs_.set_tabs(std::move(systems));
         // A system asked for while grouped is the Emulators tab and its row.
@@ -2536,7 +2567,7 @@ class Library final : public app::Concept
         for (std::size_t i = 0; i < titles().size(); ++i)
         {
             const Title &title = titles()[i];
-            if (played(title).sessions > 0 &&
+            if (played(title).sessions > 0 && !prefs_.title_hidden(title.id) &&
                 (!title.is_rom() || prefs_.system_enabled(title.system)))
                 continue_view_.push_back(static_cast<int>(i));
         }

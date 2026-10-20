@@ -20,6 +20,7 @@ namespace
 
 constexpr std::size_t kMaxName = 24; // bytes
 constexpr std::size_t kMaxTabs = 32;
+constexpr std::size_t kMaxHidden = 4000; // titles and games hidden
 
 std::string file_of(const std::string &state_dir)
 {
@@ -294,6 +295,24 @@ void LibraryPrefs::set_tab_hidden(const std::string &tab, bool hidden)
     edit_tab_prefs(tab_prefs, tab, [&](TabPrefs &e) { e.hidden = hidden && tab != "all"; });
 }
 
+bool LibraryPrefs::title_hidden(const std::string &id) const
+{
+    return std::find(hidden_titles.begin(), hidden_titles.end(), id) != hidden_titles.end();
+}
+
+bool LibraryPrefs::set_title_hidden(const std::string &id, bool hidden)
+{
+    if (!library::is_item_id(id))
+        return false;
+    std::erase(hidden_titles, id);
+    if (!hidden)
+        return true;
+    if (hidden_titles.size() >= kMaxHidden)
+        return false;
+    hidden_titles.push_back(id);
+    return true;
+}
+
 bool valid_art_dir(std::string_view path)
 {
     if (path.size() < 7 || path.size() > 160 ||
@@ -344,6 +363,8 @@ LibraryPrefs load_prefs(const std::string &state_dir)
     }
     for (const auto &member : root["placements"].members())
         prefs.place(member.first, member.second.string_or(""));
+    for (const json::Value &value : root["hidden_titles"].elements())
+        prefs.set_title_hidden(value.string_or(""), true);
 
     for (const auto &member : root["systems"].members())
     {
@@ -452,6 +473,10 @@ bool save_prefs(const std::string &state_dir, const LibraryPrefs &prefs)
                 json::quote(prefs.placements[i].tab);
     }
     text += prefs.placements.empty() ? "},\n" : "\n  },\n";
+    text += "  \"hidden_titles\": [";
+    for (std::size_t i = 0; i < prefs.hidden_titles.size(); ++i)
+        text += (i == 0 ? "" : ", ") + json::quote(prefs.hidden_titles[i]);
+    text += "],\n";
     text += "  \"systems\": {";
     for (std::size_t i = 0; i < prefs.systems.size(); ++i)
     {

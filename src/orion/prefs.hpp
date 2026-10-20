@@ -101,6 +101,7 @@ struct Placement
 //     "art_dir": "/mnt/usb0/ORION/art",
 //     "tabs": [{"id": "t1", "name": "RPGs"}],
 //     "placements": {"PPSA01234": "t1"},
+//     "hidden_titles": ["CUSA00001", "rom-0123456789ab"],
 //     "systems": {"Nintendo - Game Boy Advance": {"enabled": true, "core": "mgba_libretro.so"}},
 //     "tab_settings": {"sys:Nintendo - Sony - PlayStation 2": {"theme": "sunset-nebula",
 //                      "cover": "portrait", "sort": "recent", "hidden": false}}
@@ -183,6 +184,13 @@ struct LibraryPrefs
     // "all" never hides; a system's tab hides by switching the system off.
     bool tab_hidden(const std::string &tab) const;
     void set_tab_hidden(const std::string &tab, bool hidden);
+
+    // Titles (and games for an emulator) the player hid: they leave every
+    // tab but Hidden. By item id (library::is_item_id).
+    std::vector<std::string> hidden_titles;
+    bool title_hidden(const std::string &id) const;
+    // False for an id that is not an item id, or when too many are hidden.
+    bool set_title_hidden(const std::string &id, bool hidden);
 };
 
 // A folder box art may live in: absolute, under /data/ or /mnt/, no "..",

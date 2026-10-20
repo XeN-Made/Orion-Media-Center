@@ -262,9 +262,10 @@ TEST_F(LibraryDesign, CrossMovesATitleToACustomTabAndItIsRemembered)
     library_.state_dir = dir;
     auto design = with_fixture();
 
-    // Options opens the menu on Ciel Ouvert: Launch, Favourite, then Move to RPGs.
+    // Options opens the menu on Ciel Ouvert: Launch, Favourite, Hide, then Move to RPGs.
     send(*design, press(hui::Action::menu));
     EXPECT_FALSE(last_cues_.empty());
+    send(*design, nav(Direction::down));
     send(*design, nav(Direction::down));
     send(*design, nav(Direction::down));
     send(*design, press(hui::Action::confirm));
@@ -284,6 +285,51 @@ TEST_F(LibraryDesign, CrossMovesATitleToACustomTabAndItIsRemembered)
     auto again = hui::concepts::make_library(context_);
     send(*again, nav(Direction::right));
     EXPECT_TRUE(played(Cue::error));
+}
+
+// Hide this title takes it off every shelf onto a Hidden tab at the end;
+// Show this title brings it back, and the Hidden tab goes with the last one.
+TEST_F(LibraryDesign, AHiddenTitleLeavesItsShelvesForTheHiddenTab)
+{
+    const std::string dir = ::testing::TempDir() + "orion-design-hidden";
+    ASSERT_TRUE(hui::save::ensure_directory(dir));
+    std::remove((dir + "/library.json").c_str());
+    std::remove((dir + "/favourites.json").c_str());
+    library_.state_dir = dir;
+    auto design = with_fixture();
+    // Options on the first title: Launch, Favourite, Hide.
+    send(*design, press(hui::Action::menu));
+    send(*design, nav(Direction::down));
+    send(*design, nav(Direction::down));
+    send(*design, press(hui::Action::confirm));
+    const hui::orion::LibraryPrefs saved = hui::orion::load_prefs(dir);
+    ASSERT_EQ(saved.hidden_titles.size(), 1u);
+    const std::string hidden = saved.hidden_titles.front();
+    // All has six titles now: five steps right, then the edge.
+    for (int i = 0; i < 5; ++i)
+    {
+        send(*design, nav(Direction::right));
+        EXPECT_TRUE(played(Cue::focus)) << i;
+    }
+    send(*design, nav(Direction::right));
+    EXPECT_TRUE(played(Cue::error));
+    // All, Games, Homebrew, Media, Favourites, Hidden: it holds that one title.
+    for (int i = 0; i < 5; ++i)
+        send(*design, press(hui::Action::page_next));
+    EXPECT_EQ(hui::orion::load_prefs(dir).last_tab, "hidden");
+    send(*design, nav(Direction::right));
+    EXPECT_TRUE(played(Cue::error));
+    // Show this title: no title is hidden, and the Hidden tab is gone.
+    send(*design, press(hui::Action::menu));
+    send(*design, nav(Direction::down));
+    send(*design, nav(Direction::down));
+    send(*design, press(hui::Action::confirm));
+    EXPECT_TRUE(hui::orion::load_prefs(dir).hidden_titles.empty());
+    // Its tab went with it: ORION is on All again, and R1 turns to Games.
+    send(*design, press(hui::Action::page_next));
+    EXPECT_TRUE(played(Cue::tab));
+    expect_drawable(*design);
+    EXPECT_TRUE(hui::library::is_item_id(hidden));
 }
 
 TEST_F(LibraryDesign, LaunchSaysWhatHappenedAndLogsIt)
