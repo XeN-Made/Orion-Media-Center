@@ -149,7 +149,7 @@ class SettingsPanel
     void build_tab_page(const LibraryPrefs &prefs);
     void build_emulators(const LibraryPrefs &prefs);
     void build_art(const LibraryPrefs &prefs);
-    void build_appearance(const Look &look);
+    void build_appearance(const Look &look, const LibraryPrefs &prefs);
     void build_nav();
     void layout();
     void show(Section section, const Look &look, const LibraryPrefs &prefs);

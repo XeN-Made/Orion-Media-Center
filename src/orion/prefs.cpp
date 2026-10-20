@@ -357,6 +357,7 @@ LibraryPrefs load_prefs(const std::string &state_dir)
     prefs.auto_art = root["auto_art"].bool_or(prefs.auto_art);
     prefs.return_on_close = root["return_on_close"].bool_or(prefs.return_on_close);
     prefs.shortcut_test = root["shortcut_test"].bool_or(prefs.shortcut_test);
+    prefs.game_backgrounds = root["game_backgrounds"].bool_or(prefs.game_backgrounds);
     const std::string art_dir = root["art_dir"].string_or("");
     if (valid_art_dir(art_dir))
         prefs.art_dir = art_dir;
@@ -378,6 +379,8 @@ bool save_prefs(const std::string &state_dir, const LibraryPrefs &prefs)
     text +=
         std::string("  \"return_on_close\": ") + (prefs.return_on_close ? "true" : "false") + ",\n";
     text += std::string("  \"shortcut_test\": ") + (prefs.shortcut_test ? "true" : "false") + ",\n";
+    text += std::string("  \"game_backgrounds\": ") + (prefs.game_backgrounds ? "true" : "false") +
+            ",\n";
     text += "  \"art_dir\": " + json::quote(prefs.art_dir) + ",\n";
     text += "  \"tabs\": [";
     for (std::size_t i = 0; i < prefs.tabs.size(); ++i)

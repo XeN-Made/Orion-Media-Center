@@ -12,6 +12,14 @@
 namespace hui::orion
 {
 
+// The orders a tab can be in: the keys library.json keeps, and their names.
+// "played" and "most_played" follow ORION's play records (orion/playtime.hpp).
+inline constexpr int kSortCount = 6;
+inline constexpr const char *kSortKeys[kSortCount] = {"name",     "name_reversed", "recent",
+                                                      "platform", "played",        "most_played"};
+inline constexpr const char *kSortNames[kSortCount] = {
+    "Name A–Z", "Name Z–A", "Recently added", "Platform", "Recently played", "Most played"};
+
 // A shelf the player made. The id is stable across renames; the name is shown.
 struct CustomTab
 {
@@ -70,6 +78,7 @@ struct Placement
 //     "auto_art": true,
 //     "return_on_close": true,
 //     "shortcut_test": false,
+//     "game_backgrounds": true,
 //     "art_dir": "/mnt/usb0/ORION/art",
 //     "tabs": [{"id": "t1", "name": "RPGs"}],
 //     "placements": {"PPSA01234": "t1"},
@@ -102,6 +111,8 @@ struct LibraryPrefs
     // Experiment: during a game, L3 + R3 held shows a notification if the
     // launch helper can see the controller. Nothing is closed.
     bool shortcut_test = false;
+    // The focused game's home-screen picture behind the library.
+    bool game_backgrounds = true;
     // Where box art is looked for first and downloaded to; empty: ORION's
     // own <state_dir>/art. Always a folder under /data or /mnt.
     std::string art_dir;

@@ -46,6 +46,7 @@ enum : int
     kArtAuto,
     kReturn,
     kShortcut,
+    kGameBackgrounds,
     kArtNow,
     kArtFolder,
     // A tab's page.
@@ -63,8 +64,6 @@ enum : int
     kCoreRow = 300,   // + the system's index: which core
 };
 
-constexpr const char *kSortKeys[] = {"name", "name_reversed", "recent", "platform"};
-constexpr const char *kSortNames[] = {"Name A–Z", "Name Z–A", "Recently added", "Platform"};
 // Where box art can live: ORION's folder, a USB drive, the extended storage,
 // or a folder the player types.
 constexpr const char *kArtPlaces[] = {"ORION's folder", "USB drive", "Extended storage",
@@ -103,7 +102,7 @@ const char *section_name(SettingsPanel::Section section)
 
 int sort_index(const std::string &key)
 {
-    for (int i = 0; i < 4; ++i)
+    for (int i = 0; i < kSortCount; ++i)
     {
         if (key == kSortKeys[i])
             return i;
@@ -316,7 +315,7 @@ void SettingsPanel::build(const Look &look, const LibraryPrefs &prefs)
         build_art(prefs);
         break;
     case Section::appearance:
-        build_appearance(look);
+        build_appearance(look, prefs);
         break;
     }
 }
@@ -324,7 +323,8 @@ void SettingsPanel::build(const Look &look, const LibraryPrefs &prefs)
 void SettingsPanel::build_library(const LibraryPrefs &prefs)
 {
     form_.add_header("Library");
-    form_.add_choice(kSort, "Sort by", {kSortNames, kSortNames + 4}, sort_index(prefs.sort))
+    form_
+        .add_choice(kSort, "Sort by", {kSortNames, kSortNames + kSortCount}, sort_index(prefs.sort))
         .description = "The order of the covers, on every tab without an order of its own";
     form_.add_toggle(kReopen, "Reopen on last tab", prefs.reopen_last_tab).description =
         "ORION starts on the tab you left it on";
@@ -403,7 +403,7 @@ void SettingsPanel::build_tab_page(const LibraryPrefs &prefs)
         .description = "Square for console icons; the box's own shape for box art";
     std::vector<std::string> sorts = {std::string("Library's (") +
                                       kSortNames[sort_index(prefs.sort)] + ")"};
-    sorts.insert(sorts.end(), kSortNames, kSortNames + 4);
+    sorts.insert(sorts.end(), kSortNames, kSortNames + kSortCount);
     const std::string sort = prefs.tab_sort(page_);
     form_
         .add_choice(kPageSort, "Sort by", std::move(sorts), sort.empty() ? 0 : sort_index(sort) + 1)
@@ -498,7 +498,7 @@ std::vector<std::string> SettingsPanel::theme_names() const
     return names;
 }
 
-void SettingsPanel::build_appearance(const Look &look)
+void SettingsPanel::build_appearance(const Look &look, const LibraryPrefs &prefs)
 {
     form_.add_header("Appearance");
     std::vector<std::string> style_names = theme_names();
@@ -556,6 +556,8 @@ void SettingsPanel::build_appearance(const Look &look)
         "GAME, HOMEBREW, MEDIA or PS4 on each cover";
     form_.add_toggle(kRim, "Cover rim", look.chrome.cover_rim).description =
         "A hairline of light around each cover";
+    form_.add_toggle(kGameBackgrounds, "Game backgrounds", prefs.game_backgrounds).description =
+        "The focused game's home-screen picture fades in behind the library";
     ui::FormRow &save = form_.add_action(kSaveTheme, "Save as new theme");
     save.description = "Keeps this look as a theme file in /data/orion/themes, to reuse or share";
     save.chevron = true;
@@ -718,7 +720,7 @@ SettingsPanel::Change SettingsPanel::handle(const InputFrame &input, ui::Feedbac
     switch (id)
     {
     case kSort:
-        prefs->sort = kSortKeys[std::clamp(form_.choice_index(kSort), 0, 3)];
+        prefs->sort = kSortKeys[std::clamp(form_.choice_index(kSort), 0, kSortCount - 1)];
         return Change::prefs;
     case kReopen:
         prefs->reopen_last_tab = form_.toggle_value(kReopen);
@@ -734,6 +736,9 @@ SettingsPanel::Change SettingsPanel::handle(const InputFrame &input, ui::Feedbac
         return Change::prefs;
     case kShortcut:
         prefs->shortcut_test = form_.toggle_value(kShortcut);
+        return Change::prefs;
+    case kGameBackgrounds:
+        prefs->game_backgrounds = form_.toggle_value(kGameBackgrounds);
         return Change::prefs;
     case kArtFolder:
     {
@@ -778,7 +783,8 @@ SettingsPanel::Change SettingsPanel::edit_tab_page(int id, LibraryPrefs *prefs)
     case kPageSort:
     {
         const int index = form_.choice_index(kPageSort);
-        prefs->set_tab_sort(page_, index <= 0 ? std::string() : kSortKeys[std::min(index - 1, 3)]);
+        prefs->set_tab_sort(page_, index <= 0 ? std::string()
+                                              : kSortKeys[std::min(index - 1, kSortCount - 1)]);
         return Change::prefs;
     }
     case kPageCore:

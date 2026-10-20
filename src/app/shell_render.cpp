@@ -15,8 +15,33 @@ namespace
 constexpr float kSlide = 90.0f;
 } // namespace
 
+void Shell::upload_backdrop(gfx::Renderer &renderer)
+{
+    if (backdrop_retired_ != 0)
+    {
+        renderer.batch().delete_texture(backdrop_retired_);
+        backdrop_retired_ = 0;
+    }
+    const std::lock_guard<std::mutex> lock(backdrop_mutex_);
+    if (!backdrop_ready_)
+        return;
+    backdrop_ready_ = false;
+    backdrop_retired_ = context_.backdrop_texture;
+    context_.backdrop_texture = 0;
+    if (!backdrop_image_.rgba.empty())
+    {
+        context_.backdrop_texture = renderer.batch().create_texture(
+            backdrop_image_.width, backdrop_image_.height, backdrop_image_.rgba.data());
+        context_.backdrop_aspect =
+            static_cast<float>(backdrop_image_.width) / static_cast<float>(backdrop_image_.height);
+    }
+    context_.backdrop_shown = backdrop_image_path_;
+    backdrop_image_ = library::Image();
+}
+
 void Shell::compose(gfx::Renderer &renderer)
 {
+    upload_backdrop(renderer);
     renderer.begin();
     if (concepts_.empty())
         return;

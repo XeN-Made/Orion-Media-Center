@@ -5,6 +5,7 @@
 #include "app/shell.hpp"
 
 #include "core/save_file.hpp"
+#include "library/icon.hpp"
 #include "platform/ps5/system.hpp"
 #include "ui/glyphs.hpp"
 #include "ui/motion.hpp"
@@ -112,6 +113,46 @@ void Shell::set_info_open(bool open)
     info_open_ = open;
 }
 
+Shell::~Shell()
+{
+    if (backdrop_worker_.joinable())
+        backdrop_worker_.join();
+}
+
+void Shell::load_backdrop()
+{
+    const std::string &wanted = context_.backdrop_path;
+    if (wanted.empty() || wanted == backdrop_decoding_ || backdrop_busy_.load())
+        return;
+    if (backdrop_worker_.joinable())
+        backdrop_worker_.join();
+    backdrop_decoding_ = wanted;
+    backdrop_busy_ = true;
+    const auto load = [this, path = wanted]
+    {
+        // Home-screen pictures are 3840 x 2160: a third of that is enough
+        // under a veil, and a sixth of the memory.
+        constexpr int kSize = 1280;
+        std::string bytes;
+        library::Image image;
+        const bool ok =
+            save::read_file(path, &bytes, 24u << 20) && library::decode_png(bytes, kSize, &image);
+        {
+            const std::lock_guard<std::mutex> lock(backdrop_mutex_);
+            backdrop_image_ = ok ? std::move(image) : library::Image();
+            backdrop_image_path_ = path;
+            backdrop_ready_ = true;
+        }
+        backdrop_busy_ = false;
+    };
+    // On a PC the tour runs faster than the clock: load on the spot there, so
+    // pictures and tests see the same thing every time.
+    if (sys::on_console())
+        backdrop_worker_ = std::thread(load);
+    else
+        load();
+}
+
 void Shell::update(const InputFrame &input, float dt)
 {
     feedback_.clear();
@@ -159,6 +200,7 @@ void Shell::update(const InputFrame &input, float dt)
         forwarded.connected = input.connected;
     }
     concepts_[current_]->update(forwarded, dt, feedback_);
+    load_backdrop();
 
     if (context_.settings_changed)
     {

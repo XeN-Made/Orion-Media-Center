@@ -20,6 +20,7 @@
 #include "library/json.hpp"
 #include "orion/art_fetcher.hpp"
 #include "orion/look.hpp"
+#include "orion/playtime.hpp"
 #include "orion/prefs.hpp"
 #include "orion/settings_panel.hpp"
 #include "orion/theme_file.hpp"
@@ -86,15 +87,16 @@ constexpr Shelf kShelves[] = {
     {"media", "Media"}, {"favourites", "Favourites"},
 };
 
+// In the order of orion::kSortKeys.
 enum class Sort : int
 {
     name,
     name_reversed,
     recent,
     platform,
+    played,
+    most_played,
 };
-constexpr const char *kSortKeys[] = {"name", "name_reversed", "recent", "platform"};
-constexpr const char *kSortNames[] = {"Name A–Z", "Name Z–A", "Recently added", "Platform"};
 
 // What the on-screen keyboard is typing into.
 enum class Typing : std::uint8_t
@@ -117,7 +119,9 @@ enum : int
     kItemLaunch,
     kItemSettings,
     kItemClose,
-    kItemMove = 100, // + the tab's index
+    kItemSort,
+    kItemMove = 100,       // + the tab's index
+    kItemSortChoice = 200, // 0: the Library's order, then 1 + an orion::kSortKeys index
 };
 
 constexpr const char *kTechniques[] = {
@@ -132,6 +136,12 @@ constexpr const char *kTechniques[] = {
 
 constexpr app::TourStep kTour[] = {
     {0.5f, 0, Direction::right},
+    {0.2f, 0, Direction::right},
+    {0.2f, 0, Direction::right},
+    {0.6f, 0, Direction::none, "backdrop-loading"},
+    {1.2f, 0, Direction::none, "backdrop"},
+    {0.2f, 0, Direction::left},
+    {0.2f, 0, Direction::left},
     {0.4f, action_bit(Action::jump_next)},
     {0.6f, action_bit(Action::jump_next), Direction::none, "games"},
     {0.6f, action_bit(Action::west), Direction::none, "homebrew"},
@@ -357,9 +367,9 @@ std::string folded(std::string_view text)
 
 Sort sort_of(const std::string &key)
 {
-    for (int i = 0; i < 4; ++i)
+    for (int i = 0; i < orion::kSortCount; ++i)
     {
-        if (key == kSortKeys[i])
+        if (key == orion::kSortKeys[i])
             return static_cast<Sort>(i);
     }
     return Sort::name;
@@ -386,7 +396,8 @@ class Library final : public app::Concept
   public:
     explicit Library(app::Context &context)
         : context_(context), prefs_(orion::load_prefs(context.library.state_dir)),
-          favourites_(library::load_favourites(context.library.state_dir))
+          favourites_(library::load_favourites(context.library.state_dir)),
+          plays_(load_plays(context.library.state_dir))
     {
         tabs_.style.kind = ui::TabKind::pill;
         tabs_.style.height = 52.0f;
@@ -482,6 +493,7 @@ class Library final : public app::Concept
     {
         age_ += dt;
         clock_ += dt;
+        follow_backdrop(dt);
         poll_art(feedback);
         const bool reduced = context_.settings.reduced_motion;
         if (reduced != reduced_)
@@ -551,6 +563,7 @@ class Library final : public app::Concept
             draw_clouds(frame.scene, drift);
             frame.glass = true;
         }
+        draw_backdrop(frame.scene);
 
         gfx::DrawList &list = frame.overlay;
         const std::uint32_t glass = frame.glass ? frame.glass_texture : 0;
@@ -971,6 +984,10 @@ class Library final : public app::Concept
         ui::MenuItem rule;
         rule.separator = true;
         items.push_back(rule);
+        ui::MenuItem sort = menu_item("Sort this tab…");
+        sort.shortcut = orion::kSortNames[static_cast<int>(sort_of(sort_key()))];
+        sort.tag = kItemSort;
+        items.push_back(sort);
         ui::MenuItem settings = menu_item("Settings");
         settings.shortcut = "R3";
         settings.tag = kItemSettings;
@@ -981,6 +998,33 @@ class Library final : public app::Concept
         items.push_back(close);
         menu_.set_items(std::move(items));
         menu_.open(grid_.cell_rect(grid_.focus()), feedback);
+    }
+
+    // The orders for the active tab: its own choice, or the Library's.
+    void open_sort_menu(app::Feedback &feedback)
+    {
+        const std::string own = prefs_.tab_sort(active_key());
+        std::vector<ui::MenuItem> items;
+        ui::MenuItem library_order =
+            menu_item(std::string("Library's order (") +
+                      orion::kSortNames[static_cast<int>(sort_of(prefs_.sort))] + ")");
+        library_order.tag = kItemSortChoice;
+        library_order.shortcut = own.empty() ? "Now" : "";
+        items.push_back(library_order);
+        ui::MenuItem line;
+        line.separator = true;
+        items.push_back(line);
+        for (int i = 0; i < orion::kSortCount; ++i)
+        {
+            ui::MenuItem order = menu_item(orion::kSortNames[i]);
+            order.tag = kItemSortChoice + 1 + i;
+            order.shortcut = own == orion::kSortKeys[i] ? "Now" : "";
+            items.push_back(order);
+        }
+        menu_.set_items(std::move(items));
+        menu_.open(view_.empty() ? tabs_.tab_rect(context_.fonts, tabs_.active())
+                                 : grid_.cell_rect(grid_.focus()),
+                   feedback);
     }
 
     void update_menu(const InputFrame &input, app::Feedback &feedback)
@@ -994,6 +1038,20 @@ class Library final : public app::Concept
         if (tag == kItemLaunch)
         {
             launch(menu_title_, feedback);
+            return;
+        }
+        if (tag == kItemSort)
+        {
+            open_sort_menu(feedback);
+            return;
+        }
+        if (tag >= kItemSortChoice && tag <= kItemSortChoice + orion::kSortCount)
+        {
+            const int choice = tag - kItemSortChoice;
+            prefs_.set_tab_sort(active_key(),
+                                choice == 0 ? std::string() : orion::kSortKeys[choice - 1]);
+            tabs_changed();
+            feedback.play(audio::Cue::select);
             return;
         }
         if (tag == kItemClose)
@@ -1074,6 +1132,10 @@ class Library final : public app::Concept
                        " from the PS button menu to return to ORION\n";
         if (prefs_.shortcut_test)
             request += "@shortcut\n";
+        // How long it is played goes in ORION's own folder, which the helper
+        // can write to (orion/playtime.hpp).
+        if (const Title *self_title = find_title(self))
+            request += "@record " + title->id + "\t" + self_title->path + "/play-log.txt\n";
         if (title->is_rom() && core.empty())
             why = "no core plays " + library::short_system_name(title->system);
         else if (!sys::on_console())
@@ -1297,6 +1359,100 @@ class Library final : public app::Concept
     static bool write_shared(const std::string &file, std::string_view bytes)
     {
         return save::write_atomic(file, bytes).empty() && ::chmod(file.c_str(), 0666) == 0;
+    }
+
+    // The focused game's home-screen picture, once the focus has rested on it
+    // a moment (as the home screen does); the shell loads it (app::Context).
+    std::string backdrop_of(const Title &title) const
+    {
+        if (!prefs_.game_backgrounds || title.is_rom() || title.source != library::Source::folder)
+            return "";
+        for (const char *name : {"/sce_sys/pic0.png", "/sce_sys/pic1.png"})
+        {
+            struct stat info = {};
+            const std::string path = title.path + name;
+            if (::stat(path.c_str(), &info) == 0 && S_ISREG(info.st_mode))
+                return path;
+        }
+        return "";
+    }
+
+    void follow_backdrop(float dt)
+    {
+        constexpr float kDwell = 0.45f; // seconds on a cover before its picture is asked for
+        const std::string wanted =
+            view_.empty() || typing_ == Typing::search ? std::string() : backdrop_of(focused());
+        if (wanted != backdrop_candidate_)
+        {
+            backdrop_candidate_ = wanted;
+            backdrop_dwell_ = 0.0f;
+        }
+        backdrop_dwell_ += dt;
+        if (backdrop_dwell_ >= kDwell)
+            context_.backdrop_path = backdrop_candidate_;
+        // In when the shell holds the picture asked for, out otherwise.
+        const bool showing = !backdrop_candidate_.empty() &&
+                             context_.backdrop_shown == backdrop_candidate_ &&
+                             context_.backdrop_texture != 0 && backdrop_dwell_ >= kDwell;
+        const float speed = context_.settings.reduced_motion ? 10.0f : 2.2f;
+        backdrop_alpha_ = std::clamp(backdrop_alpha_ + (showing ? speed : -speed) * dt, 0.0f, 1.0f);
+    }
+
+    // The picture fills the screen (cropped to it), under a veil of the page
+    // colour that deepens towards the covers, so text stays readable.
+    void draw_backdrop(gfx::DrawList &scene) const
+    {
+        if (backdrop_alpha_ <= 0.0f || context_.backdrop_texture == 0)
+            return;
+        const float a = tween::smoothstep(backdrop_alpha_);
+        const Rect screen = {0.0f, 0.0f, gfx::kVirtualWidth, gfx::kVirtualHeight};
+        const float screen_aspect = screen.w / screen.h;
+        Rect uv = gfx::kFullUv;
+        const float picture = std::max(0.2f, context_.backdrop_aspect);
+        if (picture > screen_aspect)
+        {
+            const float keep = screen_aspect / picture;
+            uv.x += (1.0f - keep) * 0.5f;
+            uv.w = keep;
+        }
+        else
+        {
+            const float keep = picture / screen_aspect;
+            uv.y += (1.0f - keep) * 0.5f;
+            uv.h = keep;
+        }
+        scene.image(context_.backdrop_texture, screen, uv, Color::rgb(0xffffff, a), 0.0f);
+        const Color page = theme_.page;
+        scene.gradient_rect(screen, 0.0f, page.with_alpha(0.55f * a), page.with_alpha(0.9f * a));
+    }
+
+    // The play records: what the launch helper wrote in ORION's folder
+    // (/app0/play-log.txt), and, for the PC preview, one in the state folder.
+    static orion::PlayLog load_plays(const std::string &state_dir)
+    {
+        std::string text;
+        std::string more;
+        save::read_file("/app0/play-log.txt", &text, 4u << 20);
+        if (!state_dir.empty() && save::read_file(state_dir + "/play-log.txt", &more, 4u << 20))
+            text += "\n" + more;
+        return orion::read_play_log(text);
+    }
+
+    const orion::PlayRecord &played(const Title &title) const
+    {
+        static const orion::PlayRecord kNever;
+        const auto at = plays_.find(title.id);
+        return at == plays_.end() ? kNever : at->second;
+    }
+
+    const Title *find_title(const std::string &id) const
+    {
+        for (const Title &title : titles())
+        {
+            if (!id.empty() && title.id == id)
+                return &title;
+        }
+        return nullptr;
     }
 
     // ORION's own title ID, from its param.json; empty off the console.
@@ -1595,6 +1751,14 @@ class Library final : public app::Concept
             std::stable_sort(view_.begin(), view_.end(), [&](int a, int b)
                              { return titles()[a].platform < titles()[b].platform; });
             break;
+        case Sort::played:
+            std::stable_sort(view_.begin(), view_.end(), [&](int a, int b)
+                             { return played(titles()[a]).last > played(titles()[b]).last; });
+            break;
+        case Sort::most_played:
+            std::stable_sort(view_.begin(), view_.end(), [&](int a, int b)
+                             { return played(titles()[a]).seconds > played(titles()[b]).seconds; });
+            break;
         default:
             break;
         }
@@ -1678,7 +1842,7 @@ class Library final : public app::Concept
         const std::size_t count = view_.size();
         const std::string summary = std::to_string(count) + (count == 1 ? " title" : " titles") +
                                     "  \xc2\xb7  " +
-                                    kSortNames[static_cast<int>(sort_of(sort_key()))];
+                                    orion::kSortNames[static_cast<int>(sort_of(sort_key()))];
         ui::text(list, fonts.regular, summary.c_str(), gfx::kVirtualWidth - kMargin, 172, 24,
                  paint.page_text_muted(), gfx::Align::right);
     }
@@ -1850,6 +2014,10 @@ class Library final : public app::Concept
             line += "   \xc2\xb7   " + placed->name;
         if (favourite_of(title.id))
             line += "   \xc2\xb7   Favourite";
+        const orion::PlayRecord &record = played(title);
+        if (record.sessions > 0)
+            line += "   \xc2\xb7   Played " + orion::play_time_text(record.seconds) + ", " +
+                    orion::ago_text(record.last, std::time(nullptr));
         const float width = context_.fonts.regular.font->measure(line, 21.0f);
         plate(list, paint, {kMargin - 24.0f, 972.0f, width + 48.0f, 76.0f}, 38.0f);
         ui::text(list, context_.fonts.regular, line.c_str(), kMargin, 1018, 21,
@@ -2079,6 +2247,10 @@ class Library final : public app::Concept
     ui::Theme theme_;
     bool reduced_ = false;
     std::vector<std::string> favourites_;
+    orion::PlayLog plays_;
+    std::string backdrop_candidate_; // the picture of the focused game
+    float backdrop_dwell_ = 0.0f;    // seconds the focus has rested on it
+    float backdrop_alpha_ = 0.0f;
     std::vector<std::string> tab_keys_; // the key of each tab, in tab order
     std::vector<int> view_;             // indices into the library, in display order
     std::string query_;

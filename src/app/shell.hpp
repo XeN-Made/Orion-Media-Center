@@ -7,9 +7,14 @@
 #include "app/concept.hpp"
 #include "core/tween.hpp"
 
+#include "library/icon.hpp"
+
+#include <atomic>
 #include <cstddef>
 #include <memory>
+#include <mutex>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace hui::gfx
@@ -107,8 +112,14 @@ class Shell
         return transition_.running;
     }
 
+    ~Shell();
+    Shell(const Shell &) = delete;
+    Shell &operator=(const Shell &) = delete;
+
   private:
     void record(Frame &frame, const Concept &design, float opacity, float dx, float scale);
+    void load_backdrop();
+    void upload_backdrop(gfx::Renderer &renderer);
     void draw_chrome();
     void save_settings();
 
@@ -134,6 +145,16 @@ class Shell
     bool settings_changed_ = true; // applied once at start-up
     float save_delay_ = 0.0f;      // > 0: a save is pending
     bool welcomed_ = false;
+    // The picture Context::backdrop_path names: read and decoded on a thread
+    // of its own (a 4K PNG takes a while), uploaded by compose().
+    std::thread backdrop_worker_;
+    std::atomic<bool> backdrop_busy_{false};
+    std::mutex backdrop_mutex_;
+    std::string backdrop_decoding_; // what the worker was asked for
+    library::Image backdrop_image_; // what it made, waiting for compose()
+    std::string backdrop_image_path_;
+    bool backdrop_ready_ = false;
+    std::uint32_t backdrop_retired_ = 0; // freed a frame later: lists may still use it
 };
 
 } // namespace hui::app

@@ -28,6 +28,9 @@
 //                              it has repaired them, which is too late.
 //   @notify <text>             a system notification once the title starts
 //   @return <title ID>         when the title closes, start this one (ORION)
+//   @record <id>\t<log>        when the title closes, append "<start> <end> <id>"
+//                              (seconds since 1970) to <log>, a play-log.txt
+//                              in ORION's folder: how long it was played
 //   @shortcut                  experiment: while the title runs, see whether
 //                              L3 + R3 held for two seconds can be read, and
 //                              say so in a notification. Nothing is closed.
@@ -256,6 +259,32 @@ static void restore(installed_t *file)
     }
 }
 
+// One session in the play log ORION reads: "<start> <end> <id>".
+static void record(const char *id, const char *log, long long from)
+{
+    if (id == NULL || log == NULL)
+        return;
+    if (strncmp(log, "/data/homebrew/", 15) != 0 || strstr(log, "..") != NULL ||
+        !ends_with(log, "/play-log.txt") || strchr(id, ' ') != NULL || strlen(id) > 40)
+    {
+        say("not recording to %s", log);
+        return;
+    }
+    const long long to = (long long)time(NULL);
+    char line[128];
+    const int length = snprintf(line, sizeof(line), "%lld %lld %s\n", from, to, id);
+    const int fd = open(log, O_WRONLY | O_CREAT | O_APPEND, 0666);
+    if (fd < 0 || length <= 0)
+    {
+        say("could not record the session in %s", log);
+        return;
+    }
+    write(fd, line, (size_t)length);
+    fchmod(fd, 0666);
+    close(fd);
+    say("recorded %lld s of %s", to - from, id);
+}
+
 // Four capital letters and five digits.
 static int is_title_id(const char *text)
 {
@@ -399,6 +428,8 @@ int main(void)
     const char *note = NULL;
     const char *return_to = NULL;
     int shortcut_test = 0;
+    const char *record_id = NULL;
+    const char *record_log = NULL;
     int line_number = 0;
     int arguments = 0;
     for (char *line = request; *line != '\0';)
@@ -436,6 +467,13 @@ int main(void)
             note = line + 8;
         else if (strncmp(line, "@return ", 8) == 0 && is_title_id(line + 8))
             return_to = line + 8;
+        else if (strncmp(line, "@record ", 8) == 0 && strchr(line, '\t') != NULL)
+        {
+            char *tab = strchr(line, '\t');
+            *tab = '\0';
+            record_id = line + 8;
+            record_log = tab + 1;
+        }
         else if (strcmp(line, "@shortcut") == 0)
             shortcut_test = 1;
         else if (arguments < MAX_ARGUMENTS)
@@ -497,6 +535,7 @@ int main(void)
          waited += POLL_MS)
         usleep(POLL_MS * 1000);
     int title_app = sceSystemServiceGetAppIdOfRunningBigApp();
+    const long long played_from = (long long)time(NULL);
     say("the title is in front after %d ms (app 0x%08x)", waited, (unsigned)title_app);
     if (note != NULL && title_app > 0)
         notify(note);
@@ -510,7 +549,8 @@ int main(void)
     int elapsed = 0;
     int gone = 0;
     int restored = file_count == 0;
-    const int watching = (return_to != NULL || shortcut_test) && title_app > 0;
+    const int watching =
+        (return_to != NULL || shortcut_test || record_id != NULL) && title_app > 0;
     while (!restored || watching)
     {
         usleep(POLL_MS * 1000);
@@ -534,12 +574,14 @@ int main(void)
         {
             // The player started something else: not ours to follow.
             say("another app (0x%08x) is in front; not returning", (unsigned)now);
+            record(record_id, record_log, played_from);
             break;
         }
         gone += POLL_MS;
         if (gone < GONE_FOR_MS)
             continue;
         say("the title has closed");
+        record(record_id, record_log, played_from);
         if (return_to != NULL)
         {
             static launch_job_t back;

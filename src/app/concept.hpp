@@ -74,6 +74,13 @@ struct Context
     // Pictures a design found while running (title id, PNG path): the app
     // loads them as it loaded the scan's icons (see Shell::take_new_icons).
     std::vector<std::pair<std::string, std::string>> new_icons = {};
+    // A large picture a design wants behind it (a PNG path; empty for none).
+    // The shell decodes it off the main thread and uploads it; backdrop_shown
+    // says which picture backdrop_texture holds (it lags behind a change).
+    std::string backdrop_path = {};
+    std::string backdrop_shown = {};
+    std::uint32_t backdrop_texture = 0;
+    float backdrop_aspect = 16.0f / 9.0f;
 };
 
 // One frame of a design, back to front:
