@@ -358,6 +358,15 @@ LibraryPrefs load_prefs(const std::string &state_dir)
     prefs.return_on_close = root["return_on_close"].bool_or(prefs.return_on_close);
     prefs.shortcut_test = root["shortcut_test"].bool_or(prefs.shortcut_test);
     prefs.game_backgrounds = root["game_backgrounds"].bool_or(prefs.game_backgrounds);
+    for (const json::Value &value : root["rom_folders"].elements())
+    {
+        RomFolder folder;
+        folder.path = value["path"].string_or("");
+        folder.system = value["system"].string_or("");
+        if (valid_art_dir(folder.path) && folder.system.size() <= 80 &&
+            prefs.rom_folders.size() < 16)
+            prefs.rom_folders.push_back(std::move(folder));
+    }
     const std::string art_dir = root["art_dir"].string_or("");
     if (valid_art_dir(art_dir))
         prefs.art_dir = art_dir;
@@ -382,6 +391,14 @@ bool save_prefs(const std::string &state_dir, const LibraryPrefs &prefs)
     text += std::string("  \"game_backgrounds\": ") + (prefs.game_backgrounds ? "true" : "false") +
             ",\n";
     text += "  \"art_dir\": " + json::quote(prefs.art_dir) + ",\n";
+    text += "  \"rom_folders\": [";
+    for (std::size_t i = 0; i < prefs.rom_folders.size(); ++i)
+    {
+        text += i == 0 ? "\n" : ",\n";
+        text += "    {\"path\": " + json::quote(prefs.rom_folders[i].path) +
+                ", \"system\": " + json::quote(prefs.rom_folders[i].system) + "}";
+    }
+    text += prefs.rom_folders.empty() ? "],\n" : "\n  ],\n";
     text += "  \"tabs\": [";
     for (std::size_t i = 0; i < prefs.tabs.size(); ++i)
     {

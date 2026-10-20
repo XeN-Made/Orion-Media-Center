@@ -13,6 +13,7 @@
 #include <gtest/gtest.h>
 
 #include <filesystem>
+#include <fstream>
 #include <string>
 
 namespace hui
@@ -140,6 +141,54 @@ TEST(Emulators, TellsRetroArchsLauncherWhichGame)
               "# ORION 1792457611-42: this start only\n-L\n"
               "/app0/cores/mgba_libretro.so\n"
               "/app0/content/Nintendo - Game Boy Advance/007 - Nightfire (UE) (M3) [!].gba\n");
+}
+
+TEST(Emulators, ReadsThePlayersOwnRomFolders)
+{
+    const library::Title title = retroarch();
+    std::vector<library::Title> roms;
+    library::Emulator emulator = library::scan_retroarch(title, &roms);
+    const std::size_t content = roms.size(); // RetroArch's own: two GBA games, one DS game
+
+    // An ES-DE style folder of system folders on a "drive".
+    const std::filesystem::path drive = std::filesystem::temp_directory_path() / "hui-rom-drive";
+    std::filesystem::remove_all(drive);
+    const auto touch = [](const std::filesystem::path &file)
+    {
+        std::filesystem::create_directories(file.parent_path());
+        std::ofstream(file) << "x";
+    };
+    touch(drive / "roms/gba/Lunar Lift (USA).gba");
+    touch(drive / "roms/gba/notes.txt"); // no core takes .txt
+    touch(drive / "roms/nds/Paper Moon (Europe).nds");
+    touch(drive / "roms/unknown-system/whatever.bin"); // not a system: ignored
+    EXPECT_EQ(library::scan_rom_folder(emulator, (drive / "roms").string(), "", &roms), 2);
+    ASSERT_EQ(roms.size(), content + 2);
+    const library::Title &lunar = roms[content];
+    EXPECT_EQ(lunar.name, "Lunar Lift");
+    EXPECT_EQ(lunar.system, "Nintendo - Game Boy Advance");
+    // RetroArch reads it where it is: the same path, not one in its own folder.
+    EXPECT_EQ(lunar.rom, (drive / "roms/gba/Lunar Lift (USA).gba").string());
+    EXPECT_EQ(lunar.launcher, title.id);
+    for (const library::System &system : emulator.systems)
+    {
+        if (system.short_name == "GBA")
+            EXPECT_EQ(system.games, 3);
+    }
+
+    // The same folder again adds nothing; a single system's folder by its
+    // short name works too, and a system can be named outright.
+    EXPECT_EQ(library::scan_rom_folder(emulator, (drive / "roms").string(), "", &roms), 0);
+    touch(drive / "more/Starfall 2 (USA).gba");
+    EXPECT_EQ(library::scan_rom_folder(emulator, (drive / "more").string(),
+                                       "Nintendo - Game Boy Advance", &roms),
+              1);
+    EXPECT_EQ(library::system_of_folder("GBA", emulator), "Nintendo - Game Boy Advance");
+    EXPECT_EQ(library::system_of_folder("nds", emulator), "Nintendo - Nintendo DS");
+    EXPECT_EQ(library::system_of_folder("Nintendo - Nintendo DS", emulator),
+              "Nintendo - Nintendo DS");
+    EXPECT_EQ(library::system_of_folder("photos", emulator), "");
+    std::filesystem::remove_all(drive);
 }
 
 TEST(Emulators, NamesThumbnailsAsRetroArchDoes)

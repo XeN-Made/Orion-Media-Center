@@ -233,9 +233,12 @@ int main()
             const library::Title retroarch = titles.titles[i];
             std::vector<library::Title> roms;
             titles.emulator = library::scan_retroarch(retroarch, &roms);
-            library::attach_rom_art(
-                roms, retroarch.path,
-                orion::art_folder(orion::load_prefs(titles.state_dir), titles.state_dir));
+            const orion::LibraryPrefs prefs = orion::load_prefs(titles.state_dir);
+            // The player's own ROM folders, on a drive or anywhere in /data.
+            for (const orion::RomFolder &folder : prefs.rom_folders)
+                library::scan_rom_folder(titles.emulator, folder.path, folder.system, &roms);
+            library::attach_rom_art(roms, retroarch.path,
+                                    orion::art_folder(prefs, titles.state_dir));
             for (library::Title &rom : roms)
                 titles.titles.push_back(std::move(rom));
             break;

@@ -71,6 +71,8 @@ class SettingsPanel
         fetch_art,       // "Find box art now" was chosen
         art_folder,      // the box art folder changed (prefs.art_dir)
         type_art_folder, // "Your own folder" was chosen: the screen asks for a path
+        add_rom_folder,  // "Add a ROM folder" was chosen: the screen asks for a path
+        copy_backdrops,  // "Copy them again": the screen asks the helper anew
     };
 
     enum class Section : std::uint8_t
@@ -79,6 +81,7 @@ class SettingsPanel
         tabs,
         emulators,
         art,
+        storage,
         appearance,
     };
 
@@ -97,6 +100,13 @@ class SettingsPanel
     }
     // What the box art row says under itself: the last run, or this one.
     void set_art_status(std::string status);
+    // ORION's folder as the launch helper sees it, and what its backdrops
+    // folder holds (shown under Storage).
+    void set_storage(std::string self_path, int backdrops)
+    {
+        self_path_ = std::move(self_path);
+        backdrops_ = backdrops;
+    }
     // ORION's own art folder, to show beside the choice that means it.
     void set_state_dir(std::string dir)
     {
@@ -149,6 +159,9 @@ class SettingsPanel
     void build_tab_page(const LibraryPrefs &prefs);
     void build_emulators(const LibraryPrefs &prefs);
     void build_art(const LibraryPrefs &prefs);
+    void build_storage(const LibraryPrefs &prefs);
+    void build_folder_page(const LibraryPrefs &prefs);
+    Change edit_folder_page(int id, LibraryPrefs *prefs);
     void build_appearance(const Look &look, const LibraryPrefs &prefs);
     void build_nav();
     void layout();
@@ -174,6 +187,9 @@ class SettingsPanel
     std::vector<TabEntry> tabs_;
     std::string tab_id_;
     std::string state_dir_ = "/data/orion";
+    std::string self_path_;
+    int backdrops_ = 0;
+    int folder_page_ = -1; // the ROM folder whose page is open; -1: the list
     std::string art_status_ = "Covers from thumbnails.libretro.com for games without one";
 };
 

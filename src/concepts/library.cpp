@@ -23,6 +23,7 @@
 #include "orion/playtime.hpp"
 #include "orion/prefs.hpp"
 #include "orion/settings_panel.hpp"
+#include "orion/storage.hpp"
 #include "orion/theme_file.hpp"
 #include "platform/ps5/system.hpp"
 #include "ui/components/grid.hpp"
@@ -108,6 +109,7 @@ enum class Typing : std::uint8_t
     rename_tab,
     theme_name, // from Settings > Save as new theme
     art_folder, // from Settings > Box art > Your own folder
+    rom_folder, // from Settings > Storage > Add a ROM folder
 };
 
 // Tags of the menu items.
@@ -182,6 +184,10 @@ constexpr app::TourStep kTour[] = {
     {0.12f, 0, Direction::down},
     {0.12f, 0, Direction::down},
     {0.8f, 0, Direction::none, "settings-art"},
+    {0.2f, action_bit(Action::back)},
+    {0.3f, action_bit(Action::jump_next)},
+    {0.2f, 0, Direction::right},
+    {0.8f, 0, Direction::none, "settings-storage"},
     {0.2f, action_bit(Action::back)},
     {0.3f, action_bit(Action::jump_next)},
     {0.2f, 0, Direction::right},
@@ -451,6 +457,7 @@ class Library final : public app::Concept
         look_ = orion::load_look(state, themes_);
         settings_.set_themes(themes_);
         settings_.set_state_dir(state);
+        art_folder_was_ = orion::art_folder(prefs_, state);
         settings_.set_emulator(context_.library.emulator);
         restyle();
         // ORION reopens where it was left, when asked to.
@@ -816,6 +823,8 @@ class Library final : public app::Concept
     void open_settings(app::Feedback &feedback)
     {
         settings_.set_tabs(every_tab());
+        settings_.set_storage(context_.library.self_path,
+                              orion::count_files("/app0/backdrops", ".png"));
         settings_.open(look_, prefs_, feedback);
     }
 
@@ -878,6 +887,23 @@ class Library final : public app::Concept
             start_typing(Typing::art_folder, orion::art_folder(prefs_, context_.library.state_dir));
             feedback.play(audio::Cue::modal_open);
             break;
+        case orion::SettingsPanel::Change::add_rom_folder:
+            start_typing(Typing::rom_folder, "/mnt/usb0/roms");
+            feedback.play(audio::Cue::modal_open);
+            break;
+        case orion::SettingsPanel::Change::copy_backdrops:
+        {
+            // Every copy goes, and every title without a picture is asked about again.
+            const int gone = orion::remove_files("/app0/backdrops", ".png") +
+                             orion::remove_files("/app0/backdrops", ".none");
+            request_backdrops();
+            settings_.set_storage(context_.library.self_path, 0);
+            settings_.refresh(look_, prefs_);
+            show_note(true,
+                      "Copying the game backgrounds again (" + std::to_string(gone) + " cleared)");
+            feedback.play(audio::Cue::select);
+            break;
+        }
         case orion::SettingsPanel::Change::fetch_art:
             start_art(true);
             feedback.play(art_.running() ? audio::Cue::select : audio::Cue::error);
@@ -902,9 +928,9 @@ class Library final : public app::Concept
 
     static std::size_t limit_of(Typing typing)
     {
-        return typing == Typing::search       ? kMaxQuery
-               : typing == Typing::art_folder ? kMaxPath
-                                              : kMaxName;
+        return typing == Typing::search                                       ? kMaxQuery
+               : typing == Typing::art_folder || typing == Typing::rom_folder ? kMaxPath
+                                                                              : kMaxName;
     }
 
     std::string &buffer()
@@ -950,6 +976,23 @@ class Library final : public app::Concept
         if (typing == Typing::theme_name)
         {
             save_theme(feedback);
+            return;
+        }
+        if (typing == Typing::rom_folder)
+        {
+            struct stat info = {};
+            if (!orion::valid_art_dir(name_) || ::stat(name_.c_str(), &info) != 0 ||
+                !S_ISDIR(info.st_mode))
+            {
+                show_note(false, "No folder at " + name_ + " (it goes under /data or /mnt)");
+                feedback.play(audio::Cue::error);
+                return;
+            }
+            if (prefs_.rom_folders.size() < 16)
+                prefs_.rom_folders.push_back({name_, ""});
+            tabs_changed();
+            show_note(true, "Added " + name_ + ": its games appear when ORION next starts");
+            feedback.play(audio::Cue::saved);
             return;
         }
         if (typing == Typing::art_folder)
@@ -1343,6 +1386,12 @@ class Library final : public app::Concept
     // no picture yet (the ones that have keep theirs until ORION restarts).
     void art_folder_changed()
     {
+        // What the old folder holds comes along to the new one.
+        const std::string now = orion::art_folder(prefs_, context_.library.state_dir);
+        const int moved = orion::copy_tree(art_folder_was_, now);
+        art_folder_was_ = now;
+        if (moved > 0)
+            sys::log("[ORION] box art: %d pictures copied to %s", moved, now.c_str());
         save_prefs();
         if (settings_.is_open())
             settings_.refresh(look_, prefs_);
@@ -2334,7 +2383,9 @@ class Library final : public app::Concept
                                   : typing_ == Typing::rename_tab ? "Rename the tab"
                                   : typing_ == Typing::theme_name ? "Name the new theme"
                                   : typing_ == Typing::art_folder ? "A folder under /data or /mnt"
-                                                                  : "Name the new tab";
+                                  : typing_ == Typing::rom_folder
+                                      ? "A folder of games, like /mnt/usb0/roms"
+                                      : "Name the new tab";
         const bool empty = text.empty();
         ui::text(list, fonts.regular, empty ? placeholder : text.c_str(), field.x + 28,
                  field.y + 37, 25, empty ? Color::rgb(0xffffff, 0.66f) : Color::rgb(0xffffff));
@@ -2358,6 +2409,7 @@ class Library final : public app::Concept
     bool reduced_ = false;
     std::vector<std::string> favourites_;
     orion::PlayLog plays_;
+    std::string art_folder_was_;     // where box art was before the folder last changed
     std::string backdrop_candidate_; // what the focused game shows (backdrop_of)
     std::string backdrop_drawn_;     // what is drawn now; it changes once faded out
     float backdrop_dwell_ = 0.0f;    // seconds the focus has rested on it

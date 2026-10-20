@@ -282,6 +282,82 @@ std::string rom_id(std::string_view path)
     return text;
 }
 
+// The games in one folder of one system, added to its System (made when it
+// has none yet). dir is the folder as ORION sees it, seen as RetroArch does
+// (its own content is /app0/content/... to it; anything else is the same
+// path). Games already listed (the same file) are skipped.
+static int add_system_folder(Emulator &emulator, const std::string &name, const std::string &dir,
+                             const std::string &seen, std::vector<Title> *roms)
+{
+    auto at = std::find_if(emulator.systems.begin(), emulator.systems.end(),
+                           [&](const System &s) { return s.name == name; });
+    if (at == emulator.systems.end())
+    {
+        System system;
+        system.name = name;
+        system.short_name = short_system_name(name);
+        for (const Core &core : emulator.cores)
+        {
+            if (std::find(core.databases.begin(), core.databases.end(), name) !=
+                core.databases.end())
+                system.cores.push_back(core.file);
+        }
+        emulator.systems.push_back(std::move(system));
+        at = emulator.systems.end() - 1;
+    }
+    System &system = *at;
+    std::vector<Title> found;
+    for (const save::DirectoryEntry &entry : save::list_directory(dir))
+    {
+        if (entry.directory || entry.name.front() == '.' ||
+            system.games + static_cast<int>(found.size()) >= static_cast<int>(kMaxRomsPerSystem))
+            continue;
+        // With a core for the system, only what a core takes is a game;
+        // without one, every file is listed (the core may come later).
+        const std::string ext = extension_of(entry.name);
+        const bool taken =
+            system.cores.empty() ||
+            std::any_of(emulator.cores.begin(), emulator.cores.end(),
+                        [&](const Core &core)
+                        {
+                            return takes(core, ext) &&
+                                   std::find(system.cores.begin(), system.cores.end(), core.file) !=
+                                       system.cores.end();
+                        });
+        if (!taken || ext.empty())
+            continue;
+        Title rom;
+        rom.rom = seen + "/" + entry.name;
+        rom.id = rom_id(rom.rom);
+        if (std::any_of(roms->begin(), roms->end(), [&](const Title &t) { return t.id == rom.id; }))
+            continue;
+        rom.name = rom_display_name(entry.name);
+        rom.system = system.name;
+        rom.launcher = emulator.title_id;
+        rom.category = Category::game;
+        rom.platform = Platform::unknown;
+        rom.source = Source::image;
+        rom.path = dir + "/" + entry.name;
+        found.push_back(std::move(rom));
+    }
+    std::sort(found.begin(), found.end(),
+              [](const Title &a, const Title &b) { return a.name < b.name; });
+    system.games += static_cast<int>(found.size());
+    const int added = static_cast<int>(found.size());
+    for (Title &rom : found)
+        roms->push_back(std::move(rom));
+    // A system with nothing to play has no tab.
+    if (system.games == 0)
+        emulator.systems.erase(at);
+    return added;
+}
+
+static void sort_systems(Emulator &emulator)
+{
+    std::sort(emulator.systems.begin(), emulator.systems.end(),
+              [](const System &a, const System &b) { return a.short_name < b.short_name; });
+}
+
 Emulator scan_retroarch(const Title &retroarch, std::vector<Title> *roms)
 {
     Emulator emulator;
@@ -312,61 +388,85 @@ Emulator scan_retroarch(const Title &retroarch, std::vector<Title> *roms)
 
     for (const save::DirectoryEntry &folder : save::list_directory(retroarch.path + "/content"))
     {
-        if (!folder.directory || folder.name.front() == '.')
-            continue;
-        System system;
-        system.name = folder.name;
-        system.short_name = short_system_name(folder.name);
-        for (const Core &core : emulator.cores)
-        {
-            if (std::find(core.databases.begin(), core.databases.end(), system.name) !=
-                core.databases.end())
-                system.cores.push_back(core.file);
-        }
-        const std::string dir = retroarch.path + "/content/" + folder.name;
-        std::vector<Title> found;
-        for (const save::DirectoryEntry &entry : save::list_directory(dir))
-        {
-            if (entry.directory || entry.name.front() == '.' || found.size() >= kMaxRomsPerSystem)
-                continue;
-            // With a core for the system, only what a core takes is a game;
-            // without one, every file is listed (the core may come later).
-            const std::string ext = extension_of(entry.name);
-            const bool taken =
-                system.cores.empty() ||
-                std::any_of(emulator.cores.begin(), emulator.cores.end(),
-                            [&](const Core &core)
-                            {
-                                return takes(core, ext) &&
-                                       std::find(system.cores.begin(), system.cores.end(),
-                                                 core.file) != system.cores.end();
-                            });
-            if (!taken || ext.empty())
-                continue;
-            Title rom;
-            rom.rom = "/app0/content/" + folder.name + "/" + entry.name;
-            rom.id = rom_id(rom.rom);
-            rom.name = rom_display_name(entry.name);
-            rom.system = system.name;
-            rom.launcher = retroarch.id;
-            rom.category = Category::game;
-            rom.platform = Platform::unknown;
-            rom.source = Source::image;
-            rom.path = dir + "/" + entry.name;
-            found.push_back(std::move(rom));
-        }
-        if (found.empty())
-            continue;
-        std::sort(found.begin(), found.end(),
-                  [](const Title &a, const Title &b) { return a.name < b.name; });
-        system.games = static_cast<int>(found.size());
-        emulator.systems.push_back(std::move(system));
-        for (Title &rom : found)
-            roms->push_back(std::move(rom));
+        if (folder.directory && folder.name.front() != '.')
+            add_system_folder(emulator, folder.name, retroarch.path + "/content/" + folder.name,
+                              "/app0/content/" + folder.name, roms);
     }
-    std::sort(emulator.systems.begin(), emulator.systems.end(),
-              [](const System &a, const System &b) { return a.short_name < b.short_name; });
+    sort_systems(emulator);
     return emulator;
+}
+
+std::string system_of_folder(std::string_view name, const Emulator &emulator)
+{
+    std::string folded(name);
+    for (char &c : folded)
+        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    for (const ShortName &entry : kShortNames)
+    {
+        std::string database(entry.database);
+        std::string short_name(entry.name);
+        for (char &c : database)
+            c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        for (char &c : short_name)
+            c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        if (folded == database || folded == entry.esde || folded == short_name)
+            return entry.database;
+    }
+    // A system a core plays that the table does not know, by its full name.
+    for (const std::string &system : known_systems(emulator))
+    {
+        std::string database = system;
+        for (char &c : database)
+            c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        if (folded == database)
+            return system;
+    }
+    return "";
+}
+
+std::vector<std::string> known_systems(const Emulator &emulator)
+{
+    std::vector<std::string> systems;
+    for (const Core &core : emulator.cores)
+    {
+        for (const std::string &database : core.databases)
+        {
+            if (std::find(systems.begin(), systems.end(), database) == systems.end())
+                systems.push_back(database);
+        }
+    }
+    std::sort(systems.begin(), systems.end(), [](const std::string &a, const std::string &b)
+              { return short_system_name(a) < short_system_name(b); });
+    return systems;
+}
+
+int scan_rom_folder(Emulator &emulator, const std::string &path, const std::string &system,
+                    std::vector<Title> *roms)
+{
+    std::string folder = path;
+    while (folder.size() > 1 && folder.back() == '/')
+        folder.pop_back();
+    const std::size_t slash = folder.rfind('/');
+    const std::string name = slash == std::string::npos ? folder : folder.substr(slash + 1);
+    const std::string own = !system.empty() ? system : system_of_folder(name, emulator);
+    int added = 0;
+    if (!own.empty())
+        added = add_system_folder(emulator, own, folder, folder, roms);
+    else
+    {
+        // A folder of system folders, as ES-DE keeps them: roms/gba, roms/nds.
+        for (const save::DirectoryEntry &entry : save::list_directory(folder))
+        {
+            if (!entry.directory || entry.name.front() == '.')
+                continue;
+            const std::string inner = system_of_folder(entry.name, emulator);
+            if (!inner.empty())
+                added += add_system_folder(emulator, inner, folder + "/" + entry.name,
+                                           folder + "/" + entry.name, roms);
+        }
+    }
+    sort_systems(emulator);
+    return added;
 }
 
 } // namespace hui::library

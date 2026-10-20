@@ -27,6 +27,14 @@ struct CustomTab
     std::string name;
 };
 
+// A folder of games for RetroArch the player added: under /data or /mnt. An
+// empty system means "worked out from the folder's name" (library/emulators.hpp).
+struct RomFolder
+{
+    std::string path;
+    std::string system;
+};
+
 // What the player chose for one emulated system. Systems not listed are on,
 // with the first core that plays them.
 struct SystemPref
@@ -79,6 +87,7 @@ struct Placement
 //     "return_on_close": true,
 //     "shortcut_test": false,
 //     "game_backgrounds": true,
+//     "rom_folders": [{"path": "/mnt/usb0/roms", "system": ""}],
 //     "art_dir": "/mnt/usb0/ORION/art",
 //     "tabs": [{"id": "t1", "name": "RPGs"}],
 //     "placements": {"PPSA01234": "t1"},
@@ -96,6 +105,7 @@ struct LibraryPrefs
     std::vector<CustomTab> tabs;
     std::vector<Placement> placements;
     std::vector<SystemPref> systems;
+    std::vector<RomFolder> rom_folders;
     std::vector<TabPrefs> tab_prefs;
     // "all", "games", "homebrew", "media", "favourites" or "tab:<id>".
     std::string last_tab = "all";

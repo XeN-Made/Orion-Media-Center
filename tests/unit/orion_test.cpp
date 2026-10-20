@@ -168,6 +168,20 @@ TEST(OrionPrefs, GamesBringOrionBackUnlessToldNot)
     EXPECT_TRUE(back.shortcut_test);
 }
 
+TEST(OrionPrefs, RomFoldersAreKept)
+{
+    const std::string dir = fresh_dir("orion-prefs-rom-folders");
+    orion::LibraryPrefs prefs;
+    prefs.rom_folders.push_back({"/mnt/usb0/roms", ""});
+    prefs.rom_folders.push_back({"/data/games/psp", "Sony - PlayStation Portable"});
+    prefs.rom_folders.push_back({"/etc/nope", ""}); // not under /data or /mnt: dropped on load
+    ASSERT_TRUE(orion::save_prefs(dir, prefs));
+    const orion::LibraryPrefs back = orion::load_prefs(dir);
+    ASSERT_EQ(back.rom_folders.size(), 2u);
+    EXPECT_EQ(back.rom_folders[0].path, "/mnt/usb0/roms");
+    EXPECT_EQ(back.rom_folders[1].system, "Sony - PlayStation Portable");
+}
+
 TEST(OrionPrefs, RemovingATabSendsItsTitlesHome)
 {
     orion::LibraryPrefs prefs;

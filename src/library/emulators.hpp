@@ -26,6 +26,19 @@ bool is_retroarch(const Title &title);
 // are left out of the systems.
 Emulator scan_retroarch(const Title &retroarch, std::vector<Title> *roms);
 
+// The player's own ROM folders (as ORION and RetroArch both see them, under
+// /data or /mnt): a folder of one system, the system given or worked out from
+// its name ("gba", "GBA" or "Nintendo - Game Boy Advance"), or a folder of
+// such folders (ES-DE's layout: roms/gba, roms/nds). Their games join the
+// systems' tabs; a system RetroArch has no content for gets one. Returns how
+// many games were added.
+int scan_rom_folder(Emulator &emulator, const std::string &path, const std::string &system,
+                    std::vector<Title> *roms);
+// The system a folder's name stands for, or empty.
+std::string system_of_folder(std::string_view name, const Emulator &emulator);
+// Every system a core of RetroArch's plays, by short name.
+std::vector<std::string> known_systems(const Emulator &emulator);
+
 // Parts of the scan, exposed for tests.
 bool read_core_info(std::string_view text, const std::string &file, Core *core);
 // "007 - Nightfire (UE) (M3) [!].gba" -> "007 - Nightfire";
