@@ -75,6 +75,65 @@ TEST(Emulators, TurnsContentFoldersIntoSystemsAndGames)
     EXPECT_EQ(starfall->id, library::rom_id(starfall->rom));
 }
 
+TEST(Emulators, ListsWhatRetroArchsPlaylistsList)
+{
+    std::vector<library::Title> roms;
+    library::Emulator emulator = library::scan_retroarch(retroarch(), &roms);
+    const std::size_t before = roms.size();
+    // A manual scan of a drive's folder, as RetroArch writes one: the
+    // playlist's name says the system.
+    const std::string gba = R"json({
+      "version": "1.5",
+      "default_core_path": "/app0/cores/mgba_libretro.so",
+      "scan_content_dir": "/mnt/usb0/roms/gba",
+      "items": [
+        {"path": "/mnt/usb0/roms/gba/Super Mario Bros. 3 (U) [!].gba", "label": "Super Mario Bros. 3 (U) [!]",
+         "core_path": "DETECT", "core_name": "DETECT", "db_name": "gba.lpl"},
+        {"path": "/mnt/usb0/roms/gba/Rune Song.zip#Rune Song.gba", "label": "",
+         "core_path": "DETECT", "core_name": "DETECT", "db_name": "gba.lpl"},
+        {"path": "/app0/content/Nintendo - Game Boy Advance/Starfall Racer (USA).gba",
+         "label": "Starfall Racer (USA)", "db_name": "gba.lpl"}
+      ]})json";
+    EXPECT_EQ(library::read_retroarch_playlist(emulator, gba, "gba.lpl", &roms),
+              2); // one was listed
+    // A playlist named for nothing: the entry's database, else the default core.
+    const std::string mixed = R"json({
+      "default_core_path": "/app0/cores/mgba_libretro.so",
+      "items": [
+        {"path": "/data/roms/Paper Moon.nds", "label": "Paper Moon (E)",
+         "db_name": "Nintendo - Nintendo DS.lpl"},
+        {"path": "/data/roms/Lantern.gba", "label": "Lantern", "db_name": "Favourites.lpl"}
+      ]})json";
+    EXPECT_EQ(library::read_retroarch_playlist(emulator, mixed, "Favourites.lpl", &roms), 2);
+    EXPECT_EQ(library::read_retroarch_playlist(emulator, "not json", "x.lpl", &roms), 0);
+    ASSERT_EQ(roms.size(), before + 4u);
+
+    const auto find = [&](const std::string &name) -> const library::Title *
+    {
+        for (const library::Title &rom : roms)
+        {
+            if (rom.name == name)
+                return &rom;
+        }
+        return nullptr;
+    };
+    const library::Title *mario = find("Super Mario Bros. 3");
+    ASSERT_NE(mario, nullptr);
+    EXPECT_EQ(mario->system, "Nintendo - Game Boy Advance");
+    EXPECT_EQ(mario->rom, "/mnt/usb0/roms/gba/Super Mario Bros. 3 (U) [!].gba");
+    EXPECT_EQ(mario->launcher, "PPSA90120");
+    const library::Title *rune = find("Rune Song");
+    ASSERT_NE(rune, nullptr);
+    EXPECT_EQ(rune->rom, "/mnt/usb0/roms/gba/Rune Song.zip#Rune Song.gba");
+    EXPECT_EQ(rune->path, "/mnt/usb0/roms/gba/Rune Song.zip");
+    ASSERT_NE(find("Paper Moon"), nullptr);
+    EXPECT_EQ(find("Paper Moon")->system, "Nintendo - Nintendo DS");
+    ASSERT_NE(find("Lantern"), nullptr);
+    EXPECT_EQ(find("Lantern")->system, "Nintendo - Game Boy Advance");
+    EXPECT_EQ(emulator.apps.front().games, 4);
+    EXPECT_EQ(emulator.apps.front().folders.back(), "/mnt/usb0/roms/gba");
+}
+
 TEST(Emulators, ReadsCoreInfo)
 {
     library::Core core;

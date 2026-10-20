@@ -607,7 +607,10 @@ void SettingsPanel::build_emulator_page(const library::EmulatorApp &app, const L
     }
     for (std::size_t i = 0; i < app.folders.size(); ++i)
         form_.add_value(kOwnFolderRow + static_cast<int>(i), app.folders[i], "Built in")
-            .description = "Where " + app.name + " looks by itself; ORION looks there too";
+            .description = app.key == "retroarch"
+                               ? "RetroArch's content, or a folder its playlists list games "
+                                 "from: ORION lists them too"
+                               : "Where " + app.name + " looks by itself; ORION looks there too";
 }
 
 void SettingsPanel::build_storage(const LibraryPrefs &prefs)

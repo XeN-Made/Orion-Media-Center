@@ -43,6 +43,7 @@
 #include <cstring>
 #include <ctime>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include <sys/stat.h>
@@ -624,6 +625,7 @@ class Library final : public app::Concept
 
         tabs_.update(dt);
         grid_.update(dt);
+        want_icons();
         keys_.update(dt);
         menu_.update(dt);
         settings_.update(dt);
@@ -686,13 +688,18 @@ class Library final : public app::Concept
             draw_details(list, paint);
         else
             draw_empty(list, paint);
-        if (keyboard_shown_.value > 0.01f)
+        // A keyboard Settings asked for (a folder to type) goes over it: the
+        // sheet covers the whole screen.
+        const bool over_settings = settings_.visible();
+        if (keyboard_shown_.value > 0.01f && !over_settings)
             draw_keyboard(canvas, paint);
-        else
+        else if (keyboard_shown_.value <= 0.01f)
             draw_hints(list, paint);
         draw_launch_card(list, paint);
         draw_hold_to_exit(list, paint);
         settings_.draw(canvas);
+        if (keyboard_shown_.value > 0.01f && over_settings)
+            draw_keyboard(canvas, paint);
         menu_.draw(canvas); // last: it belongs to whatever it was opened over
         list.pop_opacity();
     }
@@ -1433,6 +1440,32 @@ class Library final : public app::Concept
         settings_.set_art_status("Looking for box art for " + games + "\u2026");
         if (manual)
             show_note(true, "Looking for box art for " + games + "\u2026");
+    }
+
+    // Games' box art is uploaded only once it is about to be seen
+    // (library/icon.hpp): the rows around the focus, a little ahead of a
+    // held direction. Each picture is asked for once.
+    void want_icons()
+    {
+        const int focus = focus_index();
+        const int first = std::max(0, focus - focus % kColumns - 2 * kColumns);
+        const int last = std::min(static_cast<int>(view_.size()), focus + 5 * kColumns);
+        bool asked = false;
+        for (int i = first; i < last; ++i)
+        {
+            const Title &title =
+                titles()[static_cast<std::size_t>(view_[static_cast<std::size_t>(i)])];
+            if (!title.is_rom() || title.texture != 0 || title.icon.empty())
+                continue;
+            std::string &wanted = wanted_icons_[title.id];
+            if (wanted == title.icon)
+                continue;
+            wanted = title.icon;
+            context_.wanted_icons.push_back(title.id);
+            asked = true;
+        }
+        if (asked)
+            art_sweep_ = std::max(art_sweep_, 2);
     }
 
     // Pictures found reach the shell, which uploads them; the covers pick the
@@ -2555,9 +2588,11 @@ class Library final : public app::Concept
     tween::Spring launch_card_;
     float age_ = 0.0f;
     float clock_ = 0.0f;
-    bool art_manual_ = false;     // the run was asked for in Settings: report it
-    int art_sweep_ = 0;           // frames until the covers take new textures
-    int generation_ = 0;          // the library's, as last rebuilt for
+    bool art_manual_ = false; // the run was asked for in Settings: report it
+    int art_sweep_ = 0;       // frames until the covers take new textures
+    int generation_ = 0;      // the library's, as last rebuilt for
+    // Games whose box art was asked for, and which picture (want_icons).
+    std::unordered_map<std::string, std::string> wanted_icons_;
     std::string folder_emulator_; // the emulator a game folder being typed is for
     // Last, so it is destroyed first: its thread stops before what it uses.
     orion::ArtFetcher art_{

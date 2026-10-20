@@ -39,6 +39,10 @@ const char *png_failure();
 
 // Reads, decodes and uploads every title's icon (needs a GL context); titles
 // whose icon is missing or broken keep texture 0. Returns the count uploaded.
+// Games for an emulator are left out: there can be thousands, so their box
+// art is uploaded only once a design wants it on screen (load_wanted_icons).
 int load_icons(Library &library, gfx::GlBatch &batch);
+// The icons of these titles (by id), when they have none uploaded yet.
+int load_wanted_icons(Library &library, const std::vector<std::string> &ids, gfx::GlBatch &batch);
 
 } // namespace hui::library

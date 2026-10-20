@@ -70,6 +70,16 @@ Emulator scan_emulators(const std::vector<Title> &titles, const std::vector<Game
 // Returns how many there are.
 int add_emulator_games(Library &library, const std::vector<GameFolder> &folders,
                        const std::string &art_dir);
+// One of RetroArch's playlists (<root>/playlists/<name>, JSON): every game it
+// has scanned, wherever the files are (/mnt/usb0/roms/snes), so ORION lists
+// what RetroArch lists without being told the folder. The system comes from
+// the playlist's name (snes.lpl, or the database's "Nintendo - Super Nintendo
+// Entertainment System.lpl"), else the entry's database or core, else the
+// playlist's default core. Paths are as RetroArch sees them (/app0 is its
+// folder); the folder it scanned joins its app's folders. Returns how many
+// games were added (ones already listed are not).
+int read_retroarch_playlist(Emulator &emulator, std::string_view text, const std::string &name,
+                            std::vector<Title> *roms);
 // One of the player's folders, for its emulator when that one is installed.
 // Returns how many games were added.
 int scan_game_folder(Emulator &emulator, const GameFolder &folder, std::vector<Title> *roms);

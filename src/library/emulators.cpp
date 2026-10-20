@@ -5,11 +5,13 @@
 #include "library/emulators.hpp"
 
 #include "core/save_file.hpp"
+#include "library/json.hpp"
 
 #include <algorithm>
 #include <cctype>
 #include <cstdint>
 #include <cstdio>
+#include <unordered_set>
 
 #include <sys/stat.h>
 
@@ -21,6 +23,7 @@ namespace
 
 constexpr std::size_t kMaxInfo = 64u << 10;
 constexpr std::size_t kMaxRomsPerSystem = 5000;
+constexpr std::size_t kMaxPlaylist = 16u << 20; // a few thousand entries is a few megabytes
 
 struct ShortName
 {
@@ -607,6 +610,40 @@ std::string seen_by(const EmulatorApp &app, const std::string &path)
     return path;
 }
 
+// Games found, sorted by name, onto their systems (made when there is none
+// yet, with the RetroArch cores that play it) and appended to *roms.
+int place_games(Emulator &emulator, std::vector<Title> &found, std::vector<Title> *roms)
+{
+    std::sort(found.begin(), found.end(),
+              [](const Title &a, const Title &b) { return a.name < b.name; });
+    int added = 0;
+    for (Title &rom : found)
+    {
+        auto at = std::find_if(emulator.systems.begin(), emulator.systems.end(),
+                               [&](const System &s) { return s.name == rom.system; });
+        if (at == emulator.systems.end())
+        {
+            System made;
+            made.name = rom.system;
+            made.short_name = short_system_name(rom.system);
+            for (const Core &core : emulator.cores)
+            {
+                if (std::find(core.databases.begin(), core.databases.end(), made.name) !=
+                    core.databases.end())
+                    made.cores.push_back(core.file);
+            }
+            emulator.systems.push_back(std::move(made));
+            at = emulator.systems.end() - 1;
+        }
+        if (at->games >= static_cast<int>(kMaxRomsPerSystem))
+            continue;
+        ++at->games;
+        ++added;
+        roms->push_back(std::move(rom));
+    }
+    return added;
+}
+
 // One folder's discs for Porpoise or PS5SX2 (system: the player's choice, or
 // empty to tell from each disc). Games already listed are skipped.
 int add_app_folder(Emulator &emulator, std::size_t app_index, const std::string &dir,
@@ -655,27 +692,7 @@ int add_app_folder(Emulator &emulator, std::size_t app_index, const std::string 
         rom.path = path;
         found.push_back(std::move(rom));
     }
-    std::sort(found.begin(), found.end(),
-              [](const Title &a, const Title &b) { return a.name < b.name; });
-    int added = 0;
-    for (Title &rom : found)
-    {
-        auto at = std::find_if(emulator.systems.begin(), emulator.systems.end(),
-                               [&](const System &s) { return s.name == rom.system; });
-        if (at == emulator.systems.end())
-        {
-            System made;
-            made.name = rom.system;
-            made.short_name = short_system_name(rom.system);
-            emulator.systems.push_back(std::move(made));
-            at = emulator.systems.end() - 1;
-        }
-        if (at->games >= static_cast<int>(kMaxRomsPerSystem))
-            continue;
-        ++at->games;
-        ++added;
-        roms->push_back(std::move(rom));
-    }
+    const int added = place_games(emulator, found, roms);
     emulator.apps[app_index].games += added;
     return added;
 }
@@ -781,6 +798,90 @@ std::vector<std::string> known_systems(const Emulator &emulator, std::string_vie
     return known_systems(emulator);
 }
 
+int read_retroarch_playlist(Emulator &emulator, std::string_view text, const std::string &name,
+                            std::vector<Title> *roms)
+{
+    EmulatorApp *app = nullptr;
+    for (EmulatorApp &candidate : emulator.apps)
+    {
+        if (candidate.key == "retroarch")
+            app = &candidate;
+    }
+    json::Value root;
+    if (app == nullptr || !json::parse(text, &root) || !root.is_object())
+        return 0;
+    const auto stem = [](std::string file)
+    {
+        const std::size_t slash = file.rfind('/');
+        if (slash != std::string::npos)
+            file.erase(0, slash + 1);
+        const std::size_t dot = file.rfind('.');
+        return dot == std::string::npos ? file : file.substr(0, dot);
+    };
+    // A core's file ("/app0/cores/snes9x_libretro.so") to the system it plays.
+    const auto core_system = [&](const std::string &core_path)
+    {
+        const std::size_t slash = core_path.rfind('/');
+        const std::string file =
+            slash == std::string::npos ? core_path : core_path.substr(slash + 1);
+        for (const Core &core : emulator.cores)
+        {
+            if (core.file == file && !core.databases.empty())
+                return core.databases.front();
+        }
+        return std::string();
+    };
+    const std::string system = system_of_folder(stem(name), emulator);
+    const std::string default_core = root["default_core_path"].string_or("");
+    const std::string scanned = root["scan_content_dir"].string_or("");
+    if (!scanned.empty() &&
+        std::find(app->folders.begin(), app->folders.end(), scanned) == app->folders.end())
+        app->folders.push_back(scanned);
+
+    std::unordered_set<std::string> listed;
+    for (const Title &rom : *roms)
+        listed.insert(rom.id);
+    std::vector<Title> found;
+    for (const json::Value &item : root["items"].elements())
+    {
+        Title rom;
+        rom.rom = item["path"].string_or("");
+        if (rom.rom.empty() || rom.rom.size() > 1024)
+            continue;
+        rom.id = rom_id(rom.rom);
+        if (!listed.insert(rom.id).second)
+            continue;
+        rom.system = system_of_folder(stem(item["db_name"].string_or("")), emulator);
+        if (rom.system.empty())
+            rom.system = core_system(item["core_path"].string_or(""));
+        if (rom.system.empty())
+            rom.system = system;
+        // An archive's member ("game.zip#game.sfc") is RetroArch's to open.
+        const std::string file = rom.rom.substr(0, rom.rom.find('#'));
+        // The extension, where it names a system (.gba, .nds), before a core
+        // that plays several (mGBA: Game Boy, Color and Advance).
+        if (rom.system.empty())
+            rom.system = system_of_folder(extension_of(rom.rom), emulator);
+        if (rom.system.empty())
+            rom.system = core_system(default_core);
+        if (rom.system.empty())
+            continue; // nothing says what plays it
+        rom.path = file.rfind("/app0/", 0) == 0 ? app->root + file.substr(5) : file;
+        const std::string label = item["label"].string_or("");
+        // Labels have no extension; the dot keeps rom_display_name from
+        // taking one off ("Super Mario Bros. 3").
+        rom.name = rom_display_name(label.empty() ? file.substr(file.rfind('/') + 1) : label + ".");
+        rom.launcher = app->title_id;
+        rom.category = Category::game;
+        rom.platform = Platform::unknown;
+        rom.source = Source::image;
+        found.push_back(std::move(rom));
+    }
+    const int added = place_games(emulator, found, roms);
+    app->games += added;
+    return added;
+}
+
 int scan_game_folder(Emulator &emulator, const GameFolder &folder, std::vector<Title> *roms)
 {
     const std::string key = folder.emulator.empty() ? std::string("retroarch") : folder.emulator;
@@ -815,6 +916,18 @@ Emulator scan_emulators(const std::vector<Title> &titles, const std::vector<Game
         {
             emulator = scan_retroarch(title, roms);
             emulator.apps.front().games = static_cast<int>(roms->size());
+            // And what its playlists list; the history ones are only what was
+            // played (builtin/content_history.lpl).
+            for (const save::DirectoryEntry &entry :
+                 save::list_directory(title.path + "/playlists"))
+            {
+                std::string text;
+                if (entry.directory || extension_of(entry.name) != "lpl" ||
+                    entry.name.rfind("content_", 0) == 0 ||
+                    !save::read_file(title.path + "/playlists/" + entry.name, &text, kMaxPlaylist))
+                    continue;
+                read_retroarch_playlist(emulator, text, entry.name, roms);
+            }
             break;
         }
     }

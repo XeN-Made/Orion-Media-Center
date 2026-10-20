@@ -52,6 +52,11 @@ class Shell
     {
         return std::exchange(context_.new_icons, {});
     }
+    // Titles whose icons the designs want on screen since the last call.
+    std::vector<std::string> take_wanted_icons()
+    {
+        return std::exchange(context_.wanted_icons, {});
+    }
     // True once since a design asked for the emulators to be scanned again.
     bool take_rescan_request()
     {

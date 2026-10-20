@@ -399,7 +399,11 @@ int main()
                      titles.emulator.apps.size(), games);
         }
         shell.update(input, dt);
-        // Box art ORION downloaded: loaded as the scan's icons were.
+        // Games' box art that comes into view.
+        if (auto wanted = shell.take_wanted_icons(); !wanted.empty())
+            library::load_wanted_icons(titles, wanted, renderer.batch());
+        // Box art ORION downloaded: loaded as the scan's icons were (a
+        // game's picture waits until it is wanted).
         if (auto icons = shell.take_new_icons(); !icons.empty())
         {
             for (const auto &[id, path] : icons)
