@@ -277,6 +277,8 @@ int main(int argc, char **argv)
         // Favourites go to the scratch folder and start empty, like settings.
         titles.state_dir = data_root;
         titles.themes_dir = assets + "/themes";
+        // HUI_SETUP=1: open on the first-run setup, as a new console would.
+        titles.offer_setup = std::getenv("HUI_SETUP") != nullptr;
         for (const char *file : {"/favourites.json", "/library.json", "/theme.json", "/themes.txt"})
             std::remove((data_root + file).c_str());
         // HUI_THEME=<id>: wear that theme, built in or one placed in

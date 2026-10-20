@@ -149,6 +149,9 @@ struct Library
     // The emulators installed and the systems they have games for. Their
     // games are in `titles` too, marked by Title::system.
     Emulator emulator;
+    // ORION shows its first-run setup until it is finished (orion/setup_panel.hpp).
+    // The app sets this; tests and the PC tour leave it off unless asked.
+    bool offer_setup = false;
     // Grows each time the library is scanned again while ORION runs: a design
     // that keeps indices into titles rebuilds when it changes.
     int generation = 0;

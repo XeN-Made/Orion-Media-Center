@@ -25,6 +25,10 @@ enum : int
     kSort = 1,
     kReopen,
     kGroupSystems,
+    kAutostart,
+    kPayloadInfo,
+    kPayloadFolder,
+    kRunSetup,
     kLeaveShelf,
     kBase,
     kBackground,
@@ -88,21 +92,10 @@ std::string folder_key(const RomFolder &folder)
     return folder.emulator.empty() ? std::string("retroarch") : folder.emulator;
 }
 
-// Where box art can live: ORION's folder, a USB drive, the extended storage,
-// or a folder the player types.
-constexpr const char *kArtPlaces[] = {"ORION's folder", "USB drive", "Extended storage",
+// Where box art can live (prefs.hpp), or a folder the player types.
+constexpr const char *kArtPlaces[] = {kArtPlaceNames[0], kArtPlaceNames[1], kArtPlaceNames[2],
                                       "Your own folder"};
-constexpr const char *kArtPaths[] = {"", "/mnt/usb0/ORION/art", "/mnt/ext0/ORION/art"};
-
-int art_place(const std::string &dir)
-{
-    for (int i = 0; i < 3; ++i)
-    {
-        if (dir == kArtPaths[i])
-            return i;
-    }
-    return 3;
-}
+constexpr const char *const *kArtPaths = kArtPlacePaths;
 
 constexpr const char *kCoverNames[] = {"Fit the pictures", "Square", "Portrait (5:7)",
                                        "Landscape (7:5)"};
@@ -396,6 +389,14 @@ void SettingsPanel::build_library(const LibraryPrefs &prefs)
         "Close a game from the PS button menu and ORION opens again";
     form_.add_toggle(kShortcut, "Shortcut test (L3 + R3)", prefs.shortcut_test).description =
         "Experiment: hold L3 + R3 in a game to see if ORION notices. Nothing is closed";
+    form_.add_toggle(kAutostart, "Open ORION after the jailbreak", prefs.autostart).description =
+        "Add the payload below to your autoloader; ORION opens as the browser closes";
+    const std::size_t slash = payload_.rfind('/');
+    form_.add_value(kPayloadInfo, "Autostart payload", payload_.substr(slash + 1));
+    form_.add_value(kPayloadFolder, "In the folder", payload_.substr(0, slash));
+    ui::FormRow &setup = form_.add_action(kRunSetup, "Run setup again");
+    setup.chevron = true;
+    setup.description = "The first-run steps: look, emulators, box art, autostart";
 }
 
 void SettingsPanel::build_tabs(const LibraryPrefs &prefs)
@@ -915,6 +916,8 @@ SettingsPanel::Change SettingsPanel::handle(const InputFrame &input, ui::Feedbac
             return Change::add_rom_folder;
         if (id == kBackdropsAgain)
             return Change::copy_backdrops;
+        if (id == kRunSetup)
+            return Change::run_setup;
         if (id == kScanEmulators)
             return Change::scan_emulators;
         if (emulator_ != nullptr && id >= kEmulatorRow &&
@@ -979,6 +982,9 @@ SettingsPanel::Change SettingsPanel::handle(const InputFrame &input, ui::Feedbac
     {
     case kSort:
         prefs->sort = kSortKeys[std::clamp(form_.choice_index(kSort), 0, kSortCount - 1)];
+        return Change::prefs;
+    case kAutostart:
+        prefs->autostart = form_.toggle_value(kAutostart);
         return Change::prefs;
     case kGroupSystems:
         prefs->group_systems = form_.toggle_value(kGroupSystems);

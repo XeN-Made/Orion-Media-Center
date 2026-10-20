@@ -77,6 +77,7 @@ class SettingsPanel
         copy_backdrops,  // "Copy them again": the screen asks the helper anew
         folders,         // a game folder changed or went: save and scan again
         scan_emulators,  // "Scan for emulators" was chosen
+        run_setup,       // "Run setup again": the screen closes Settings and opens the setup
     };
 
     enum class Section : std::uint8_t
@@ -120,6 +121,11 @@ class SettingsPanel
     void set_emulator(const library::Emulator &emulator)
     {
         emulator_ = &emulator;
+    }
+    // Where the autostart payload is, as the jailbreak's autoloader sees it.
+    void set_autostart_payload(std::string path)
+    {
+        payload_ = std::move(path);
     }
     // What Scan for emulators says under itself: the last scan, or this one.
     void set_scan_status(std::string status)
@@ -211,6 +217,7 @@ class SettingsPanel
     std::string emulator_page_; // the emulator whose page is open; empty: the list
     int folder_page_ = -1; // the game folder whose page is open (in prefs.rom_folders); -1: none
     std::string scan_status_ = "Finds RetroArch, Porpoise and PS5SX2, and their games";
+    std::string payload_ = "/data/homebrew/PPSA99061/assets/payloads/orion-autostart.elf";
     std::string art_status_ = "Covers from thumbnails.libretro.com for games without one";
 };
 

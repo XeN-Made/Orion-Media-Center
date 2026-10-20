@@ -24,6 +24,7 @@
 #include "orion/playtime.hpp"
 #include "orion/prefs.hpp"
 #include "orion/settings_panel.hpp"
+#include "orion/setup_panel.hpp"
 #include "orion/storage.hpp"
 #include "orion/theme_file.hpp"
 #include "platform/ps5/system.hpp"
@@ -151,6 +152,18 @@ constexpr const char *kTechniques[] = {
 };
 
 constexpr app::TourStep kTour[] = {
+    {0.1f, 0, Direction::down},
+    {0.1f, 0, Direction::down},
+    {0.1f, 0, Direction::down},
+    {0.1f, 0, Direction::down},
+    {0.1f, 0, Direction::down},
+    {0.1f, 0, Direction::down},
+    {0.1f, 0, Direction::down},
+    {0.1f, 0, Direction::down},
+    {0.1f, 0, Direction::down},
+    {0.1f, 0, Direction::down},
+    {0.1f, 0, Direction::down},
+    {0.1f, 0, Direction::down},
     {0.5f, 0, Direction::right},
     {0.2f, 0, Direction::right},
     {0.2f, 0, Direction::right},
@@ -519,6 +532,15 @@ class Library final : public app::Concept
         settings_.set_state_dir(state);
         art_folder_was_ = orion::art_folder(prefs_, state);
         settings_.set_emulator(context_.library.emulator);
+        setup_.set_themes(themes_);
+        setup_.set_emulator(context_.library.emulator);
+        setup_.set_state_dir(state);
+        setup_.set_titles(static_cast<int>(std::count_if(
+            titles().begin(), titles().end(), [](const Title &t) { return !t.is_rom(); })));
+        setup_.set_autostart_payload(autostart_payload());
+        settings_.set_autostart_payload(autostart_payload());
+        // A console that has not been set up yet starts on the setup.
+        setup_pending_ = context_.library.offer_setup && !prefs_.setup_done;
         restyle();
         // ORION reopens where it was left, when asked to.
         std::string start = prefs_.reopen_last_tab ? prefs_.last_tab : std::string("all");
@@ -641,7 +663,8 @@ class Library final : public app::Concept
             restyle();
         }
 
-        const bool browsing = typing_ == Typing::none && !menu_.is_open() && !settings_.is_open();
+        const bool browsing = typing_ == Typing::none && !menu_.is_open() && !settings_.is_open() &&
+                              !setup_.is_open();
         const bool back_held = (input.held & action_bit(Action::back)) != 0;
         if (browsing && input.is_pressed(Action::back))
             hold_armed_ = true;
@@ -654,12 +677,19 @@ class Library final : public app::Concept
             feedback.play(audio::Cue::back);
         }
 
-        // One layer has the input: the keyboard, then a menu, then Settings,
-        // then the library itself.
+        if (setup_pending_)
+        {
+            setup_pending_ = false;
+            setup_.open(look_, prefs_, feedback);
+        }
+        // One layer has the input: the keyboard, then a menu, then the setup
+        // or Settings, then the library itself.
         if (typing_ != Typing::none)
             update_typing(input, feedback);
         else if (menu_.is_open())
             update_menu(input, feedback);
+        else if (setup_.is_open())
+            update_setup(input, feedback);
         else if (settings_.is_open())
             update_settings(input, feedback);
         else
@@ -677,6 +707,7 @@ class Library final : public app::Concept
         keys_.update(dt);
         menu_.update(dt);
         settings_.update(dt);
+        setup_.update(dt);
         if (launch_exit_ > 0.0f)
         {
             launch_exit_ -= dt;
@@ -753,6 +784,7 @@ class Library final : public app::Concept
         draw_launch_card(list, paint);
         draw_hold_to_exit(list, paint);
         settings_.draw(canvas);
+        setup_.draw(canvas);
         if (keyboard_shown_.value > 0.01f && over_settings)
             draw_keyboard(canvas, paint);
         menu_.draw(canvas); // last: it belongs to whatever it was opened over
@@ -800,6 +832,7 @@ class Library final : public app::Concept
         tabs_.style.reduced_motion = grid_.style.reduced_motion = keys_.style.reduced_motion =
             menu_.style.reduced_motion = reduced_;
         settings_.set_theme(theme_, reduced_);
+        setup_.set_theme(theme_, reduced_);
     }
 
     // The shape of the active tab's covers: the one chosen in Settings, else
@@ -868,7 +901,16 @@ class Library final : public app::Concept
 
     void save_prefs() const
     {
-        orion::save_prefs(context_.library.state_dir, prefs_);
+        const std::string &state = context_.library.state_dir;
+        orion::save_prefs(state, prefs_);
+        // The autostart payload reads no JSON: a file that exists says "off".
+        if (state.empty())
+            return;
+        const std::string off = state + "/autostart-off";
+        if (prefs_.autostart)
+            std::remove(off.c_str());
+        else
+            save::write_atomic(off, "ORION's autostart is off (Settings, Library)\n");
     }
 
     // ---- input ----
@@ -1067,6 +1109,9 @@ class Library final : public app::Concept
         settings_.set_scan_status("Looking for emulators and their games…");
         if (settings_.is_open())
             settings_.refresh(look_, prefs_);
+        setup_.set_scan_status("Looking for emulators and their games…");
+        if (setup_.is_open())
+            setup_.refresh(look_, prefs_);
         feedback.play(audio::Cue::select);
     }
 
@@ -1080,12 +1125,15 @@ class Library final : public app::Concept
                                   (emulator.apps.size() == 1 ? " emulator, " : " emulators, ") +
                                   std::to_string(games) + (games == 1 ? " game" : " games");
         settings_.set_scan_status(found);
+        setup_.set_scan_status(found);
         rebuild_tabs(active_key());
         restyle();
         rebuild();
         settings_.set_tabs(every_tab());
         if (settings_.is_open())
             settings_.rebuild_nav(look_, prefs_);
+        if (setup_.is_open())
+            setup_.refresh(look_, prefs_);
         show_note(true, found);
         feedback.play(audio::Cue::complete);
         // New games look for their box art, as at start-up.
@@ -1103,6 +1151,39 @@ class Library final : public app::Concept
         settings_.set_tabs(every_tab());
         if (settings_.is_open())
             settings_.refresh(look_, prefs_);
+    }
+
+    void update_setup(const InputFrame &input, app::Feedback &feedback)
+    {
+        switch (setup_.handle(input, feedback, &look_, &prefs_))
+        {
+        case orion::SetupPanel::Change::look:
+            restyle();
+            orion::save_look(context_.library.state_dir, look_);
+            break;
+        case orion::SetupPanel::Change::prefs:
+            tabs_changed();
+            break;
+        case orion::SetupPanel::Change::art_folder:
+            art_folder_changed();
+            break;
+        case orion::SetupPanel::Change::scan_emulators:
+            scan_emulators(feedback);
+            break;
+        case orion::SetupPanel::Change::finished:
+            tabs_changed();
+            break;
+        case orion::SetupPanel::Change::none:
+            break;
+        }
+    }
+
+    // The autostart payload, where the jailbreak's autoloader finds it.
+    std::string autostart_payload() const
+    {
+        const std::string &self = context_.library.self_path;
+        return (self.empty() ? std::string("/data/homebrew/PPSA99061") : self) +
+               "/assets/payloads/orion-autostart.elf";
     }
 
     void update_settings(const InputFrame &input, app::Feedback &feedback)
@@ -1152,6 +1233,10 @@ class Library final : public app::Concept
             break;
         case orion::SettingsPanel::Change::scan_emulators:
             scan_emulators(feedback);
+            break;
+        case orion::SettingsPanel::Change::run_setup:
+            settings_.close(feedback);
+            setup_.open(look_, prefs_, feedback);
             break;
         case orion::SettingsPanel::Change::copy_backdrops:
         {
@@ -2898,6 +2983,8 @@ class Library final : public app::Concept
     ui::Keyboard keys_;
     ui::Menu menu_;
     orion::SettingsPanel settings_;
+    orion::SetupPanel setup_;
+    bool setup_pending_ = false; // the setup opens on the first frame (it needs feedback)
     tween::Spring keyboard_shown_;
     std::string launch_message_;
     bool launch_ok_ = false;

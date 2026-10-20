@@ -234,6 +234,7 @@ int main()
         titles.scanned = true;
         titles.state_dir = "/data/orion";
         titles.themes_dir = std::string(kAssets) + "/themes";
+        titles.offer_setup = true;
         scan_emulators();
         const int icons = library::load_icons(titles, renderer.batch());
         char summary[128];

@@ -87,6 +87,8 @@ struct Placement
 //     "sort": "recent",
 //     "reopen_last_tab": true,
 //     "group_systems": true,
+//     "setup_done": true,
+//     "autostart": true,
 //     "moved_leave_shelf": true,
 //     "auto_art": true,
 //     "return_on_close": true,
@@ -120,6 +122,11 @@ struct LibraryPrefs
     bool reopen_last_tab = true;
     // The emulated systems share one Emulators tab, a row of their own under it.
     bool group_systems = true;
+    // The first-run setup was finished (or skipped): it does not show again.
+    bool setup_done = false;
+    // The autostart payload opens ORION after the jailbreak; off writes
+    // <state_dir>/autostart-off, which the payload honours.
+    bool autostart = true;
     // A title moved to a custom tab leaves its Games / Homebrew / Media
     // shelf; it always stays in All.
     bool moved_leave_shelf = true;
@@ -178,6 +185,13 @@ struct LibraryPrefs
 // A folder box art may live in: absolute, under /data/ or /mnt/, no "..",
 // no control characters, at most 160 bytes.
 bool valid_art_dir(std::string_view path);
+// The places box art can live, as Settings and the setup offer them: ORION's
+// folder (art_dir empty), a USB drive, the extended storage.
+constexpr int kArtPlaceCount = 3;
+constexpr const char *kArtPlaceNames[] = {"ORION's folder", "USB drive", "Extended storage"};
+constexpr const char *kArtPlacePaths[] = {"", "/mnt/usb0/ORION/art", "/mnt/ext0/ORION/art"};
+// Which of them art_dir is, or kArtPlaceCount for a folder of the player's.
+int art_place(const std::string &art_dir);
 // The folder box art goes in: the player's, else <state_dir>/art.
 std::string art_folder(const LibraryPrefs &prefs, const std::string &state_dir);
 // The player's game folders as the emulator scan takes them.

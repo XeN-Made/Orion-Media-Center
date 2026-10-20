@@ -35,6 +35,72 @@ class LibraryDesign : public hui::testing::ConceptFixture
     }
 };
 
+// A console that has not been set up starts on the setup; Skip setup ends it
+// for good and the library takes the input again.
+TEST_F(LibraryDesign, ANewConsoleStartsOnTheSetupAndCanSkipIt)
+{
+    const std::string dir = ::testing::TempDir() + "orion-design-setup-skip";
+    ASSERT_TRUE(hui::save::ensure_directory(dir));
+    std::remove((dir + "/library.json").c_str());
+    library_.state_dir = dir;
+    library_.offer_setup = true;
+    auto design = with_fixture();
+    send(*design, hui::InputFrame());
+    expect_drawable(*design);
+    // The shoulders belong to the setup now: no shelf turns.
+    send(*design, press(hui::Action::page_next));
+    EXPECT_FALSE(played(Cue::tab));
+    // Get started, what was found, Skip setup: the last row.
+    for (int i = 0; i < 4; ++i)
+        send(*design, nav(Direction::down));
+    send(*design, press(hui::Action::confirm));
+    EXPECT_TRUE(hui::orion::load_prefs(dir).setup_done);
+    send(*design, press(hui::Action::page_next));
+    EXPECT_TRUE(played(Cue::tab));
+}
+
+TEST_F(LibraryDesign, TheSetupWalksThroughEveryStep)
+{
+    const std::string dir = ::testing::TempDir() + "orion-design-setup-walk";
+    ASSERT_TRUE(hui::save::ensure_directory(dir));
+    std::remove((dir + "/library.json").c_str());
+    library_.state_dir = dir;
+    library_.offer_setup = true;
+    auto design = with_fixture();
+    send(*design, hui::InputFrame());
+    // Welcome: Get started is the first row.
+    send(*design, press(hui::Action::confirm));
+    // Look, Emulators, Box art, Library, Autostart: Continue is the last row.
+    for (int step = 0; step < 5; ++step)
+    {
+        // Circle on a later step goes back one, Get started comes forward again.
+        if (step == 2)
+        {
+            send(*design, press(hui::Action::back));
+            EXPECT_TRUE(played(Cue::back));
+            for (int i = 0; i < 10; ++i)
+                send(*design, nav(Direction::down));
+            send(*design, press(hui::Action::confirm));
+        }
+        for (int i = 0; i < 10; ++i)
+            send(*design, nav(Direction::down));
+        expect_drawable(*design);
+        EXPECT_FALSE(hui::orion::load_prefs(dir).setup_done) << step;
+        send(*design, press(hui::Action::confirm));
+    }
+    // Done: Start using ORION is the first row.
+    send(*design, press(hui::Action::confirm));
+    EXPECT_TRUE(hui::orion::load_prefs(dir).setup_done);
+}
+
+// Without offer_setup (tests, the PC tour) the library starts as it is.
+TEST_F(LibraryDesign, NoSetupUnlessTheAppOffersIt)
+{
+    auto design = with_fixture();
+    send(*design, press(hui::Action::page_next));
+    EXPECT_TRUE(played(Cue::tab));
+}
+
 TEST_F(LibraryDesign, BrowsingTicksAndTheEdgesRefuse)
 {
     auto design = with_fixture();

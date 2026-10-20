@@ -263,6 +263,8 @@ done
 # ORION's launch helper: a payload for the console's ELF loader, built with the
 # payload SDK and shipped in the app folder (see payload/launcher/main.c).
 bash "$root/payload/launcher/build.sh" "$sdk_root" "$app/assets/payloads/orion-launcher.elf"
+# And the autostart payload, for a jailbreak's autoloader (payload/autostart/main.c).
+bash "$root/payload/autostart/build.sh" "$sdk_root" "$app/assets/payloads/orion-autostart.elf"
 # Directory listing returns nothing under /app0 on the console, so each
 # audio folder carries an index of its files (read by save::list_files).
 for dir in "$app/assets/audio/music" "$app"/assets/audio/sfx/*/; do
