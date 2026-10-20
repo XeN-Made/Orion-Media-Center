@@ -1049,26 +1049,31 @@ class Library final : public app::Concept
         // game, as RetroArch's own ES-DE does: -L <core> <game>.
         const std::string core = title->is_rom() ? core_for(*title) : std::string();
         // A game for RetroArch: its launcher is told through args.txt and
-        // frontend.cfg, which the helper puts back afterwards
-        // (library/emulators.hpp, payload/launcher).
+        // frontend.cfg (library/emulators.hpp). ORION stages them in its own
+        // folder; the helper, outside any sandbox, puts them in RetroArch's
+        // and the originals back afterwards (payload/launcher). Files ORION
+        // writes there itself the launcher cannot read before it decides.
         const std::string &root = context_.library.emulator.root;
         const std::string args = root + "/args.txt";
         const std::string frontend = root + "/config/frontend.cfg";
-        const std::string request = title->is_rom() ? title->launcher + "\n@restore " + args +
-                                                          "\n@restore " + frontend + "\n"
-                                                    : title->id + "\n";
+        const std::string staged_args = dir + "/retroarch-args.txt";
+        const std::string staged_frontend = dir + "/retroarch-frontend.cfg";
+        const std::string request =
+            title->is_rom() ? title->launcher + "\n@install " + staged_args + "\t" + args +
+                                  "\n@install " + staged_frontend + "\t" + frontend + "\n"
+                            : title->id + "\n";
         if (title->is_rom() && core.empty())
             why = "no core plays " + library::short_system_name(title->system);
         else if (!sys::on_console())
             why = "not on a console";
         else if (title->is_rom() && title->rom.size() > library::kRetroArchArgMax)
             why = "its path is longer than RetroArch reads";
-        else if (title->is_rom() && !(keep_aside(args) && keep_aside(frontend)))
-            why = "could not keep RetroArch's own settings aside";
-        else if (title->is_rom() && !write_shared(args, library::retroarch_args(core, title->rom)))
-            why = "could not write " + args;
-        else if (title->is_rom() && !write_frontend(frontend))
-            why = "could not write " + frontend;
+        else if (title->is_rom() &&
+                 !write_shared(staged_args, library::retroarch_args(core, title->rom)))
+            why = "could not write " + staged_args;
+        else if (title->is_rom() && !write_shared(staged_frontend, library::retroarch_frontend(
+                                                                       players_frontend(frontend))))
+            why = "could not write " + staged_frontend;
         else if (dir.empty() || !save::write_atomic(dir + "/launch-request.txt", request).empty())
             why = "could not write the launch request";
         else if (!save::read_file(kLauncherPath, &elf, 4u << 20) || elf.empty())
@@ -1283,23 +1288,9 @@ class Library final : public app::Concept
         return save::write_atomic(file, bytes).empty() && ::chmod(file.c_str(), 0666) == 0;
     }
 
-    // Keeps a file of RetroArch's before ORION writes its own: as
-    // <file>.orion-backup, or, when there was none, an empty
-    // <file>.orion-absent. A backup still there from an earlier start is the
-    // player's file: it stays.
-    static bool keep_aside(const std::string &file)
-    {
-        const std::string backup = file + ".orion-backup";
-        const std::string absent = file + ".orion-absent";
-        std::string bytes;
-        if (save::read_file(backup, &bytes, 1u << 20) || save::read_file(absent, &bytes, 1u << 20))
-            return true;
-        if (save::read_file(file, &bytes, 1u << 20))
-            return write_shared(backup, bytes);
-        return write_shared(absent, "");
-    }
-
-    // The undoing of keep_aside(), as the launch helper does it.
+    // The undoing of what the launch helper does for a game of RetroArch's,
+    // for when it could not: the original is <file>.orion-backup, or there
+    // was none (<file>.orion-absent).
     static void put_back(const std::string &file)
     {
         const std::string backup = file + ".orion-backup";
@@ -1317,13 +1308,13 @@ class Library final : public app::Concept
         }
     }
 
-    // frontend.cfg with the picker skipped, from the player's own.
-    static bool write_frontend(const std::string &file)
+    // The player's own frontend.cfg (a backup left from an earlier start is it).
+    static std::string players_frontend(const std::string &file)
     {
         std::string current;
         if (!save::read_file(file + ".orion-backup", &current, 1u << 20))
             save::read_file(file, &current, 1u << 20);
-        return write_shared(file, library::retroarch_frontend(current));
+        return current;
     }
 
     // The core a game for an emulator runs with: the player's choice for
