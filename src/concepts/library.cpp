@@ -30,6 +30,7 @@
 #include "ui/components/grid.hpp"
 #include "ui/components/keyboard.hpp"
 #include "ui/components/menu.hpp"
+#include "ui/components/select.hpp"
 #include "ui/components/tabs.hpp"
 #include "ui/glyphs.hpp"
 #include "ui/motion.hpp"
@@ -60,6 +61,9 @@ using library::Title;
 
 constexpr float kMargin = 96.0f;
 constexpr float kTabsTop = 204.0f;
+constexpr float kTabEdge = 76.0f;     // room for L1 (and R1 after the tabs)
+constexpr float kTabsWidth = 1180.0f; // the tab bar between them
+constexpr float kSortWidth = 330.0f;  // the sort picker in the header
 constexpr float kGridTop = 280.0f;
 constexpr float kGridBottom = 972.0f;
 // Seven columns keep two whole rows in view, so scrolling never leaves a
@@ -161,6 +165,14 @@ constexpr app::TourStep kTour[] = {
     {0.6f, action_bit(Action::west), Direction::none, "homebrew"},
     {0.5f, action_bit(Action::jump_prev)},
     {0.3f, action_bit(Action::jump_prev)},
+    // Up from the first row: the sort picker, then its list; Circle closes
+    // it and down goes back to the covers.
+    {0.3f, 0, Direction::up},
+    {0.6f, 0, Direction::none, "sort-focus"},
+    {0.3f, action_bit(Action::confirm)},
+    {0.7f, 0, Direction::none, "sort-open"},
+    {0.3f, action_bit(Action::back)},
+    {0.3f, 0, Direction::down},
     {0.6f, action_bit(Action::menu), Direction::none, "favourite"},
     {0.6f, action_bit(Action::back), Direction::none, "title-menu"},
     // Cross launches: on a PC the card says it needs the console.
@@ -435,13 +447,28 @@ class Library final : public app::Concept
         tabs_.style.padding = 20.0f;
         tabs_.style.on_page = true;
         tabs_.style.focus_ring = false;
-        tabs_.set_bounds({kMargin, kTabsTop, 1300.0f, 56.0f});
+        // Between L1 and R1, which say there is more to either side.
+        tabs_.set_bounds({kMargin + kTabEdge, kTabsTop, kTabsWidth, 56.0f});
+
+        // The tab's order, at the header's right.
+        sort_.style.label = ui::SelectLabel::none;
+        sort_.style.field_height = 50.0f;
+        sort_.style.value_size = 22.0f;
+        sort_.style.padding = 18.0f;
+        sort_.style.on_page = true;
+        sort_.style.max_rows = 7;
+        sort_.style.row_height = 52.0f;
+        sort_.style.option_size = 22.0f;
+        sort_.set_bounds({gfx::kVirtualWidth - kMargin - kSortWidth, 132.0f, kSortWidth, 50.0f});
+        sort_.set_limits({0.0f, 0.0f, gfx::kVirtualWidth, gfx::kVirtualHeight - 60.0f});
 
         grid_.style.columns = kColumns;
         grid_.style.gap_x = 28.0f;
         grid_.style.gap_y = 30.0f;
-        // Every edge refuses, as the home screen's own grids do.
+        // Every edge refuses, as the home screen's own grids do, but the top
+        // one: up from the first row goes to the sort picker.
         grid_.style.wrap = ui::GridWrap::none;
+        grid_.style.exits.up = true;
         grid_.style.card.title_size = 22.0f;
         grid_.style.card.subtitle_size = 17.0f;
         grid_.style.card.badge_corner = ui::CardCorner::top_right;
@@ -624,7 +651,12 @@ class Library final : public app::Concept
             update_browse(input, feedback);
 
         tabs_.update(dt);
+        grid_.set_active(!header_focus_);
         grid_.update(dt);
+        sort_.set_active(header_focus_);
+        sort_.update(dt);
+        header_refusal_.update(dt);
+        update_status(dt);
         want_icons();
         keys_.update(dt);
         menu_.update(dt);
@@ -681,7 +713,9 @@ class Library final : public app::Concept
         list.push_opacity(intro);
 
         draw_header(list, paint);
+        sort_.draw(canvas);
         tabs_.draw(canvas);
+        draw_tab_edges(list, paint);
         draw_tab_sheen(list);
         draw_query(list, paint);
         if (grid_.count() > 0)
@@ -701,6 +735,7 @@ class Library final : public app::Concept
         if (keyboard_shown_.value > 0.01f && over_settings)
             draw_keyboard(canvas, paint);
         menu_.draw(canvas); // last: it belongs to whatever it was opened over
+        sort_.draw_popover(canvas);
         list.pop_opacity();
     }
 
@@ -717,7 +752,8 @@ class Library final : public app::Concept
     {
         shown_ = shown_look();
         theme_ = orion::themed(shown_, themes_);
-        tabs_.style.theme = grid_.style.theme = menu_.style.theme = theme_;
+        tabs_.style.theme = grid_.style.theme = menu_.style.theme = sort_.style.theme = theme_;
+        sort_.style.reduced_motion = context_.settings.reduced_motion;
         keys_.style.theme = clear_glass(theme_);
         grid_.style.card.radius = shown_.corners;
         apply_cover_shape();
@@ -815,8 +851,82 @@ class Library final : public app::Concept
 
     // ---- input ----
 
+    // What ORION is doing in the background, for the line at the header's
+    // top right: it shows while there is something, then fades.
+    void update_status(float dt)
+    {
+        std::string status;
+        float progress = -1.0f;
+        if (context_.rescan_requested)
+            status = "Looking for emulators and their games…";
+        else if (art_.running())
+        {
+            const orion::ArtFetcher::Progress now = art_.progress();
+            status = "Downloading box art  ·  " + std::to_string(now.done) + " of " +
+                     std::to_string(now.total);
+            if (now.total > 0)
+                progress = static_cast<float>(now.done) / static_cast<float>(now.total);
+        }
+        else if (backdrop_copies_.running())
+            status = "Copying game backgrounds…";
+        if (!status.empty())
+        {
+            status_ = std::move(status);
+            status_progress_ = progress;
+        }
+        status_shown_.target =
+            art_.running() || backdrop_copies_.running() || context_.rescan_requested ? 1.0f : 0.0f;
+        status_shown_.update(dt, context_.settings.reduced_motion ? 60.0f : 6.0f);
+    }
+
+    // The sort picker's choices for the active tab: the library's order,
+    // then each order of its own.
+    void sync_sort()
+    {
+        std::vector<ui::SelectOption> options;
+        options.emplace_back(std::string("Default (") +
+                             orion::kSortNames[static_cast<int>(sort_of(prefs_.sort))] + ")");
+        for (int i = 0; i < orion::kSortCount; ++i)
+            options.emplace_back(orion::kSortNames[i]);
+        if (!sort_.is_open())
+            sort_.set_options(std::move(options));
+        const std::string own = prefs_.tab_sort(active_key());
+        sort_.set_index(own.empty() ? 0 : static_cast<int>(sort_of(own)) + 1);
+    }
+
+    // The sort picker has the focus: Cross opens it, down (or Circle) goes
+    // back to the covers. The shoulder buttons, search and Settings still work.
+    void update_header(const InputFrame &input, app::Feedback &feedback)
+    {
+        const ui::Event event = sort_.handle(input, feedback);
+        if (event == ui::Event::changed)
+        {
+            const int choice = sort_.index();
+            prefs_.set_tab_sort(active_key(),
+                                choice <= 0 ? std::string() : orion::kSortKeys[choice - 1]);
+            tabs_changed();
+            return;
+        }
+        if (sort_.is_open() || event != ui::Event::none)
+            return;
+        if (input.nav == Direction::down || input.is_pressed(Action::back))
+        {
+            header_focus_ = false;
+            feedback.play(input.nav == Direction::down ? audio::Cue::focus : audio::Cue::back);
+        }
+        else if (input.nav == Direction::up || input.nav == Direction::left ||
+                 input.nav == Direction::right)
+            ui::refuse(feedback, sort_.style, input, header_refusal_, sort_.bounds().cx());
+    }
+
     void update_browse(const InputFrame &input, app::Feedback &feedback)
     {
+        // An open sort list takes everything.
+        if (sort_.is_open())
+        {
+            update_header(input, feedback);
+            return;
+        }
         // L1 / R1 change shelf; L2 / R2 do too, which is also what the tour
         // uses, since L1 / R1 belong to the shell wherever it holds several
         // designs (the PC tools).
@@ -846,6 +956,11 @@ class Library final : public app::Concept
             open_settings(feedback);
             return;
         }
+        if (header_focus_)
+        {
+            update_header(input, feedback);
+            return;
+        }
         if (input.is_pressed(Action::back) && !query_.empty())
         {
             query_.clear();
@@ -853,8 +968,13 @@ class Library final : public app::Concept
             rebuild();
             return;
         }
+        // Up from the first row (or from an empty tab) reaches the sort picker.
         if (grid_.count() == 0)
+        {
+            if (input.nav == Direction::up)
+                focus_header(feedback);
             return;
+        }
         if (input.is_pressed(Action::west))
         {
             toggle_favourite(focused().id, feedback);
@@ -871,6 +991,15 @@ class Library final : public app::Concept
             return;
         }
         grid_.handle(input, feedback);
+        if (grid_.exit() == Direction::up)
+            focus_header(feedback);
+    }
+
+    void focus_header(app::Feedback &feedback)
+    {
+        header_focus_ = true;
+        sync_sort();
+        feedback.play(audio::Cue::focus);
     }
 
     void open_settings(app::Feedback &feedback)
@@ -2019,6 +2148,7 @@ class Library final : public app::Concept
     // keeping the focus on the same title when it is still there.
     void rebuild()
     {
+        sync_sort();
         std::string keep;
         if (!view_.empty())
             keep = focused().id;
@@ -2144,12 +2274,75 @@ class Library final : public app::Concept
         ui::text(list, fonts.semibold, "ORION MEDIA CENTER", kMargin + 36.0f, 105, 17,
                  theme_.accent, gfx::Align::left, 4.0f);
         ui::text(list, fonts.display, "Library", kMargin, 172, 62, paint.page_text());
+        // The count, then the sort picker (drawn with the components).
         const std::size_t count = view_.size();
-        const std::string summary = std::to_string(count) + (count == 1 ? " title" : " titles") +
-                                    "  \xc2\xb7  " +
-                                    orion::kSortNames[static_cast<int>(sort_of(sort_key()))];
-        ui::text(list, fonts.regular, summary.c_str(), gfx::kVirtualWidth - kMargin, 172, 24,
+        const std::string summary = std::to_string(count) + (count == 1 ? " title" : " titles");
+        ui::text(list, fonts.regular, summary.c_str(), sort_.bounds().x - 22.0f, 165, 24,
                  paint.page_text_muted(), gfx::Align::right);
+        draw_status(list, paint);
+    }
+
+    // What ORION is doing in the background, over the sort picker: a turning
+    // dot, the words and, when it can be counted, how far along it is.
+    void draw_status(gfx::DrawList &list, const ui::Painter &paint) const
+    {
+        const float shown = status_shown_.value;
+        if (shown < 0.01f || status_.empty())
+            return;
+        const ui::Fonts &fonts = context_.fonts;
+        const float right = gfx::kVirtualWidth - kMargin;
+        list.push_opacity(std::min(shown, 1.0f));
+        const float width = fonts.semibold.font->measure(status_, 17.0f);
+        const float cx = right - width - 20.0f;
+        const float turn = context_.settings.reduced_motion ? 0.8f : clock_ * 4.0f;
+        list.ring(cx, 99.0f, 7.0f, 1.5f, theme_.accent.with_alpha(0.45f));
+        list.circle(cx + std::cos(turn) * 7.0f, 99.0f + std::sin(turn) * 7.0f, 2.5f, theme_.accent);
+        ui::text(list, fonts.semibold, status_.c_str(), right, 105, 17, paint.page_text_muted(),
+                 gfx::Align::right);
+        if (status_progress_ >= 0.0f)
+        {
+            const Rect track = {right - width, 114.0f, width, 3.0f};
+            list.rounded_rect(track, 1.5f, paint.page_text_muted().with_alpha(0.25f));
+            list.rounded_rect(
+                {track.x, track.y, track.w * std::clamp(status_progress_, 0.0f, 1.0f), track.h},
+                1.5f, theme_.accent);
+        }
+        list.pop_opacity();
+    }
+
+    // L1 and R1 either side of the tab bar: bright, with how many, where
+    // tabs are out of view on that side; faint where there are none.
+    void draw_tab_edges(gfx::DrawList &list, const ui::Painter &paint) const
+    {
+        const ui::Fonts &fonts = context_.fonts;
+        const Rect bar = tabs_.bounds();
+        int left = 0;
+        int right = 0;
+        for (int i = 0; i < static_cast<int>(tabs_.tabs().size()); ++i)
+        {
+            const Rect tab = tabs_.tab_rect(fonts, i);
+            if (tab.cx() < bar.x)
+                ++left;
+            else if (tab.cx() > bar.x + bar.w)
+                ++right;
+        }
+        constexpr float kSize = 40.0f;
+        const float cy = bar.y + bar.h * 0.5f; // draw_button centres on it
+        const auto edge = [&](ui::Button button, float x, int hidden, bool after)
+        {
+            list.push_opacity(hidden > 0 ? 1.0f : 0.35f);
+            ui::draw_button(list, fonts, glyphs(), button, x, cy, kSize);
+            list.pop_opacity();
+            if (hidden <= 0)
+                return;
+            const std::string more = "+" + std::to_string(hidden);
+            const float w = ui::button_width(button, kSize);
+            ui::text(list, fonts.semibold, more.c_str(), after ? x + w + 10.0f : x + w * 0.5f,
+                     after ? cy + 7.0f : cy + 38.0f, after ? 20.0f : 17.0f, paint.page_text_muted(),
+                     after ? gfx::Align::left : gfx::Align::center);
+        };
+        edge(ui::Button::l1, kMargin, left, false);
+        edge(ui::Button::r1, bar.x + bar.w + 12.0f, right, true);
     }
 
     // The active search, at the right of the tab row, with how to clear it.
@@ -2574,6 +2767,12 @@ class Library final : public app::Concept
     std::string menu_tab_;   // the tab a menu (or a rename) is about
     ui::TabBar tabs_;
     ui::GridView grid_;
+    ui::Select sort_;           // the tab's order, in the header (Up from the top row)
+    bool header_focus_ = false; // the sort picker has the focus
+    ui::Pulse header_refusal_;
+    std::string status_;            // what ORION is doing in the background, or empty
+    float status_progress_ = -1.0f; // 0..1 when it can be measured
+    tween::Spring status_shown_;
     ui::Keyboard keys_;
     ui::Menu menu_;
     orion::SettingsPanel settings_;
