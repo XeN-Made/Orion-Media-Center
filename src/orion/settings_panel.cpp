@@ -527,14 +527,14 @@ void SettingsPanel::build_storage(const LibraryPrefs &prefs)
                     art_place(prefs.art_dir))
         .description = "Looked in first, and where downloads go: " + art_folder(prefs, state_dir_) +
                        ". Moving it copies what is there";
-    const std::string backdrops =
-        self_path_.empty() ? std::string("ORION's folder") : self_path_ + "/backdrops";
+    const std::string backdrops = state_dir_ + "/backdrops";
     form_
         .add_value(kBackdropsInfo, "Game background copies",
                    std::to_string(backdrops_) + (backdrops_ == 1 ? " picture" : " pictures"))
-        .description = backdrops + ": the console's pictures for games that ship none";
+        .description = backdrops + ": the console's pictures for games that ship none, "
+                                   "through the FTP server on port 2121";
     form_.add_action(kBackdropsAgain, "Copy them again").description =
-        "Asks the launch helper for every missing picture once more";
+        "Asks the FTP server for every missing picture once more";
     form_.add_value(kThemesInfo, "Your themes", state_dir_ + "/themes").description =
         "Theme files you save, and ones you add by hand";
     form_.add_value(kStateInfo + 100, "Settings and play records", state_dir_).description =

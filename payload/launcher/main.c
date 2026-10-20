@@ -37,13 +37,7 @@
 //
 // The helper stays until the title closes when it has something to watch
 // for, and ends at once otherwise.
-//
-// ORION also sends it at start without a launch, with
-// /data/orion/backdrop-request.txt: the first line the folder to fill (its
-// own backdrops folder), then one title ID per line. For each, the system's
-// copy of the title's home-screen picture (/user/appmeta/<ID>/pic0.png or
-// pic1.png), which ORION's sandbox cannot read, is copied there as <ID>.png;
-// a title without one leaves an empty <ID>.none, so it is not asked again.
+
 
 #include <errno.h>
 #include <fcntl.h>
@@ -58,8 +52,6 @@
 #include <unistd.h>
 
 #define REQUEST_PATH "/data/orion/launch-request.txt"
-#define BACKDROP_REQUEST_PATH "/data/orion/backdrop-request.txt"
-#define MAX_PICTURE (24 << 20) // bytes of one home-screen picture
 #define FRESH_REQUEST_S 120     // a launch request older than this is a leftover
 #define LOG_PATH "/data/orion/launch-helper.txt"
 // ORION's own folder, for when /data/orion does not take the helper's files.
@@ -420,73 +412,8 @@ static void shortcut_poll(shortcut_t *shortcut)
     }
 }
 
-// Copies one file, readable by every app; 0 on failure.
-static int copy_shared(const char *from, const char *to)
-{
-    char *bytes = malloc(MAX_PICTURE);
-    if (bytes == NULL)
-        return 0;
-    const long size = read_up_to(from, bytes, MAX_PICTURE);
-    const int ok = size > 0 && size < MAX_PICTURE && write_shared(to, bytes, (size_t)size);
-    free(bytes);
-    return ok;
-}
-
-// The backdrop request (see the top of this file). True when there was one.
-static int copy_backdrops(void)
-{
-    static char request[8192];
-    memset(request, 0, sizeof(request));
-    if (read_up_to(BACKDROP_REQUEST_PATH, request, sizeof(request) - 1) < 0)
-        return 0;
-    remove(BACKDROP_REQUEST_PATH);
-    char *line = strtok(request, "\n");
-    const char *folder = line;
-    if (folder == NULL || strncmp(folder, "/data/homebrew/", 15) != 0 ||
-        strstr(folder, "..") != NULL || !ends_with(folder, "/backdrops") || strlen(folder) > 300)
-    {
-        say("backdrops: not a backdrops folder: %.60s", folder != NULL ? folder : "");
-        return 1;
-    }
-    int checked = 0;
-    mkdir(folder, 0777);
-    chmod(folder, 0777);
-    int copied = 0;
-    int none = 0;
-    while ((line = strtok(NULL, "\n")) != NULL)
-    {
-        if (!is_title_id(line))
-            continue;
-        char to[400];
-        char from[128];
-        int done = 0;
-        for (int i = 0; i < 2 && !done; ++i)
-        {
-            snprintf(from, sizeof(from), "/user/appmeta/%s/pic%d.png", line, i);
-            snprintf(to, sizeof(to), "%s/%s.png", folder, line);
-            done = access(from, R_OK) == 0 && copy_shared(from, to);
-            // The first title says whether /user can be seen from here at all.
-            if (!done && checked++ == 0)
-                say("backdrops: cannot read %s (errno %d)", from, errno);
-        }
-        if (done)
-            ++copied;
-        else
-        {
-            snprintf(to, sizeof(to), "%s/%s.none", folder, line);
-            write_shared(to, "", 0);
-            ++none;
-        }
-    }
-    say("backdrops: copied %d, none for %d", copied, none);
-    return 1;
-}
-
 int main(void)
 {
-    // A run for the backdrops does that and nothing else: never a launch.
-    if (copy_backdrops())
-        return 0;
     // The helper may not remove ORION's request after reading it, so an old
     // one can still be there: only a fresh one is a launch.
     struct stat info;

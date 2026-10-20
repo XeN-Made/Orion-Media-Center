@@ -19,6 +19,7 @@
 #include "library/favourites.hpp"
 #include "library/json.hpp"
 #include "orion/art_fetcher.hpp"
+#include "orion/backdrop_copies.hpp"
 #include "orion/look.hpp"
 #include "orion/playtime.hpp"
 #include "orion/prefs.hpp"
@@ -69,6 +70,9 @@ constexpr std::size_t kMaxPath = 160; // bytes, as orion::valid_art_dir takes th
 // The launch helper shipped in the app folder, and the console's ELF loader.
 constexpr const char *kLauncherPath = "/app0/assets/payloads/orion-launcher.elf";
 constexpr int kLoaderPort = 9021;
+// The FTP server payload players commonly run (ftpsrv): it can read what
+// ORION's sandbox cannot, the system's copies of home-screen pictures.
+constexpr int kFtpPort = 2121;
 // How long Circle is held to close ORION.
 constexpr float kHoldToExit = 1.2f;
 // The search panel sits under the first row of covers, so the results of
@@ -493,14 +497,21 @@ class Library final : public app::Concept
     // Titles with no home-screen picture in their own folder: the launch
     // helper, outside the sandbox, copies the system's into ORION's
     // backdrops folder. Each title is asked about once (<ID>.png or <ID>.none).
-    void request_backdrops() const
+    // Where the copies of the system's pictures go: ORION's own folder.
+    std::string backdrop_folder() const
     {
-        const std::string &self_path = context_.library.self_path;
-        const std::string &dir = context_.library.state_dir;
-        if (self_path.empty() || dir.empty())
+        return context_.library.state_dir + "/backdrops";
+    }
+
+    // Titles with no home-screen picture in their own folder get the
+    // system's, fetched through the console's FTP server (orion/backdrop_copies.hpp).
+    // Each title is asked about once (<ID>.png or <ID>.none).
+    void request_backdrops()
+    {
+        if (context_.library.state_dir.empty())
             return;
-        std::string request = self_path + "/backdrops\n";
-        int count = 0;
+        const std::string folder = backdrop_folder();
+        std::vector<std::string> ids;
         for (const Title &title : titles())
         {
             if (title.is_rom())
@@ -512,18 +523,13 @@ class Library final : public app::Concept
                 (exists(title.path + "/sce_sys/pic0.png") ||
                  exists(title.path + "/sce_sys/pic1.png")))
                 continue;
-            if (exists("/app0/backdrops/" + title.id + ".png") ||
-                exists("/app0/backdrops/" + title.id + ".none"))
+            if (exists(folder + "/" + title.id + ".png") ||
+                exists(folder + "/" + title.id + ".none"))
                 continue;
-            request += title.id + "\n";
-            ++count;
+            ids.push_back(title.id);
         }
-        std::string elf;
-        if (count == 0 || !save::write_atomic(dir + "/backdrop-request.txt", request).empty() ||
-            !save::read_file(kLauncherPath, &elf, 4u << 20) || elf.empty())
-            return;
-        const int error = sys::send_payload(elf, kLoaderPort);
-        sys::log("[ORION] backdrops for %d titles asked of the helper: %d", count, error);
+        if (!ids.empty())
+            backdrop_copies_.start(std::move(ids), folder, kFtpPort);
     }
 
     const app::ConceptInfo &info() const override
@@ -831,7 +837,7 @@ class Library final : public app::Concept
     {
         settings_.set_tabs(every_tab());
         settings_.set_storage(context_.library.self_path,
-                              orion::count_files("/app0/backdrops", ".png"));
+                              orion::count_files(backdrop_folder(), ".png"));
         settings_.open(look_, prefs_, feedback);
     }
 
@@ -901,8 +907,8 @@ class Library final : public app::Concept
         case orion::SettingsPanel::Change::copy_backdrops:
         {
             // Every copy goes, and every title without a picture is asked about again.
-            const int gone = orion::remove_files("/app0/backdrops", ".png") +
-                             orion::remove_files("/app0/backdrops", ".none");
+            const int gone = orion::remove_files(backdrop_folder(), ".png") +
+                             orion::remove_files(backdrop_folder(), ".none");
             request_backdrops();
             settings_.set_storage(context_.library.self_path, 0);
             settings_.refresh(look_, prefs_);
@@ -1465,7 +1471,7 @@ class Library final : public app::Concept
     // a moment (as the home screen does); the shell loads it (app::Context).
     // What the focused game shows behind the library: "file:<png>" (its
     // home-screen picture, from its folder or the console's copy in
-    // /user/appmeta), else "icon:<id>" (its cover, blurred), else nothing.
+    // the copy of the system's one), else "icon:<id>" (its cover, blurred), else nothing.
     std::string backdrop_of(const Title &title) const
     {
         if (!prefs_.game_backgrounds)
@@ -1484,12 +1490,9 @@ class Library final : public app::Concept
                 places.push_back(title.path + "/sce_sys/pic1.png");
             }
             // The system keeps a copy of every registered title's pictures,
-            // disc images included, which the launch helper copies into
-            // ORION's folder (request_backdrops), and which ORION may be
-            // allowed to read itself.
-            places.push_back("/app0/backdrops/" + title.id + ".png");
-            places.push_back("/user/appmeta/" + title.id + "/pic0.png");
-            places.push_back("/user/appmeta/" + title.id + "/pic1.png");
+            // disc images included, out of ORION's sight; request_backdrops
+            // fetches it through the console's FTP server.
+            places.push_back(backdrop_folder() + "/" + title.id + ".png");
             for (const std::string &place : places)
             {
                 if (is_file(place))
@@ -2416,7 +2419,8 @@ class Library final : public app::Concept
     bool reduced_ = false;
     std::vector<std::string> favourites_;
     orion::PlayLog plays_;
-    std::string art_folder_was_;     // where box art was before the folder last changed
+    std::string art_folder_was_; // where box art was before the folder last changed
+    orion::BackdropCopies backdrop_copies_;
     std::string backdrop_candidate_; // what the focused game shows (backdrop_of)
     std::string backdrop_drawn_;     // what is drawn now; it changes once faded out
     float backdrop_dwell_ = 0.0f;    // seconds the focus has rested on it
