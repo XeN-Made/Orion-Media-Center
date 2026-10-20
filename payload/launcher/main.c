@@ -327,14 +327,16 @@ int main(void)
     for (waited = 0; !job.done && waited < WAIT_FOR_LAUNCH_MS; waited += 100)
         usleep(100 * 1000);
     if (job.done)
+        // A start the system takes answers the new app's ID (0x00002018 on a
+        // console), not 0; a refusal is a negative error code (0x8...).
         say("system answered 0x%08x (%s)", (unsigned)job.result,
-            job.result == 0 ? "accepted" : "refused");
+            job.result >= 0 ? "accepted" : "refused");
     else
         say("system has not answered after %d ms; the title may still be starting", waited);
     if (restore_count > 0)
     {
         // Give the title time to come up and read the files, then put them back.
-        if (!job.done || job.result == 0)
+        if (!job.done || job.result >= 0)
         {
             for (waited = 0; sceSystemServiceGetAppIdOfRunningBigApp() <= 0 &&
                              waited < WAIT_FOR_TITLE_MS;
@@ -345,5 +347,5 @@ int main(void)
         for (int i = 0; i < restore_count; ++i)
             restore(restores[i]);
     }
-    return job.done && job.result == 0 ? 0 : 1;
+    return job.done && job.result >= 0 ? 0 : 1;
 }
