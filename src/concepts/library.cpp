@@ -3142,8 +3142,20 @@ class Library final : public app::Concept
                 continue;
             view_.push_back(static_cast<int>(i));
         }
-        // The scan already sorted by name; every other order is a stable sort
-        // on top of it, so ties stay alphabetical.
+        // By name first: the scan sorted the console's titles, but games for
+        // an emulator come after them, and a tab (Favourites, your own) can
+        // hold both. Every other order is a stable sort on top of it, so ties
+        // stay alphabetical.
+        {
+            std::vector<std::pair<std::string, int>> keyed;
+            keyed.reserve(view_.size());
+            for (const int index : view_)
+                keyed.emplace_back(folded(titles()[static_cast<std::size_t>(index)].name), index);
+            std::stable_sort(keyed.begin(), keyed.end(),
+                             [](const auto &a, const auto &b) { return a.first < b.first; });
+            for (std::size_t i = 0; i < keyed.size(); ++i)
+                view_[i] = keyed[i].second;
+        }
         switch (sort_of(sort_key()))
         {
         case Sort::name_reversed:
