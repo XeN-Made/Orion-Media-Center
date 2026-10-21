@@ -882,6 +882,50 @@ int read_retroarch_playlist(Emulator &emulator, std::string_view text, const std
     return added;
 }
 
+std::vector<Player> players_for(const Emulator &emulator, const Title &game)
+{
+    std::vector<Player> players;
+    if (!game.is_rom())
+        return players;
+    const EmulatorApp *found_by = emulator.app_of(game);
+    // The file as another emulator sees it: its own folder is /app0 to it.
+    const auto file_for = [&](const EmulatorApp &app)
+    { return &app == found_by ? game.rom : seen_by(app, game.path); };
+    const std::string ext = extension_of(game.path);
+    if (const EmulatorApp *retroarch = emulator.app("retroarch"))
+    {
+        for (const Core &core : emulator.cores)
+        {
+            if (std::find(core.databases.begin(), core.databases.end(), game.system) ==
+                core.databases.end())
+                continue;
+            Player player;
+            player.key = "retroarch:" + core.file;
+            player.label = "RetroArch · " + core.name;
+            player.app = retroarch;
+            player.core = core.file;
+            player.rom = file_for(*retroarch);
+            players.push_back(std::move(player));
+        }
+    }
+    const auto standalone = [&](const char *key, const char *label, bool takes)
+    {
+        const EmulatorApp *app = emulator.app(key);
+        if (app == nullptr || !takes)
+            return;
+        Player player;
+        player.key = key;
+        player.label = label;
+        player.app = app;
+        player.rom = file_for(*app);
+        players.push_back(std::move(player));
+    };
+    standalone("porpoise", "Porpoise",
+               (game.system == kGameCube || game.system == kWii) && porpoise_takes(ext));
+    standalone("ps5sx2", "PS5SX2 (opens it)", game.system == kPs2 && ps2_takes(ext));
+    return players;
+}
+
 int scan_game_folder(Emulator &emulator, const GameFolder &folder, std::vector<Title> *roms)
 {
     const std::string key = folder.emulator.empty() ? std::string("retroarch") : folder.emulator;

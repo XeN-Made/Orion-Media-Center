@@ -142,8 +142,10 @@ enum : int
     kItemClose,
     kItemSort,
     kItemHide,
+    kItemPlayWith,
     kItemMove = 100,       // + the tab's index
     kItemSortChoice = 200, // 0: the Library's order, then 1 + an orion::kSortKeys index
+    kItemPlayer = 300,     // 0: the default, then 1 + an index in library::players_for
 };
 
 constexpr const char *kTechniques[] = {
@@ -157,18 +159,6 @@ constexpr const char *kTechniques[] = {
 };
 
 constexpr app::TourStep kTour[] = {
-    {0.1f, 0, Direction::down},
-    {0.1f, 0, Direction::down},
-    {0.1f, 0, Direction::down},
-    {0.1f, 0, Direction::down},
-    {0.1f, 0, Direction::down},
-    {0.1f, 0, Direction::down},
-    {0.1f, 0, Direction::down},
-    {0.1f, 0, Direction::down},
-    {0.1f, 0, Direction::down},
-    {0.1f, 0, Direction::down},
-    {0.1f, 0, Direction::down},
-    {0.1f, 0, Direction::down},
     {0.5f, 0, Direction::right},
     {0.2f, 0, Direction::right},
     {0.2f, 0, Direction::right},
@@ -1495,6 +1485,14 @@ class Library final : public app::Concept
         favourite.shortcut = "Square";
         favourite.tag = kItemFavourite;
         items.push_back(favourite);
+        // A game more than one emulator plays: which one, for this game.
+        if (library::players_for(context_.library.emulator, title).size() >= 2)
+        {
+            ui::MenuItem with = menu_item("Play with…");
+            with.shortcut = player_label(title);
+            with.tag = kItemPlayWith;
+            items.push_back(with);
+        }
         const bool hidden = prefs_.title_hidden(title.id);
         ui::MenuItem hide = menu_item(hidden ? "Show this title" : "Hide this title");
         hide.tag = kItemHide;
@@ -1541,6 +1539,52 @@ class Library final : public app::Concept
     }
 
     // The orders for the active tab: its own choice, or the Library's.
+    // What a game plays with, short: "Snes9x", "Porpoise".
+    std::string player_label(const Title &title) const
+    {
+        const library::Player player = player_of(title);
+        if (player.app == nullptr)
+            return "";
+        return player.core.empty() ? player.app->name : core_name(player.core);
+    }
+
+    // Play with…: Default (what it plays with when nothing is chosen), then
+    // every emulator and core that can play it.
+    void open_player_menu(app::Feedback &feedback)
+    {
+        const Title *title = find_title(menu_title_);
+        if (title == nullptr)
+            return;
+        const std::string chosen = prefs_.game_player(title->id);
+        std::vector<ui::MenuItem> items;
+        // The default, as it would be without a choice.
+        std::string usual;
+        {
+            const library::EmulatorApp *app = context_.library.emulator.app_of(*title);
+            if (app != nullptr)
+                usual = app->key == "retroarch" ? "RetroArch · " + core_name(core_for(*title))
+                                                : app->name;
+        }
+        ui::MenuItem standard = menu_item("Default (" + usual + ")");
+        standard.tag = kItemPlayer;
+        standard.shortcut = chosen.empty() ? "Now" : "";
+        items.push_back(standard);
+        ui::MenuItem line;
+        line.separator = true;
+        items.push_back(line);
+        const std::vector<library::Player> players =
+            library::players_for(context_.library.emulator, *title);
+        for (std::size_t i = 0; i < players.size() && i < 60; ++i)
+        {
+            ui::MenuItem item = menu_item(players[i].label);
+            item.tag = kItemPlayer + 1 + static_cast<int>(i);
+            item.shortcut = players[i].key == chosen ? "Now" : "";
+            items.push_back(item);
+        }
+        menu_.set_items(std::move(items));
+        menu_.open(grid_.cell_rect(grid_.focus()), feedback);
+    }
+
     void open_sort_menu(app::Feedback &feedback)
     {
         const std::string own = prefs_.tab_sort(active_key());
@@ -1609,6 +1653,28 @@ class Library final : public app::Concept
             toggle_favourite(menu_title_, feedback);
             return;
         }
+        if (tag == kItemPlayWith)
+        {
+            open_player_menu(feedback);
+            return;
+        }
+        if (tag >= kItemPlayer && tag < kItemPlayer + 100)
+        {
+            const Title *title = find_title(menu_title_);
+            if (title == nullptr)
+                return;
+            const std::vector<library::Player> players =
+                library::players_for(context_.library.emulator, *title);
+            const int choice = tag - kItemPlayer - 1;
+            prefs_.set_game_player(title->id,
+                                   choice >= 0 && choice < static_cast<int>(players.size())
+                                       ? players[static_cast<std::size_t>(choice)].key
+                                       : std::string());
+            tabs_changed();
+            show_note(true, title->name + " plays with " + player_label(*title));
+            feedback.play(audio::Cue::select);
+            return;
+        }
         if (tag == kItemHide)
         {
             const bool hide = !prefs_.title_hidden(menu_title_);
@@ -1663,11 +1729,13 @@ class Library final : public app::Concept
         std::string why;
         // A game for an emulator starts in the app that plays it, each the
         // way it takes a game (library/emulators.hpp).
-        const library::EmulatorApp *app =
-            title->is_rom() ? context_.library.emulator.app_of(*title) : nullptr;
+        // The emulator and core the player chose for it (Play with…), or the default.
+        const library::Player player = title->is_rom() ? player_of(*title) : library::Player();
+        const library::EmulatorApp *app = player.app;
         const bool retroarch = app != nullptr && app->key == "retroarch";
         // RetroArch, as its own ES-DE does: -L <core> <game>.
-        const std::string core = retroarch ? core_for(*title) : std::string();
+        const std::string core = retroarch ? player.core : std::string();
+        const std::string launcher = app != nullptr ? app->title_id : std::string();
         // Its launcher is told through args.txt and test-run.txt. ORION
         // stages them in its own folder; the helper, outside any sandbox,
         // puts them in RetroArch's and the originals back afterwards
@@ -1683,15 +1751,14 @@ class Library final : public app::Concept
                                   std::to_string(sys::monotonic_us() % 1000000);
         std::string request = title->id + "\n";
         if (retroarch)
-            request = title->launcher + "\n@install " + staged_args + "\t" + args + "\n@install " +
+            request = launcher + "\n@install " + staged_args + "\t" + args + "\n@install " +
                       staged_test_run + "\t" + test_run + "\n";
         else if (app != nullptr && app->key == "porpoise")
             // Porpoise closes itself when the game ends, so ORION comes back.
-            request =
-                title->launcher + "\n" +
-                library::porpoise_arguments(title->launcher, title->rom, prefs_.return_on_close);
+            request = launcher + "\n" +
+                      library::porpoise_arguments(launcher, player.rom, prefs_.return_on_close);
         else if (app != nullptr)
-            request = title->launcher + "\n"; // opens it; the game is picked there
+            request = launcher + "\n"; // opens it; the game is picked there
         // Coming back: the helper waits for the game to close, then starts ORION.
         const std::string self = own_title_id();
         if (prefs_.return_on_close && !self.empty())
@@ -1710,12 +1777,12 @@ class Library final : public app::Concept
             why = "no core plays " + library::short_system_name(title->system);
         else if (!sys::on_console())
             why = "not on a console";
-        else if (retroarch && title->rom.size() > library::kRetroArchArgMax)
+        else if (retroarch && player.rom.size() > library::kRetroArchArgMax)
             why = "its path is longer than RetroArch reads";
-        else if (title->is_rom() && title->rom.size() > kMaxRequestPath)
+        else if (title->is_rom() && player.rom.size() > kMaxRequestPath)
             why = "its path is too long";
         else if (retroarch &&
-                 !write_shared(staged_args, library::retroarch_args(core, title->rom, token)))
+                 !write_shared(staged_args, library::retroarch_args(core, player.rom, token)))
             why = "could not write " + staged_args;
         else if (retroarch && !write_shared(staged_test_run, "ORION " + token + "\n"))
             why = "could not write " + staged_test_run;
@@ -2210,11 +2277,37 @@ class Library final : public app::Concept
         return chosen;
     }
 
+    // How a game for an emulator is played: the player's choice for it (Play
+    // with…), else the emulator that found it, RetroArch with the system's core.
+    library::Player player_of(const Title &title) const
+    {
+        const std::string chosen = prefs_.game_player(title.id);
+        if (!chosen.empty())
+        {
+            for (library::Player &player : library::players_for(context_.library.emulator, title))
+            {
+                if (player.key == chosen)
+                    return player;
+            }
+        }
+        library::Player player;
+        player.app = context_.library.emulator.app_of(title);
+        player.rom = title.rom;
+        if (player.app != nullptr && player.app->key == "retroarch")
+        {
+            player.core = core_for(title);
+            player.key = "retroarch:" + player.core;
+        }
+        else if (player.app != nullptr)
+            player.key = player.app->key;
+        return player;
+    }
+
     // The app a game for an emulator starts in, by name.
     std::string emulator_name(const Title &title) const
     {
-        const library::EmulatorApp *app = context_.library.emulator.app_of(title);
-        return app != nullptr ? app->name : std::string("not installed");
+        const library::Player player = player_of(title);
+        return player.app != nullptr ? player.app->name : std::string("not installed");
     }
 
     std::string core_name(const std::string &file) const
@@ -2921,11 +3014,10 @@ class Library final : public app::Concept
     {
         const Title &title = focused();
         std::string line = title.id;
-        const library::EmulatorApp *app =
-            title.is_rom() ? context_.library.emulator.app_of(title) : nullptr;
-        if (app != nullptr && app->key == "retroarch")
+        const library::Player player = title.is_rom() ? player_of(title) : library::Player();
+        if (player.app != nullptr && player.app->key == "retroarch")
             line = library::short_system_name(title.system) + "   RetroArch, " +
-                   core_name(core_for(title));
+                   core_name(player.core);
         else if (title.is_rom())
             line = library::short_system_name(title.system) + "   " + emulator_name(title);
         else

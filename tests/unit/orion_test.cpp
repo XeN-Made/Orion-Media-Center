@@ -173,6 +173,24 @@ TEST(OrionPrefs, GamesBringOrionBackUnlessToldNot)
     EXPECT_TRUE(back.shortcut_test);
 }
 
+TEST(OrionPrefs, AGameKeepsTheEmulatorChosenForIt)
+{
+    const std::string dir = fresh_dir("orion-prefs-players");
+    orion::LibraryPrefs prefs;
+    prefs.set_game_player("rom-0123456789ab", "retroarch:snes9x_libretro.so");
+    prefs.set_game_player("rom-00000000000c", "porpoise");
+    prefs.set_game_player("not an id", "porpoise"); // refused
+    ASSERT_TRUE(orion::save_prefs(dir, prefs));
+    orion::LibraryPrefs back = orion::load_prefs(dir);
+    EXPECT_EQ(back.game_player("rom-0123456789ab"), "retroarch:snes9x_libretro.so");
+    EXPECT_EQ(back.game_player("rom-00000000000c"), "porpoise");
+    EXPECT_EQ(back.game_players.size(), 2u);
+    // Default again: the entry goes.
+    back.set_game_player("rom-00000000000c", "");
+    EXPECT_EQ(back.game_player("rom-00000000000c"), "");
+    EXPECT_EQ(back.game_players.size(), 1u);
+}
+
 TEST(OrionPrefs, RomFoldersAreKept)
 {
     const std::string dir = fresh_dir("orion-prefs-rom-folders");

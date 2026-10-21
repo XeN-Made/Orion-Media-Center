@@ -134,6 +134,63 @@ TEST(Emulators, ListsWhatRetroArchsPlaylistsList)
     EXPECT_EQ(emulator.apps.front().folders.back(), "/mnt/usb0/roms/gba");
 }
 
+// Every installed emulator that can play a game, each seeing the file where
+// it does: /app0 is an app's own folder.
+TEST(Emulators, ListsEveryWayToPlayAGame)
+{
+    library::Emulator emulator;
+    library::EmulatorApp retroarch;
+    retroarch.key = "retroarch";
+    retroarch.name = "RetroArch";
+    retroarch.title_id = "PPSA90120";
+    retroarch.root = "/data/homebrew/PPSA90120";
+    emulator.apps.push_back(retroarch);
+    library::EmulatorApp porpoise;
+    porpoise.key = "porpoise";
+    porpoise.name = "Porpoise";
+    porpoise.title_id = "PPSA90130";
+    porpoise.root = "/data/homebrew/PPSA90130";
+    emulator.apps.push_back(porpoise);
+    library::Core dolphin;
+    dolphin.file = "dolphin_libretro.so";
+    dolphin.name = "Dolphin";
+    dolphin.databases = {"Nintendo - GameCube", "Nintendo - Wii"};
+    library::Core snes9x;
+    snes9x.file = "snes9x_libretro.so";
+    snes9x.name = "Snes9x";
+    snes9x.databases = {"Nintendo - Super Nintendo Entertainment System"};
+    emulator.cores = {dolphin, snes9x};
+
+    library::Title disc;
+    disc.id = "rom-000000000001";
+    disc.system = "Nintendo - GameCube";
+    disc.path = "/data/homebrew/PPSA90130/porpoise/games/Quiet Bay.rvz";
+    disc.rom = "/app0/porpoise/games/Quiet Bay.rvz";
+    disc.launcher = "PPSA90130";
+    const std::vector<library::Player> players = library::players_for(emulator, disc);
+    ASSERT_EQ(players.size(), 2u);
+    EXPECT_EQ(players[0].key, "retroarch:dolphin_libretro.so");
+    EXPECT_EQ(players[0].label, "RetroArch · Dolphin");
+    EXPECT_EQ(players[0].core, "dolphin_libretro.so");
+    // Porpoise's folder is not RetroArch's: RetroArch sees the full path.
+    EXPECT_EQ(players[0].rom, disc.path);
+    EXPECT_EQ(players[1].key, "porpoise");
+    EXPECT_EQ(players[1].rom, disc.rom); // as Porpoise found it
+
+    library::Title cart;
+    cart.id = "rom-000000000002";
+    cart.system = "Nintendo - Super Nintendo Entertainment System";
+    cart.path = "/mnt/usb0/roms/snes/Lantern.sfc";
+    cart.rom = cart.path;
+    cart.launcher = "PPSA90120";
+    ASSERT_EQ(library::players_for(emulator, cart).size(), 1u);
+    EXPECT_EQ(library::players_for(emulator, cart)[0].key, "retroarch:snes9x_libretro.so");
+    // A console title has none.
+    library::Title console;
+    console.id = "PPSA90101";
+    EXPECT_TRUE(library::players_for(emulator, console).empty());
+}
+
 TEST(Emulators, ReadsCoreInfo)
 {
     library::Core core;

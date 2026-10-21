@@ -80,6 +80,19 @@ int add_emulator_games(Library &library, const std::vector<GameFolder> &folders,
 // games were added (ones already listed are not).
 int read_retroarch_playlist(Emulator &emulator, std::string_view text, const std::string &name,
                             std::vector<Title> *roms);
+// A way to play a game here: an installed emulator (and for RetroArch, one
+// of its cores) and the game's file as that emulator sees it.
+struct Player
+{
+    std::string key;   // "retroarch:snes9x_libretro.so", "porpoise", "ps5sx2"
+    std::string label; // "RetroArch · Snes9x"
+    const EmulatorApp *app = nullptr;
+    std::string core; // RetroArch's core file; empty for the others
+    std::string rom;  // the file, as app sees it
+};
+// Every way this game can be played: each RetroArch core for its system,
+// Porpoise for a GameCube or Wii disc, PS5SX2 for a PS2 disc. In that order.
+std::vector<Player> players_for(const Emulator &emulator, const Title &game);
 // One of the player's folders, for its emulator when that one is installed.
 // Returns how many games were added.
 int scan_game_folder(Emulator &emulator, const GameFolder &folder, std::vector<Title> *roms);

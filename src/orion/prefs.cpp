@@ -295,6 +295,24 @@ void LibraryPrefs::set_tab_hidden(const std::string &tab, bool hidden)
     edit_tab_prefs(tab_prefs, tab, [&](TabPrefs &e) { e.hidden = hidden && tab != "all"; });
 }
 
+std::string LibraryPrefs::game_player(const std::string &id) const
+{
+    for (const auto &[game, key] : game_players)
+    {
+        if (game == id)
+            return key;
+    }
+    return "";
+}
+
+void LibraryPrefs::set_game_player(const std::string &id, const std::string &key)
+{
+    std::erase_if(game_players, [&](const auto &entry) { return entry.first == id; });
+    if (!key.empty() && key.size() <= 96 && library::is_item_id(id) &&
+        game_players.size() < kMaxHidden)
+        game_players.emplace_back(id, key);
+}
+
 bool LibraryPrefs::title_hidden(const std::string &id) const
 {
     return std::find(hidden_titles.begin(), hidden_titles.end(), id) != hidden_titles.end();
@@ -365,6 +383,8 @@ LibraryPrefs load_prefs(const std::string &state_dir)
         prefs.place(member.first, member.second.string_or(""));
     for (const json::Value &value : root["hidden_titles"].elements())
         prefs.set_title_hidden(value.string_or(""), true);
+    for (const auto &member : root["game_players"].members())
+        prefs.set_game_player(member.first, member.second.string_or(""));
 
     for (const auto &member : root["systems"].members())
     {
@@ -477,6 +497,12 @@ bool save_prefs(const std::string &state_dir, const LibraryPrefs &prefs)
     for (std::size_t i = 0; i < prefs.hidden_titles.size(); ++i)
         text += (i == 0 ? "" : ", ") + json::quote(prefs.hidden_titles[i]);
     text += "],\n";
+    text += "  \"game_players\": {";
+    for (std::size_t i = 0; i < prefs.game_players.size(); ++i)
+        text += std::string(i == 0 ? "\n" : ",\n") + "    " +
+                json::quote(prefs.game_players[i].first) + ": " +
+                json::quote(prefs.game_players[i].second);
+    text += prefs.game_players.empty() ? "},\n" : "\n  },\n";
     text += "  \"systems\": {";
     for (std::size_t i = 0; i < prefs.systems.size(); ++i)
     {

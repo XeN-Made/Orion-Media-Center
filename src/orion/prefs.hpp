@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace hui::orion
@@ -102,6 +103,7 @@ struct Placement
 //     "tabs": [{"id": "t1", "name": "RPGs"}],
 //     "placements": {"PPSA01234": "t1"},
 //     "hidden_titles": ["CUSA00001", "rom-0123456789ab"],
+//     "game_players": {"rom-0123456789ab": "retroarch:snes9x_libretro.so"},
 //     "systems": {"Nintendo - Game Boy Advance": {"enabled": true, "core": "mgba_libretro.so"}},
 //     "tab_settings": {"sys:Nintendo - Sony - PlayStation 2": {"theme": "sunset-nebula",
 //                      "cover": "portrait", "sort": "recent", "hidden": false}}
@@ -188,6 +190,12 @@ struct LibraryPrefs
     // Titles (and games for an emulator) the player hid: they leave every
     // tab but Hidden. By item id (library::is_item_id).
     std::vector<std::string> hidden_titles;
+    // How the player chose to play a game for an emulator (library::Player
+    // key), by its id; games not listed play as found.
+    std::vector<std::pair<std::string, std::string>> game_players;
+    std::string game_player(const std::string &id) const;
+    // An empty key goes back to the default.
+    void set_game_player(const std::string &id, const std::string &key);
     bool title_hidden(const std::string &id) const;
     // False for an id that is not an item id, or when too many are hidden.
     bool set_title_hidden(const std::string &id, bool hidden);
