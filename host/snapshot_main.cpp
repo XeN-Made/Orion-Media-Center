@@ -32,6 +32,7 @@
 #include "manifest.hpp"
 #include "orion/prefs.hpp"
 #include "ui/fonts.hpp"
+#include "ui/theme.hpp"
 
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
@@ -40,6 +41,8 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "../third_party/stb/stb_image_write.h"
 
+#include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <string>
@@ -243,6 +246,120 @@ int main(int argc, char **argv)
             icon[i] = 255;
         stbi_flip_vertically_on_write(1);
         return stbi_write_png(icon_path, kIcon, kIcon, 4, icon.data(), kIcon * 4) != 0 ? 0 : 1;
+    }
+
+    // HUI_HOME_ART=<dir>: ORION's home-screen art, drawn with the kit in its
+    // own sky: icon0.png (512 x 512), pic0.png (behind the title while it is
+    // selected) and pic1.png (while it starts), both 3840 x 2160. Then stop;
+    // tools/prepare-assets.sh turns the pictures into sce_sys/ files.
+    if (const char *art_dir = std::getenv("HUI_HOME_ART"))
+    {
+        using hui::gfx::Color;
+        const hui::ui::Theme *orion = nullptr;
+        for (const hui::ui::Theme &theme : hui::ui::themes())
+        {
+            if (std::string(theme.id) == "orion")
+                orion = &theme;
+        }
+        if (orion == nullptr)
+            return 1;
+        const Color accent = orion->accent;
+        // The nebula ORION's library drifts through, held still.
+        const auto clouds = [](hui::gfx::DrawList &list, float scale)
+        {
+            struct Cloud
+            {
+                float x, y, size;
+                std::uint32_t hue;
+                float alpha;
+            };
+            constexpr Cloud kClouds[] = {
+                {300.0f, 300.0f, 900.0f, 0x2448c8, 0.2f},
+                {1520.0f, 240.0f, 820.0f, 0x1a9ad0, 0.18f},
+                {1100.0f, 840.0f, 960.0f, 0x1f5f9a, 0.13f},
+                {380.0f, 920.0f, 700.0f, 0x1c3a9c, 0.15f},
+            };
+            for (const Cloud &c : kClouds)
+            {
+                const float s = c.size * scale;
+                list.shadow({c.x * scale - s * 0.5f, c.y * scale - s * 0.5f, s, s}, s * 0.5f,
+                            s * 0.55f, Color::rgb(c.hue, c.alpha));
+            }
+        };
+        // The O-ring of the library's header, large: a ring with a moon on it.
+        const auto logo = [&](hui::gfx::DrawList &list, float cx, float cy, float r)
+        {
+            list.glow({cx - r, cy - r, r * 2.0f, r * 2.0f}, r, r * 0.9f, accent.with_alpha(0.32f));
+            list.ring(cx, cy, r, r * 0.17f, accent.with_alpha(0.9f));
+            list.ring(cx, cy, r - r * 0.06f, r * 0.03f, Color::rgb(0xffffff, 0.45f));
+            const float mx = cx + std::cos(0.8f) * r;
+            const float my = cy + std::sin(0.8f) * r;
+            list.glow({mx - r * 0.3f, my - r * 0.3f, r * 0.6f, r * 0.6f}, r * 0.3f, r * 0.35f,
+                      Color::rgb(0xffffff, 0.55f));
+            list.circle(mx, my, r * 0.3f, Color::rgb(0xffffff));
+        };
+        const auto paint = [&](int w, int h, float vw, float vh, const hui::gfx::DrawList &list,
+                               const std::string &path)
+        {
+            GLuint target = 0;
+            GLuint storage = 0;
+            glGenFramebuffers(1, &target);
+            glGenRenderbuffers(1, &storage);
+            glBindRenderbuffer(GL_RENDERBUFFER, storage);
+            glRenderbufferStorage(GL_RENDERBUFFER, GL_RGBA8, w, h);
+            glBindFramebuffer(GL_FRAMEBUFFER, target);
+            glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER,
+                                      storage);
+            hui::gfx::BackdropSpec sky = orion->backdrop;
+            sky.time = 42.0f;
+            sky.params[0] = 252.0f;
+            sky.params[1] = 12.0f;
+            renderer.begin();
+            renderer.backdrop(sky);
+            renderer.draw(list);
+            renderer.present(target, w, h, vw, vh);
+            std::vector<unsigned char> pixels(static_cast<std::size_t>(w) *
+                                              static_cast<std::size_t>(h) * 4);
+            glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+            for (std::size_t i = 3; i < pixels.size(); i += 4)
+                pixels[i] = 255;
+            stbi_flip_vertically_on_write(1);
+            const bool ok = stbi_write_png(path.c_str(), w, h, 4, pixels.data(), w * 4) != 0;
+            std::fprintf(stderr, "%s %s\n", ok ? "wrote" : "could not write", path.c_str());
+            glDeleteRenderbuffers(1, &storage);
+            glDeleteFramebuffers(1, &target);
+            return ok;
+        };
+        const std::string dir = art_dir;
+        hui::save::ensure_directory(dir);
+        bool ok = true;
+        {
+            hui::gfx::DrawList list;
+            clouds(list, 512.0f / 1920.0f * 1.6f);
+            logo(list, 256.0f, 214.0f, 104.0f);
+            hui::ui::text(list, fonts.display, "ORION", 256, 428, 84, Color::rgb(0xffffff),
+                          hui::gfx::Align::center, 6.0f);
+            ok = paint(512, 512, 512.0f, 512.0f, list, dir + "/icon0.png") && ok;
+        }
+        {
+            // The home screen writes the title's name and Play over the left
+            // and the bottom: the mark sits to the right, alone.
+            hui::gfx::DrawList list;
+            clouds(list, 1.0f);
+            logo(list, 1400.0f, 470.0f, 190.0f);
+            ok = paint(3840, 2160, 1920.0f, 1080.0f, list, dir + "/pic0.png") && ok;
+        }
+        {
+            hui::gfx::DrawList list;
+            clouds(list, 1.0f);
+            logo(list, 960.0f, 440.0f, 120.0f);
+            hui::ui::text(list, fonts.display, "ORION", 960, 712, 104, Color::rgb(0xffffff),
+                          hui::gfx::Align::center, 10.0f);
+            hui::ui::text(list, fonts.semibold, "MEDIA CENTER", 960, 772, 28, accent,
+                          hui::gfx::Align::center, 14.0f);
+            ok = paint(3840, 2160, 1920.0f, 1080.0f, list, dir + "/pic1.png") && ok;
+        }
+        return ok ? 0 : 1;
     }
 
     GLuint framebuffer = 0;
