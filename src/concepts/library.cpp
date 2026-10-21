@@ -1819,13 +1819,32 @@ class Library final : public app::Concept
 
     // Play with…: Default (what it plays with when nothing is chosen), then
     // every emulator and core that can play it.
-    void open_player_menu(app::Feedback &feedback)
+    // launch_after: the game is starting and has no emulator chosen yet; the
+    // list is just the emulators, and the one picked is kept and started.
+    void open_player_menu(app::Feedback &feedback, bool launch_after = false)
     {
         const Title *title = find_title(menu_title_);
         if (title == nullptr)
             return;
+        launch_after_pick_ = launch_after;
         const std::string chosen = prefs_.game_player(title->id);
         std::vector<ui::MenuItem> items;
+        if (launch_after)
+        {
+            const std::vector<library::Player> players =
+                library::players_for(context_.library.emulator, *title);
+            for (std::size_t i = 0; i < players.size() && i < 60; ++i)
+            {
+                ui::MenuItem item = menu_item(players[i].label);
+                item.tag = kItemPlayer + 1 + static_cast<int>(i);
+                items.push_back(item);
+            }
+            menu_.set_items(std::move(items));
+            menu_.open(grid_.cell_rect(grid_.focus()), feedback);
+            show_note(true, "Which emulator for " + title->name +
+                                "? ORION remembers; Options, Play with… changes it");
+            return;
+        }
         // The default, as it would be without a choice.
         std::string usual;
         {
@@ -1857,7 +1876,12 @@ class Library final : public app::Concept
     void update_menu(const InputFrame &input, app::Feedback &feedback)
     {
         if (menu_.handle(input, feedback) != ui::Event::activated)
+        {
+            // Backed out of the emulator question: the game does not start.
+            if (!menu_.is_open())
+                launch_after_pick_ = false;
             return;
+        }
         const int tag = menu_.items()[static_cast<std::size_t>(menu_.focus())].tag;
         if (menu_.is_open())
             menu_.close(feedback);
@@ -1905,6 +1929,11 @@ class Library final : public app::Concept
                                        ? players[static_cast<std::size_t>(choice)].key
                                        : std::string());
             tabs_changed();
+            if (std::exchange(launch_after_pick_, false))
+            {
+                launch(title->id, feedback);
+                return;
+            }
             show_note(true, title->name + " plays with " + player_label(*title));
             feedback.play(audio::Cue::select);
             return;
@@ -1957,6 +1986,14 @@ class Library final : public app::Concept
         }
         if (title == nullptr || launch_pending_ > 0.0f)
             return;
+        // A game several emulators play, started for the first time: ask which.
+        if (title->is_rom() && prefs_.ask_player && prefs_.game_player(title->id).empty() &&
+            library::players_for(context_.library.emulator, *title).size() >= 2)
+        {
+            menu_title_ = title->id;
+            open_player_menu(feedback, true);
+            return;
+        }
         const std::string &dir = context_.library.state_dir;
         launch_ok_ = false;
         std::string why;
@@ -3280,7 +3317,26 @@ class Library final : public app::Concept
         if (record.sessions > 0)
             line += "   \xc2\xb7   Played " + orion::play_time_text(record.seconds) + ", " +
                     orion::ago_text(record.last, std::time(nullptr));
-        const float width = context_.fonts.regular.font->measure(line, 21.0f);
+        // Never under the buttons: what does not fit ends in "…".
+        const gfx::Font &font = *context_.fonts.regular.font;
+        const float room = gfx::kVirtualWidth - kMargin - hint_row().width - 30.0f - 24.0f -
+                           kMargin - 24.0f - 20.0f;
+        if (font.measure(line, 21.0f) > room)
+        {
+            const std::string dots = "\xe2\x80\xa6";
+            while (!line.empty() && font.measure(line + dots, 21.0f) > room)
+            {
+                // Back off one UTF-8 character: to the byte its last one starts at.
+                std::size_t at = line.size() - 1;
+                while (at > 0 && (static_cast<unsigned char>(line[at]) & 0xC0) == 0x80)
+                    --at;
+                line.erase(at);
+            }
+            while (!line.empty() && line.back() == ' ')
+                line.pop_back();
+            line += dots;
+        }
+        const float width = font.measure(line, 21.0f);
         plate(list, paint, {kMargin - 24.0f, 972.0f, width + 48.0f, 76.0f}, 38.0f);
         ui::text(list, context_.fonts.regular, line.c_str(), kMargin, 1018, 21,
                  paint.page_text_muted());
@@ -3326,11 +3382,18 @@ class Library final : public app::Concept
                  gfx::Align::center);
     }
 
-    void draw_hints(gfx::DrawList &list, ui::Painter &paint) const
+    // The buttons along the bottom: on the Emulators tab L2 / R2 change
+    // system, said first, and seven hints take a little less room each.
+    struct HintRow
     {
-        // On the Emulators tab, L2 / R2 change system: said first.
-        const bool systems = on_emulators_tab();
-        const ui::Hint hints[] = {
+        const ui::Hint *hints;
+        int count;
+        ui::HintLayout layout;
+        float width;
+    };
+    HintRow hint_row() const
+    {
+        static constexpr ui::Hint kHints[] = {
             {ui::Button::l2, "System", ui::Button::r2},
             {ui::Button::l1, "Shelf", ui::Button::r1},
             {ui::Button::cross, "Launch"},
@@ -3339,17 +3402,22 @@ class Library final : public app::Concept
             {ui::Button::options, "More"},
             {ui::Button::right_stick, "Settings"},
         };
-        const ui::Hint *shown = systems ? hints : hints + 1;
-        const int count = systems ? 7 : 6;
+        const bool systems = on_emulators_tab();
+        HintRow row{systems ? kHints : kHints + 1, systems ? 7 : 6, {}, 0.0f};
+        row.layout.size = systems ? 36.0f : 38.0f;
+        row.layout.text_size = systems ? 20.0f : 21.0f;
+        row.layout.cy = 1010.0f;
+        row.width = ui::measure_hints(context_.fonts, row.hints, row.count, row.layout);
+        return row;
+    }
+
+    void draw_hints(gfx::DrawList &list, ui::Painter &paint) const
+    {
+        const HintRow row = hint_row();
         const float right = gfx::kVirtualWidth - kMargin;
-        // Seven hints (on Emulators) take a little less room each.
-        ui::HintLayout layout;
-        layout.size = systems ? 40.0f : 44.0f;
-        layout.text_size = systems ? 22.0f : 25.0f;
-        layout.cy = 1010.0f;
-        const float width = ui::measure_hints(context_.fonts, shown, count, layout);
-        plate(list, paint, {right - width - 30.0f, 972.0f, width + 60.0f, 76.0f}, 38.0f);
-        ui::draw_hints(list, context_.fonts, glyphs(), shown, count, right, true, layout);
+        plate(list, paint, {right - row.width - 30.0f, 972.0f, row.width + 60.0f, 76.0f}, 38.0f);
+        ui::draw_hints(list, context_.fonts, glyphs(), row.hints, row.count, right, true,
+                       row.layout);
     }
 
     // A bar at the bottom of the screen, as the look asks: glass, or its rim.
@@ -3555,8 +3623,9 @@ class Library final : public app::Concept
     std::unordered_set<std::string> removed_ids_; // gone since the scan: on no tab
     orion::SettingsPanel settings_;
     orion::SetupPanel setup_;
-    bool setup_pending_ = false; // the setup opens on the first frame (it needs feedback)
-    std::string now_playing_;    // the song Settings, Sound was last told of
+    bool setup_pending_ = false;     // the setup opens on the first frame (it needs feedback)
+    bool launch_after_pick_ = false; // the emulator menu opened because a game was started
+    std::string now_playing_;        // the song Settings, Sound was last told of
     tween::Spring keyboard_shown_;
     std::string launch_message_;
     bool launch_ok_ = false;

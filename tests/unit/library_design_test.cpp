@@ -574,15 +574,27 @@ TEST_F(LibraryWithRetroArch, LaunchingARomNamesTheCoreAndTheGame)
     const std::string dir = ::testing::TempDir() + "orion-design-rom-launch";
     ASSERT_TRUE(hui::save::ensure_directory(dir));
     std::remove((dir + "/launch.txt").c_str());
+    std::remove((dir + "/library.json").c_str()); // no emulator chosen from an earlier run
     library_.state_dir = dir;
     auto design = with_retroarch();
-    for (int i = 0; i < 6; ++i)
+    // Emulators, then R2 from DS to GBA.
+    for (int i = 0; i < 5; ++i)
         send(*design, press(hui::Action::page_next));
+    send(*design, press(hui::Action::jump_next));
+    // Two cores play GBA: the first start asks which, and starts nothing yet.
     send(*design, press(hui::Action::confirm));
+    EXPECT_FALSE(std::filesystem::exists(dir + "/launch.txt"));
+    expect_drawable(*design);
+    send(*design, press(hui::Action::confirm)); // the first core
     std::string log;
     ASSERT_TRUE(hui::save::read_file(dir + "/launch.txt", &log));
     EXPECT_NE(log.find("Comet Post"), std::string::npos); // first by name on GBA
     EXPECT_NE(log.find("not on a console"), std::string::npos);
+    // Kept: the next start goes straight on.
+    EXPECT_FALSE(hui::orion::load_prefs(dir).game_players.empty());
+    std::remove((dir + "/launch.txt").c_str());
+    send(*design, press(hui::Action::confirm), 7.0f);
+    EXPECT_TRUE(std::filesystem::exists(dir + "/launch.txt"));
     expect_drawable(*design);
 }
 

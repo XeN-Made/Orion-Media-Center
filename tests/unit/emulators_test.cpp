@@ -495,5 +495,40 @@ TEST(Emulators, FindsPorpoiseAndPs5sx2AndTheirGames)
     fs::remove_all(root);
 }
 
+// PS5SX2's and Porpoise's own covers: a PS2 game by the serial PS5SX2 noted
+// for its file, a GameCube disc by the ID in its header. A game that has a
+// picture keeps it.
+TEST(Emulators, UsesTheCoversTheEmulatorsDownloaded)
+{
+    namespace fs = std::filesystem;
+    const fs::path root = fs::temp_directory_path() / "hui-emulator-covers";
+    fs::remove_all(root);
+    write_file(root / "PCSX2/covers/SLUS-21678.jpg", "jpeg");
+    write_file(root / "porpoise/covers/GQBP01.png", "png");
+    const fs::path ps2 = root / "roms/Budokai (USA).iso";
+    const fs::path cube = root / "roms/Quiet Bay.iso";
+    write_file(ps2, std::string(1024, '\0'));
+    write_file(cube, disc_head(0, "GQBP01", "Quiet Bay", false));
+    write_file(root / "PCSX2/chd-serials.txt",
+               ps2.string() +
+                   "\t3020816384\t1792304888\tSLUS-21678\n/elsewhere.iso\t1\t2\tSLES-00000\n");
+
+    std::vector<library::Title> roms(3);
+    roms[0].system = "Sony - PlayStation 2";
+    roms[0].path = ps2.string();
+    roms[1].system = "Nintendo - GameCube";
+    roms[1].path = cube.string();
+    roms[2].system = "Sony - PlayStation 2";
+    roms[2].path = (root / "roms/Unknown.iso").string();
+    roms[2].icon = "/kept.png";
+    EXPECT_EQ(library::attach_emulator_covers(roms, (root / "PCSX2").string(),
+                                              (root / "porpoise").string()),
+              2);
+    EXPECT_EQ(roms[0].icon, (root / "PCSX2/covers/SLUS-21678.jpg").string());
+    EXPECT_EQ(roms[1].icon, (root / "porpoise/covers/GQBP01.png").string());
+    EXPECT_EQ(roms[2].icon, "/kept.png");
+    fs::remove_all(root);
+}
+
 } // namespace
 } // namespace hui

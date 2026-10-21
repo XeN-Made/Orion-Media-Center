@@ -89,6 +89,7 @@ struct Placement
 //     "reopen_last_tab": true,
 //     "group_systems": true,
 //     "continue_row": true,
+//     "ask_player": true,
 //     "setup_done": true,
 //     "autostart": true,
 //     "moved_leave_shelf": true,
@@ -129,6 +130,8 @@ struct LibraryPrefs
     // The first-run setup was finished (or skipped): it does not show again.
     // A row of what was played last over the All tab's covers.
     bool continue_row = true;
+    // A game more than one emulator plays asks which, the first time it starts.
+    bool ask_player = true;
     bool setup_done = false;
     // The autostart payload opens ORION after the jailbreak; off writes
     // <state_dir>/autostart-off, which the payload honours.

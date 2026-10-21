@@ -11,6 +11,7 @@
 #include <cctype>
 #include <cstdint>
 #include <cstdio>
+#include <unordered_map>
 #include <unordered_set>
 
 #include <sys/stat.h>
@@ -1020,12 +1021,68 @@ Emulator scan_emulators(const std::vector<Title> &titles, const std::vector<Game
     return emulator;
 }
 
+int attach_emulator_covers(std::vector<Title> &roms, const std::string &pcsx2_dir,
+                           const std::string &porpoise_dir)
+{
+    const auto is_file = [](const std::string &file)
+    {
+        struct stat info = {};
+        return ::stat(file.c_str(), &info) == 0 && S_ISREG(info.st_mode);
+    };
+    // PS5SX2's serials, by the file as ORION sees it (its paths are the same).
+    std::unordered_map<std::string, std::string> serials;
+    std::string cache;
+    if (save::read_file(pcsx2_dir + "/chd-serials.txt", &cache, 4u << 20))
+    {
+        for (const std::string &line : split(cache, '\n', false))
+        {
+            const std::vector<std::string> fields = split(line, '\t', false);
+            if (fields.size() >= 4 && !fields[3].empty())
+                serials[fields[0]] = fields[3];
+        }
+    }
+    int found = 0;
+    for (Title &rom : roms)
+    {
+        if (!rom.is_rom() || !rom.icon.empty())
+            continue;
+        std::vector<std::string> candidates;
+        if (rom.system == kPs2)
+        {
+            const auto serial = serials.find(rom.path);
+            if (serial != serials.end())
+            {
+                candidates.push_back(pcsx2_dir + "/covers/" + serial->second + ".jpg");
+                candidates.push_back(pcsx2_dir + "/covers/" + serial->second + ".png");
+            }
+        }
+        else if (rom.system == kGameCube || rom.system == kWii)
+        {
+            Disc disc;
+            if (read_nintendo_disc(read_head(rom.path), &disc) && !disc.id.empty())
+                candidates.push_back(porpoise_dir + "/covers/" + disc.id + ".png");
+        }
+        for (const std::string &candidate : candidates)
+        {
+            if (is_file(candidate))
+            {
+                rom.icon = candidate;
+                ++found;
+                break;
+            }
+        }
+    }
+    return found;
+}
+
 int add_emulator_games(Library &library, const std::vector<GameFolder> &folders,
                        const std::string &art_dir)
 {
     std::erase_if(library.titles, [](const Title &title) { return title.is_rom(); });
     std::vector<Title> roms;
     library.emulator = scan_emulators(library.titles, folders, &roms);
+    // The emulators' own covers first: high quality, and nothing to download.
+    attach_emulator_covers(roms, "/data/PCSX2", "/data/porpoise");
     const EmulatorApp *retroarch = library.emulator.app("retroarch");
     attach_rom_art(roms, retroarch != nullptr ? retroarch->root : std::string(), art_dir);
     const int count = static_cast<int>(roms.size());

@@ -64,6 +64,15 @@ struct GameFolder
 // start-up and Settings' Scan for emulators both run.
 Emulator scan_emulators(const std::vector<Title> &titles, const std::vector<GameFolder> &folders,
                         std::vector<Title> *roms);
+// The covers the emulators downloaded themselves, in high quality, for games
+// without a picture yet (so ORION need not download one): PS5SX2's
+// <pcsx2_dir>/covers/<serial>.jpg (or .png), the serial from its own cache
+// of the games it has seen (<pcsx2_dir>/chd-serials.txt: path, size, time,
+// serial), and Porpoise's <porpoise_dir>/covers/<disc ID>.png for GameCube
+// and Wii discs, the ID from the disc itself. Returns how many games got one.
+int attach_emulator_covers(std::vector<Title> &roms, const std::string &pcsx2_dir,
+                           const std::string &porpoise_dir);
+
 // The library's emulators and their games, (re)made: games found by an
 // earlier scan leave library.titles, scan_emulators runs over the rest, box
 // art is attached (attach_rom_art, art_dir) and the games are appended.

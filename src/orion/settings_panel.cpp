@@ -29,6 +29,7 @@ enum : int
     kReopen,
     kContinueRow,
     kGroupSystems,
+    kAskPlayer,
     kAutostart,
     kPayloadInfo,
     kPayloadFolder,
@@ -568,6 +569,8 @@ void SettingsPanel::build_emulators(const LibraryPrefs &prefs)
             std::string(known.plays) + ". Install it, then scan";
     }
 
+    form_.add_toggle(kAskPlayer, "Ask which emulator to use", prefs.ask_player).description =
+        "A game more than one emulator plays asks the first time; Options, Play with changes it";
     if (emulator_ == nullptr || emulator_->systems.empty())
         return;
     form_.add_header("Systems");
@@ -1184,6 +1187,9 @@ SettingsPanel::Change SettingsPanel::handle(const InputFrame &input, ui::Feedbac
     }
     case kAutostart:
         prefs->autostart = form_.toggle_value(kAutostart);
+        return Change::prefs;
+    case kAskPlayer:
+        prefs->ask_player = form_.toggle_value(kAskPlayer);
         return Change::prefs;
     case kGroupSystems:
         prefs->group_systems = form_.toggle_value(kGroupSystems);
