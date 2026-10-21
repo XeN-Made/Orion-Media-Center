@@ -12,6 +12,9 @@
 
 #include <cctype>
 #include <cstdio>
+#include <ctime>
+#include <fcntl.h>
+#include <unistd.h>
 #include <utility>
 #include <vector>
 
@@ -56,6 +59,20 @@ std::vector<int> version_parts(std::string_view text)
 }
 
 } // namespace
+
+void update_log(const std::string &path, const std::string &line)
+{
+    if (path.empty())
+        return;
+    const int fd = ::open(path.c_str(), O_WRONLY | O_CREAT | O_APPEND, 0666);
+    if (fd < 0)
+        return;
+    const std::string text =
+        std::to_string(static_cast<long long>(std::time(nullptr))) + "  " + line + "\n";
+    const ssize_t written = ::write(fd, text.data(), text.size());
+    (void)written;
+    ::close(fd);
+}
 
 bool parse_release(std::string_view text, Release *out)
 {
@@ -122,6 +139,7 @@ bool UpdateCheck::start(std::string current_version)
             std::string error;
             Release release;
             State state = State::failed;
+            update_log(log_, "check: asking GitHub (this is ORION " + current + ")");
             if (!get_ || !get_(kLatestRelease, kMaxAnswer, &body, &error))
                 error = error.empty() ? std::string("no network") : error;
             else if (!parse_release(body, &release))
@@ -129,6 +147,10 @@ bool UpdateCheck::start(std::string current_version)
             else
                 state = compare_versions(release.version, current) > 0 ? State::available
                                                                        : State::up_to_date;
+            update_log(log_, state == State::failed ? "check: failed: " + error
+                             : state == State::available
+                                 ? "check: " + release.version + " is newer"
+                                 : "check: " + release.version + " is not newer");
             {
                 std::lock_guard<std::mutex> lock(mutex_);
                 state_ = state;
@@ -286,45 +308,55 @@ bool UpdateInstaller::start(Release release, std::string title_id, std::string u
         {
             const auto set = [&](State state, std::string error = {})
             {
+                static constexpr const char *kNames[] = {"idle", "downloading", "unpacking",
+                                                         "ready", "failed"};
+                update_log(log_, std::string("install: ") + kNames[static_cast<int>(state)] +
+                                     (error.empty() ? "" : ": " + error));
                 std::lock_guard<std::mutex> lock(mutex_);
                 state_ = state;
                 error_ = std::move(error);
             };
-            std::string sums;
-            std::string error;
-            MappedFile zip;
-            const std::size_t slash = release.zip.rfind('/');
-            const std::string zip_name =
-                slash == std::string::npos ? release.zip : release.zip.substr(slash + 1);
-            // The ZIP goes straight to a file and is read through a mapping:
-            // held in memory it would not fit the app's heap.
-            save::ensure_directory(dir);
-            const std::string zip_path = dir + "/" + id + ".zip";
-            if (release.zip.empty() || release.sums.empty())
-                set(State::failed, "the release has no ZIP or no SHA256SUMS");
-            else if (!get_ || !get_(release.sums, kMaxAnswer, &sums, &error))
-                set(State::failed, "SHA256SUMS could not be read: " + error);
-            else if (const std::string want = sum_for(sums, zip_name); want.empty())
-                set(State::failed, "SHA256SUMS does not list " + zip_name);
-            else if (!download_ || !download_(release.zip, zip_path, kMaxZip, &error))
-                set(State::failed, "the download failed: " + error);
-            else if (!zip.open(zip_path, &error))
-                set(State::failed, error);
-            else if (sha256_hex(zip.view()) != want)
-                set(State::failed, "the download does not match SHA256SUMS");
-            else
+            // Each step says where it is in the log first, so a stall shows.
+            const auto run = [&]
             {
+                update_log(log_, "install: " + release.version + " from " + release.zip);
+                if (release.zip.empty() || release.sums.empty())
+                    return set(State::failed, "the release has no ZIP or no SHA256SUMS");
+                const std::size_t slash = release.zip.rfind('/');
+                const std::string zip_name =
+                    slash == std::string::npos ? release.zip : release.zip.substr(slash + 1);
+                std::string error;
+                std::string sums;
+                update_log(log_, "install: reading SHA256SUMS");
+                if (!get_ || !get_(release.sums, kMaxAnswer, &sums, &error))
+                    return set(State::failed, "SHA256SUMS could not be read: " + error);
+                const std::string want = sum_for(sums, zip_name);
+                if (want.empty())
+                    return set(State::failed, "SHA256SUMS does not list " + zip_name);
+                // The ZIP goes straight to a file and is read through a
+                // mapping: held in memory it would not fit the app's heap.
+                save::ensure_directory(dir);
+                const std::string zip_path = dir + "/" + id + ".zip";
+                update_log(log_, "install: downloading to " + zip_path);
+                if (!download_ || !download_(release.zip, zip_path, kMaxZip, &error))
+                    return set(State::failed, "the download failed: " + error);
+                MappedFile zip;
+                if (!zip.open(zip_path, &error))
+                    return set(State::failed, error);
+                update_log(log_, "install: downloaded " + std::to_string(zip.view().size()) +
+                                     " bytes; checking its SHA-256");
+                if (sha256_hex(zip.view()) != want)
+                    return set(State::failed, "the download does not match SHA256SUMS");
                 set(State::unpacking);
                 const std::string stage = dir + "/stage";
                 std::remove((stage + "/files.txt").c_str());
                 if (!stage_update(zip.view(), id, stage, &error))
-                    set(State::failed, error);
-                else
-                {
-                    save::write_atomic(stage + "/version.txt", release.version + "\n");
-                    set(State::ready);
-                }
-            }
+                    return set(State::failed, error);
+                save::write_atomic(stage + "/version.txt", release.version + "\n");
+                std::remove(zip_path.c_str()); // unpacked: no longer needed
+                set(State::ready);
+            };
+            run();
             running_ = false;
             finished_ = true;
         });

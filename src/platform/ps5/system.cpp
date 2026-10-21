@@ -281,6 +281,7 @@ bool http_download(const std::string &url, const std::string &path, std::size_t 
     // No limit on the whole: a slow line takes minutes. Stalled is over.
     curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, 1024L);
     curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, 30L);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 15L * 60L);
     curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
     curl_easy_setopt(curl, CURLOPT_USERAGENT, "ORION-Media-Center/1");
     art_trace(("download " + url).c_str());

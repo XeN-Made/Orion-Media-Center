@@ -48,6 +48,7 @@
 #include <cstdio>
 #include <cstring>
 #include <ctime>
+#include <memory>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -1370,6 +1371,7 @@ class Library final : public app::Concept
     void open_settings(app::Feedback &feedback)
     {
         settings_.set_tabs(every_tab());
+        settings_.set_version(context_.version);
         settings_.set_storage(context_.library.self_path,
                               orion::count_files(backdrop_folder(), ".png"));
         settings_.open(look_, prefs_, feedback);
@@ -1417,6 +1419,7 @@ class Library final : public app::Concept
         restyle();
         rebuild();
         settings_.set_tabs(every_tab());
+        settings_.set_version(context_.version);
         if (settings_.is_open())
             settings_.rebuild_nav(look_, prefs_);
         if (setup_.is_open())
@@ -1436,6 +1439,7 @@ class Library final : public app::Concept
         restyle();
         rebuild();
         settings_.set_tabs(every_tab());
+        settings_.set_version(context_.version);
         if (settings_.is_open())
             settings_.refresh(look_, prefs_);
     }
@@ -2531,6 +2535,23 @@ class Library final : public app::Concept
     // The card above the hints, for a note that is not a launch.
     // Asks GitHub whether a newer ORION is out: by itself once a launch, a
     // few seconds in (the library first), or when Settings says Check now.
+    static std::unique_ptr<orion::UpdateCheck> new_update_check()
+    {
+        return std::make_unique<orion::UpdateCheck>(
+            [](const std::string &url, std::size_t limit, std::string *body, std::string *error)
+            { return sys::http_get(url, limit, body, error); });
+    }
+
+    // The update log (orion/updates.hpp): every step, kept across starts.
+    std::string update_log_path() const
+    {
+        const std::string &state = context_.library.state_dir;
+        if (state.empty())
+            return {};
+        save::ensure_directory(state + "/update");
+        return state + "/update/log.txt";
+    }
+
     void check_for_updates(bool asked)
     {
         if (context_.version.empty() || !sys::on_console())
@@ -2542,8 +2563,28 @@ class Library final : public app::Concept
             settings_.refresh(look_, prefs_);
             return;
         }
-        if (!updates_.start(context_.version))
+        const std::string log = update_log_path();
+        if (updates_->state() == orion::UpdateCheck::State::checking)
+        {
+            const int waited = static_cast<int>(clock_ - check_started_);
+            if (waited < 20)
+            {
+                settings_.set_update_status("ORION " + context_.version + ": still checking (" +
+                                            std::to_string(waited) + " s)");
+                settings_.refresh(look_, prefs_);
+                return;
+            }
+            // No answer in 20 s: the request hangs. Its thread cannot be
+            // stopped; the check is left to it, and a new one starts.
+            orion::update_log(log, "check: no answer after " + std::to_string(waited) +
+                                       " s; starting a new one");
+            (void)updates_.release();
+            updates_ = new_update_check();
+        }
+        updates_->set_log(log);
+        if (!updates_->start(context_.version))
             return;
+        check_started_ = clock_;
         manual_update_check_ = asked;
         settings_.set_update_status("ORION " + context_.version + ": checking…");
         settings_.refresh(look_, prefs_);
@@ -2556,18 +2597,19 @@ class Library final : public app::Concept
             update_asked_ = true;
             check_for_updates(false);
         }
-        if (!updates_.take_finished())
+        if (!updates_->take_finished())
             return;
-        const orion::Release latest = updates_.latest();
+        const orion::Release latest = updates_->latest();
         std::string status = "ORION " + context_.version;
-        switch (updates_.state())
+        switch (updates_->state())
         {
         case orion::UpdateCheck::State::available:
             status += ". ORION " + latest.version + " is out";
             if (prefs_.auto_update || manual_update_check_)
             {
+                orion::update_log(update_log_path(), "orion: downloading " + latest.version);
                 download_update(latest);
-                status += ": downloading it";
+                status += ": downloading it…";
             }
             else
                 show_note(true,
@@ -2579,9 +2621,9 @@ class Library final : public app::Concept
                 show_note(true, "ORION " + context_.version + " is the newest");
             break;
         default:
-            status += ". Could not check: " + updates_.error();
+            status += ". Could not check: " + updates_->error();
             if (manual_update_check_)
-                show_note(false, "Could not check for updates: " + updates_.error());
+                show_note(false, "Could not check for updates: " + updates_->error());
             break;
         }
         settings_.set_update_status(std::move(status));
@@ -2595,7 +2637,9 @@ class Library final : public app::Concept
         const std::string &state = context_.library.state_dir;
         if (state.empty() || own_title_id().empty())
             return;
-        installer_.start(release, own_title_id(), state + "/update");
+        installer_.set_log(update_log_path());
+        if (!installer_.start(release, own_title_id(), state + "/update"))
+            orion::update_log(update_log_path(), "orion: a download is already running");
     }
 
     void update_installer()
@@ -4318,9 +4362,10 @@ class Library final : public app::Concept
     orion::ArtFetcher art_{
         [](const std::string &url, std::size_t limit, std::string *body, std::string *error)
         { return sys::http_get(url, limit, body, error); }};
-    orion::UpdateCheck updates_{
-        [](const std::string &url, std::size_t limit, std::string *body, std::string *error)
-        { return sys::http_get(url, limit, body, error); }};
+    // A check whose request never returns cannot be stopped, only left
+    // behind: Check now starts a new one (check_for_updates).
+    std::unique_ptr<orion::UpdateCheck> updates_ = new_update_check();
+    float check_started_ = 0.0f;       // clock_ when the running check began
     bool update_asked_ = false;        // the check this launch makes by itself has started
     bool manual_update_check_ = false; // the running check was asked for: say how it went
     orion::UpdateInstaller installer_{

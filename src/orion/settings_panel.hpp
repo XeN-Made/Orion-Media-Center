@@ -97,6 +97,7 @@ class SettingsPanel
         storage,
         sound,
         appearance,
+        about, // the version, updates, where things are
     };
 
     SettingsPanel();
@@ -151,6 +152,11 @@ class SettingsPanel
     void set_update_ready(std::string version)
     {
         update_ready_ = std::move(version);
+    }
+    // This ORION's version, for About ("01.001.002"; empty: unknown).
+    void set_version(std::string version)
+    {
+        version_ = std::move(version);
     }
     // The emulator whose page is open ("porpoise"), or empty.
     const std::string &emulator_page() const
@@ -231,6 +237,7 @@ class SettingsPanel
     void build_art(const LibraryPrefs &prefs);
     void build_storage(const LibraryPrefs &prefs);
     void build_sound();
+    void build_about(const LibraryPrefs &prefs);
     void build_folder_page(const LibraryPrefs &prefs);
     Change edit_folder_page(int id, LibraryPrefs *prefs);
     void build_appearance(const Look &look, const LibraryPrefs &prefs);
@@ -273,6 +280,7 @@ class SettingsPanel
     std::string scan_status_ = "Finds RetroArch, Porpoise and PS5SX2, and their games";
     std::string update_status_ = "Not checked yet";
     std::string update_ready_;
+    std::string version_;
     std::string payload_ = "/data/homebrew/PPSA99061/assets/payloads/orion-autostart.elf";
     std::string art_status_ = "Covers from thumbnails.libretro.com for games without one";
 };

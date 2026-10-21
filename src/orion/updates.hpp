@@ -30,6 +30,11 @@ struct Release
     std::string sums;    // its SHA256SUMS; empty when it has none
 };
 
+// Appends "<time>  <line>" to the update log (orion's state dir,
+// update/log.txt): every step of a check and an install, so a stall says
+// where it stopped. Nothing when path is empty.
+void update_log(const std::string &path, const std::string &line);
+
 // Reads GitHub's answer for one release. False when it is not one (no tag).
 bool parse_release(std::string_view json, Release *out);
 
@@ -61,6 +66,11 @@ class UpdateCheck
     UpdateCheck(const UpdateCheck &) = delete;
     UpdateCheck &operator=(const UpdateCheck &) = delete;
 
+    // Where each step is written (update_log); empty for nowhere.
+    void set_log(std::string path)
+    {
+        log_ = std::move(path);
+    }
     // False while a check is running.
     bool start(std::string current_version);
     State state() const;
@@ -78,6 +88,7 @@ class UpdateCheck
     State state_ = State::idle;
     Release latest_;
     std::string error_;
+    std::string log_;
 };
 
 // ---- installing an update ----
@@ -121,6 +132,10 @@ class UpdateInstaller
     UpdateInstaller(const UpdateInstaller &) = delete;
     UpdateInstaller &operator=(const UpdateInstaller &) = delete;
 
+    void set_log(std::string path)
+    {
+        log_ = std::move(path);
+    }
     // False while one is running.
     bool start(Release release, std::string title_id, std::string update_dir);
     State state() const;
@@ -139,6 +154,7 @@ class UpdateInstaller
     State state_ = State::idle;
     Release release_;
     std::string error_;
+    std::string log_;
 };
 
 } // namespace hui::orion

@@ -7,6 +7,7 @@
 #include "core/save_file.hpp"
 #include "gfx/draw_list.hpp"
 #include "library/emulators.hpp"
+#include "orion/updates.hpp"
 #include "ui/glyphs.hpp"
 
 #include <algorithm>
@@ -39,6 +40,10 @@ enum : int
     kAutoUpdate,
     kUpdateNow,
     kInstallUpdate,
+    kAboutVersion,
+    kAboutTitle,
+    kAboutReleases,
+    kAboutLog,
     kLeaveShelf,
     kBase,
     kBackground,
@@ -136,6 +141,8 @@ const char *section_name(SettingsPanel::Section section)
         return "Storage";
     case SettingsPanel::Section::sound:
         return "Sound";
+    case SettingsPanel::Section::about:
+        return "About";
     default:
         return "Appearance";
     }
@@ -297,6 +304,7 @@ void SettingsPanel::build_nav()
     sections_.push_back(Section::appearance);
     if (app_settings_ != nullptr)
         sections_.push_back(Section::sound);
+    sections_.push_back(Section::about);
     std::vector<ui::NavEntry> entries;
     for (Section section : sections_)
     {
@@ -414,6 +422,9 @@ void SettingsPanel::build(const Look &look, const LibraryPrefs &prefs)
     case Section::appearance:
         build_appearance(look, prefs);
         break;
+    case Section::about:
+        build_about(prefs);
+        break;
     }
 }
 
@@ -442,15 +453,25 @@ void SettingsPanel::build_library(const LibraryPrefs &prefs)
     ui::FormRow &setup = form_.add_action(kRunSetup, "Run setup again");
     setup.chevron = true;
     setup.description = "The first-run steps: look, emulators, box art, autostart";
+}
+
+void SettingsPanel::build_about(const LibraryPrefs &prefs)
+{
+    form_.add_header("ORION Media Center");
+    form_.add_value(kAboutVersion, "Version", version_.empty() ? "Unknown" : version_);
+    form_.add_value(kAboutTitle, "Title ID", "PPSA99061");
+    form_.add_value(kAboutReleases, "Releases", kReleasesPage);
+    form_.add_header("Updates");
+    if (!update_ready_.empty())
+        form_.add_action(kInstallUpdate, "Install ORION " + update_ready_).description =
+            "ORION closes, updates itself and opens again";
+    form_.add_action(kUpdateNow, "Check now").description = update_status_;
     form_.add_toggle(kCheckUpdates, "Check for updates", prefs.check_updates).description =
         "Each time ORION opens, it asks GitHub whether a newer ORION is out";
     form_.add_toggle(kAutoUpdate, "Download updates by themselves", prefs.auto_update).description =
         "A newer ORION is made ready in the background; ORION asks before it "
         "installs it";
-    form_.add_action(kUpdateNow, "Check now").description = update_status_;
-    if (!update_ready_.empty())
-        form_.add_action(kInstallUpdate, "Install ORION " + update_ready_).description =
-            "ORION closes, updates itself and opens again";
+    form_.add_value(kAboutLog, "Update log", "/data/orion/update/log.txt");
 }
 
 void SettingsPanel::build_tabs(const LibraryPrefs &prefs)
