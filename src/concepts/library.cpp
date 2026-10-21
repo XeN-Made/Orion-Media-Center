@@ -2970,18 +2970,17 @@ class Library final : public app::Concept
             grid_.set_focus(focus, true);
     }
 
-    // What a title is, as its banner says, in the order "Tag" sorts them:
-    // PS5 games, PS4 games, homebrew, media, then each emulated system.
+    // What a title is, in the order "Tag" sorts them: games (PS5, PS4 and
+    // every emulated system together, by name), homebrew, media. Platform is
+    // the order that splits games by system.
     std::pair<int, std::string> tag_of(const Title &title) const
     {
         if (title.is_rom())
-            return {4, library::short_system_name(title.system)};
-        if (title.platform == library::Platform::ps4)
-            return {1, "PS4 games"};
+            return {0, "Games"};
         if (library::shelf_of(title) == library::Shelf::media)
-            return {3, "Media"};
+            return {2, "Media"};
         if (library::shelf_of(title) == library::Shelf::homebrew)
-            return {2, "Homebrew"};
+            return {1, "Homebrew"};
         return {0, "Games"};
     }
 

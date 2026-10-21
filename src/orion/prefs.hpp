@@ -16,7 +16,7 @@ namespace hui::orion
 {
 
 // The orders a tab can be in: the keys library.json keeps, and their names.
-// "tag" groups them under labels (Games, Homebrew, Media, each system);
+// "tag" groups them under labels (Games of every system, Homebrew, Media);
 // "played" and "most_played" follow ORION's play records (orion/playtime.hpp).
 inline constexpr int kSortCount = 7;
 inline constexpr const char *kSortKeys[kSortCount] = {
