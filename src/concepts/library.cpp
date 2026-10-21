@@ -21,10 +21,8 @@
 #include "orion/art_fetcher.hpp"
 #include "orion/backdrop_copies.hpp"
 #include "orion/look.hpp"
-#include "orion/local_http.hpp"
 #include "orion/playtime.hpp"
 #include "orion/prefs.hpp"
-#include "orion/remover.hpp"
 #include "orion/settings_panel.hpp"
 #include "orion/setup_panel.hpp"
 #include "orion/storage.hpp"
@@ -88,8 +86,6 @@ constexpr std::size_t kMaxPath = 160; // bytes, as orion::valid_art_dir takes th
 // The launch helper shipped in the app folder, and the console's ELF loader.
 constexpr const char *kLauncherPath = "/app0/assets/payloads/orion-launcher.elf";
 constexpr int kLoaderPort = 9021;
-// ShadowMountPlus's API on the console, for removing games (orion/remover.hpp).
-constexpr int kShadowMountPort = 10101;
 constexpr float kHoldToDelete = 1.5f; // seconds of Cross on Delete
 // The launch helper reads a request of 4 KiB; a game's path is one line of it.
 constexpr std::size_t kMaxRequestPath = 1024;
@@ -583,6 +579,8 @@ class Library final : public app::Concept
         restyle();
         // ORION reopens where it was left, when asked to.
         std::string start = prefs_.reopen_last_tab ? prefs_.last_tab : std::string("all");
+        // A removal the launch helper did while ORION was closed.
+        take_remove_result();
         rebuild_tabs(start);
         restyle();
         rebuild();
@@ -758,7 +756,6 @@ class Library final : public app::Concept
         keys_.update(dt);
         menu_.update(dt);
         dialog_.update(dt);
-        poll_remover(feedback);
         settings_.update(dt);
         setup_.update(dt);
         if (launch_exit_ > 0.0f)
@@ -999,25 +996,6 @@ class Library final : public app::Concept
             if (now.total > 0)
                 progress = static_cast<float>(now.done) / static_cast<float>(now.total);
         }
-        else if (remover_.running())
-        {
-            const orion::Remover::Progress now = remover_.progress();
-            if (now.kind == orion::Remover::Kind::home_screen)
-                status = "Removing " + now.name + " from the home screen…";
-            else
-            {
-                status = "Deleting " + now.name;
-                if (now.total_bytes > 0)
-                {
-                    status +=
-                        "  ·  " + gigabytes(now.done_bytes) + " of " + gigabytes(now.total_bytes);
-                    progress = static_cast<float>(static_cast<double>(now.done_bytes) /
-                                                  static_cast<double>(now.total_bytes));
-                }
-                else
-                    status += "…";
-            }
-        }
         else if (backdrop_copies_.running())
             status = "Copying game backgrounds…";
         if (!status.empty())
@@ -1025,10 +1003,8 @@ class Library final : public app::Concept
             status_ = std::move(status);
             status_progress_ = progress;
         }
-        status_shown_.target = art_.running() || backdrop_copies_.running() ||
-                                       context_.rescan_requested || remover_.running()
-                                   ? 1.0f
-                                   : 0.0f;
+        status_shown_.target =
+            art_.running() || backdrop_copies_.running() || context_.rescan_requested ? 1.0f : 0.0f;
         status_shown_.update(dt, context_.settings.reduced_motion ? 60.0f : 6.0f);
     }
 
@@ -1602,14 +1578,6 @@ class Library final : public app::Concept
     // The orders for the active tab: its own choice, or the Library's.
     // ---- removing ----
 
-    // "12.4 GB", for the status line.
-    static std::string gigabytes(std::uint64_t bytes)
-    {
-        char text[32];
-        std::snprintf(text, sizeof(text), "%.1f GB", static_cast<double>(bytes) / 1e9);
-        return text;
-    }
-
     // What Remove… is offered for: a game for an emulator (its file), or a
     // console title ShadowMountPlus registered from a folder or an image. An
     // emulator other games play with is not, while it has them.
@@ -1661,12 +1629,6 @@ class Library final : public app::Concept
         const Title *title = find_title(menu_title_);
         if (title == nullptr)
             return;
-        if (kind != kItemRemoveRom && remover_.running())
-        {
-            show_note(false, "Another removal is still running: " + remover_.progress().name);
-            feedback.play(audio::Cue::error);
-            return;
-        }
         remove_kind_ = kind;
         remove_id_ = title->id;
         remove_hold_ = 0.0f;
@@ -1765,44 +1727,85 @@ class Library final : public app::Concept
             feedback.play(audio::Cue::erase);
             return;
         }
-        const orion::Remover::Kind kind = remove_kind_ == kItemRemoveHome
-                                              ? orion::Remover::Kind::home_screen
-                                              : orion::Remover::Kind::erase;
-        if (!remover_.start(kind, title->id, title->name))
+        // ShadowMountPlus touches no game while one is open, and ORION is
+        // one: the launch helper does it once ORION has closed, then opens
+        // ORION again (payload/launcher, "@remove"). How it went comes back
+        // in remove-result.txt, read when ORION starts (take_remove_result).
+        const std::string self = own_title_id();
+        const std::string &self_path = context_.library.self_path;
+        std::string why;
+        if (!sys::on_console())
+            why = "not on a console";
+        else if (self.empty() || self_path.empty())
+            why = "ORION does not know its own folder";
+        else
         {
-            show_note(false, "Another removal is still running");
+            const std::string request = self + "\n@remove " +
+                                        (remove_kind_ == kItemRemoveHome ? "home" : "erase") +
+                                        "\t" + title->id + "\t" + one_line(title->name) +
+                                        "\n@remove-result " + self_path + "/remove-result.txt\n";
+            std::remove((self_path + "/remove-result.txt").c_str());
+            why = send_helper(request);
+        }
+        if (!why.empty())
+        {
+            show_note(false, why == "not on a console"
+                                 ? std::string("Removing works on the console only")
+                                 : "Could not remove " + title->name + ": " + why);
             feedback.play(audio::Cue::error);
             return;
         }
+        launch_ok_ = true;
+        launch_message_ = (remove_kind_ == kItemRemoveHome ? "Removing " : "Deleting ") +
+                          title->name + ": ORION closes now and opens again when it is done";
+        launch_shown_ = 6.0f;
+        launch_exit_ = 1.6f; // a moment longer: there is more to read
+        launch_pending_ = 30.0f;
         feedback.play(audio::Cue::select);
     }
 
-    // A removal through ShadowMountPlus that ended: say how, and take the
-    // title off its tabs.
-    void poll_remover(app::Feedback &feedback)
+    // What the launch helper did with a removal while ORION was closed: said
+    // once, and the title taken off its tabs (a game left on the home screen
+    // with its files waits on Hidden, or ORION would list it again).
+    void take_remove_result()
     {
-        if (!remover_.take_finished())
+        const std::string &self_path = context_.library.self_path;
+        std::string text;
+        if (self_path.empty() || !save::read_file(self_path + "/remove-result.txt", &text, 4096) ||
+            text.empty())
             return;
-        const orion::Remover::Progress done = remover_.progress();
-        if (!done.ok)
+        std::remove((self_path + "/remove-result.txt").c_str());
+        // "<home|erase> <0|1> <title ID>\t<message>"
+        const std::size_t tab = text.find('\t');
+        const std::string head = text.substr(0, tab);
+        std::string message = tab == std::string::npos ? std::string() : text.substr(tab + 1);
+        while (!message.empty() && (message.back() == '\n' || message.back() == '\r'))
+            message.pop_back();
+        const std::size_t first = head.find(' ');
+        const std::size_t second = head.find(' ', first + 1);
+        if (first == std::string::npos || second == std::string::npos)
+            return;
+        const std::string kind = head.substr(0, first);
+        const bool ok = head.substr(first + 1, second - first - 1) == "1";
+        const std::string id = head.substr(second + 1);
+        const Title *title = find_title(id);
+        const std::string name = title != nullptr ? title->name : id;
+        if (!ok)
         {
-            show_note(false, "Could not remove " + done.name + ": " + done.error);
-            feedback.play(audio::Cue::error);
+            show_note(false, "Could not remove " + name + ": " + message);
             return;
         }
-        if (done.kind == orion::Remover::Kind::home_screen)
+        if (kind == "home")
         {
-            // Its files stay, so ORION would list it again: it waits on Hidden.
-            prefs_.set_title_hidden(done.title_id, true);
-            show_note(true, done.name + " left the home screen; it is on the Hidden tab");
+            prefs_.set_title_hidden(id, true);
+            save_prefs();
+            show_note(true, name + " left the home screen; it is on the Hidden tab");
         }
         else
         {
-            removed_ids_.insert(done.title_id);
-            show_note(true, "Deleted " + done.name);
+            removed_ids_.insert(id);
+            show_note(true, "Deleted " + name);
         }
-        tabs_changed();
-        feedback.play(audio::Cue::complete);
     }
 
     // What a game plays with, short: "Snes9x", "Porpoise".
@@ -1956,7 +1959,6 @@ class Library final : public app::Concept
             return;
         const std::string &dir = context_.library.state_dir;
         launch_ok_ = false;
-        std::string elf;
         std::string why;
         // A game for an emulator starts in the app that plays it, each the
         // way it takes a game (library/emulators.hpp).
@@ -2017,25 +2019,15 @@ class Library final : public app::Concept
             why = "could not write " + staged_args;
         else if (retroarch && !write_shared(staged_test_run, "ORION " + token + "\n"))
             why = "could not write " + staged_test_run;
-        else if (dir.empty() || !save::write_atomic(dir + "/launch-request.txt", request).empty())
-            why = "could not write the launch request";
-        else if (!save::read_file(kLauncherPath, &elf, 4u << 20) || elf.empty())
-            why = std::string("the launch helper is missing (") + kLauncherPath + ")";
         else
         {
-            const int error = sys::send_payload(elf, kLoaderPort);
-            if (error == 0)
-                launch_ok_ = true;
-            else if (error == sys::kLaunchUnsupported)
-                why = "not on a console";
-            else
-                why = "the ELF loader did not answer (errno " + std::to_string(error) + ")";
+            why = send_helper(request);
+            launch_ok_ = why.empty();
         }
 
         if (launch_ok_)
         {
-            log_launch(*title, "sent the helper (" + std::to_string(elf.size()) +
-                                   " bytes) to 127.0.0.1:" + std::to_string(kLoaderPort) +
+            log_launch(*title, "sent the helper to 127.0.0.1:" + std::to_string(kLoaderPort) +
                                    "; closing ORION");
             launch_message_ = app != nullptr && !app->starts_games
                                   ? "Opening " + app->name + ": choose " + title->name + " there"
@@ -2054,6 +2046,26 @@ class Library final : public app::Concept
         }
         launch_shown_ = 6.0f;
         feedback.play(launch_ok_ ? audio::Cue::launch : audio::Cue::error);
+    }
+
+    // Hands a request to the launch helper: it goes into
+    // <state_dir>/launch-request.txt and the helper to the console's ELF
+    // loader. Empty when that worked, else why not ("not on a console").
+    std::string send_helper(const std::string &request) const
+    {
+        const std::string &dir = context_.library.state_dir;
+        std::string elf;
+        if (dir.empty() || !save::write_atomic(dir + "/launch-request.txt", request).empty())
+            return "could not write the launch request";
+        if (!save::read_file(kLauncherPath, &elf, 4u << 20) || elf.empty())
+            return std::string("the launch helper is missing (") + kLauncherPath + ")";
+        const int error = sys::send_payload(elf, kLoaderPort);
+        if (error == 0)
+            return "";
+        std::remove((dir + "/launch-request.txt").c_str());
+        if (error == sys::kLaunchUnsupported)
+            return "not on a console";
+        return "the ELF loader did not answer (errno " + std::to_string(error) + ")";
     }
 
     // Games for an emulator that have no box art yet. Without retry, games a
@@ -3535,20 +3547,11 @@ class Library final : public app::Concept
     tween::Spring status_shown_;
     ui::Keyboard keys_;
     ui::Menu menu_;
-    // Remove: the question, what it is about, and the job that does it.
+    // Remove: the question and what it is about.
     ui::Dialog dialog_;
-    int remove_kind_ = 0;      // the menu tag that asked (kItemRemoveHome, ...)
-    std::string remove_id_;    // the title or game it is about
-    float remove_hold_ = 0.0f; // seconds Cross has been held on a delete
-    orion::Remover remover_{
-        [](const std::string &path, const std::string &json, std::string *reply, std::string *error)
-        {
-            orion::HttpReply answer;
-            if (!orion::post_local_json(kShadowMountPort, path, json, &answer, error))
-                return false;
-            *reply = answer.body;
-            return true;
-        }};
+    int remove_kind_ = 0;                         // the menu tag that asked (kItemRemoveHome, ...)
+    std::string remove_id_;                       // the title or game it is about
+    float remove_hold_ = 0.0f;                    // seconds Cross has been held on a delete
     std::unordered_set<std::string> removed_ids_; // gone since the scan: on no tab
     orion::SettingsPanel settings_;
     orion::SetupPanel setup_;

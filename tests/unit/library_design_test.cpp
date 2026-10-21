@@ -386,6 +386,42 @@ TEST_F(LibraryDesign, DeletingAGameFileWantsCrossHeld)
     expect_drawable(*design);
 }
 
+// The launch helper removes a game while ORION is closed and leaves word in
+// ORION's folder: a delete takes the title off every tab, a home-screen
+// removal puts it on Hidden, and the word is read once.
+TEST_F(LibraryDesign, AHelperRemovalIsAppliedWhenOrionOpens)
+{
+    const std::string dir = ::testing::TempDir() + "orion-design-removed";
+    ASSERT_TRUE(hui::save::ensure_directory(dir));
+    std::remove((dir + "/library.json").c_str());
+    library_.state_dir = dir;
+    library_.self_path = dir;
+    ASSERT_TRUE(
+        hui::save::write_atomic(dir + "/remove-result.txt", "erase 1 PPSA90101\t\n").empty());
+    auto design = with_fixture();
+    EXPECT_FALSE(std::filesystem::exists(dir + "/remove-result.txt"));
+    // All holds six titles now: five steps right, then the edge.
+    for (int i = 0; i < 5; ++i)
+        send(*design, nav(Direction::right));
+    send(*design, nav(Direction::right));
+    EXPECT_TRUE(played(Cue::error));
+
+    ASSERT_TRUE(
+        hui::save::write_atomic(dir + "/remove-result.txt", "home 1 PPSA90103\t\n").empty());
+    auto again = hui::concepts::make_library(context_);
+    const hui::orion::LibraryPrefs prefs = hui::orion::load_prefs(dir);
+    ASSERT_EQ(prefs.hidden_titles.size(), 1u);
+    EXPECT_EQ(prefs.hidden_titles.front(), "PPSA90103");
+
+    // A failure changes nothing.
+    ASSERT_TRUE(hui::save::write_atomic(dir + "/remove-result.txt",
+                                        "erase 0 PPSA90104\tShadowMountPlus said no\n")
+                    .empty());
+    auto third = hui::concepts::make_library(context_);
+    EXPECT_EQ(hui::orion::load_prefs(dir).hidden_titles.size(), 1u);
+    expect_drawable(*third);
+}
+
 TEST_F(LibraryDesign, LaunchSaysWhatHappenedAndLogsIt)
 {
     const std::string dir = ::testing::TempDir() + "orion-design-launch";

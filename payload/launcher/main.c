@@ -39,15 +39,19 @@
 // for, and ends at once otherwise.
 
 
+#include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <netinet/in.h>
 #include <pthread.h>
 #include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/time.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -57,6 +61,7 @@
 // ORION's own folder, for when /data/orion does not take the helper's files.
 #define LOG_FALLBACK "/data/homebrew/PPSA99061/launch-helper.txt"
 #define WAIT_FOR_EXIT_MS 20000
+#define SMP_PORT 10101 // ShadowMountPlus's API, for removing games
 #define WAIT_FOR_LAUNCH_MS 15000
 #define WAIT_FOR_TITLE_MS 20000
 #define TITLE_READS_MS 15000 // after it is up, before its files go back
@@ -306,6 +311,214 @@ static int is_title_id(const char *text)
     return 1;
 }
 
+// ---- removing a game through ShadowMountPlus ----
+//
+// ShadowMountPlus refuses to touch games while one is open, and to it ORION
+// is one ("a game is active or awaiting exit"). So ORION hands a removal to
+// the helper and closes; with nothing in front, the helper asks
+// ShadowMountPlus's API (127.0.0.1:10101, JSON over POST, "status": 0 when it
+// worked) to delete the game's files (then watches the job to its end) and to
+// take it off the home screen. It says how it went in a notification and in
+// a result file ORION reads when it opens again.
+
+// POSTs json to path on the API; the reply's body into body. -1 when the API
+// did not answer.
+static int smp_post(const char *path, const char *json, char *body, size_t size)
+{
+    const int fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (fd < 0)
+        return -1;
+    struct timeval timeout = {10, 0};
+    setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+    setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
+    struct sockaddr_in address;
+    memset(&address, 0, sizeof(address));
+    address.sin_family = AF_INET;
+    address.sin_port = htons(SMP_PORT);
+    address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    if (connect(fd, (const struct sockaddr *)&address, sizeof(address)) != 0)
+    {
+        close(fd);
+        return -1;
+    }
+    static char request[1024];
+    const int length = snprintf(request, sizeof(request),
+                                "POST %s HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: "
+                                "application/json\r\nContent-Length: %zu\r\nConnection: "
+                                "close\r\n\r\n%s",
+                                path, strlen(json), json);
+    if (length <= 0 || length >= (int)sizeof(request) || send(fd, request, (size_t)length, 0) != length)
+    {
+        close(fd);
+        return -1;
+    }
+    static char raw[16384];
+    size_t got = 0;
+    for (;;)
+    {
+        const ssize_t n = recv(fd, raw + got, sizeof(raw) - 1 - got, 0);
+        if (n <= 0)
+            break;
+        got += (size_t)n;
+        if (got >= sizeof(raw) - 1)
+            break;
+    }
+    close(fd);
+    raw[got] = '\0';
+    const char *start = strstr(raw, "\r\n\r\n");
+    if (strncmp(raw, "HTTP/", 5) != 0 || start == NULL)
+        return -1;
+    // The replies are small JSON objects; a chunked one keeps its chunk
+    // sizes between the pieces, which the field reading below steps over.
+    snprintf(body, size, "%s", start + 4);
+    return 0;
+}
+
+// Where a field's value starts in a JSON object: after "key" and its colon.
+static const char *json_field(const char *json, const char *key)
+{
+    char quoted[64];
+    snprintf(quoted, sizeof(quoted), "\"%s\"", key);
+    const char *at = strstr(json, quoted);
+    if (at == NULL)
+        return NULL;
+    at += strlen(quoted);
+    while (*at == ' ' || *at == '\t' || *at == '\r' || *at == '\n')
+        ++at;
+    if (*at != ':')
+        return NULL;
+    ++at;
+    while (*at == ' ' || *at == '\t' || *at == '\r' || *at == '\n')
+        ++at;
+    return at;
+}
+
+static double json_number(const char *json, const char *key, double fallback)
+{
+    const char *at = json_field(json, key);
+    return at != NULL && (*at == '-' || (*at >= '0' && *at <= '9')) ? strtod(at, NULL) : fallback;
+}
+
+static int json_true(const char *json, const char *key)
+{
+    const char *at = json_field(json, key);
+    return at != NULL && strncmp(at, "true", 4) == 0;
+}
+
+static void json_text(const char *json, const char *key, char *out, size_t size)
+{
+    out[0] = '\0';
+    const char *at = json_field(json, key);
+    if (at == NULL || *at != '"' || size == 0)
+        return;
+    ++at;
+    size_t n = 0;
+    while (*at != '\0' && *at != '"' && n + 1 < size)
+    {
+        if (*at == '\\' && at[1] != '\0')
+            ++at;
+        out[n++] = *at++;
+    }
+    out[n] = '\0';
+}
+
+// One call: 1 when the API said status 0; why not in error.
+static int smp_call(const char *path, const char *json, char *body, size_t size, char *error,
+                    size_t error_size)
+{
+    if (smp_post(path, json, body, size) != 0)
+    {
+        snprintf(error, error_size, "ShadowMountPlus did not answer (is it running?)");
+        return 0;
+    }
+    if (json_number(body, "status", -1.0) != 0.0)
+    {
+        json_text(body, "error", error, error_size);
+        if (error[0] == '\0')
+            snprintf(error, error_size, "ShadowMountPlus said no");
+        say("ShadowMountPlus %s: %s", path, error);
+        return 0;
+    }
+    return 1;
+}
+
+// erase: delete the files, watch the job, then uninstall. Otherwise uninstall
+// only. 1 when it did what it was asked; why not in error.
+static int remove_game(int erase, const char *id, const char *name, char *error, size_t error_size)
+{
+    static char body[16384];
+    char json[128];
+    snprintf(json, sizeof(json), "{\"title_id\": \"%s\"%s}", id, erase ? ", \"confirm\": true" : "");
+    if (!erase)
+    {
+        const int ok = smp_call("/api/v1/games/uninstall", json, body, sizeof(body), error,
+                                error_size);
+        say("uninstall %s: %s", id, ok ? "done" : error);
+        return ok;
+    }
+    if (!smp_call("/api/v1/games/delete", json, body, sizeof(body), error, error_size))
+        return 0;
+    int active = !json_true(body, "source_missing");
+    say("delete %s: %s", id, active ? "job started" : "its files were already gone");
+    char note[256];
+    snprintf(note, sizeof(note), "Deleting %s\xe2\x80\xa6 ORION opens again when it is done", name);
+    notify(note);
+    int last_tenth = -1;
+    for (int poll = 0; active && poll < 6 * 60 * 60; ++poll)
+    {
+        sleep(1);
+        if (!smp_call("/api/v1/games/storage/status", "{}", body, sizeof(body), error, error_size))
+            return 0;
+        active = json_true(body, "active");
+        const double done = json_number(body, "processed_bytes", 0.0);
+        const double total = json_number(body, "total_bytes", 0.0);
+        const int tenth = total > 0.0 ? (int)(done * 10.0 / total) : -1;
+        if (active && tenth > last_tenth && tenth > 0)
+        {
+            // Every tenth of the way, so a long delete shows it is moving.
+            last_tenth = tenth;
+            snprintf(note, sizeof(note), "Deleting %s: %d%%", name, tenth * 10);
+            notify(note);
+        }
+        if (!active && json_number(body, "result_status", 0.0) != 0.0)
+        {
+            json_text(body, "result_error", error, error_size);
+            if (error[0] == '\0')
+                snprintf(error, error_size, "the delete did not finish");
+            say("delete %s stopped: %s", id, error);
+            return 0;
+        }
+    }
+    if (active)
+    {
+        snprintf(error, error_size, "the delete is taking too long; ShadowMountPlus is still on it");
+        return 0;
+    }
+    // The files are gone, which is what was asked: a refused uninstall now
+    // (ShadowMountPlus may have let the title go itself) changes nothing.
+    char ignored[160];
+    snprintf(json, sizeof(json), "{\"title_id\": \"%s\"}", id);
+    smp_call("/api/v1/games/uninstall", json, body, sizeof(body), ignored, sizeof(ignored));
+    say("delete %s: done", id);
+    return 1;
+}
+
+// "<kind> <ok> <title ID>\t<message>", for ORION to read when it opens.
+static void write_result(const char *path, const char *kind, int ok, const char *id,
+                         const char *message)
+{
+    if (path == NULL || strncmp(path, "/data/homebrew/", 15) != 0 || strstr(path, "..") != NULL ||
+        !ends_with(path, "/remove-result.txt"))
+    {
+        say("not writing a result to %s", path != NULL ? path : "(nowhere)");
+        return;
+    }
+    char line[512];
+    const int length = snprintf(line, sizeof(line), "%s %d %s\t%s\n", kind, ok, id, message);
+    if (length > 0)
+        write_shared(path, line, (size_t)(length < (int)sizeof(line) ? length : (int)sizeof(line) - 1));
+}
+
 typedef struct launch_job
 {
     char title[16];
@@ -444,6 +657,10 @@ int main(void)
     int shortcut_test = 0;
     const char *record_id = NULL;
     const char *record_log = NULL;
+    const char *remove_kind = NULL; // "home" or "erase"
+    const char *remove_id = NULL;
+    const char *remove_name = NULL;
+    const char *remove_result = NULL;
     int line_number = 0;
     int arguments = 0;
     for (char *line = request; *line != '\0';)
@@ -488,6 +705,26 @@ int main(void)
             record_id = line + 8;
             record_log = tab + 1;
         }
+        else if (strncmp(line, "@remove ", 8) == 0)
+        {
+            // "@remove <home|erase>\t<title ID>\t<name>"
+            char *id = strchr(line, '\t');
+            char *name = id != NULL ? strchr(id + 1, '\t') : NULL;
+            if (name != NULL)
+            {
+                *id++ = '\0';
+                *name++ = '\0';
+                if (is_title_id(id) &&
+                    (strcmp(line + 8, "home") == 0 || strcmp(line + 8, "erase") == 0))
+                {
+                    remove_kind = line + 8;
+                    remove_id = id;
+                    remove_name = name;
+                }
+            }
+        }
+        else if (strncmp(line, "@remove-result ", 15) == 0)
+            remove_result = line + 15;
         else if (strcmp(line, "@shortcut") == 0)
             shortcut_test = 1;
         else if (arguments < MAX_ARGUMENTS)
@@ -523,6 +760,23 @@ int main(void)
         return 1;
     }
     say("no app in front after %d ms", waited);
+    // A removal ORION asked for goes first; then ORION opens again.
+    if (remove_id != NULL)
+    {
+        usleep(1500 * 1000); // ShadowMountPlus sees the game end a moment later
+        char error[256] = "";
+        const int erase = strcmp(remove_kind, "erase") == 0;
+        const int ok = remove_game(erase, remove_id, remove_name, error, sizeof(error));
+        char note[384];
+        if (!ok)
+            snprintf(note, sizeof(note), "Could not remove %s: %s", remove_name, error);
+        else if (erase)
+            snprintf(note, sizeof(note), "Deleted %s", remove_name);
+        else
+            snprintf(note, sizeof(note), "%s left the home screen", remove_name);
+        notify(note);
+        write_result(remove_result, remove_kind, ok, remove_id, ok ? "" : error);
+    }
     for (int i = 0; i < file_count; ++i)
     {
         if (!install(&files[i]))
