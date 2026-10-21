@@ -37,8 +37,8 @@ enum : int
     kEmulatorRow = 100, // + the emulator's index, or a missing one's past them
 };
 
-constexpr const char *kStepNames[] = {"Welcome", "Look",      "Emulators", "Box art",
-                                      "Library", "Autostart", "Done"};
+constexpr const char *kStepNames[] = {"Welcome", "Look",     "Emulators", "Box art",
+                                      "Library", "Autoboot", "Done"};
 
 int sort_index(const std::string &key)
 {
@@ -244,14 +244,14 @@ void SetupPanel::build(const Look &look, const LibraryPrefs &prefs)
     }
     case Step::autostart:
     {
-        form_.add_header("Autostart");
+        form_.add_header("Autoboot");
         // A row that only shows a value never shows its description: what to
         // do goes on the toggle, the file's place on a row of its own.
-        form_.add_toggle(kAutostart, "Open ORION after the jailbreak", prefs.autostart)
-            .description =
-            "Add the payload below to your autoloader; ORION opens as the browser closes";
+        form_.add_toggle(kAutostart, "Autoboot ORION after the jailbreak", prefs.autostart)
+            .description = "ORION opens on its own after each jailbreak, once the payload below is "
+                           "in your autoloader";
         const std::size_t slash = payload_.rfind('/');
-        form_.add_value(kPayload, "Payload", payload_.substr(slash + 1));
+        form_.add_value(kPayload, "Autoboot payload", payload_.substr(slash + 1));
         form_.add_value(kPayloadFolder, "In the folder", payload_.substr(0, slash));
         next("Continue",
              "Turn it off here or in Settings, Library, without touching the autoloader");

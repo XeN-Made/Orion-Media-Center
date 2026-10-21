@@ -25,7 +25,7 @@ namespace hui::orion
 //   Emulators   the emulators found (scan again), group their tabs
 //   Box art     find it by itself, where it goes
 //   Library     return to ORION after a game, reopen on the last tab, sort
-//   Autostart   open ORION after the jailbreak, and the payload for it
+//   Autoboot    ORION opens on its own after the jailbreak, and the payload for it
 //   Done        where everything is
 //
 // Up and down move in the rows, Cross takes one, left and right change a

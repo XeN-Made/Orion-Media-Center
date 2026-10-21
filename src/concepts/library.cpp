@@ -138,14 +138,11 @@ enum : int
     kItemNewTab,
     kItemUnplace,
     kItemLaunch,
-    kItemSettings,
     kItemClose,
-    kItemSort,
     kItemHide,
     kItemPlayWith,
-    kItemMove = 100,       // + the tab's index
-    kItemSortChoice = 200, // 0: the Library's order, then 1 + an orion::kSortKeys index
-    kItemPlayer = 300,     // 0: the default, then 1 + an index in library::players_for
+    kItemMove = 100,   // + the tab's index
+    kItemPlayer = 300, // 0: the default, then 1 + an index in library::players_for
 };
 
 constexpr const char *kTechniques[] = {
@@ -1541,17 +1538,11 @@ class Library final : public app::Concept
             unplace.danger = true;
             items.push_back(unplace);
         }
+        // Sorting is the picker over the covers and Settings is R3, both in
+        // view all the time: the menu keeps to the title.
         ui::MenuItem rule;
         rule.separator = true;
         items.push_back(rule);
-        ui::MenuItem sort = menu_item("Sort this tab…");
-        sort.shortcut = orion::kSortNames[static_cast<int>(sort_of(sort_key()))];
-        sort.tag = kItemSort;
-        items.push_back(sort);
-        ui::MenuItem settings = menu_item("Settings");
-        settings.shortcut = "R3";
-        settings.tag = kItemSettings;
-        items.push_back(settings);
         ui::MenuItem close = menu_item("Close ORION");
         close.shortcut = "Hold Circle";
         close.tag = kItemClose;
@@ -1607,32 +1598,6 @@ class Library final : public app::Concept
         menu_.open(grid_.cell_rect(grid_.focus()), feedback);
     }
 
-    void open_sort_menu(app::Feedback &feedback)
-    {
-        const std::string own = prefs_.tab_sort(active_key());
-        std::vector<ui::MenuItem> items;
-        ui::MenuItem library_order =
-            menu_item(std::string("Library's order (") +
-                      orion::kSortNames[static_cast<int>(sort_of(prefs_.sort))] + ")");
-        library_order.tag = kItemSortChoice;
-        library_order.shortcut = own.empty() ? "Now" : "";
-        items.push_back(library_order);
-        ui::MenuItem line;
-        line.separator = true;
-        items.push_back(line);
-        for (int i = 0; i < orion::kSortCount; ++i)
-        {
-            ui::MenuItem order = menu_item(orion::kSortNames[i]);
-            order.tag = kItemSortChoice + 1 + i;
-            order.shortcut = own == orion::kSortKeys[i] ? "Now" : "";
-            items.push_back(order);
-        }
-        menu_.set_items(std::move(items));
-        menu_.open(view_.empty() ? tabs_.tab_rect(context_.fonts, tabs_.active())
-                                 : grid_.cell_rect(grid_.focus()),
-                   feedback);
-    }
-
     void update_menu(const InputFrame &input, app::Feedback &feedback)
     {
         if (menu_.handle(input, feedback) != ui::Event::activated)
@@ -1646,28 +1611,9 @@ class Library final : public app::Concept
             launch(menu_title_, feedback);
             return;
         }
-        if (tag == kItemSort)
-        {
-            open_sort_menu(feedback);
-            return;
-        }
-        if (tag >= kItemSortChoice && tag <= kItemSortChoice + orion::kSortCount)
-        {
-            const int choice = tag - kItemSortChoice;
-            prefs_.set_tab_sort(active_key(),
-                                choice == 0 ? std::string() : orion::kSortKeys[choice - 1]);
-            tabs_changed();
-            feedback.play(audio::Cue::select);
-            return;
-        }
         if (tag == kItemClose)
         {
             context_.exit_requested = true;
-            return;
-        }
-        if (tag == kItemSettings)
-        {
-            open_settings(feedback);
             return;
         }
         if (tag == kItemFavourite)
@@ -3113,13 +3059,15 @@ class Library final : public app::Concept
             {ui::Button::square, "Favourite"},
             {ui::Button::triangle, "Search"},
             {ui::Button::options, "More"},
+            {ui::Button::right_stick, "Settings"},
         };
         const ui::Hint *shown = systems ? hints : hints + 1;
-        const int count = systems ? 6 : 5;
+        const int count = systems ? 7 : 6;
         const float right = gfx::kVirtualWidth - kMargin;
+        // Seven hints (on Emulators) take a little less room each.
         ui::HintLayout layout;
-        layout.size = 46.0f;
-        layout.text_size = 26.0f;
+        layout.size = systems ? 40.0f : 44.0f;
+        layout.text_size = systems ? 22.0f : 25.0f;
         layout.cy = 1010.0f;
         const float width = ui::measure_hints(context_.fonts, shown, count, layout);
         plate(list, paint, {right - width - 30.0f, 972.0f, width + 60.0f, 76.0f}, 38.0f);

@@ -417,10 +417,11 @@ void SettingsPanel::build_library(const LibraryPrefs &prefs)
         "Close a game from the PS button menu and ORION opens again";
     form_.add_toggle(kShortcut, "Shortcut test (L3 + R3)", prefs.shortcut_test).description =
         "Experiment: hold L3 + R3 in a game to see if ORION notices. Nothing is closed";
-    form_.add_toggle(kAutostart, "Open ORION after the jailbreak", prefs.autostart).description =
-        "Add the payload below to your autoloader; ORION opens as the browser closes";
+    form_.add_toggle(kAutostart, "Autoboot ORION after the jailbreak", prefs.autostart)
+        .description =
+        "ORION opens on its own after each jailbreak, once the payload below is in your autoloader";
     const std::size_t slash = payload_.rfind('/');
-    form_.add_value(kPayloadInfo, "Autostart payload", payload_.substr(slash + 1));
+    form_.add_value(kPayloadInfo, "Autoboot payload", payload_.substr(slash + 1));
     form_.add_value(kPayloadFolder, "In the folder", payload_.substr(0, slash));
     ui::FormRow &setup = form_.add_action(kRunSetup, "Run setup again");
     setup.chevron = true;
