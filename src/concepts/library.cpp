@@ -613,6 +613,7 @@ class Library final : public app::Concept
         std::string start = prefs_.reopen_last_tab ? prefs_.last_tab : std::string("all");
         // A removal the launch helper did while ORION was closed.
         take_remove_result();
+        take_update_result();
         rebuild_tabs(start);
         restyle();
         rebuild();
@@ -788,6 +789,10 @@ class Library final : public app::Concept
         header_refusal_.update(dt);
         update_status(dt);
         update_updates();
+        update_installer();
+        if (update_waiting_ && !dialog_.is_open() && !menu_.is_open() && !settings_.is_open() &&
+            !setup_.is_open() && typing_ == Typing::none && launch_pending_ <= 0.0f)
+            ask_update(feedback);
         want_icons();
         keys_.update(dt);
         menu_.update(dt);
@@ -1543,6 +1548,10 @@ class Library final : public app::Concept
             context_.skip_song = true;
             feedback.play(audio::Cue::select);
             break;
+        case orion::SettingsPanel::Change::install_update:
+            settings_.close(feedback);
+            install_update(feedback);
+            break;
         case orion::SettingsPanel::Change::check_updates:
             check_for_updates(true);
             feedback.play(audio::Cue::select);
@@ -1851,6 +1860,15 @@ class Library final : public app::Concept
 
     void update_dialog(const InputFrame &input, float dt, app::Feedback &feedback)
     {
+        if (dialog_update_)
+        {
+            const ui::Event event = dialog_.handle(input, feedback);
+            if (event == ui::Event::activated && dialog_.choice() == 1)
+                install_update(feedback);
+            if (!dialog_.is_open())
+                dialog_update_ = false;
+            return;
+        }
         const bool hold = remove_kind_ != kItemRemoveHome && dialog_.focus() == 1;
         if (hold &&
             (input.is_pressed(Action::confirm) || (input.held & action_bit(Action::confirm)) != 0))
@@ -2545,9 +2563,15 @@ class Library final : public app::Concept
         switch (updates_.state())
         {
         case orion::UpdateCheck::State::available:
-            status += ". ORION " + latest.version + " is out: " + orion::kReleasesPage;
-            show_note(true,
-                      "ORION " + latest.version + " is out. Get it from " + orion::kReleasesPage);
+            status += ". ORION " + latest.version + " is out";
+            if (prefs_.auto_update || manual_update_check_)
+            {
+                download_update(latest);
+                status += ": downloading it";
+            }
+            else
+                show_note(true,
+                          "ORION " + latest.version + " is out: Settings, Library, Check now");
             break;
         case orion::UpdateCheck::State::up_to_date:
             status += " is the newest";
@@ -2562,6 +2586,117 @@ class Library final : public app::Concept
         }
         settings_.set_update_status(std::move(status));
         settings_.refresh(look_, prefs_);
+    }
+
+    // The release, downloaded, checked and unpacked beside ORION on a thread
+    // of its own (orion/updates.hpp); the player is asked once it is ready.
+    void download_update(const orion::Release &release)
+    {
+        const std::string &state = context_.library.state_dir;
+        if (state.empty() || own_title_id().empty())
+            return;
+        installer_.start(release, own_title_id(), state + "/update");
+    }
+
+    void update_installer()
+    {
+        if (!installer_.take_finished())
+            return;
+        const orion::Release release = installer_.release();
+        if (installer_.state() == orion::UpdateInstaller::State::ready)
+        {
+            settings_.set_update_ready(release.version);
+            settings_.set_update_status("ORION " + context_.version + ". ORION " + release.version +
+                                        " is ready to install");
+            settings_.refresh(look_, prefs_);
+            update_waiting_ = true; // asked as soon as nothing else is open
+            return;
+        }
+        settings_.set_update_status("ORION " + context_.version +
+                                    ". The update could not be made ready: " + installer_.error());
+        settings_.refresh(look_, prefs_);
+        show_note(false,
+                  "ORION " + release.version + " could not be downloaded: " + installer_.error());
+    }
+
+    // Asked once, over the library: now, or later from Settings.
+    void ask_update(app::Feedback &feedback)
+    {
+        update_waiting_ = false;
+        const orion::Release release = installer_.release();
+        ui::DialogContent content;
+        content.icon = ui::StatusKind::info;
+        content.title = "ORION " + release.version + " is ready";
+        content.body = "You have ORION " + context_.version +
+                       ". ORION closes, updates itself and opens again;\n"
+                       "your settings, favourites and box art stay.";
+        content.buttons = {{"Later"}, {"Update now", ui::ButtonKind::primary, false}};
+        content.default_button = 1;
+        dialog_update_ = true;
+        dialog_.open(std::move(content), feedback);
+    }
+
+    // ORION cannot replace its own files while it runs: the launch helper
+    // copies the staged ones over them once ORION has closed, then opens it
+    // again (payload/launcher, "@update"). How it went is read at the next
+    // start (take_update_result).
+    void install_update(app::Feedback &feedback)
+    {
+        const std::string self = own_title_id();
+        const std::string &self_path = context_.library.self_path;
+        const std::string update = context_.library.state_dir + "/update";
+        std::string why;
+        if (!sys::on_console())
+            why = "not on a console";
+        else if (installer_.state() != orion::UpdateInstaller::State::ready)
+            why = "no update is ready";
+        else if (self.empty() || self_path.empty())
+            why = "ORION does not know its own folder";
+        else
+        {
+            std::remove((update + "/result.txt").c_str());
+            why = send_helper(self + "\n@update " + update + "/stage\t" + self_path + "\n");
+        }
+        if (!why.empty())
+        {
+            show_note(false, why == "not on a console"
+                                 ? std::string("Updating works on the console only")
+                                 : "Could not update ORION: " + why);
+            feedback.play(audio::Cue::error);
+            return;
+        }
+        launch_ok_ = true;
+        launch_message_ =
+            "Updating to ORION " + installer_.release().version + ": ORION opens again when done";
+        launch_shown_ = 6.0f;
+        launch_exit_ = 1.6f;
+        launch_pending_ = 30.0f;
+        feedback.play(audio::Cue::select);
+    }
+
+    // What the helper did with an update while ORION was closed, said once.
+    void take_update_result()
+    {
+        const std::string update = context_.library.state_dir + "/update";
+        std::string text;
+        if (context_.library.state_dir.empty() ||
+            !save::read_file(update + "/result.txt", &text, 4096) || text.empty())
+            return;
+        std::remove((update + "/result.txt").c_str());
+        std::remove((update + "/stage/files.txt").c_str()); // the stage is spent
+        // "1 <version>" or "0 <version>\t<why>"
+        while (!text.empty() && (text.back() == '\n' || text.back() == '\r'))
+            text.pop_back();
+        const bool ok = text.rfind("1 ", 0) == 0;
+        const std::size_t tab = text.find('\t');
+        const std::string version =
+            text.size() > 2 ? text.substr(2, tab == std::string::npos ? std::string::npos : tab - 2)
+                            : std::string();
+        if (ok)
+            show_note(true, "ORION is updated to " + version);
+        else
+            show_note(false, "ORION could not update to " + version + ": " +
+                                 (tab == std::string::npos ? std::string() : text.substr(tab + 1)));
     }
 
     void show_note(bool ok, std::string message)
@@ -4188,6 +4323,11 @@ class Library final : public app::Concept
         { return sys::http_get(url, limit, body, error); }};
     bool update_asked_ = false;        // the check this launch makes by itself has started
     bool manual_update_check_ = false; // the running check was asked for: say how it went
+    orion::UpdateInstaller installer_{
+        [](const std::string &url, std::size_t limit, std::string *body, std::string *error)
+        { return sys::http_get(url, limit, body, error); }};
+    bool update_waiting_ = false; // an update is ready: ask when nothing else is open
+    bool dialog_update_ = false;  // the dialog asks about the update, not a removal
 };
 
 } // namespace

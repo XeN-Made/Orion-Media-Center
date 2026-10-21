@@ -155,6 +155,9 @@ struct LibraryPrefs
     bool return_on_close = true;
     // Ask GitHub for a newer ORION each time it opens (orion/updates.hpp).
     bool check_updates = true;
+    // A newer ORION found is downloaded and made ready by itself; ORION
+    // still asks before it installs it.
+    bool auto_update = true;
     // The focused game's home-screen picture behind the library; for games
     // with none, their cover blurred (blurred_covers). Strength 0.2 to 1:
     // below 1 the sky and its clouds show through.

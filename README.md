@@ -52,7 +52,7 @@ most played.
   focus ring, per tab if you like.
 - Background music (add your own `.ogg` files) and sound effects.
 - Opens by itself after the jailbreak (autoboot), returns to ORION when a game
-  closes, and tells you when a newer ORION is out.
+  closes, and updates itself when a newer ORION is out.
 
 | Settings | First-run setup |
 | --- | --- |
@@ -94,12 +94,18 @@ be there.
 
 ### Updating
 
-ORION tells you when a newer version is out: each time it opens it asks
-GitHub for the latest release (Settings, Library: **Check for updates**, and
-**Check now**). Releases are at
+ORION updates itself. Each time it opens it asks GitHub for the latest
+release; when there is a newer one it downloads it in the background,
+checks it against the release's published SHA256 sum, and asks: **Update
+now** closes ORION, puts the new files in place, and opens it again. Your
+settings, favourites and box art stay. The files it replaced are kept in
+`/data/orion/update/previous`.
+
+Settings, Library: **Check for updates**, **Download updates by themselves**,
+**Check now**, and **Install ORION …** once one is ready. Releases are at
 [github.com/XeN-Made/Orion-Media-Center/releases](https://github.com/XeN-Made/Orion-Media-Center/releases).
 
-To install one, close ORION (hold Circle on the library, or close it from the PS button
+To install one by hand instead, close ORION (hold Circle on the library, or close it from the PS button
 menu), then upload the new `PPSA99061` folder over the old one. Your
 settings, favourites and box art live in `/data/orion` and are kept.
 

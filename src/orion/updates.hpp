@@ -27,6 +27,7 @@ struct Release
     std::string version; // the tag: "01.001.000"
     std::string page;    // its page on GitHub
     std::string zip;     // the ZIP to install from; empty when it has none
+    std::string sums;    // its SHA256SUMS; empty when it has none
 };
 
 // Reads GitHub's answer for one release. False when it is not one (no tag).
@@ -76,6 +77,61 @@ class UpdateCheck
     mutable std::mutex mutex_;
     State state_ = State::idle;
     Release latest_;
+    std::string error_;
+};
+
+// ---- installing an update ----
+//
+// ORION cannot replace its own files while it runs. It downloads the
+// release's ZIP, checks it against the release's SHA256SUMS, and unpacks
+// its title folder into <update_dir>/stage, with files.txt (one path a line,
+// relative to the title folder) and version.txt. The launch helper copies
+// those files over the installed ones once ORION has closed, keeps the old
+// ones in <update_dir>/previous, and opens ORION again (payload/launcher,
+// "@update"); how it went is in <update_dir>/result.txt.
+
+// The hash `sums` (a SHA256SUMS file) gives for `file_name`, lowercase; empty
+// when it names no such file.
+std::string sum_for(std::string_view sums, std::string_view file_name);
+
+// Unpacks the title folder of a release ZIP ("PPSA99061/...") into `stage`
+// and writes files.txt. Entries outside it, or with "..", are refused.
+bool stage_update(std::string_view zip, const std::string &title_id, const std::string &stage,
+                  std::string *error);
+
+class UpdateInstaller
+{
+  public:
+    enum class State
+    {
+        idle,
+        downloading,
+        unpacking,
+        ready, // staged: <update_dir>/stage holds the new files
+        failed,
+    };
+
+    explicit UpdateInstaller(HttpGet get);
+    ~UpdateInstaller();
+    UpdateInstaller(const UpdateInstaller &) = delete;
+    UpdateInstaller &operator=(const UpdateInstaller &) = delete;
+
+    // False while one is running.
+    bool start(Release release, std::string title_id, std::string update_dir);
+    State state() const;
+    Release release() const;
+    std::string error() const;
+    // True once after it ended.
+    bool take_finished();
+
+  private:
+    HttpGet get_;
+    std::thread worker_;
+    std::atomic<bool> running_{false};
+    std::atomic<bool> finished_{false};
+    mutable std::mutex mutex_;
+    State state_ = State::idle;
+    Release release_;
     std::string error_;
 };
 

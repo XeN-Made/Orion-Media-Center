@@ -36,7 +36,9 @@ enum : int
     kPayloadFolder,
     kRunSetup,
     kCheckUpdates,
+    kAutoUpdate,
     kUpdateNow,
+    kInstallUpdate,
     kLeaveShelf,
     kBase,
     kBackground,
@@ -442,7 +444,13 @@ void SettingsPanel::build_library(const LibraryPrefs &prefs)
     setup.description = "The first-run steps: look, emulators, box art, autostart";
     form_.add_toggle(kCheckUpdates, "Check for updates", prefs.check_updates).description =
         "Each time ORION opens, it asks GitHub whether a newer ORION is out";
+    form_.add_toggle(kAutoUpdate, "Download updates by themselves", prefs.auto_update).description =
+        "A newer ORION is made ready in the background; ORION asks before it "
+        "installs it";
     form_.add_action(kUpdateNow, "Check now").description = update_status_;
+    if (!update_ready_.empty())
+        form_.add_action(kInstallUpdate, "Install ORION " + update_ready_).description =
+            "ORION closes, updates itself and opens again";
 }
 
 void SettingsPanel::build_tabs(const LibraryPrefs &prefs)
@@ -1132,6 +1140,8 @@ SettingsPanel::Change SettingsPanel::handle(const InputFrame &input, ui::Feedbac
             return Change::run_setup;
         if (id == kUpdateNow)
             return Change::check_updates;
+        if (id == kInstallUpdate)
+            return Change::install_update;
         if (id == kScanEmulators)
             return Change::scan_emulators;
         if (emulator_ != nullptr && id >= kEmulatorRow &&
@@ -1196,6 +1206,9 @@ SettingsPanel::Change SettingsPanel::handle(const InputFrame &input, ui::Feedbac
     {
     case kSort:
         prefs->sort = kSortKeys[std::clamp(form_.choice_index(kSort), 0, kSortCount - 1)];
+        return Change::prefs;
+    case kAutoUpdate:
+        prefs->auto_update = form_.toggle_value(kAutoUpdate);
         return Change::prefs;
     case kCheckUpdates:
         prefs->check_updates = form_.toggle_value(kCheckUpdates);

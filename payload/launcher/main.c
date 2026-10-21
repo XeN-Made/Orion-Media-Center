@@ -32,6 +32,11 @@
 //   @record <id>\t<log>        when the title closes, append "<start> <end> <id>"
 //                              (seconds since 1970) to <log>, a play-log.txt
 //                              in ORION's folder: how long it was played
+//   @update <stage>\t<folder>  before the title starts (ORION, updating
+//                              itself): copy the files <stage>/files.txt lists
+//                              over <folder>'s, keep the old ones beside the
+//                              stage, refresh the home screen's pictures, and
+//                              say how it went in result.txt (orion/updates.hpp)
 //
 // The helper stays until the title closes when it has something to watch
 // for, and ends at once otherwise.
@@ -557,6 +562,219 @@ static int launch(launch_job_t *job)
     return job->result;
 }
 
+// ---- @update: ORION's own files, replaced while it is closed ----
+
+#define UPDATE_ROOT "/data/orion/update/"
+#define MAX_UPDATE_LIST (256 * 1024) // files.txt: a path a line
+#define COPY_CHUNK (256 * 1024)
+
+// Makes every folder of <base>/<relative>'s parent.
+static int make_folders(const char *base, const char *relative)
+{
+    char path[1024];
+    for (const char *slash = strchr(relative, '/'); slash != NULL; slash = strchr(slash + 1, '/'))
+    {
+        if (snprintf(path, sizeof(path), "%s/%.*s", base, (int)(slash - relative), relative) >=
+            (int)sizeof(path))
+            return 0;
+        if (mkdir(path, 0777) != 0 && errno != EEXIST)
+            return 0;
+    }
+    return 1;
+}
+
+// Copies a file, written beside its place first and renamed into it, so a
+// reader never sees half of one. 1 when it worked.
+static int copy_file(const char *from, const char *to)
+{
+    static char chunk[COPY_CHUNK];
+    char temporary[1100];
+    snprintf(temporary, sizeof(temporary), "%s.orion-new", to);
+    const int in = open(from, O_RDONLY);
+    if (in < 0)
+        return 0;
+    const int out = open(temporary, O_WRONLY | O_CREAT | O_TRUNC, 0777);
+    if (out < 0)
+    {
+        close(in);
+        return 0;
+    }
+    int ok = 1;
+    for (;;)
+    {
+        const ssize_t got = read(in, chunk, sizeof(chunk));
+        if (got == 0)
+            break;
+        if (got < 0 || write(out, chunk, (size_t)got) != got)
+        {
+            ok = 0;
+            break;
+        }
+    }
+    fchmod(out, 0777);
+    close(out);
+    close(in);
+    if (!ok || rename(temporary, to) != 0)
+    {
+        remove(temporary);
+        return 0;
+    }
+    return 1;
+}
+
+// Whether two files hold the same bytes (both must be readable).
+static int same_file(const char *a, const char *b)
+{
+    struct stat sa;
+    struct stat sb;
+    if (stat(a, &sa) != 0 || stat(b, &sb) != 0 || sa.st_size != sb.st_size)
+        return 0;
+    static char left[COPY_CHUNK];
+    static char right[COPY_CHUNK];
+    const int fa = open(a, O_RDONLY);
+    const int fb = open(b, O_RDONLY);
+    int same = fa >= 0 && fb >= 0;
+    while (same)
+    {
+        const ssize_t got = read(fa, left, sizeof(left));
+        if (got <= 0)
+            break;
+        same = read(fb, right, (size_t)got) == got && memcmp(left, right, (size_t)got) == 0;
+    }
+    if (fa >= 0)
+        close(fa);
+    if (fb >= 0)
+        close(fb);
+    return same;
+}
+
+// The home screen keeps copies of a title's pictures from when it was
+// registered: a new icon or background is put there too.
+static void refresh_home_screen(const char *title, const char *target)
+{
+    static const char *const pictures[] = {"icon0.png", "pic0.dds", "pic1.dds"};
+    char from[1024];
+    char to[1024];
+    for (size_t i = 0; i < sizeof(pictures) / sizeof(pictures[0]); ++i)
+    {
+        snprintf(from, sizeof(from), "%s/sce_sys/%s", target, pictures[i]);
+        const char *const places[] = {"/user/app/%s/sce_sys/%s", "/user/appmeta/%s/%s"};
+        for (size_t p = 0; p < 2; ++p)
+        {
+            snprintf(to, sizeof(to), places[p], title, pictures[i]);
+            if (access(to, F_OK) == 0 && !same_file(from, to))
+                say(copy_file(from, to) ? "home screen: %s" : "home screen: could not write %s", to);
+        }
+        if (i == 0)
+        {
+            snprintf(to, sizeof(to), "/user/app/%s/icon0.png", title);
+            if (access(to, F_OK) == 0 && !same_file(from, to))
+                say(copy_file(from, to) ? "home screen: %s" : "home screen: could not write %s", to);
+        }
+    }
+}
+
+// Copies the staged files over the title's, keeping each one it replaces in
+// <update dir>/previous. A failure puts back what was already replaced.
+static int apply_update(const char *title, const char *stage, const char *target, char *error,
+                        size_t error_size)
+{
+    static char list[MAX_UPDATE_LIST + 1];
+    char path[1024];
+    snprintf(path, sizeof(path), "%s/files.txt", stage);
+    const long size = read_up_to(path, list, MAX_UPDATE_LIST);
+    if (size <= 0)
+    {
+        snprintf(error, error_size, "the update has no file list");
+        return 0;
+    }
+    list[size] = '\0';
+    char previous[512];
+    snprintf(previous, sizeof(previous), "%.*sprevious", (int)(strrchr(stage, '/') - stage + 1),
+             stage);
+    mkdir(previous, 0777);
+    int done = 0;
+    int ok = 1;
+    char *line = list;
+    while (ok && *line != '\0')
+    {
+        char *end = strchr(line, '\n');
+        if (end != NULL)
+            *end = '\0';
+        if (line[0] != '\0' && strstr(line, "..") == NULL && line[0] != '/')
+        {
+            char from[1024];
+            char to[1024];
+            char keep[1024];
+            snprintf(from, sizeof(from), "%s/%s", stage, line);
+            snprintf(to, sizeof(to), "%s/%s", target, line);
+            snprintf(keep, sizeof(keep), "%s/%s", previous, line);
+            if (!make_folders(target, line) || !make_folders(previous, line))
+                ok = 0;
+            else if (access(to, F_OK) == 0 && !copy_file(to, keep))
+                ok = 0;
+            else if (!copy_file(from, to))
+                ok = 0;
+            if (!ok)
+                snprintf(error, error_size, "could not replace %s (errno %d)", line, errno);
+            else
+                ++done;
+        }
+        if (end == NULL)
+            break;
+        line = end + 1;
+    }
+    if (!ok)
+    {
+        // Back to the old files, those that were replaced.
+        line = list;
+        for (int i = 0; i < done && *line != '\0'; ++i)
+        {
+            char to[1024];
+            char keep[1024];
+            snprintf(to, sizeof(to), "%s/%s", target, line);
+            snprintf(keep, sizeof(keep), "%s/%s", previous, line);
+            if (access(keep, F_OK) == 0)
+                copy_file(keep, to);
+            line += strlen(line) + 1;
+        }
+        return 0;
+    }
+    say("update: %d files replaced", done);
+    refresh_home_screen(title, target);
+    return 1;
+}
+
+// <update dir>/result.txt: "1 <version>" or "0 <version>\t<why>".
+static void write_update_result(const char *stage, int ok, const char *error)
+{
+    char version[64] = "";
+    char path[1024];
+    snprintf(path, sizeof(path), "%s/version.txt", stage);
+    const long size = read_up_to(path, version, sizeof(version) - 1);
+    version[size > 0 ? size : 0] = '\0';
+    char *newline = strchr(version, '\n');
+    if (newline != NULL)
+        *newline = '\0';
+    snprintf(path, sizeof(path), "%.*sresult.txt", (int)(strrchr(stage, '/') - stage + 1), stage);
+    char text[512];
+    const int length = snprintf(text, sizeof(text), "%d %s%s%s\n", ok, version, ok ? "" : "\t",
+                                ok ? "" : error);
+    write_shared(path, text, (size_t)length);
+}
+
+// Only ORION's own staging folder, onto the title's own folder.
+static int update_allowed(const char *title, const char *stage, const char *target)
+{
+    const size_t title_length = strlen(title);
+    const size_t target_length = strlen(target);
+    return strncmp(stage, UPDATE_ROOT, strlen(UPDATE_ROOT)) == 0 && strstr(stage, "..") == NULL &&
+           strstr(target, "..") == NULL && target_length > title_length + 1 &&
+           strcmp(target + target_length - title_length, title) == 0 &&
+           target[target_length - title_length - 1] == '/' &&
+           (strncmp(target, "/data/homebrew/", 15) == 0 || strncmp(target, "/mnt/", 5) == 0);
+}
+
 int main(void)
 {
     // The helper may not remove ORION's request after reading it, so an old
@@ -592,6 +810,8 @@ int main(void)
     const char *remove_id = NULL;
     const char *remove_name = NULL;
     const char *remove_result = NULL;
+    const char *update_stage = NULL;  // @update
+    const char *update_target = NULL;
     int line_number = 0;
     int arguments = 0;
     for (char *line = request; *line != '\0';)
@@ -654,6 +874,14 @@ int main(void)
                 }
             }
         }
+        else if (strncmp(line, "@update ", 8) == 0 && strchr(line, '\t') != NULL)
+        {
+            // "@update <staging folder>\t<the title's folder>"
+            char *tab = strchr(line, '\t');
+            *tab = '\0';
+            update_stage = line + 8;
+            update_target = tab + 1;
+        }
         else if (strncmp(line, "@remove-result ", 15) == 0)
             remove_result = line + 15;
         else if (arguments < MAX_ARGUMENTS)
@@ -705,6 +933,19 @@ int main(void)
             snprintf(note, sizeof(note), "%s left the home screen", remove_name);
         notify(note);
         write_result(remove_result, remove_kind, ok, remove_id, ok ? "" : error);
+    }
+    // An update of ORION itself: its files replaced, then it opens again.
+    if (update_stage != NULL)
+    {
+        char error[256] = "could not be applied";
+        int ok = update_allowed(job.title, update_stage, update_target);
+        if (!ok)
+            snprintf(error, sizeof(error), "the request names folders it may not change");
+        else
+            ok = apply_update(job.title, update_stage, update_target, error, sizeof(error));
+        say("update: %s%s", ok ? "done" : "failed: ", ok ? "" : error);
+        notify(ok ? "ORION is updated; it opens again now" : "ORION could not be updated");
+        write_update_result(update_stage, ok, error);
     }
     for (int i = 0; i < file_count; ++i)
     {
