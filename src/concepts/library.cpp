@@ -538,6 +538,7 @@ class Library final : public app::Concept
                 draw_art(canvas, art, radius, item, focus);
         };
         grid_card_ = grid_.style.card;
+        cases_.art = grid_.art;
         grid_.set_bounds(
             {kMargin, kGridTop, gfx::kVirtualWidth - 2.0f * kMargin, kGridBottom - kGridTop});
 
@@ -778,6 +779,7 @@ class Library final : public app::Concept
         grid_.update(dt);
         continue_.set_active(continue_focus_ && !header_focus_);
         continue_.update(dt);
+        update_cases(dt);
         sort_.set_active(header_focus_ && !header_on_view_);
         sort_.update(dt);
         view_pick_.set_active(header_focus_ && header_on_view_);
@@ -836,7 +838,10 @@ class Library final : public app::Concept
         {
             ui::Canvas covers{frame.scene, context_.fonts, 0, clock_};
             frame.scene.push_opacity(intro);
-            grid_.draw(covers);
+            if (view() == View::cases)
+                cases_.draw(covers);
+            else
+                grid_.draw(covers);
             frame.scene.pop_opacity();
         }
         if (continue_shown())
@@ -926,6 +931,8 @@ class Library final : public app::Concept
         grid_.style.card.ring = !aurora;
         grid_.style.card.glow = !aurora;
         // The Continue playing row wears the covers' look.
+        cases_.style.theme = grid_.style.theme;
+        cases_.style.reduced_motion = reduced_;
         continue_.style.theme = grid_.style.theme;
         continue_.style.card.radius = shown_.corners;
         continue_.style.card.ring = !aurora;
@@ -1012,25 +1019,25 @@ class Library final : public app::Concept
         {
         case View::cases:
         {
-            constexpr float kPad = 44.0f;
-            constexpr float kGap = 64.0f;
+            // A shelf, not a grid: the case in focus in the middle, larger,
+            // the one before and after either side; left and right turn it.
+            // The grid keeps the order and the focus, out of sight.
             constexpr float kAspect = 0.79f; // a disc case, 135 x 170
-            grid_.style.columns = 3;
-            grid_.style.card.art_aspect = kAspect;
-            grid_.style.card.focus_scale = 1.04f;
-            const float text = ui::card_height(grid_.style.card, 100.0f) - 100.0f / kAspect;
-            // The focused case grows and lifts: its caption needs room below.
-            constexpr float kLift = 34.0f;
-            // By tag, a label sits over each section's row: room for it too.
-            const float label = sort_of(sort_key()) == Sort::tag ? grid_.style.section_gap : 0.0f;
-            const float case_w =
-                std::min((room - 2.0f * kPad - text - kLift - label) * kAspect, 520.0f);
-            grid_.style.cell_width = case_w;
-            grid_.style.padding = kPad;
-            grid_.style.gap_x = kGap;
-            grid_.style.gap_y = 2.0f * kPad;
-            const float across = 3.0f * case_w + 2.0f * kGap + 2.0f * kPad;
-            grid_.set_bounds({(gfx::kVirtualWidth - across) * 0.5f, top, across, room});
+            constexpr float kGrow = 1.1f;    // the case in focus
+            cases_.style.mode = ui::CarouselMode::centered;
+            cases_.style.card = grid_.style.card;
+            cases_.style.card.art_aspect = kAspect;
+            cases_.style.card.focus_scale = kGrow;
+            cases_.style.card.badge_corner = ui::CardCorner::top_right;
+            cases_.style.counter = false;
+            cases_.style.neighbour_fade = 0.3f;
+            cases_.style.edge_fade = 0.6f;
+            cases_.style.gap = 70.0f;
+            cases_.style.peek = 0.0f;
+            const float text = ui::card_height(cases_.style.card, 100.0f) - 100.0f / kAspect;
+            cases_.style.item_width = std::min(((room - 48.0f) / kGrow - text) * kAspect, 540.0f);
+            cases_.set_bounds({kMargin, top, width, room});
+            grid_.set_bounds({kMargin, top, width, room});
             return;
         }
         case View::list:
@@ -1046,6 +1053,40 @@ class Library final : public app::Concept
             break;
         }
         grid_.set_bounds({kMargin, top, width, room});
+    }
+
+    // Cases view each frame: the shelf follows the grid's focus (a jump, a
+    // search) and its pictures as they arrive, and the cases near the focus
+    // get sharp pictures; any other view lets them go.
+    void update_cases(float dt)
+    {
+        std::vector<std::string> sharp;
+        if (view() == View::cases && grid_.count() > 0)
+        {
+            if (static_cast<int>(cases_.items().size()) != grid_.count())
+                cases_.set_items(grid_.items());
+            if (cases_.focus() != grid_.focus())
+                cases_.set_focus(grid_.focus(), false);
+            for (int i = 0; i < grid_.count(); ++i)
+            {
+                const ui::CardItem &from = grid_.items()[static_cast<std::size_t>(i)];
+                ui::CardItem &to = cases_.item(i);
+                to.texture = from.texture;
+                to.image_aspect = from.image_aspect;
+            }
+            // The three in view and two either side, ready for a turn.
+            constexpr int kReach = 3;
+            const int focus = grid_.focus();
+            for (int i = std::max(0, focus - kReach);
+                 i <= std::min(grid_.count() - 1, focus + kReach); ++i)
+                sharp.push_back(titles()[static_cast<std::size_t>(
+                                             grid_.items()[static_cast<std::size_t>(i)].tag)]
+                                    .id);
+        }
+        if (sharp != context_.sharp_icons)
+            context_.sharp_icons = std::move(sharp);
+        cases_.set_active(!header_focus_);
+        cases_.update(dt);
     }
 
     // The order of the active tab: its own, else the Library's.
@@ -1280,6 +1321,21 @@ class Library final : public app::Concept
         }
         if (continue_focus_)
             return; // the row's other input is above
+        if (view() == View::cases)
+        {
+            // The shelf turns left and right; up leaves it, down has nowhere to go.
+            if (input.nav == Direction::up)
+                focus_above_grid(feedback);
+            else if (input.nav == Direction::down)
+                ui::refuse(feedback, cases_.style, input, header_refusal_,
+                           cases_.item_rect(cases_.focus()).cx());
+            else
+            {
+                cases_.handle(input, feedback);
+                grid_.set_focus(cases_.focus(), false);
+            }
+            return;
+        }
         grid_.handle(input, feedback);
         if (grid_.exit() == Direction::up)
             focus_above_grid(feedback);
@@ -3090,6 +3146,11 @@ class Library final : public app::Concept
         mark_bare_covers();
         if (!view_.empty())
             grid_.set_focus(focus, true);
+        if (view() == View::cases)
+        {
+            cases_.set_items(grid_.items());
+            cases_.set_focus(grid_.focus(), true);
+        }
     }
 
     // What a title is, in the order "Tag" sorts them: games (PS5, PS4 and
@@ -3372,12 +3433,14 @@ class Library final : public app::Concept
                            inner.with_alpha(0.7f * focus));
     }
 
-    // The band across the top of a case: the colour its system's cases are
-    // known by, and the system's name in it. Drawn, not copied: plain type,
-    // no printed logos. Homebrew wears ORION's own night sky and ring.
+    // A case as its system's are made: the plastic's colour all round, a
+    // header across the top of the sleeve with the system's name, the cover
+    // under it. Drawn, not copied: plain type, no printed logos. Homebrew
+    // wears ORION's own night sky and ring.
     struct CaseBand
     {
-        Color fill;
+        Color rim;  // the plastic
+        Color fill; // the sleeve's header
         Color ink;
         std::string label;
         bool orion = false;
@@ -3385,48 +3448,50 @@ class Library final : public app::Concept
     CaseBand case_band(const Title &title) const
     {
         if (library::shelf_of(title) == library::Shelf::homebrew)
-            return {Color::rgb(0x0b0e20), theme_.accent, "HOMEBREW", true};
+            return {Color::rgb(0x161a3d), Color::rgb(0x0b0e20), theme_.accent, "HOMEBREW", true};
         if (library::shelf_of(title) == library::Shelf::media)
-            return {Color::rgb(0xffc94a), Color::rgb(0x1a1204), "MEDIA"};
+            return {Color::rgb(0x202228), Color::rgb(0xffc94a), Color::rgb(0x1a1204), "MEDIA"};
         if (title.platform == library::Platform::ps4)
-            return {Color::rgb(0x0a3d91), Color::rgb(0xffffff), "PS4"};
+            return {Color::rgb(0x1c4fb5), Color::rgb(0x0a3d91), Color::rgb(0xffffff), "PS4"};
         if (!title.is_rom())
-            return {Color::rgb(0xf3f4f6), Color::rgb(0x0a0b0d), "PS5"};
+            return {Color::rgb(0x2463d9), Color::rgb(0xf7f8fa), Color::rgb(0x08090b), "PS5"};
         std::string name = library::short_system_name(title.system);
         for (char &c : name)
             c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
         struct Known
         {
             const char *name;
+            std::uint32_t rim;
             std::uint32_t fill;
             std::uint32_t ink;
         };
         constexpr Known kKnown[] = {
-            {"PS2", 0x0d0f14, 0xffffff},     {"PS1", 0x22252b, 0xffffff},
-            {"PSP", 0x1b1d22, 0xffffff},     {"GAMECUBE", 0x4a3b8c, 0xffffff},
-            {"WII", 0xeef1f5, 0x2a6fd6},     {"WII U", 0x1f8ad8, 0xffffff},
-            {"SNES", 0x5f6278, 0xffffff},    {"NES", 0x9b1c1c, 0xffffff},
-            {"N64", 0x2b2b2b, 0xffffff},     {"GBA", 0x3a3c9a, 0xffffff},
-            {"GBC", 0x5b6b2c, 0xffffff},     {"GB", 0x6f7a3c, 0xffffff},
-            {"DS", 0xd9dce3, 0x111111},      {"3DS", 0xc8242b, 0xffffff},
-            {"GENESIS", 0x151515, 0xffffff},
+            {"PS2", 0x14161b, 0x0d0f14, 0xffffff},     {"PS1", 0x14161b, 0x22252b, 0xffffff},
+            {"PSP", 0x14161b, 0x1b1d22, 0xffffff},     {"GAMECUBE", 0x16171c, 0x4a3b8c, 0xffffff},
+            {"WII", 0xe9edf2, 0xeef1f5, 0x2a6fd6},     {"WII U", 0x1d7fd0, 0x1f8ad8, 0xffffff},
+            {"SNES", 0x16171c, 0x5f6278, 0xffffff},    {"NES", 0x16171c, 0x9b1c1c, 0xffffff},
+            {"N64", 0x16171c, 0x2b2b2b, 0xffffff},     {"GBA", 0x16171c, 0x3a3c9a, 0xffffff},
+            {"GBC", 0x16171c, 0x5b6b2c, 0xffffff},     {"GB", 0x16171c, 0x6f7a3c, 0xffffff},
+            {"DS", 0x16171c, 0xd9dce3, 0x111111},      {"3DS", 0xd8dbe1, 0xc8242b, 0xffffff},
+            {"GENESIS", 0x16171c, 0x151515, 0xffffff},
         };
         for (const Known &known : kKnown)
         {
             if (name == known.name)
-                return {Color::rgb(known.fill), Color::rgb(known.ink), name};
+                return {Color::rgb(known.rim), Color::rgb(known.fill), Color::rgb(known.ink), name};
         }
-        return {Color::rgb(0x4b3fa6), Color::rgb(0xffffff), name};
+        return {Color::rgb(0x16171c), Color::rgb(0x4b3fa6), Color::rgb(0xffffff), name};
     }
 
-    // A game in Cases view: a case with its system's band over the cover.
+    // A game in Cases view. The picture is the sharp copy when the app has
+    // made one (Context::sharp_icons), else the grid's small one.
     void draw_case(ui::Canvas &canvas, const Rect &art, const ui::CardItem &item, float focus) const
     {
         gfx::DrawList &list = canvas.list;
         const Title &title = titles()[static_cast<std::size_t>(item.tag)];
         const CaseBand band = case_band(title);
-        constexpr float kRadius = 12.0f;
-        const float band_h = std::round(art.h * 0.105f);
+        constexpr float kRadius = 14.0f;
+        constexpr float kInner = 5.0f;
         const bool aurora = shown_.chrome.focus == orion::FocusRing::aurora && focus > 0.01f;
         if (aurora)
         {
@@ -3434,21 +3499,30 @@ class Library final : public app::Concept
             const Color light = hsv(std::fmod(time * 0.05f, 1.0f), 0.55f, 1.0f);
             list.glow(art, kRadius, 30.0f * focus, light.with_alpha(0.5f * focus));
         }
-        // The case: its band's colour all round, the cover set into it.
-        list.rounded_rect(art, kRadius, band.fill);
+        // The plastic, lit from the top left.
+        list.rounded_rect(art, kRadius, band.rim);
+        list.gradient_rect(art, kRadius, Color::rgb(0xffffff, 0.22f), Color::rgb(0x000000, 0.18f));
+        // The sleeve inside it: the header, then the cover.
+        const Rect sleeve = art.inset(std::round(art.w * 0.024f));
+        const float band_h = std::round(sleeve.h * 0.115f);
+        list.rounded_rect(sleeve, kInner, band.fill);
         if (band.orion)
-            list.gradient_rect(art, kRadius, Color::rgb(0x1b1450), Color::rgb(0x0b0e20));
-        const Rect cover{art.x, art.y + band_h, art.w, art.h - band_h};
+            list.gradient_rect(sleeve, kInner, Color::rgb(0x1b1450), Color::rgb(0x0b0e20));
+        const Rect cover{sleeve.x, sleeve.y + band_h, sleeve.w, sleeve.h - band_h};
         // Drawn a corner taller and clipped flat: a straight edge under the
-        // band, round corners at the bottom.
-        const Rect drawn{cover.x, cover.y - kRadius, cover.w, cover.h + kRadius};
+        // header, round corners at the bottom.
+        const Rect drawn{cover.x, cover.y - kInner, cover.w, cover.h + kInner};
+        const bool sharp = title.sharp_texture != 0 && title.sharp_height > 0;
+        const std::uint32_t texture = sharp ? title.sharp_texture : item.texture;
         list.push_clip(cover);
-        if (item.texture != 0)
+        if (texture != 0)
         {
             // Filled, trimmed evenly at the edges that differ.
-            const float picture = std::max(0.2f, item.image_aspect);
+            const float picture = sharp ? static_cast<float>(title.sharp_width) /
+                                              static_cast<float>(title.sharp_height)
+                                        : std::max(0.2f, item.image_aspect);
             const float shape = drawn.w / std::max(drawn.h, 1.0f);
-            Rect uv = item.uv;
+            Rect uv = sharp ? Rect{0.0f, 0.0f, 1.0f, 1.0f} : item.uv;
             if (picture > shape)
             {
                 const float keep = shape / picture;
@@ -3461,41 +3535,41 @@ class Library final : public app::Concept
                 uv.y += uv.h * (1.0f - keep) * 0.5f;
                 uv.h *= keep;
             }
-            list.image(item.texture, drawn, uv, Color::rgb(0xffffff), kRadius);
+            list.image(texture, drawn, uv, Color::rgb(0xffffff), kInner);
         }
         else
         {
-            list.gradient_rect(drawn, kRadius, item.top, item.bottom);
+            list.gradient_rect(drawn, kInner, item.top, item.bottom);
             const std::string letters = monogram(item.title);
             ui::text(list, canvas.fonts.display, letters.c_str(), cover.cx(),
                      cover.y + cover.h * 0.5f + cover.h * 0.12f, cover.h * 0.3f,
                      Color::rgb(0xffffff, 0.9f), gfx::Align::center);
         }
         list.pop_clip();
-        // The band's name, left, as a case's spine-side header reads.
-        const float size = band_h * 0.46f;
-        float x = art.x + band_h * 0.42f;
+        // The header's name, large at its left, where a case prints its mark.
+        const float size = band_h * 0.6f;
+        float x = sleeve.x + band_h * 0.32f;
+        const float mid = sleeve.y + band_h * 0.5f;
         if (band.orion)
         {
             // ORION's ring before the word, as on its header.
-            const float ring = band_h * 0.2f;
-            list.ring(x + ring, art.y + band_h * 0.5f, ring, ring * 0.22f, band.ink);
-            list.circle(x + ring + std::cos(0.8f) * ring,
-                        art.y + band_h * 0.5f + std::sin(0.8f) * ring, ring * 0.32f,
+            const float ring = band_h * 0.22f;
+            list.ring(x + ring, mid, ring, ring * 0.22f, band.ink);
+            list.circle(x + ring + std::cos(0.8f) * ring, mid + std::sin(0.8f) * ring, ring * 0.32f,
                         Color::rgb(0xffffff));
-            x += ring * 2.0f + band_h * 0.3f;
+            x += ring * 2.0f + band_h * 0.25f;
         }
-        ui::text(list, canvas.fonts.semibold, band.label.c_str(), x,
-                 art.y + band_h * 0.5f + size * 0.36f, size, band.ink, gfx::Align::left,
-                 size * 0.08f);
-        // Plastic: a sheen down the cover and a thin rim round the case.
-        list.gradient_rect(cover, kRadius, Color::rgb(0xffffff, 0.12f), Color::rgb(0xffffff, 0.0f));
+        const float label_size = band.orion ? size * 0.72f : size;
+        ui::text(list, canvas.fonts.semibold, band.label.c_str(), x, mid + label_size * 0.36f,
+                 label_size, band.ink, gfx::Align::left, label_size * 0.06f);
+        // The plastic over the sleeve: a faint sheen and the case's edge.
+        list.gradient_rect(cover, kInner, Color::rgb(0xffffff, 0.1f), Color::rgb(0xffffff, 0.0f));
         list.bordered_rect(art, kRadius, Color::rgb(0x000000, 0.0f), 1.5f,
-                           Color::rgb(0xffffff, 0.22f));
+                           Color::rgb(0xffffff, 0.28f));
         if (favourite_of(title.id))
         {
             const float r = std::max(16.0f, art.w * 0.06f);
-            const float cx = art.x + art.w - r - 12.0f;
+            const float cx = sleeve.x + sleeve.w - r - 12.0f;
             const float cy = cover.y + r + 12.0f;
             list.circle(cx, cy, r, Color::rgb(0x0b0e20, 0.72f));
             list.star(cx, cy, r * 0.72f, Color::rgb(0xffc94a));
@@ -3994,6 +4068,7 @@ class Library final : public app::Concept
     std::vector<std::string> sub_keys_; // "sys:..." for each of them
     ui::GridView grid_;
     ui::Carousel continue_;          // what was played last, over the All tab
+    ui::Carousel cases_;             // Cases view: the grid's items as a shelf of cases
     std::vector<int> continue_view_; // indices into the library, newest first
     bool continue_focus_ = false;    // the row has the focus
     ui::Select sort_;                // the tab's order, in the header (Up from the top row)
