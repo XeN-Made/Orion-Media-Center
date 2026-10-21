@@ -10,9 +10,11 @@ set -euo pipefail
 
 root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 version=1.0.2
-archive_sha256=30d8e51dd062739b629346102be5932728ba714bc50b1bdcdf08306c8843d9a4
+archive_sha256=9477bc9275aa73c70e0c558188aee4e81614d68a408431888beb2562fa2f9784
 manifest_sha256=0d432edc9d648d6e0cccb4d5eb3db8484f10ba4b075b5ccf23edda3251b66360
-url="https://github.com/blackbearreloaded/ps5-opengl/releases/download/v$version/ps5-opengl-sdk-$version.tar.gz"
+# ORION keeps its own copy (the upstream ps5-opengl releases are gone): the
+# same SDK, repacked with its licences; the manifest above proves the files.
+url="https://github.com/XeN-Made/Orion-Media-Center/releases/download/deps-ps5-opengl-$version/ps5-opengl-sdk-$version.tar.gz"
 
 cache="$root/.deps/ps5-opengl"
 archive="$cache/ps5-opengl-sdk-$version.tar.gz"
