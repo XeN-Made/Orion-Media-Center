@@ -118,6 +118,7 @@ enum class Sort : int
     name_reversed,
     recent,
     platform,
+    tag,
     played,
     most_played,
 };
@@ -2921,6 +2922,10 @@ class Library final : public app::Concept
             std::stable_sort(view_.begin(), view_.end(), [&](int a, int b)
                              { return titles()[a].platform < titles()[b].platform; });
             break;
+        case Sort::tag:
+            std::stable_sort(view_.begin(), view_.end(), [&](int a, int b)
+                             { return tag_of(titles()[a]) < tag_of(titles()[b]); });
+            break;
         case Sort::played:
             std::stable_sort(view_.begin(), view_.end(), [&](int a, int b)
                              { return played(titles()[a]).last > played(titles()[b]).last; });
@@ -2943,9 +2948,41 @@ class Library final : public app::Concept
             items.push_back(card_of(title, view_[i]));
         }
         grid_.set_items(std::move(items));
+        // By tag, each tag is a section of its own with its name over it.
+        if (sort_of(sort_key()) == Sort::tag)
+        {
+            std::vector<ui::GridSection> sections;
+            for (std::size_t i = 0; i < view_.size(); ++i)
+            {
+                std::string label = tag_of(titles()[static_cast<std::size_t>(view_[i])]).second;
+                if (sections.empty() || sections.back().label != label)
+                {
+                    ui::GridSection section;
+                    section.first = static_cast<int>(i);
+                    section.label = std::move(label);
+                    sections.push_back(std::move(section));
+                }
+            }
+            grid_.set_sections(std::move(sections));
+        }
         mark_bare_covers();
         if (!view_.empty())
             grid_.set_focus(focus, true);
+    }
+
+    // What a title is, as its banner says, in the order "Tag" sorts them:
+    // PS5 games, PS4 games, homebrew, media, then each emulated system.
+    std::pair<int, std::string> tag_of(const Title &title) const
+    {
+        if (title.is_rom())
+            return {4, library::short_system_name(title.system)};
+        if (title.platform == library::Platform::ps4)
+            return {1, "PS4 games"};
+        if (library::shelf_of(title) == library::Shelf::media)
+            return {3, "Media"};
+        if (library::shelf_of(title) == library::Shelf::homebrew)
+            return {2, "Homebrew"};
+        return {0, "Games"};
     }
 
     // A title's cover, for the grid and the Continue playing row; index is

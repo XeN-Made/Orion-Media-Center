@@ -16,12 +16,13 @@ namespace hui::orion
 {
 
 // The orders a tab can be in: the keys library.json keeps, and their names.
+// "tag" groups them under labels (Games, Homebrew, Media, each system);
 // "played" and "most_played" follow ORION's play records (orion/playtime.hpp).
-inline constexpr int kSortCount = 6;
-inline constexpr const char *kSortKeys[kSortCount] = {"name",     "name_reversed", "recent",
-                                                      "platform", "played",        "most_played"};
+inline constexpr int kSortCount = 7;
+inline constexpr const char *kSortKeys[kSortCount] = {
+    "name", "name_reversed", "recent", "platform", "tag", "played", "most_played"};
 inline constexpr const char *kSortNames[kSortCount] = {
-    "Name A–Z", "Name Z–A", "Recently added", "Platform", "Recently played", "Most played"};
+    "Name A–Z", "Name Z–A", "Recently added", "Platform", "Tag", "Recently played", "Most played"};
 
 // A shelf the player made. The id is stable across renames; the name is shown.
 struct CustomTab
