@@ -790,6 +790,11 @@ std::string porpoise_arguments(const std::string &title_id, const std::string &d
     return title_id + "\n--rom\n" + disc + "\n" + (exit_after_game ? "--exit-after-game\n" : "");
 }
 
+std::string ps5sx2_launch_note(const std::string &game)
+{
+    return game + "\n";
+}
+
 std::vector<std::string> known_systems(const Emulator &emulator, std::string_view key)
 {
     if (key == "porpoise")
@@ -932,7 +937,10 @@ std::vector<Player> players_for(const Emulator &emulator, const Title &game)
     };
     standalone("porpoise", "Porpoise",
                (game.system == kGameCube || game.system == kWii) && porpoise_takes(ext));
-    standalone("ps5sx2", "PS5SX2 (opens it)", game.system == kPs2 && ps2_takes(ext));
+    standalone("ps5sx2", "PS5SX2", game.system == kPs2 && ps2_takes(ext));
+    // PS5SX2 reads its launch note after its jailbreak, where /data is /data.
+    if (!players.empty() && players.back().key == "ps5sx2")
+        players.back().rom = game.path;
     return players;
 }
 
@@ -999,7 +1007,7 @@ Emulator scan_emulators(const std::vector<Title> &titles, const std::vector<Game
             app.title_id = title.id;
             app.root = title.path;
             app.systems = known_systems(emulator, known.key);
-            app.starts_games = app.key == "porpoise";
+            app.starts_games = app.key == "porpoise" || app.key == "ps5sx2";
             for (const std::string &folder : own_folders(app.key, app.root))
             {
                 if (is_folder(folder))

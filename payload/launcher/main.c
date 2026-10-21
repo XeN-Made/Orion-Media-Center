@@ -22,7 +22,8 @@
 //                              <file>.orion-backup (or <file>.orion-absent
 //                              marks that there was none), the staged copy is
 //                              written readable by every app, and once the
-//                              title has read it the original comes back. The
+//                              title has read it the original comes back
+//                              (PS5SX2's disc-launch.txt: once it closes). The
 //                              helper writes it because the title cannot read
 //                              files ORION writes from inside its sandbox until
 //                              it has repaired them, which is too late.
@@ -148,10 +149,16 @@ static int ends_with(const char *text, const char *end)
     return length > tail && strcmp(text + length - tail, end) == 0;
 }
 
+// PS5SX2's launch note: it deletes the note once read, after a jailbreak
+// that can take ten seconds, so the note is put back only when it closes.
+static const char *const kPs5sx2Note = "/data/PCSX2/disc-launch.txt";
+
 // Only args.txt, test-run.txt (and config/frontend.cfg, which earlier builds
-// changed) of a title under /data/homebrew.
+// changed) of a title under /data/homebrew, and PS5SX2's launch note.
 static int changeable(const char *path)
 {
+    if (strcmp(path, kPs5sx2Note) == 0)
+        return 1;
     return strncmp(path, "/data/homebrew/", 15) == 0 && strstr(path, "..") == NULL &&
            strlen(path) <= 400 &&
            (ends_with(path, "/args.txt") || ends_with(path, "/test-run.txt") ||
@@ -817,8 +824,11 @@ int main(void)
     int elapsed = 0;
     int gone = 0;
     int restored = file_count == 0;
+    int note_out = 0;
+    for (int i = 0; i < file_count; ++i)
+        note_out |= strcmp(files[i].path, kPs5sx2Note) == 0;
     const int watching =
-        (return_to != NULL || shortcut_test || record_id != NULL) && title_app > 0;
+        (return_to != NULL || shortcut_test || record_id != NULL || note_out) && title_app > 0;
     while (!restored || watching)
     {
         usleep(POLL_MS * 1000);
@@ -826,7 +836,10 @@ int main(void)
         if (!restored && elapsed >= TITLE_READS_MS)
         {
             for (int i = 0; i < file_count; ++i)
-                restore(&files[i]);
+            {
+                if (strcmp(files[i].path, kPs5sx2Note) != 0)
+                    restore(&files[i]);
+            }
             restored = 1;
         }
         if (!watching)
@@ -859,11 +872,9 @@ int main(void)
         }
         break;
     }
-    if (!restored)
-    {
-        for (int i = 0; i < file_count; ++i)
-            restore(&files[i]);
-    }
+    // restore() skips what is already back, so this catches the note too.
+    for (int i = 0; i < file_count; ++i)
+        restore(&files[i]);
     say("done");
     return 0;
 }

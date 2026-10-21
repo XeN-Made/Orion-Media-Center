@@ -2016,6 +2016,8 @@ class Library final : public app::Concept
         const std::string test_run = root + "/test-run.txt";
         const std::string staged_args = dir + "/retroarch-args.txt";
         const std::string staged_test_run = dir + "/retroarch-test-run.txt";
+        const bool ps5sx2 = app != nullptr && app->key == "ps5sx2";
+        const std::string staged_note = dir + "/ps5sx2-launch.txt";
         // Unique to this start: the helper tells its files from a later start's.
         const std::string token = std::to_string(std::time(nullptr)) + "-" +
                                   std::to_string(sys::monotonic_us() % 1000000);
@@ -2027,6 +2029,11 @@ class Library final : public app::Concept
             // Porpoise closes itself when the game ends, so ORION comes back.
             request = launcher + "\n" +
                       library::porpoise_arguments(launcher, player.rom, prefs_.return_on_close);
+        else if (ps5sx2)
+            // The note PS5SX2's disc helper leaves it, written by the helper:
+            // /data/PCSX2 is out of ORION's reach.
+            request =
+                launcher + "\n@install " + staged_note + "\t" + library::kPs5sx2LaunchNote + "\n";
         else if (app != nullptr)
             request = launcher + "\n"; // opens it; the game is picked there
         // Coming back: the helper waits for the game to close, then starts ORION.
@@ -2056,6 +2063,8 @@ class Library final : public app::Concept
             why = "could not write " + staged_args;
         else if (retroarch && !write_shared(staged_test_run, "ORION " + token + "\n"))
             why = "could not write " + staged_test_run;
+        else if (ps5sx2 && !write_shared(staged_note, library::ps5sx2_launch_note(player.rom)))
+            why = "could not write " + staged_note;
         else
         {
             why = send_helper(request);
@@ -3309,36 +3318,57 @@ class Library final : public app::Concept
                 line += "   v" + title.version;
             line += "   " + std::string(shelf_name(library::shelf_of(title)));
         }
-        if (const orion::CustomTab *placed = prefs_.placement(title.id))
-            line += "   \xc2\xb7   " + placed->name;
-        if (favourite_of(title.id))
-            line += "   \xc2\xb7   Favourite";
+        // What it is goes on the first line, its history on a second: one
+        // line beside the buttons left too little room for both.
+        std::string history;
+        const auto add = [&](const std::string &part)
+        { history += (history.empty() ? "" : "   \xc2\xb7   ") + part; };
         const orion::PlayRecord &record = played(title);
         if (record.sessions > 0)
-            line += "   \xc2\xb7   Played " + orion::play_time_text(record.seconds) + ", " +
-                    orion::ago_text(record.last, std::time(nullptr));
+            add("Played " + orion::play_time_text(record.seconds) + ", " +
+                orion::ago_text(record.last, std::time(nullptr)));
+        if (favourite_of(title.id))
+            add("Favourite");
+        if (const orion::CustomTab *placed = prefs_.placement(title.id))
+            add(placed->name);
         // Never under the buttons: what does not fit ends in "…".
         const gfx::Font &font = *context_.fonts.regular.font;
         const float room = gfx::kVirtualWidth - kMargin - hint_row().width - 30.0f - 24.0f -
                            kMargin - 24.0f - 20.0f;
-        if (font.measure(line, 21.0f) > room)
+        const auto fit = [&](std::string text, float size)
         {
+            if (font.measure(text, size) <= room)
+                return text;
             const std::string dots = "\xe2\x80\xa6";
-            while (!line.empty() && font.measure(line + dots, 21.0f) > room)
+            while (!text.empty() && font.measure(text + dots, size) > room)
             {
                 // Back off one UTF-8 character: to the byte its last one starts at.
-                std::size_t at = line.size() - 1;
-                while (at > 0 && (static_cast<unsigned char>(line[at]) & 0xC0) == 0x80)
+                std::size_t at = text.size() - 1;
+                while (at > 0 && (static_cast<unsigned char>(text[at]) & 0xC0) == 0x80)
                     --at;
-                line.erase(at);
+                text.erase(at);
             }
-            while (!line.empty() && line.back() == ' ')
-                line.pop_back();
-            line += dots;
-        }
-        const float width = font.measure(line, 21.0f);
+            // No separator left dangling before the dots.
+            while (text.ends_with(" ") || text.ends_with("\xc2\xb7"))
+                text.resize(text.size() - (text.back() == ' ' ? 1 : 2));
+            return text + dots;
+        };
+        constexpr float kSize = 20.0f;
+        constexpr float kSmall = 18.0f;
+        line = fit(line, kSize);
+        history = fit(history, kSmall);
+        const float width = std::max(font.measure(line, kSize),
+                                     history.empty() ? 0.0f : font.measure(history, kSmall));
         plate(list, paint, {kMargin - 24.0f, 972.0f, width + 48.0f, 76.0f}, 38.0f);
-        ui::text(list, context_.fonts.regular, line.c_str(), kMargin, 1018, 21,
+        if (history.empty())
+        {
+            ui::text(list, context_.fonts.regular, line.c_str(), kMargin, 1017, kSize,
+                     paint.page_text_muted());
+            return;
+        }
+        ui::text(list, context_.fonts.regular, line.c_str(), kMargin, 1004, kSize,
+                 paint.page_text());
+        ui::text(list, context_.fonts.regular, history.c_str(), kMargin, 1031, kSmall,
                  paint.page_text_muted());
     }
 

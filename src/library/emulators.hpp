@@ -38,8 +38,8 @@ Emulator scan_retroarch(const Title &retroarch, std::vector<Title> *roms);
 //              Starts a game from its command line, as its own home-screen
 //              tiles do: <title id> --rom <disc> [--exit-after-game].
 //   ps5sx2     PS5SX2: PS2 discs in /data/PCSX2/games, /data/PCSX2 and a
-//              drive's PS2/ or PCSX2/games/. It takes no game from outside
-//              that ORION can use yet, so its games open PS5SX2.
+//              drive's PS2/ or PCSX2/games/. Starts a game through the
+//              note its disc helper leaves it (kPs5sx2LaunchNote, below).
 struct KnownEmulator
 {
     const char *key;   // what the prefs name it by
@@ -121,6 +121,13 @@ bool read_nintendo_disc(std::string_view head, Disc *disc);
 // launch helper's request format after the title ID).
 std::string porpoise_arguments(const std::string &title_id, const std::string &disc,
                                bool exit_after_game);
+
+// PS5SX2 takes no command line, but when it starts it boots the game named
+// on the first line of this note (and deletes it) instead of opening its
+// shelf, as it does for its disc helper. A note older than ten minutes is
+// ignored, and the file must exist as PS5SX2 sees it (a /data or /mnt path).
+inline constexpr const char *kPs5sx2LaunchNote = "/data/PCSX2/disc-launch.txt";
+std::string ps5sx2_launch_note(const std::string &game);
 
 // The player's own ROM folders (as ORION and RetroArch both see them, under
 // /data or /mnt): a folder of one system, the system given or worked out from

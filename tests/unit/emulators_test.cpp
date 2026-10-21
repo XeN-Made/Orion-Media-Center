@@ -197,6 +197,32 @@ TEST(Emulators, ListsEveryWayToPlayAGame)
     EXPECT_TRUE(library::players_for(emulator, console).empty());
 }
 
+// PS5SX2 is handed a game through its disc helper's note, which it reads
+// after its jailbreak: the full path even for a game in its own folder.
+TEST(Emulators, PS5SX2IsHandedTheGameByItsFullPath)
+{
+    library::Emulator emulator;
+    library::EmulatorApp sx2;
+    sx2.key = "ps5sx2";
+    sx2.name = "PS5SX2";
+    sx2.title_id = "PPSA90131";
+    sx2.root = "/data/homebrew/PPSA90131";
+    emulator.apps.push_back(sx2);
+
+    library::Title disc;
+    disc.id = "rom-000000000003";
+    disc.system = "Sony - PlayStation 2";
+    disc.path = "/data/homebrew/PPSA90131/games/Paper Tiger (USA).iso";
+    disc.rom = "/app0/games/Paper Tiger (USA).iso";
+    disc.launcher = "PPSA90131";
+    const std::vector<library::Player> players = library::players_for(emulator, disc);
+    ASSERT_EQ(players.size(), 1u);
+    EXPECT_EQ(players[0].label, "PS5SX2");
+    EXPECT_EQ(players[0].rom, disc.path);
+    EXPECT_EQ(library::ps5sx2_launch_note(players[0].rom), disc.path + "\n");
+    EXPECT_STREQ(library::kPs5sx2LaunchNote, "/data/PCSX2/disc-launch.txt");
+}
+
 TEST(Emulators, ReadsCoreInfo)
 {
     library::Core core;
@@ -450,7 +476,7 @@ TEST(Emulators, FindsPorpoiseAndPs5sx2AndTheirGames)
     ASSERT_NE(dolphin, nullptr);
     ASSERT_NE(sx2, nullptr);
     EXPECT_TRUE(dolphin->starts_games);
-    EXPECT_FALSE(sx2->starts_games);
+    EXPECT_TRUE(sx2->starts_games);
     EXPECT_EQ(dolphin->games, 2); // the gba folder is another system's
     EXPECT_EQ(sx2->games, 2);     // the GameCube disc is Porpoise's kind
     ASSERT_FALSE(dolphin->folders.empty());
