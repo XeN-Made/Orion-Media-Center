@@ -27,6 +27,7 @@
 #include "orion/setup_panel.hpp"
 #include "orion/storage.hpp"
 #include "orion/theme_file.hpp"
+#include "orion/updates.hpp"
 #include "platform/ps5/system.hpp"
 #include "ui/components/carousel.hpp"
 #include "ui/components/grid.hpp"
@@ -786,6 +787,7 @@ class Library final : public app::Concept
         view_pick_.update(dt);
         header_refusal_.update(dt);
         update_status(dt);
+        update_updates();
         want_icons();
         keys_.update(dt);
         menu_.update(dt);
@@ -1539,6 +1541,10 @@ class Library final : public app::Concept
             break;
         case orion::SettingsPanel::Change::skip_song:
             context_.skip_song = true;
+            feedback.play(audio::Cue::select);
+            break;
+        case orion::SettingsPanel::Change::check_updates:
+            check_for_updates(true);
             feedback.play(audio::Cue::select);
             break;
         case orion::SettingsPanel::Change::run_setup:
@@ -2505,6 +2511,59 @@ class Library final : public app::Concept
     }
 
     // The card above the hints, for a note that is not a launch.
+    // Asks GitHub whether a newer ORION is out: by itself once a launch, a
+    // few seconds in (the library first), or when Settings says Check now.
+    void check_for_updates(bool asked)
+    {
+        if (context_.version.empty() || !sys::on_console())
+        {
+            settings_.set_update_status(
+                "ORION " +
+                (context_.version.empty() ? std::string("(no version)") : context_.version) +
+                ": checking works on the console only");
+            settings_.refresh(look_, prefs_);
+            return;
+        }
+        if (!updates_.start(context_.version))
+            return;
+        manual_update_check_ = asked;
+        settings_.set_update_status("ORION " + context_.version + ": checking…");
+        settings_.refresh(look_, prefs_);
+    }
+
+    void update_updates()
+    {
+        if (!update_asked_ && prefs_.check_updates && age_ > 4.0f)
+        {
+            update_asked_ = true;
+            check_for_updates(false);
+        }
+        if (!updates_.take_finished())
+            return;
+        const orion::Release latest = updates_.latest();
+        std::string status = "ORION " + context_.version;
+        switch (updates_.state())
+        {
+        case orion::UpdateCheck::State::available:
+            status += ". ORION " + latest.version + " is out: " + orion::kReleasesPage;
+            show_note(true,
+                      "ORION " + latest.version + " is out. Get it from " + orion::kReleasesPage);
+            break;
+        case orion::UpdateCheck::State::up_to_date:
+            status += " is the newest";
+            if (manual_update_check_)
+                show_note(true, "ORION " + context_.version + " is the newest");
+            break;
+        default:
+            status += ". Could not check: " + updates_.error();
+            if (manual_update_check_)
+                show_note(false, "Could not check for updates: " + updates_.error());
+            break;
+        }
+        settings_.set_update_status(std::move(status));
+        settings_.refresh(look_, prefs_);
+    }
+
     void show_note(bool ok, std::string message)
     {
         launch_ok_ = ok;
@@ -4112,6 +4171,11 @@ class Library final : public app::Concept
     orion::ArtFetcher art_{
         [](const std::string &url, std::size_t limit, std::string *body, std::string *error)
         { return sys::http_get(url, limit, body, error); }};
+    orion::UpdateCheck updates_{
+        [](const std::string &url, std::size_t limit, std::string *body, std::string *error)
+        { return sys::http_get(url, limit, body, error); }};
+    bool update_asked_ = false;        // the check this launch makes by itself has started
+    bool manual_update_check_ = false; // the running check was asked for: say how it went
 };
 
 } // namespace

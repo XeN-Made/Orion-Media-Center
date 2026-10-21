@@ -153,6 +153,8 @@ struct LibraryPrefs
     bool auto_art = true;
     // A game started from ORION brings ORION back when it closes.
     bool return_on_close = true;
+    // Ask GitHub for a newer ORION each time it opens (orion/updates.hpp).
+    bool check_updates = true;
     // The focused game's home-screen picture behind the library; for games
     // with none, their cover blurred (blurred_covers). Strength 0.2 to 1:
     // below 1 the sky and its clouds show through.

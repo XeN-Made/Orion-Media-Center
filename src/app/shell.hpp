@@ -109,6 +109,7 @@ class Shell
     void set_version(std::string version)
     {
         version_ = std::move(version);
+        context_.version = version_;
     }
 
     // ---- for the tour and tests ----

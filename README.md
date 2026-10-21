@@ -40,7 +40,12 @@ be there.
 
 ### Updating
 
-Close ORION (hold Circle on the library, or close it from the PS button
+ORION tells you when a newer version is out: each time it opens it asks
+GitHub for the latest release (Settings, Library: **Check for updates**, and
+**Check now**). Releases are at
+[github.com/XeN-Made/Orion-Media-Center/releases](https://github.com/XeN-Made/Orion-Media-Center/releases).
+
+To install one, close ORION (hold Circle on the library, or close it from the PS button
 menu), then upload the new `PPSA99061` folder over the old one. Your
 settings, favourites and box art live in `/data/orion` and are kept.
 

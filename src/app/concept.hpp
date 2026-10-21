@@ -80,6 +80,9 @@ struct Context
     // Titles a design shows large right now (ids): the app keeps sharp
     // copies of their pictures, and only theirs (library::load_sharp_icons).
     std::vector<std::string> sharp_icons = {};
+    // This app's version (param.json's contentVersion, "01.000.010"); empty
+    // when unknown (a PC).
+    std::string version = {};
     // A design that wants the emulators and their games found again (Settings,
     // Scan for emulators) sets this; the app scans between frames and bumps
     // library.generation.

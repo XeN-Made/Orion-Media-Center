@@ -445,6 +445,7 @@ LibraryPrefs load_prefs(const std::string &state_dir)
     prefs.moved_leave_shelf = root["moved_leave_shelf"].bool_or(prefs.moved_leave_shelf);
     prefs.auto_art = root["auto_art"].bool_or(prefs.auto_art);
     prefs.return_on_close = root["return_on_close"].bool_or(prefs.return_on_close);
+    prefs.check_updates = root["check_updates"].bool_or(prefs.check_updates);
     prefs.game_backgrounds = root["game_backgrounds"].bool_or(prefs.game_backgrounds);
     prefs.blurred_covers = root["blurred_covers"].bool_or(prefs.blurred_covers);
     prefs.background_strength = std::clamp(
@@ -486,6 +487,7 @@ bool save_prefs(const std::string &state_dir, const LibraryPrefs &prefs)
     text += std::string("  \"auto_art\": ") + (prefs.auto_art ? "true" : "false") + ",\n";
     text +=
         std::string("  \"return_on_close\": ") + (prefs.return_on_close ? "true" : "false") + ",\n";
+    text += std::string("  \"check_updates\": ") + (prefs.check_updates ? "true" : "false") + ",\n";
     text += std::string("  \"game_backgrounds\": ") + (prefs.game_backgrounds ? "true" : "false") +
             ",\n";
     text +=
