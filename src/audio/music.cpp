@@ -12,6 +12,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <utility>
 
 namespace hui::audio
 {
@@ -144,24 +145,49 @@ MusicPlayer::MusicPlayer() : buffer_(static_cast<std::size_t>(kChunk) * 2)
 
 int MusicPlayer::init(Mixer &mixer, const std::string &directory, std::uint64_t seed)
 {
+    return init(mixer, std::vector<std::string>{directory}, seed);
+}
+
+int MusicPlayer::init(Mixer &mixer, const std::vector<std::string> &directories, std::uint64_t seed)
+{
     mixer_ = &mixer;
-    directory_ = directory;
     mixer.attach_stream(0, &ring_);
     mixer.set_stream_gain(0, kBaseGain, 0.0f);
     mixer.set_stream_gain(1, 0.0f, 0.0f);
 
-    for (const std::string &name : save::list_files(directory))
+    // (file, name) pairs, sorted by file first so the seed alone decides the
+    // order: a fresh one every launch.
+    std::vector<std::pair<std::string, std::string>> songs;
+    for (const std::string &directory : directories)
     {
-        if (name.size() > 4 && name.compare(name.size() - 4, 4, ".ogg") == 0 &&
-            playlist_.size() < kMaxSongs)
-            playlist_.push_back(name.substr(0, name.size() - 4));
+        for (const std::string &name : save::list_files(directory))
+        {
+            if (name.size() > 4 && name.compare(name.size() - 4, 4, ".ogg") == 0 &&
+                songs.size() < kMaxSongs)
+                songs.emplace_back(directory + "/" + name, name.substr(0, name.size() - 4));
+        }
     }
-    // A fresh order every launch: sort first so the seed alone decides it.
-    std::sort(playlist_.begin(), playlist_.end());
+    std::sort(songs.begin(), songs.end());
     std::uint64_t state = seed;
-    for (std::size_t i = playlist_.size(); i > 1; --i)
-        std::swap(playlist_[i - 1], playlist_[next_random(state) % i]);
+    for (std::size_t i = songs.size(); i > 1; --i)
+        std::swap(songs[i - 1], songs[next_random(state) % i]);
+    playlist_.clear();
+    files_.clear();
+    for (auto &[file, name] : songs)
+    {
+        files_.push_back(std::move(file));
+        playlist_.push_back(std::move(name));
+    }
     return static_cast<int>(playlist_.size());
+}
+
+void MusicPlayer::skip()
+{
+    // Between songs (in the breath after one) the next comes anyway.
+    if (track_)
+        gap_frames_ = static_cast<int>(kGapSeconds * static_cast<float>(kSampleRate));
+    track_.reset();
+    current_.clear();
 }
 
 bool MusicPlayer::next_song()
@@ -171,11 +197,12 @@ bool MusicPlayer::next_song()
     while (!playlist_.empty() && failures_ < static_cast<int>(playlist_.size()))
     {
         const std::string name = playlist_[next_];
+        const std::string file = files_[next_];
         next_ = (next_ + 1) % playlist_.size();
         std::string data;
         auto track = std::make_unique<MusicTrack>();
         std::string error = "unreadable";
-        if (save::read_file(directory_ + "/" + name + ".ogg", &data, 32u << 20))
+        if (save::read_file(file, &data, 32u << 20))
             error = track->open(std::move(data));
         if (error.empty())
         {

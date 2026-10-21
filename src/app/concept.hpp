@@ -81,6 +81,10 @@ struct Context
     // Scan for emulators) sets this; the app scans between frames and bumps
     // library.generation.
     bool rescan_requested = false;
+    // The song the background music plays now (its file name), set by the
+    // app every frame; a design that wants the next one sets skip_song.
+    std::string now_playing = {};
+    bool skip_song = false;
     // A large picture a design wants behind it (a PNG path; empty for none).
     // The shell decodes it off the main thread and uploads it; backdrop_shown
     // says which picture backdrop_texture holds (it lags behind a change).

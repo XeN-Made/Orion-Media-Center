@@ -68,6 +68,12 @@ enum : int
     kThemesInfo,
     kFolderSystem,
     kFolderRemove,
+    kMusicVolume,
+    kSfxVolume,
+    kUiVolume,
+    kNowPlaying,
+    kNextSong,
+    kMusicFolder,
     kBrowseUse,
     kBrowseUp,
     kBrowseType,
@@ -122,6 +128,8 @@ const char *section_name(SettingsPanel::Section section)
         return "Box art";
     case SettingsPanel::Section::storage:
         return "Storage";
+    case SettingsPanel::Section::sound:
+        return "Sound";
     default:
         return "Appearance";
     }
@@ -271,6 +279,8 @@ void SettingsPanel::build_nav()
         sections_.push_back(Section::art);
     sections_.push_back(Section::storage);
     sections_.push_back(Section::appearance);
+    if (app_settings_ != nullptr)
+        sections_.push_back(Section::sound);
     std::vector<ui::NavEntry> entries;
     for (Section section : sections_)
     {
@@ -381,6 +391,9 @@ void SettingsPanel::build(const Look &look, const LibraryPrefs &prefs)
         break;
     case Section::storage:
         build_storage(prefs);
+        break;
+    case Section::sound:
+        build_sound();
         break;
     case Section::appearance:
         build_appearance(look, prefs);
@@ -717,6 +730,32 @@ void SettingsPanel::build_browser()
     }
     form_.add_action(kBrowseType, "Type a path instead").description =
         "Any folder under /data or /mnt, with the keyboard";
+}
+
+void SettingsPanel::build_sound()
+{
+    form_.add_header("Sound");
+    if (app_settings_ == nullptr)
+        return;
+    // 0..10, 0 said as Off.
+    std::vector<std::string> levels = {"Off"};
+    for (int i = 1; i <= 10; ++i)
+        levels.push_back(std::to_string(i));
+    form_.add_choice(kMusicVolume, "Music", levels, std::clamp(app_settings_->music_volume, 0, 10))
+        .description = "The songs behind ORION; Off stops them";
+    form_
+        .add_choice(kSfxVolume, "Sound effects", levels,
+                    std::clamp(app_settings_->sfx_volume, 0, 10))
+        .description = "Launching, saving, refusing";
+    form_.add_choice(kUiVolume, "Menu sounds", levels, std::clamp(app_settings_->ui_volume, 0, 10))
+        .description = "Moving the focus, opening and closing";
+    form_.add_value(kNowPlaying, "Now playing",
+                    app_settings_->music_volume == 0 ? std::string("Music is off")
+                    : now_playing_.empty()           ? std::string("Between songs")
+                                                     : now_playing_);
+    form_.add_action(kNextSong, "Next song").description =
+        "Your own songs join when ORION starts: .ogg files, 48 kHz, in the folder below";
+    form_.add_value(kMusicFolder, "Your music", "/data/orion/music");
 }
 
 void SettingsPanel::build_storage(const LibraryPrefs &prefs)
@@ -1061,6 +1100,8 @@ SettingsPanel::Change SettingsPanel::handle(const InputFrame &input, ui::Feedbac
         }
         if (id == kBackdropsAgain)
             return Change::copy_backdrops;
+        if (id == kNextSong)
+            return Change::skip_song;
         if (id == kRunSetup)
             return Change::run_setup;
         if (id == kScanEmulators)
@@ -1128,6 +1169,18 @@ SettingsPanel::Change SettingsPanel::handle(const InputFrame &input, ui::Feedbac
     case kSort:
         prefs->sort = kSortKeys[std::clamp(form_.choice_index(kSort), 0, kSortCount - 1)];
         return Change::prefs;
+    case kMusicVolume:
+    case kSfxVolume:
+    case kUiVolume:
+    {
+        if (app_settings_ == nullptr)
+            return Change::none;
+        const int level = std::clamp(form_.choice_index(id), 0, 10);
+        (id == kMusicVolume ? app_settings_->music_volume
+         : id == kSfxVolume ? app_settings_->sfx_volume
+                            : app_settings_->ui_volume) = level;
+        return Change::sound;
+    }
     case kAutostart:
         prefs->autostart = form_.toggle_value(kAutostart);
         return Change::prefs;

@@ -114,7 +114,9 @@ decoded on the main thread about 0.7 seconds ahead of the audio thread. It
 plays the folder as a playlist: the order is shuffled afresh every time the
 app starts, each song plays once with a short pause before the next, and after
 the last one the same order starts again. It ducks by 6 dB under big cues, and
-the music bus has its own volume in the settings.
+the music bus has its own volume in the settings. `init()` also takes several
+folders, which share one playlist (ORION adds the player's own,
+`/data/orion/music`), and `skip()` ends the song playing now.
 
 Adding a song is dropping a file into the folder. Keep to 48 kHz stereo, about
 -18 LUFS integrated with true peaks at or below -1 dBTP (so the interface

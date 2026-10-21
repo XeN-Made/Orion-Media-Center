@@ -159,6 +159,47 @@ TEST(MusicPlayer, ShuffleChangesWithTheSeed)
     EXPECT_TRUE(differs); // another launch gets another order
 }
 
+// The app's songs and the player's own folder share one playlist; a folder
+// that is not there adds nothing.
+TEST(MusicPlayer, SeveralFoldersShareOnePlaylist)
+{
+    Mixer mixer;
+    MusicPlayer both;
+    EXPECT_EQ(both.init(mixer, std::vector<std::string>{kMusic, kMusic, "/nonexistent"}, 5), 8);
+    MusicPlayer one;
+    EXPECT_EQ(one.init(mixer, std::vector<std::string>{"/nonexistent", kMusic}, 5), 4);
+}
+
+// Skip ends the song playing now and the next in the playlist follows.
+TEST(MusicPlayer, SkipGoesToTheNextSong)
+{
+    Mixer mixer;
+    MusicPlayer player;
+    ASSERT_EQ(player.init(mixer, kMusic, 7), 4);
+    std::vector<std::int16_t> out(800 * 2);
+    std::string first;
+    for (int frame = 0; frame < 30 && first.empty(); ++frame)
+    {
+        player.pump(1.0f / 60.0f);
+        mixer.render(out.data(), 800);
+        first = player.current();
+    }
+    ASSERT_FALSE(first.empty());
+    player.skip();
+    EXPECT_EQ(player.current(), "");
+    std::string next;
+    for (int frame = 0; frame < 120 && next.empty(); ++frame)
+    {
+        player.pump(1.0f / 60.0f);
+        mixer.render(out.data(), 800);
+        next = player.current();
+    }
+    EXPECT_FALSE(next.empty());
+    EXPECT_NE(next, first);
+    player.skip();
+    player.skip(); // nothing playing: nothing to do
+}
+
 TEST(MusicPlayer, SilentWithoutSongs)
 {
     Mixer mixer;

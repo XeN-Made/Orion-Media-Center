@@ -57,6 +57,17 @@ class Shell
     {
         return std::exchange(context_.wanted_icons, {});
     }
+    // The song the music plays now, for the designs (Context::now_playing).
+    void set_now_playing(const std::string &song)
+    {
+        if (context_.now_playing != song)
+            context_.now_playing = song;
+    }
+    // True once since a design asked for the next song.
+    bool take_skip_song()
+    {
+        return std::exchange(context_.skip_song, false);
+    }
     // True once since a design asked for the emulators to be scanned again.
     bool take_rescan_request()
     {

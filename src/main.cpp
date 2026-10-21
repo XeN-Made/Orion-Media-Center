@@ -32,6 +32,7 @@
 #include <cstring>
 #include <GL/glcorearb.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 #include <cstddef>
 #include <algorithm>
@@ -154,11 +155,31 @@ bool save_picture(const std::string &path, int width, int height)
     return std::fclose(file) == 0 && ok;
 }
 
+// How far start-up got, in /data/orion/boot.txt: klog is gone after a crash
+// that takes the console down, this file is not. Each step is flushed to
+// the disk before the next begins.
+void boot_step(const char *step)
+{
+    static const std::int64_t start = hui::sys::monotonic_us();
+    static bool first = true;
+    hui::save::ensure_directory("/data/orion");
+    std::FILE *file = std::fopen("/data/orion/boot.txt", first ? "w" : "a");
+    first = false;
+    if (file == nullptr)
+        return;
+    std::fprintf(file, "%lld ms  %s\n",
+                 static_cast<long long>((hui::sys::monotonic_us() - start) / 1000), step);
+    std::fflush(file);
+    ::fsync(fileno(file));
+    std::fclose(file);
+}
+
 } // namespace
 
 int main()
 {
     using namespace hui;
+    boot_step("entry");
     sys::log("[HUI] entry");
     sys::log("[HUI] storage dir=%d", save::ensure_directory(kDataRoot) ? 1 : 0);
 
@@ -172,6 +193,7 @@ int main()
         sys::park();
     }
 
+    boot_step("display open");
     gfx::Renderer renderer;
     gfx::Font regular;
     gfx::Font semibold;
@@ -191,6 +213,7 @@ int main()
         sys::log("[HUI] fatal: renderer init failed");
         sys::park();
     }
+    boot_step("renderer and fonts");
     demo::Catalog catalog;
     const std::int64_t art_start = sys::monotonic_us();
     if (!catalog.build_covers(renderer, fonts))
@@ -200,6 +223,7 @@ int main()
 
     // The installed titles, as ShadowMountPlus sees them. /data is visible
     // here only because ShadowMountPlus mounts it into the titles it launches.
+    boot_step("cover art");
     library::Library titles;
     // The emulators' games: at start-up, and again when Settings asks (Scan
     // for emulators). The prefs hold the player's folders.
@@ -277,14 +301,19 @@ int main()
             save::write_atomic("/data/orion/scan.txt", text);
     }
 
+    boot_step("library scanned");
     ps5::Pad pad;
     pad.open();
     InputTracker tracker;
     audio::Mixer mixer;
     // The music stream attaches to the mixer before the audio thread starts.
     audio::MusicPlayer music;
-    const int tracks = music.init(mixer, std::string(kAssets) + "/audio/music",
-                                  static_cast<std::uint64_t>(sys::monotonic_us()));
+    // ORION's own songs, and the player's in /data/orion/music (48 kHz .ogg),
+    // a folder made here so it is there to copy songs into over FTP.
+    save::ensure_directory("/data/orion/music");
+    const int tracks = music.init(
+        mixer, std::vector<std::string>{std::string(kAssets) + "/audio/music", "/data/orion/music"},
+        static_cast<std::uint64_t>(sys::monotonic_us()));
     sys::log("[HUI] music songs=%d", tracks);
     ps5::AudioOut audio_out;
     audio_out.start(mixer);
@@ -294,8 +323,10 @@ int main()
     for (const std::string &error : bank.errors)
         sys::log("[HUI] sound rejected %s", error.c_str());
 
+    boot_step("audio");
     app::Shell shell(fonts, catalog, titles, kDataRoot, renderer.glass_texture(),
                      app::orion_registry());
+    boot_step("screen built");
     const std::string version = read_content_version("/app0/sce_sys/param.json");
     shell.set_version(version);
     sys::log("[HUI] version %s designs=%zu", version.empty() ? "unknown" : version.c_str(),
@@ -445,7 +476,10 @@ int main()
                               static_cast<std::uint8_t>(accent.g * 255.0f),
                               static_cast<std::uint8_t>(accent.b * 255.0f));
         }
+        if (shell.take_skip_song())
+            music.skip();
         music.pump(dt);
+        shell.set_now_playing(music.current());
 
         shell.compose(renderer);
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -484,6 +518,7 @@ int main()
         app::Telemetry &telemetry = shell.telemetry();
         if (frames == 1)
         {
+            boot_step("first frame shown");
             sys::log("[HUI] first-swap ok shapes=%zu draws=%zu", renderer.last_instances(),
                      renderer.last_draw_calls());
             const bool hidden = sys::hide_splash_screen();

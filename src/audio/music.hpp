@@ -68,9 +68,15 @@ class MusicPlayer
     // attaches the music stream to the mixer (call before the audio thread
     // starts). Returns how many songs were found.
     int init(Mixer &mixer, const std::string &directory, std::uint64_t seed);
+    // The same over several folders: the app's songs and the player's own.
+    // Folders that do not exist add nothing.
+    int init(Mixer &mixer, const std::vector<std::string> &directories, std::uint64_t seed);
 
     // Lowers the music under a sting for a moment.
     void duck();
+    // Ends the song playing now; the next one starts after the usual breath
+    // (what is already decoded, under a second, still plays).
+    void skip();
     void pump(float dt);
 
     // The song playing now (file name without .ogg), or "".
@@ -94,9 +100,9 @@ class MusicPlayer
     void apply_gain(float seconds);
 
     Mixer *mixer_ = nullptr;
-    std::string directory_;
-    std::vector<std::string> playlist_;
-    std::size_t next_ = 0; // index in playlist_ of the song after this one
+    std::vector<std::string> playlist_; // names, in play order
+    std::vector<std::string> files_;    // the same songs' files, in the same order
+    std::size_t next_ = 0;              // index in playlist_ of the song after this one
     StreamRing ring_{1u << 16};
     std::unique_ptr<MusicTrack> track_;
     std::string current_;

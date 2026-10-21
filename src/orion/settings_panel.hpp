@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "core/settings.hpp"
 #include "library/library.hpp"
 #include "orion/look.hpp"
 #include "orion/prefs.hpp"
@@ -81,6 +82,8 @@ class SettingsPanel
         folders,        // a game folder changed or went: save and scan again
         scan_emulators, // "Scan for emulators" was chosen
         run_setup,      // "Run setup again": the screen closes Settings and opens the setup
+        sound,          // a volume changed in the app's Settings (set_app_settings)
+        skip_song,      // "Next song" was chosen
     };
 
     enum class Section : std::uint8_t
@@ -90,6 +93,7 @@ class SettingsPanel
         emulators,
         art,
         storage,
+        sound,
         appearance,
     };
 
@@ -139,6 +143,17 @@ class SettingsPanel
     const std::string &emulator_page() const
     {
         return emulator_page_;
+    }
+    // The app's own settings, whose volumes the Sound rows edit; must outlive
+    // the panel. Without them there is no Sound section.
+    void set_app_settings(Settings &settings)
+    {
+        app_settings_ = &settings;
+    }
+    // The song playing now, for the Sound section.
+    void set_now_playing(std::string song)
+    {
+        now_playing_ = std::move(song);
     }
     // Where the folder browser starts: the drives and folders a game folder
     // can be in, as (name, path). Ones that do not exist are left out.
@@ -202,6 +217,7 @@ class SettingsPanel
     const library::EmulatorApp *page_app() const;
     void build_art(const LibraryPrefs &prefs);
     void build_storage(const LibraryPrefs &prefs);
+    void build_sound();
     void build_folder_page(const LibraryPrefs &prefs);
     Change edit_folder_page(int id, LibraryPrefs *prefs);
     void build_appearance(const Look &look, const LibraryPrefs &prefs);
@@ -234,6 +250,8 @@ class SettingsPanel
     std::string emulator_page_; // the emulator whose page is open; empty: the list
     // The folder browser, open over an emulator's page: where it is (empty:
     // the places), and the folders in it.
+    Settings *app_settings_ = nullptr;
+    std::string now_playing_;
     bool browsing_ = false;
     std::string browse_path_;
     std::vector<std::string> browse_folders_;

@@ -234,6 +234,10 @@ constexpr app::TourStep kTour[] = {
     {0.2f, 0, Direction::right},
     {0.8f, 0, Direction::none, "settings-appearance"},
     {0.2f, action_bit(Action::back)},
+    {0.3f, action_bit(Action::jump_next)},
+    {0.2f, 0, Direction::right},
+    {0.8f, 0, Direction::none, "settings-sound"},
+    {0.2f, action_bit(Action::back)},
     {0.5f, action_bit(Action::back)},
     {0.6f, action_bit(Action::north)},
     {0.7f, 0, Direction::none, "search"},
@@ -562,6 +566,7 @@ class Library final : public app::Concept
         if (!sys::on_console())
             places.emplace_back("This folder (PC preview)", ".");
         settings_.set_browse_places(std::move(places));
+        settings_.set_app_settings(context_.settings);
         settings_.set_autostart_payload(autostart_payload());
         // A console that has not been set up yet starts on the setup.
         setup_pending_ = context_.library.offer_setup && !prefs_.setup_done;
@@ -675,6 +680,14 @@ class Library final : public app::Concept
         {
             generation_ = context_.library.generation;
             emulators_scanned(feedback);
+        }
+        // The song playing now, for Settings, Sound.
+        if (context_.now_playing != now_playing_)
+        {
+            now_playing_ = context_.now_playing;
+            settings_.set_now_playing(now_playing_);
+            if (settings_.is_open() && settings_.section() == orion::SettingsPanel::Section::sound)
+                settings_.refresh(look_, prefs_);
         }
         age_ += dt;
         clock_ += dt;
@@ -1326,6 +1339,15 @@ class Library final : public app::Concept
             break;
         case orion::SettingsPanel::Change::scan_emulators:
             scan_emulators(feedback);
+            break;
+        case orion::SettingsPanel::Change::sound:
+            // The app applies the volumes and saves them (Context::settings).
+            context_.settings_changed = true;
+            settings_.refresh(look_, prefs_);
+            break;
+        case orion::SettingsPanel::Change::skip_song:
+            context_.skip_song = true;
+            feedback.play(audio::Cue::select);
             break;
         case orion::SettingsPanel::Change::run_setup:
             settings_.close(feedback);
@@ -3302,6 +3324,7 @@ class Library final : public app::Concept
     orion::SettingsPanel settings_;
     orion::SetupPanel setup_;
     bool setup_pending_ = false; // the setup opens on the first frame (it needs feedback)
+    std::string now_playing_;    // the song Settings, Sound was last told of
     tween::Spring keyboard_shown_;
     std::string launch_message_;
     bool launch_ok_ = false;
