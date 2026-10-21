@@ -126,7 +126,7 @@ std::string porpoise_arguments(const std::string &title_id, const std::string &d
 // on the first line of this note (and deletes it) instead of opening its
 // shelf, as it does for its disc helper. A note older than ten minutes is
 // ignored, and the file must exist as PS5SX2 sees it (a /data or /mnt path).
-inline constexpr const char *kPs5sx2LaunchNote = "/data/PCSX2/disc-launch.txt";
+inline constexpr const char *kPs5sx2LaunchNote = "/data/PCSX2/logs/disc-launch.txt";
 std::string ps5sx2_launch_note(const std::string &game);
 
 // The player's own ROM folders (as ORION and RetroArch both see them, under

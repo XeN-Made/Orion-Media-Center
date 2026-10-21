@@ -220,7 +220,7 @@ TEST(Emulators, PS5SX2IsHandedTheGameByItsFullPath)
     EXPECT_EQ(players[0].label, "PS5SX2");
     EXPECT_EQ(players[0].rom, disc.path);
     EXPECT_EQ(library::ps5sx2_launch_note(players[0].rom), disc.path + "\n");
-    EXPECT_STREQ(library::kPs5sx2LaunchNote, "/data/PCSX2/disc-launch.txt");
+    EXPECT_STREQ(library::kPs5sx2LaunchNote, "/data/PCSX2/logs/disc-launch.txt");
 }
 
 TEST(Emulators, ReadsCoreInfo)

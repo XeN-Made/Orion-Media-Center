@@ -66,6 +66,7 @@
 #define WAIT_FOR_LAUNCH_MS 15000
 #define WAIT_FOR_TITLE_MS 20000
 #define TITLE_READS_MS 15000 // after it is up, before its files go back
+#define REFUSED_GRACE_MS 8000 // a refused title that still comes up, within this
 #define GONE_FOR_MS 1000     // no app in front this long: the title has closed
 #define POLL_MS 100
 #define SHORTCUT_HOLD_MS 2000
@@ -151,7 +152,7 @@ static int ends_with(const char *text, const char *end)
 
 // PS5SX2's launch note: it deletes the note once read, after a jailbreak
 // that can take ten seconds, so the note is put back only when it closes.
-static const char *const kPs5sx2Note = "/data/PCSX2/disc-launch.txt";
+static const char *const kPs5sx2Note = "/data/PCSX2/logs/disc-launch.txt";
 
 // Only args.txt, test-run.txt (and config/frontend.cfg, which earlier builds
 // changed) of a title under /data/homebrew, and PS5SX2's launch note.
@@ -798,11 +799,35 @@ int main(void)
     usleep(500 * 1000); // let the system finish tearing the last one down
     sceUserServiceInitialize(NULL);
     // -1: no answer yet (the title may still come up); below that, refused.
-    if (launch(&job) < -1)
+    // A refusal is not always the end: PS5SX2 has come up three seconds
+    // after a 0x80940010. So it counts only once nothing has appeared.
+    const int answer = launch(&job);
+    if (answer < -1)
     {
-        for (int i = 0; i < file_count; ++i)
-            restore(&files[i]);
-        return 1;
+        int late = 0;
+        for (; sceSystemServiceGetAppIdOfRunningBigApp() <= 0 && late < REFUSED_GRACE_MS;
+             late += POLL_MS)
+            usleep(POLL_MS * 1000);
+        if (sceSystemServiceGetAppIdOfRunningBigApp() > 0)
+            say("the title came up %d ms after the refusal; carrying on", late);
+        else
+        {
+            for (int i = 0; i < file_count; ++i)
+                restore(&files[i]);
+            char said[160];
+            snprintf(said, sizeof(said), "The system did not start %s (0x%08x)", job.title,
+                     (unsigned)answer);
+            notify(said);
+            // Not left on the home screen: back to ORION, which asked.
+            if (return_to != NULL)
+            {
+                static launch_job_t back;
+                memset(&back, 0, sizeof(back));
+                strcpy(back.title, return_to);
+                launch(&back);
+            }
+            return 1;
+        }
     }
 
     // Wait for the title to be in front.
