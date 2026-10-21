@@ -75,6 +75,16 @@ bool http_get(const std::string &url, std::size_t limit, std::string *body, std:
     return false;
 }
 
+bool http_download(const std::string &url, const std::string &path, std::size_t limit,
+                   std::string *error)
+{
+    (void)url;
+    (void)path;
+    (void)limit;
+    *error = "the PC preview has no network";
+    return false;
+}
+
 int send_payload(const std::string &elf, int port)
 {
     std::fprintf(stderr, "[HUI] payload of %zu bytes for port %d: not on a console\n", elf.size(),

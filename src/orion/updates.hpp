@@ -99,6 +99,11 @@ std::string sum_for(std::string_view sums, std::string_view file_name);
 bool stage_update(std::string_view zip, const std::string &title_id, const std::string &stage,
                   std::string *error);
 
+// Fetches a URL into a file at `path` (at most limit bytes). False with
+// *error set when it could not.
+using HttpDownload = std::function<bool(const std::string &url, const std::string &path,
+                                        std::size_t limit, std::string *error)>;
+
 class UpdateInstaller
 {
   public:
@@ -111,7 +116,7 @@ class UpdateInstaller
         failed,
     };
 
-    explicit UpdateInstaller(HttpGet get);
+    UpdateInstaller(HttpGet get, HttpDownload download);
     ~UpdateInstaller();
     UpdateInstaller(const UpdateInstaller &) = delete;
     UpdateInstaller &operator=(const UpdateInstaller &) = delete;
@@ -126,6 +131,7 @@ class UpdateInstaller
 
   private:
     HttpGet get_;
+    HttpDownload download_;
     std::thread worker_;
     std::atomic<bool> running_{false};
     std::atomic<bool> finished_{false};

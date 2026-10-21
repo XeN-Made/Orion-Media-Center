@@ -13,6 +13,7 @@ src/concepts/*.cpp
 src/concepts/components/*.cpp
 src/core/frame_stats.cpp
 src/core/input.cpp
+src/core/mapped_file.cpp
 src/core/save_file.cpp
 src/core/settings.cpp
 src/core/sha256.cpp

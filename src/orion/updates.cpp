@@ -4,6 +4,7 @@
 
 #include "orion/updates.hpp"
 
+#include "core/mapped_file.hpp"
 #include "core/save_file.hpp"
 #include "core/sha256.hpp"
 #include "core/zip.hpp"
@@ -256,7 +257,8 @@ bool stage_update(std::string_view zip, const std::string &title_id, const std::
     return true;
 }
 
-UpdateInstaller::UpdateInstaller(HttpGet get) : get_(std::move(get))
+UpdateInstaller::UpdateInstaller(HttpGet get, HttpDownload download)
+    : get_(std::move(get)), download_(std::move(download))
 {
 }
 
@@ -288,29 +290,34 @@ bool UpdateInstaller::start(Release release, std::string title_id, std::string u
                 state_ = state;
                 error_ = std::move(error);
             };
-            std::string zip;
             std::string sums;
             std::string error;
+            MappedFile zip;
             const std::size_t slash = release.zip.rfind('/');
             const std::string zip_name =
                 slash == std::string::npos ? release.zip : release.zip.substr(slash + 1);
+            // The ZIP goes straight to a file and is read through a mapping:
+            // held in memory it would not fit the app's heap.
+            save::ensure_directory(dir);
+            const std::string zip_path = dir + "/" + id + ".zip";
             if (release.zip.empty() || release.sums.empty())
                 set(State::failed, "the release has no ZIP or no SHA256SUMS");
-            else if (!get_ || !get_(release.zip, kMaxZip, &zip, &error))
-                set(State::failed, "the download failed: " + error);
-            else if (!get_(release.sums, kMaxAnswer, &sums, &error))
+            else if (!get_ || !get_(release.sums, kMaxAnswer, &sums, &error))
                 set(State::failed, "SHA256SUMS could not be read: " + error);
             else if (const std::string want = sum_for(sums, zip_name); want.empty())
                 set(State::failed, "SHA256SUMS does not list " + zip_name);
-            else if (sha256_hex(zip) != want)
+            else if (!download_ || !download_(release.zip, zip_path, kMaxZip, &error))
+                set(State::failed, "the download failed: " + error);
+            else if (!zip.open(zip_path, &error))
+                set(State::failed, error);
+            else if (sha256_hex(zip.view()) != want)
                 set(State::failed, "the download does not match SHA256SUMS");
             else
             {
                 set(State::unpacking);
-                save::ensure_directory(dir);
                 const std::string stage = dir + "/stage";
                 std::remove((stage + "/files.txt").c_str());
-                if (!stage_update(zip, id, stage, &error))
+                if (!stage_update(zip.view(), id, stage, &error))
                     set(State::failed, error);
                 else
                 {

@@ -4,11 +4,11 @@
 
 #include "core/zip.hpp"
 
+#include "core/mapped_file.hpp"
 #include "third_party/stb/image.h" // stbi_zlib_decode_noheader_buffer: raw deflate
 
 #include <cstdint>
 #include <limits>
-#include <vector>
 
 namespace hui
 {
@@ -65,7 +65,9 @@ bool unzip(std::string_view archive, const ZipVisitor &each, std::string *error)
     std::size_t at = u32(archive, end + 16);
     if (count == 0xffff || at == 0xffffffff)
         return fail(error, "ZIP64 archives are not read");
-    std::vector<char> out;
+    // Inflated entries go to a mapping of their own: the largest is
+    // tens of MB, too much for the app's fixed heap (core/mapped_file.hpp).
+    MappedBuffer out;
     for (std::uint32_t i = 0; i < count; ++i)
     {
         if (at + 46 > archive.size() || u32(archive, at) != kDirectoryEntry)
@@ -104,9 +106,11 @@ bool unzip(std::string_view archive, const ZipVisitor &each, std::string *error)
         }
         if (method != 8)
             return fail(error, name + ": compression method " + std::to_string(method));
-        out.resize(size == 0 ? 1 : size);
-        const int written = stbi_zlib_decode_noheader_buffer(
-            out.data(), static_cast<int>(out.size()), stored.data(), static_cast<int>(packed));
+        if (!out.reserve(size))
+            return fail(error, name + ": no memory to inflate it");
+        const int written =
+            stbi_zlib_decode_noheader_buffer(out.data(), static_cast<int>(size == 0 ? 1 : size),
+                                             stored.data(), static_cast<int>(packed));
         if (written < 0 || static_cast<std::uint32_t>(written) != size)
             return fail(error, name + " does not inflate");
         if (!each(name, std::string_view(out.data(), size)))

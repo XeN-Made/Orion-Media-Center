@@ -4325,7 +4325,9 @@ class Library final : public app::Concept
     bool manual_update_check_ = false; // the running check was asked for: say how it went
     orion::UpdateInstaller installer_{
         [](const std::string &url, std::size_t limit, std::string *body, std::string *error)
-        { return sys::http_get(url, limit, body, error); }};
+        { return sys::http_get(url, limit, body, error); },
+        [](const std::string &url, const std::string &path, std::size_t limit, std::string *error)
+        { return sys::http_download(url, path, limit, error); }};
     bool update_waiting_ = false; // an update is ready: ask when nothing else is open
     bool dialog_update_ = false;  // the dialog asks about the update, not a removal
 };

@@ -127,13 +127,20 @@ TEST(OrionUpdates, DownloadsChecksAndStagesARelease)
     release.version = "01.001.001";
     release.zip = "https://example.invalid/download/PPSA99061.zip";
     release.sums = "https://example.invalid/download/SHA256SUMS";
+    const orion::HttpGet get = [&](const std::string &, std::size_t, std::string *body,
+                                   std::string *) -> bool
+    {
+        *body = sums;
+        return true;
+    };
     const auto serve = [&](std::string served_zip)
     {
-        return [&, served_zip](const std::string &url, std::size_t, std::string *body,
-                               std::string *) -> bool
+        return [&, served_zip](const std::string &url, const std::string &path, std::size_t,
+                               std::string *error) -> bool
         {
-            *body = url == release.zip ? served_zip : sums;
-            return true;
+            EXPECT_EQ(url, release.zip);
+            *error = save::write_atomic(path, served_zip);
+            return error->empty();
         };
     };
     const auto finish = [](orion::UpdateInstaller &installer)
@@ -143,7 +150,7 @@ TEST(OrionUpdates, DownloadsChecksAndStagesARelease)
     };
 
     const std::string dir = fresh_dir("orion-update-install");
-    orion::UpdateInstaller good(serve(zip));
+    orion::UpdateInstaller good(get, serve(zip));
     ASSERT_TRUE(good.start(release, "PPSA99061", dir));
     finish(good);
     EXPECT_EQ(good.state(), orion::UpdateInstaller::State::ready) << good.error();
@@ -154,7 +161,7 @@ TEST(OrionUpdates, DownloadsChecksAndStagesARelease)
     // A download that does not match its published sum installs nothing.
     std::string tampered = zip;
     tampered[tampered.size() / 2] ^= 1;
-    orion::UpdateInstaller bad(serve(tampered));
+    orion::UpdateInstaller bad(get, serve(tampered));
     ASSERT_TRUE(bad.start(release, "PPSA99061", fresh_dir("orion-update-tampered")));
     finish(bad);
     EXPECT_EQ(bad.state(), orion::UpdateInstaller::State::failed);

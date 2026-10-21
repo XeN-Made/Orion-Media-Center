@@ -197,9 +197,8 @@ std::size_t sink_write(char *data, std::size_t size, std::size_t count, void *us
     return bytes;
 }
 
-} // namespace
-
-bool http_get(const std::string &url, std::size_t limit, std::string *body, std::string *error)
+// curl's global set-up, once, whichever request comes first.
+void curl_ready()
 {
     static std::once_flag once;
     std::call_once(once,
@@ -209,6 +208,110 @@ bool http_get(const std::string &url, std::size_t limit, std::string *body, std:
                        curl_global_init(CURL_GLOBAL_DEFAULT);
                        art_trace("curl_global_init done");
                    });
+}
+
+struct FileSink
+{
+    int fd;
+    std::size_t limit;
+    std::size_t written = 0;
+    bool over = false;
+    bool failed = false;
+};
+
+std::size_t file_write(char *data, std::size_t size, std::size_t count, void *user)
+{
+    auto *sink = static_cast<FileSink *>(user);
+    const std::size_t bytes = size * count;
+    if (sink->written + bytes > sink->limit)
+    {
+        sink->over = true;
+        return 0;
+    }
+    std::size_t done = 0;
+    while (done < bytes)
+    {
+        const ssize_t result = ::write(sink->fd, data + done, bytes - done);
+        if (result < 0 && errno == EINTR)
+            continue;
+        if (result <= 0)
+        {
+            sink->failed = true;
+            return 0;
+        }
+        done += static_cast<std::size_t>(result);
+    }
+    sink->written += bytes;
+    return bytes;
+}
+
+} // namespace
+
+bool http_download(const std::string &url, const std::string &path, std::size_t limit,
+                   std::string *error)
+{
+    curl_ready();
+    const std::string part = path + ".part";
+    const int fd = ::open(part.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0666);
+    if (fd < 0)
+    {
+        *error = "cannot write " + part + " (errno " + std::to_string(errno) + ")";
+        return false;
+    }
+    CURL *curl = curl_easy_init();
+    if (curl == nullptr)
+    {
+        ::close(fd);
+        ::unlink(part.c_str());
+        *error = "curl did not start";
+        return false;
+    }
+    FileSink sink{fd, limit};
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, file_write);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &sink);
+    curl_easy_setopt(curl, CURLOPT_CAINFO, kCaBundle);
+    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+    curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 3L);
+#if LIBCURL_VERSION_NUM >= 0x075500
+    curl_easy_setopt(curl, CURLOPT_PROTOCOLS_STR, "https");
+    curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS_STR, "https");
+#endif
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 10L);
+    // No limit on the whole: a slow line takes minutes. Stalled is over.
+    curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, 1024L);
+    curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, 30L);
+    curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, "ORION-Media-Center/1");
+    art_trace(("download " + url).c_str());
+    const CURLcode code = curl_easy_perform(curl);
+    art_trace(("download done: " + std::string(curl_easy_strerror(code))).c_str());
+    long status = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status);
+    curl_easy_cleanup(curl);
+    const bool closed = ::fsync(fd) == 0 && ::close(fd) == 0;
+    if (code != CURLE_OK || status != 200 || !closed)
+    {
+        ::unlink(part.c_str());
+        *error = sink.over          ? std::string("too large")
+                 : sink.failed      ? std::string("could not write the file (disk full?)")
+                 : code != CURLE_OK ? std::string(curl_easy_strerror(code))
+                 : status != 200    ? "HTTP " + std::to_string(status)
+                                    : std::string("could not finish the file");
+        return false;
+    }
+    if (::rename(part.c_str(), path.c_str()) != 0)
+    {
+        ::unlink(part.c_str());
+        *error = "cannot rename the download (errno " + std::to_string(errno) + ")";
+        return false;
+    }
+    return true;
+}
+
+bool http_get(const std::string &url, std::size_t limit, std::string *body, std::string *error)
+{
+    curl_ready();
     body->clear();
     art_trace("curl_easy_init");
     CURL *curl = curl_easy_init();

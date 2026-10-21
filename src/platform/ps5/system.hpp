@@ -60,4 +60,11 @@ void art_trace(const char *step, bool reset = false);
 // worker thread. On a PC it always says there is no network.
 bool http_get(const std::string &url, std::size_t limit, std::string *body, std::string *error);
 
+// The same for a large file: written to `path` as it arrives (through
+// <path>.part, renamed when complete), so it never sits in memory. ORION's
+// heap is 128 MB; a release ZIP held in a string, doubling as it grows,
+// does not fit beside everything else.
+bool http_download(const std::string &url, const std::string &path, std::size_t limit,
+                   std::string *error);
+
 } // namespace hui::sys
