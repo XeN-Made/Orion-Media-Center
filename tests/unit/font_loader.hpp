@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Loads a baked font from assets/fonts for a test.
+// ORION Media Center - Loads a baked font from assets/fonts for a test.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Test fixture for components: fonts, a canvas, every theme.
+// ORION Media Center - Test fixture for components: fonts, a canvas, every theme.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ps5-homebrew-ui - Rebuild the baked SDF fonts in assets/fonts.
+# ORION Media Center - Rebuild the baked SDF fonts in assets/fonts.
 # Copyright (C) 2026 BlackBearReloaded
 # SPDX-License-Identifier: GPL-3.0-or-later
 #

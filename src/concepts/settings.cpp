@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Design "Control Room": a settings screen whose controls are real.
+// ORION Media Center - Design "Control Room": a settings screen whose controls are real.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
@@ -1416,7 +1416,7 @@ class SettingsDesign final : public app::Concept
         std::snprintf(frame, sizeof(frame), "%.2f ms a frame",
                       static_cast<double>(telemetry.average_ms));
         const char *labels[] = {"APPLICATION", "DESIGNS", "RENDERER", "FRAME RATE"};
-        const char *values[] = {"ps5-homebrew-ui", designs, "Rendered with OpenGL 4.6",
+        const char *values[] = {"ORION Media Center", designs, "Rendered with OpenGL 4.6",
                                 measured ? rate : "Measuring"};
         const char *notes[] = {"A reference for console-grade interfaces",
                                "Switch between them with L1 and R1",

@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Host (Linux/WSL) implementation of the system services.
+// ORION Media Center - Host (Linux/WSL) implementation of the system services.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

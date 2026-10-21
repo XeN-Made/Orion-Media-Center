@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Component: PauseMenu.
+// ORION Media Center - Component: PauseMenu.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

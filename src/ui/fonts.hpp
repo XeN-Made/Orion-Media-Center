@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - The font set every screen draws with.
+// ORION Media Center - The font set every screen draws with.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

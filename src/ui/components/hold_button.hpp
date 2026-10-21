@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Component: HoldButton, hold to confirm.
+// ORION Media Center - Component: HoldButton, hold to confirm.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 //

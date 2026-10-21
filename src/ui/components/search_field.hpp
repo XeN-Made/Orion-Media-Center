@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Component: SearchField, a search box with a suggestions list.
+// ORION Media Center - Component: SearchField, a search box with a suggestions list.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

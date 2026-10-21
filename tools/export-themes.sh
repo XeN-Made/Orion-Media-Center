@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ps5-homebrew-ui - Regenerates assets/themes from the kit's built-in themes.
+# ORION Media Center - Regenerates assets/themes from the kit's built-in themes.
 # Copyright (C) 2026 BlackBearReloaded
 # SPDX-License-Identifier: GPL-3.0-or-later
 #

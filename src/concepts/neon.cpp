@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Design "Neon Arcade": the main menu of a synthwave racer.
+// ORION Media Center - Design "Neon Arcade": the main menu of a synthwave racer.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 //

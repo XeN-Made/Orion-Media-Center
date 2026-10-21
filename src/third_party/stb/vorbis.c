@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - The single compilation unit for the vendored stb_vorbis.
+// ORION Media Center - The single compilation unit for the vendored stb_vorbis.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 //

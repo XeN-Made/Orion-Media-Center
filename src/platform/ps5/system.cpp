@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - PS5 system services: logging, clock, splash screen.
+// ORION Media Center - PS5 system services: logging, clock, splash screen.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

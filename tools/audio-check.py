@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# ps5-homebrew-ui - Validates delivered sound effects and music .
+# ORION Media Center - Validates delivered sound effects and music .
 # Copyright (C) 2026 BlackBearReloaded
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Checks assets/audio/sfx/<set>/*.wav and assets/audio/music/*.ogg.

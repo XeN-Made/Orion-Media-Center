@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Component: ScrollArea, scrolling for content of any kind.
+// ORION Media Center - Component: ScrollArea, scrolling for content of any kind.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 //

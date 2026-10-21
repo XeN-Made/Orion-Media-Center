@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Title icons: uploading them as textures (needs OpenGL).
+// ORION Media Center - Title icons: uploading them as textures (needs OpenGL).
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

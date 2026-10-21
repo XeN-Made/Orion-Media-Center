@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Tests that hold for every design in the registry.
+// ORION Media Center - Tests that hold for every design in the registry.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

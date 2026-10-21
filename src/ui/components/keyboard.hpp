@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Component: Keyboard, an on-screen keyboard for a controller.
+// ORION Media Center - Component: Keyboard, an on-screen keyboard for a controller.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Component: ProfilePicker.
+// ORION Media Center - Component: ProfilePicker.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

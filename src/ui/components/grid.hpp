@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Component: GridView, a scrolling grid of cards with one gliding focus.
+// ORION Media Center - Component: GridView, a scrolling grid of cards with one gliding focus.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

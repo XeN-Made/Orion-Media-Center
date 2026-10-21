@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - ORION theme files: a whole look as one JSON document.
+// ORION Media Center - ORION theme files: a whole look as one JSON document.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

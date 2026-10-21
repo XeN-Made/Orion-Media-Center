@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# ps5-homebrew-ui - One validation run on a console: install, tour, collect evidence.
+# ORION Media Center - One validation run on a console: install, tour, collect evidence.
 # Copyright (C) 2026 BlackBearReloaded
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Runs the app's self-driving tour on a console and brings the evidence back.
@@ -73,7 +73,7 @@ class Console:
     def __init__(self, host, port):
         self.ftp = FTP()
         self.ftp.connect(host, port, timeout=30)
-        self.ftp.login("anonymous", "ps5-homebrew-ui")
+        self.ftp.login("anonymous", "orion-media-center")
 
     def close(self):
         try:

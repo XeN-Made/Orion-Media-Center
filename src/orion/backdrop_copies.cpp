@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Copies of the system's home-screen pictures, fetched through local FTP.
+// ORION Media Center - Copies of the system's home-screen pictures, fetched through local FTP.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

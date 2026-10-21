@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Tests: the actions group (buttons, hold, quick actions, banner, tour).
+// ORION Media Center - Tests: the actions group (buttons, hold, quick actions, banner, tour).
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

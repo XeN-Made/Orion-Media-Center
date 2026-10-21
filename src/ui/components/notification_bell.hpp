@@ -1,6 +1,5 @@
-// ps5-homebrew-ui - Component: NotificationBell, the status-bar indicator of unread notifications.
-// Copyright (C) 2026 BlackBearReloaded
-// SPDX-License-Identifier: GPL-3.0-or-later
+// ORION Media Center - Component: NotificationBell, the status-bar indicator of unread
+// notifications. Copyright (C) 2026 BlackBearReloaded SPDX-License-Identifier: GPL-3.0-or-later
 //
 // A bell on a button with a count on its corner. The count pops when it
 // changes and the bell swings for a moment when something arrives, so a

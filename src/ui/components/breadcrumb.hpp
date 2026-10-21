@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Component: Breadcrumb, the path to where the player is.
+// ORION Media Center - Component: Breadcrumb, the path to where the player is.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Process-lifetime heap for the OpenGL runtime.
+// ORION Media Center - Process-lifetime heap for the OpenGL runtime.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
@@ -89,7 +89,7 @@ static int hui_heap_ready(void)
     }
 
     hui_heap_base = base;
-    hui_heap_mspace = sceLibcMspaceCreate("ps5-homebrew-ui", base, HUI_HEAP_SIZE, 0);
+    hui_heap_mspace = sceLibcMspaceCreate("orion-media-center", base, HUI_HEAP_SIZE, 0);
     if (hui_heap_mspace == NULL)
     {
         hui_heap_base = NULL;

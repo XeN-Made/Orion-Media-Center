@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Component Library page: the components that organise and reach content.
+// ORION Media Center - Component Library page: the components that organise and reach content.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 //

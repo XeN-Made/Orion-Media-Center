@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Component: PageDots, where the player is in paged content.
+// ORION Media Center - Component: PageDots, where the player is in paged content.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

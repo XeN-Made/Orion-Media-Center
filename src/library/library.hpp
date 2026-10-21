@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - The console's own library: what ShadowMountPlus can mount.
+// ORION Media Center - The console's own library: what ShadowMountPlus can mount.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

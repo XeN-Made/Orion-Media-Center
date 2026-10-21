@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Component: TextField, a labelled line of text with a caret.
+// ORION Media Center - Component: TextField, a labelled line of text with a caret.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

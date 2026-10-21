@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Box art matching: a ROM's file name against the libretro thumbnail sets.
+// ORION Media Center - Box art matching: a ROM's file name against the libretro thumbnail sets.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

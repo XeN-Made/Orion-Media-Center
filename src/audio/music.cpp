@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Background music: a shuffled playlist of OGG Vorbis songs.
+// ORION Media Center - Background music: a shuffled playlist of OGG Vorbis songs.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

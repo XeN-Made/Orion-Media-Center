@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Tests: Keyboard, PinEntry, SearchField, KeyBinder and InputPrompt behaviour.
+// ORION Media Center - Tests: Keyboard, PinEntry, SearchField, KeyBinder and InputPrompt behaviour.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Little-endian byte writer/reader for save payloads.
+// ORION Media Center - Little-endian byte writer/reader for save payloads.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Tests: a held pair of buttons that steps and repeats.
+// ORION Media Center - Tests: a held pair of buttons that steps and repeats.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

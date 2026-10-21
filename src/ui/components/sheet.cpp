@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Component: Sheet.
+// ORION Media Center - Component: Sheet.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

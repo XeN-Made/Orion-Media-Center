@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - measure_paragraph agrees with what paragraph draws.
+// ORION Media Center - measure_paragraph agrees with what paragraph draws.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

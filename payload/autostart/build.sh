@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ps5-homebrew-ui - Builds ORION's autostart payload with the PS5 payload SDK.
+# ORION Media Center - Builds ORION's autostart payload with the PS5 payload SDK.
 # Copyright (C) 2026 BlackBearReloaded
 # SPDX-License-Identifier: GPL-3.0-or-later
 #

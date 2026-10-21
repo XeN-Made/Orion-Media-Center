@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Components: the focus ring of a control that has an inside of its own.
+// ORION Media Center - Components: the focus ring of a control that has an inside of its own.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 //

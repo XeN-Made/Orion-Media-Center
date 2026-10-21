@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Component: TextView, a scrolling article for licences, notes and help.
+// ORION Media Center - Component: TextView, a scrolling article for licences, notes and help.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

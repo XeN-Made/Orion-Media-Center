@@ -23,7 +23,7 @@ Every comment-capable project file must start with this header (adapt the
 comment syntax and the one-line description):
 
 ```cpp
-// ps5-homebrew-ui - One-line description of the file.
+// ORION Media Center - One-line description of the file.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 ```

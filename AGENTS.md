@@ -7,8 +7,12 @@ guessing.
 
 ## What this is
 
-A reference for building console-grade user interfaces for PS5 homebrew with
-OpenGL 4.6, and one native app ("Homebrew UI Lab") that shows all of it.
+ORION Media Center: a launcher for jailbroken PS5 consoles (games, homebrew,
+media apps and emulated games in one library; title `PPSA99061`, user guide in
+[README.md](README.md)), built on a kit for console-grade user interfaces
+with OpenGL 4.6. The kit's designs and gallery stay in the repository as its
+reference and tests; the ORION app ships only the library
+(`app::orion_registry()`, `src/concepts/library.cpp`, `src/orion/`).
 
 <!-- BEGIN:counts -->
 Right now: **21 designs**, **30 themes**, **99 components**.
@@ -139,7 +143,6 @@ Other outputs of the same program:
 | `HUI_REEL=out/clips tools/host-snapshots.sh out/scratch aurora 640 360` | An animated WebP of the whole tour |
 | `tools/render-media.sh all` | Everything under `docs/media` (pictures and clips) |
 | `HUI_MANIFEST=build/manifest.json tools/host-snapshots.sh build/snapshots aurora` then `python3 tools/gen-docs.py build/manifest.json` | The galleries, the component catalogue, the component index and the counts |
-| `HUI_ICON=icon.png tools/host-snapshots.sh out` | A plain 512 x 512 icon drawn by the renderer |
 | `HUI_HOME_ART=out/art tools/host-snapshots.sh out` | ORION's home-screen art: `icon0.png`, `pic0.png`, `pic1.png` (3840 x 2160; `tools/prepare-assets.sh` makes the DDS files) |
 
 What the preview cannot tell you, and must be reported as not verified until

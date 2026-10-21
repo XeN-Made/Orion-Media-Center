@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Components: CheckGroup and RadioGroup.
+// ORION Media Center - Components: CheckGroup and RadioGroup.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

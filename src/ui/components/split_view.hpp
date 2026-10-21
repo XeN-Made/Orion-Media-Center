@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Component: SplitView, two or three panes with dividers between them.
+// ORION Media Center - Component: SplitView, two or three panes with dividers between them.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 //

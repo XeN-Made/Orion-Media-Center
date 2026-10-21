@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - A pair of buttons held down: one step, then more, faster.
+// ORION Media Center - A pair of buttons held down: one step, then more, faster.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

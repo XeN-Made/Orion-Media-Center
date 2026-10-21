@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Component: RadialMenu, a ring of wedges chosen by pointing the stick.
+// ORION Media Center - Component: RadialMenu, a ring of wedges chosen by pointing the stick.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

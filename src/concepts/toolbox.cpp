@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Design "Toolbox": the kit on one screen.
+// ORION Media Center - Design "Toolbox": the kit on one screen.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 //

@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - ORION's Settings: a full screen of sections, with a page for every tab.
+// ORION Media Center - ORION's Settings: a full screen of sections, with a page for every tab.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 
@@ -57,7 +57,6 @@ enum : int
     kNewTab,
     kArtAuto,
     kReturn,
-    kShortcut,
     kGameBackgrounds,
     kBlurredCovers,
     kBackgroundStrength,
@@ -430,8 +429,6 @@ void SettingsPanel::build_library(const LibraryPrefs &prefs)
         "A title moved to your own tab leaves Games, Homebrew or Media";
     form_.add_toggle(kReturn, "Return to ORION after a game", prefs.return_on_close).description =
         "Close a game from the PS button menu and ORION opens again";
-    form_.add_toggle(kShortcut, "Shortcut test (L3 + R3)", prefs.shortcut_test).description =
-        "Experiment: hold L3 + R3 in a game to see if ORION notices. Nothing is closed";
     form_.add_toggle(kAutostart, "Autoboot ORION after the jailbreak", prefs.autostart)
         .description =
         "ORION opens on its own after each jailbreak, once the payload below is in your autoloader";
@@ -1231,9 +1228,6 @@ SettingsPanel::Change SettingsPanel::handle(const InputFrame &input, ui::Feedbac
         return Change::prefs;
     case kReturn:
         prefs->return_on_close = form_.toggle_value(kReturn);
-        return Change::prefs;
-    case kShortcut:
-        prefs->shortcut_test = form_.toggle_value(kShortcut);
         return Change::prefs;
     case kGameBackgrounds:
         prefs->game_backgrounds = form_.toggle_value(kGameBackgrounds);

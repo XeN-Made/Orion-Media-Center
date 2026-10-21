@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Controller button glyphs and on-screen hint rows.
+// ORION Media Center - Controller button glyphs and on-screen hint rows.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

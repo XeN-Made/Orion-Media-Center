@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - ORION's launch helper: a payload that starts a title.
+// ORION Media Center - ORION's launch helper: a payload that starts a title.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
@@ -32,9 +32,6 @@
 //   @record <id>\t<log>        when the title closes, append "<start> <end> <id>"
 //                              (seconds since 1970) to <log>, a play-log.txt
 //                              in ORION's folder: how long it was played
-//   @shortcut                  experiment: while the title runs, see whether
-//                              L3 + R3 held for two seconds can be read, and
-//                              say so in a notification. Nothing is closed.
 //
 // The helper stays until the title closes when it has something to watch
 // for, and ends at once otherwise.
@@ -69,14 +66,9 @@
 #define REFUSED_GRACE_MS 8000 // a refused title that still comes up, within this
 #define GONE_FOR_MS 1000     // no app in front this long: the title has closed
 #define POLL_MS 100
-#define SHORTCUT_HOLD_MS 2000
 #define MAX_ARGUMENTS 16
 #define MAX_INSTALLS 4
 #define MAX_STAGED 4096 // bytes of one staged file
-
-// DualSense buttons as scePadReadState reports them (src/core/input.hpp).
-#define PAD_L3 0x00000002u
-#define PAD_R3 0x00000004u
 
 // The launch parameters as the PS5 homebrew loader passes them: only the
 // user is filled in.
@@ -96,22 +88,11 @@ typedef struct notify_request
     char message[3075];
 } notify_request_t;
 
-// scePadReadState's sample (src/platform/ps5/pad.cpp): the buttons come first.
-typedef struct pad_state
-{
-    uint32_t buttons;
-    uint8_t rest[116];
-} pad_state_t;
-
 int sceSystemServiceGetAppIdOfRunningBigApp(void);
 int sceSystemServiceLaunchApp(const char *title_id, char **argv, launch_param_t *param);
 int sceUserServiceInitialize(void *params);
 int sceUserServiceGetForegroundUser(int *user);
 int sceKernelSendNotificationRequest(int device, notify_request_t *request, size_t size, int blocking);
-int scePadInit(void);
-int scePadOpen(int user, int type, int index, const void *parameters);
-int scePadGetHandle(int user, int type, int index);
-int scePadReadState(int handle, pad_state_t *state);
 
 static void say(const char *format, ...)
 {
@@ -576,63 +557,6 @@ static int launch(launch_job_t *job)
     return job->result;
 }
 
-// The experiment: can a payload read the controller while a game has it?
-typedef struct shortcut
-{
-    int handle;    // < 0: none
-    int held_ms;   // how long L3 + R3 have been down
-    int reads;     // successful reads, for the log
-    int failures;  // failed reads, for the log
-    int announced; // this hold has been reported
-} shortcut_t;
-
-static void shortcut_open(shortcut_t *shortcut)
-{
-    memset(shortcut, 0, sizeof(*shortcut));
-    const int init = scePadInit();
-    int user = 0;
-    sceUserServiceGetForegroundUser(&user);
-    shortcut->handle = scePadOpen(user, 0, 0, NULL);
-    say("shortcut: scePadInit 0x%08x, scePadOpen 0x%08x", (unsigned)init,
-        (unsigned)shortcut->handle);
-    if (shortcut->handle < 0)
-    {
-        shortcut->handle = scePadGetHandle(user, 0, 0);
-        say("shortcut: scePadGetHandle 0x%08x", (unsigned)shortcut->handle);
-    }
-}
-
-static void shortcut_poll(shortcut_t *shortcut)
-{
-    if (shortcut->handle < 0)
-        return;
-    pad_state_t state;
-    memset(&state, 0, sizeof(state));
-    const int result = scePadReadState(shortcut->handle, &state);
-    if (result != 0)
-    {
-        if (shortcut->failures++ == 0)
-            say("shortcut: scePadReadState 0x%08x", (unsigned)result);
-        return;
-    }
-    if (shortcut->reads++ == 0)
-        say("shortcut: the controller can be read (buttons 0x%08x)", (unsigned)state.buttons);
-    const uint32_t both = PAD_L3 | PAD_R3;
-    if ((state.buttons & both) != both)
-    {
-        shortcut->held_ms = 0;
-        shortcut->announced = 0;
-        return;
-    }
-    shortcut->held_ms += POLL_MS;
-    if (shortcut->held_ms >= SHORTCUT_HOLD_MS && !shortcut->announced)
-    {
-        shortcut->announced = 1;
-        say("shortcut: L3 + R3 held for %d ms", shortcut->held_ms);
-        notify("ORION saw L3 + R3 (shortcut test: nothing is closed)");
-    }
-}
-
 int main(void)
 {
     // The helper may not remove ORION's request after reading it, so an old
@@ -662,7 +586,6 @@ int main(void)
     int file_count = 0;
     const char *note = NULL;
     const char *return_to = NULL;
-    int shortcut_test = 0;
     const char *record_id = NULL;
     const char *record_log = NULL;
     const char *remove_kind = NULL; // "home" or "erase"
@@ -733,8 +656,6 @@ int main(void)
         }
         else if (strncmp(line, "@remove-result ", 15) == 0)
             remove_result = line + 15;
-        else if (strcmp(line, "@shortcut") == 0)
-            shortcut_test = 1;
         else if (arguments < MAX_ARGUMENTS)
             job.argv[arguments++] = line;
         if (end == NULL)
@@ -840,12 +761,8 @@ int main(void)
     if (note != NULL && title_app > 0)
         notify(note);
 
-    // Then watch it: put its files back once it has read them, try the
-    // shortcut, and notice when it closes.
-    shortcut_t shortcut;
-    shortcut.handle = -1;
-    if (shortcut_test && title_app > 0)
-        shortcut_open(&shortcut);
+    // Then watch it: put its files back once it has read them, and notice
+    // when it closes.
     int elapsed = 0;
     int gone = 0;
     int restored = file_count == 0;
@@ -853,7 +770,7 @@ int main(void)
     for (int i = 0; i < file_count; ++i)
         note_out |= strcmp(files[i].path, kPs5sx2Note) == 0;
     const int watching =
-        (return_to != NULL || shortcut_test || record_id != NULL || note_out) && title_app > 0;
+        (return_to != NULL || record_id != NULL || note_out) && title_app > 0;
     while (!restored || watching)
     {
         usleep(POLL_MS * 1000);
@@ -873,7 +790,6 @@ int main(void)
         if (now == title_app)
         {
             gone = 0;
-            shortcut_poll(&shortcut);
             continue;
         }
         if (now > 0)

@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Component: Rating, stars that fill, for display and for input.
+// ORION Media Center - Component: Rating, stars that fill, for display and for input.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

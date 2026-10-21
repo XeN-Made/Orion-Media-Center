@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - ORION's Settings: a full screen of sections, with a page for every tab.
+// ORION Media Center - ORION's Settings: a full screen of sections, with a page for every tab.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

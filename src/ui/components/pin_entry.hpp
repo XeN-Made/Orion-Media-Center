@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Component: PinEntry, a row of boxes for a numeric code.
+// ORION Media Center - Component: PinEntry, a row of boxes for a numeric code.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

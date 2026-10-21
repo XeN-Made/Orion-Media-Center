@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - The list of UI designs, in switcher order.
+// ORION Media Center - The list of UI designs, in switcher order.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

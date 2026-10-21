@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - ORION's look: a base theme plus the player's own choices.
+// ORION Media Center - ORION's look: a base theme plus the player's own choices.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

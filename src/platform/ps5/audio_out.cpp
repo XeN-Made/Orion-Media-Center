@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Audio output thread through sceAudioOut.
+// ORION Media Center - Audio output thread through sceAudioOut.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

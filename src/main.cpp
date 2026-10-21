@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Application entry point.
+// ORION Media Center - Application entry point.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 //

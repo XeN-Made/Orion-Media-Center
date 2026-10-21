@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Component: ToastStack, timed notifications that never take the focus.
+// ORION Media Center - Component: ToastStack, timed notifications that never take the focus.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Invented sample content shared by every design.
+// ORION Media Center - Invented sample content shared by every design.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

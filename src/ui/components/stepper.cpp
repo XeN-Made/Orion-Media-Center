@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Component: Stepper.
+// ORION Media Center - Component: Stepper.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

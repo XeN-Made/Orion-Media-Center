@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Component: InputPrompt, the "enter a name" overlay.
+// ORION Media Center - Component: InputPrompt, the "enter a name" overlay.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Confetti celebration drawn over a finished game.
+// ORION Media Center - Confetti celebration drawn over a finished game.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

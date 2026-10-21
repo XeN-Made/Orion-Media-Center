@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Declarations for the vendored stb_image (see image.c).
+// ORION Media Center - Declarations for the vendored stb_image (see image.c).
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Component: MediaControls, the transport of an audio or video player.
+// ORION Media Center - Component: MediaControls, the transport of an audio or video player.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

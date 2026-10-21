@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Every component of the library in one include.
+// ORION Media Center - Every component of the library in one include.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 //

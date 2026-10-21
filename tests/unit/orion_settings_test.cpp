@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Tests: ORION's Settings panel, through the controller.
+// ORION Media Center - Tests: ORION's Settings panel, through the controller.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

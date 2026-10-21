@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Persistent offscreen canvas (MSAA render target + texture).
+// ORION Media Center - Persistent offscreen canvas (MSAA render target + texture).
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

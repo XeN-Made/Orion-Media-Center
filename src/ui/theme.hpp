@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Design tokens: one struct that restyles every widget.
+// ORION Media Center - Design tokens: one struct that restyles every widget.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

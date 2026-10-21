@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ps5-homebrew-ui - Incremental host GoogleTest compilation.
+# ORION Media Center - Incremental host GoogleTest compilation.
 # Copyright (C) 2026 BlackBearReloaded
 # SPDX-License-Identifier: GPL-3.0-or-later
 #

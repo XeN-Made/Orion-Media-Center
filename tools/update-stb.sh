@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ps5-homebrew-ui - Vendors stb_vorbis and stb_image (public domain / MIT) at a pinned commit.
+# ORION Media Center - Vendors stb_vorbis and stb_image (public domain / MIT) at a pinned commit.
 # Copyright (C) 2026 BlackBearReloaded
 # SPDX-License-Identifier: GPL-3.0-or-later
 #

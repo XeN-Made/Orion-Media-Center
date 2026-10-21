@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Design "Editorial": a magazine's weekly selection.
+// ORION Media Center - Design "Editorial": a magazine's weekly selection.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 //

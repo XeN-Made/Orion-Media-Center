@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Component: ListView.
+// ORION Media Center - Component: ListView.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

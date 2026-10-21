@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Easing and spring tests.
+// ORION Media Center - Easing and spring tests.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Sound cues: names, sound sets and the loaded sound bank.
+// ORION Media Center - Sound cues: names, sound sets and the loaded sound bank.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

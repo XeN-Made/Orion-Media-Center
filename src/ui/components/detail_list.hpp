@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Component: DetailList, labelled values in three layouts.
+// ORION Media Center - Component: DetailList, labelled values in three layouts.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Component: Carousel, a horizontal shelf of cards in three modes.
+// ORION Media Center - Component: Carousel, a horizontal shelf of cards in three modes.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

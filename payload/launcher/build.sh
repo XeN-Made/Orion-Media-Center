@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ps5-homebrew-ui - Builds ORION's launch helper payload with the PS5 payload SDK.
+# ORION Media Center - Builds ORION's launch helper payload with the PS5 payload SDK.
 # Copyright (C) 2026 BlackBearReloaded
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
@@ -23,4 +23,4 @@ export PS5_PAYLOAD_SDK="$sdk"
 }
 mkdir -p "$(dirname -- "$output")"
 "$compiler" -Wall -Wextra -Werror -O2 -o "$output" "$here/main.c" \
-    -lSceSystemService -lSceUserService -lScePad -lkernel_sys
+    -lSceSystemService -lSceUserService -lkernel_sys

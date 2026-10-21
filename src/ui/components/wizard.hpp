@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Component: Wizard, the step indicator of a multi-step flow.
+// ORION Media Center - Component: Wizard, the step indicator of a multi-step flow.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

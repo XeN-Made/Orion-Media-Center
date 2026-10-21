@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Tests: ORION's folders, counted and copied.
+// ORION Media Center - Tests: ORION's folders, counted and copied.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

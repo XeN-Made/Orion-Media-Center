@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - ORION's folders: counting and copying what they hold.
+// ORION Media Center - ORION's folders: counting and copying what they hold.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

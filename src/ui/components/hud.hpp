@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Components: HUD pieces that sit over gameplay.
+// ORION Media Center - Components: HUD pieces that sit over gameplay.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 //

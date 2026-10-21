@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Frame composition: backdrops, draw lists and frosted glass.
+// ORION Media Center - Frame composition: backdrops, draw lists and frosted glass.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

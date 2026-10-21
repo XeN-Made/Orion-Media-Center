@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Design "Constellation": a skill tree drawn as a star map.
+// ORION Media Center - Design "Constellation": a skill tree drawn as a star map.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 //

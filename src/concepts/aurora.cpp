@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Design "Aurora Shelf": a console home screen.
+// ORION Media Center - Design "Aurora Shelf": a console home screen.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 //

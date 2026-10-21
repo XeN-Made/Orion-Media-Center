@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Automated tour: drives every design with scripted input.
+// ORION Media Center - Automated tour: drives every design with scripted input.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

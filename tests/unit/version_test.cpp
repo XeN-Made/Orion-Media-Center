@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - App version parsing tests.
+// ORION Media Center - App version parsing tests.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

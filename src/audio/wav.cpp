@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - WAV (RIFF PCM) decoding for sound effects.
+// ORION Media Center - WAV (RIFF PCM) decoding for sound effects.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - ORION's autostart: a payload that opens ORION once the jailbreak is done.
+// ORION Media Center - ORION's autostart: a payload that opens ORION once the jailbreak is done.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 //

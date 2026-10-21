@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Checked save container and atomic file writes.
+// ORION Media Center - Checked save container and atomic file writes.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

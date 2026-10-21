@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Components: Slider and RangeSlider, one or two thumbs on a track.
+// ORION Media Center - Components: Slider and RangeSlider, one or two thumbs on a track.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

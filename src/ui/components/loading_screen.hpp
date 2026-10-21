@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Component: LoadingScreen, the full-screen loader with stages and tips.
+// ORION Media Center - Component: LoadingScreen, the full-screen loader with stages and tips.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

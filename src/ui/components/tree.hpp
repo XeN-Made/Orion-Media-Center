@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Component: TreeView, a hierarchy that opens and closes branch by branch.
+// ORION Media Center - Component: TreeView, a hierarchy that opens and closes branch by branch.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

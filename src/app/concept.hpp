@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - The contract between the shell and one UI design.
+// ORION Media Center - The contract between the shell and one UI design.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

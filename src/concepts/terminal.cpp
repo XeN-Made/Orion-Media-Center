@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Design "Phosphor": a monochrome CRT terminal.
+// ORION Media Center - Design "Phosphor": a monochrome CRT terminal.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 //

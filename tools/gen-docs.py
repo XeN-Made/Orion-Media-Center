@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-# ps5-homebrew-ui - Writes the design and theme galleries of the documentation.
+# ORION Media Center - Writes the design and theme galleries of the documentation.
 # Copyright (C) 2026 BlackBearReloaded
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Fills the generated sections of README.md, docs/DESIGNS.md and docs/THEMES.md.
+"""Fills the generated sections of docs/UI_KIT.md, docs/DESIGNS.md and docs/THEMES.md.
 
 usage: tools/gen-docs.py <manifest.json>
 
@@ -54,8 +54,8 @@ def readme_designs(designs, prefix):
     cells = []
     for index, d in enumerate(designs, 1):
         cells.append(
-            f'<a href="{prefix}docs/DESIGNS.md#{d["id"]}">'
-            f'<img src="{prefix}docs/media/designs/{d["id"]}.jpg" alt="{d["name"]}"></a><br>'
+            f'<a href="{prefix}DESIGNS.md#{d["id"]}">'
+            f'<img src="{prefix}media/designs/{d["id"]}.jpg" alt="{d["name"]}"></a><br>'
             f'<b>{index:02d} &middot; {d["name"]}</b><br><sub>{d["tagline"]}</sub>')
     return grid(cells, 2)
 
@@ -64,8 +64,8 @@ def readme_themes(themes, prefix):
     cells = []
     for index, t in enumerate(themes, 1):
         cells.append(
-            f'<a href="{prefix}docs/THEMES.md#{t["id"]}">'
-            f'<img src="{prefix}docs/media/themes/{t["id"]}.jpg" alt="{t["name"]}"></a><br>'
+            f'<a href="{prefix}THEMES.md#{t["id"]}">'
+            f'<img src="{prefix}media/themes/{t["id"]}.jpg" alt="{t["name"]}"></a><br>'
             f'<b>{index:02d} &middot; {t["name"]}</b><br><sub>{t["family"]}</sub>')
     return grid(cells, 3)
 
@@ -261,10 +261,10 @@ def main():
         raise SystemExit(__doc__)
     manifest = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
     designs, themes = manifest["designs"], manifest["themes"]
-    replace_section(ROOT / "README.md", "designs", readme_designs(designs, ""))
-    replace_section(ROOT / "README.md", "themes", readme_themes(themes, ""))
+    replace_section(ROOT / "docs" / "UI_KIT.md", "designs", readme_designs(designs, ""))
+    replace_section(ROOT / "docs" / "UI_KIT.md", "themes", readme_themes(themes, ""))
     components = sum(len(component_names(group)) for group, _ in COMPONENT_GROUPS)
-    replace_section(ROOT / "README.md", "counts",
+    replace_section(ROOT / "docs" / "UI_KIT.md", "counts",
                     f"**{len(designs)} designs** &middot; **{len(themes)} themes** &middot; "
                     f"**{components} reusable components**")
     replace_section(ROOT / "docs/DESIGNS.md", "designs", designs_page(designs))

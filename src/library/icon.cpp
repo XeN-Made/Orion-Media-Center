@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Title icons: decoding (no OpenGL here; see icon_upload.cpp).
+// ORION Media Center - Title icons: decoding (no OpenGL here; see icon_upload.cpp).
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

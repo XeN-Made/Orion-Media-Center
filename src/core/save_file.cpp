@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Checked save container and atomic file writes.
+// ORION Media Center - Checked save container and atomic file writes.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 
@@ -84,7 +84,7 @@ Decoded decode(Kind kind, std::string_view data)
     Decoded result;
     if (data.size() < kHeader + kTrailer || std::memcmp(data.data(), kMagic, 4) != 0)
     {
-        result.error = "not a ps5-homebrew-ui save";
+        result.error = "not an ORION Media Center save";
         return result;
     }
     if (get_u16(data, 6) != static_cast<std::uint16_t>(kind))

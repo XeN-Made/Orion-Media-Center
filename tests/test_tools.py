@@ -245,8 +245,8 @@ class ToolTests(unittest.TestCase):
         self.assertIn('echo "BUILD_LABEL=PR $PR_NUMBER, $short" >> "$GITHUB_ENV"', workflow)
         self.assertIn("name: ${{ steps.label.outputs.artifact }}", workflow)
         # The release job still finds a tag's build under its commit.
-        self.assertIn('--name "ps5-homebrew-ui-$GITHUB_SHA"', workflow)
-        self.assertIn('echo "artifact=ps5-homebrew-ui-$GITHUB_SHA" >> "$GITHUB_OUTPUT"', workflow)
+        self.assertIn('--name "orion-media-center-$GITHUB_SHA"', workflow)
+        self.assertIn('echo "artifact=orion-media-center-$GITHUB_SHA" >> "$GITHUB_OUTPUT"', workflow)
         # A contributor's code is never built with write access or secrets.
         self.assertNotIn("pull_request_target:", workflow)
         build = (ROOT / "tools/build.sh").read_text(encoding="utf-8")

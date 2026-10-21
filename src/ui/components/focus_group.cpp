@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Component: FocusGroup.
+// ORION Media Center - Component: FocusGroup.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

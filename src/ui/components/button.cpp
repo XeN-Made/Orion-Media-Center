@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Components: PushButton and IconButton.
+// ORION Media Center - Components: PushButton and IconButton.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

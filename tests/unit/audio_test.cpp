@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Mixer, WAV decoding and sound bank tests.
+// ORION Media Center - Mixer, WAV decoding and sound bank tests.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

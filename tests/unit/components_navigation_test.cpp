@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Tests: TabBar, SideNav, Breadcrumb, PageDots and Menu behaviour.
+// ORION Media Center - Tests: TabBar, SideNav, Breadcrumb, PageDots and Menu behaviour.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

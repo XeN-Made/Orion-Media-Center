@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Save container and atomic write tests.
+// ORION Media Center - Save container and atomic write tests.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Component: TabBar, a row of tabs with one gliding indicator.
+// ORION Media Center - Component: TabBar, a row of tabs with one gliding indicator.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

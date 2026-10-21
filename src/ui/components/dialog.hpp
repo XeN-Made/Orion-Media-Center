@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Component: Dialog, a modal question with one to three answers.
+// ORION Media Center - Component: Dialog, a modal question with one to three answers.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

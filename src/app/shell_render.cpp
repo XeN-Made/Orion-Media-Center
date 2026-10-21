@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - The shell's frame composition (the part that needs the renderer).
+// ORION Media Center - The shell's frame composition (the part that needs the renderer).
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - A small FTP client for the console's own FTP server.
+// ORION Media Center - A small FTP client for the console's own FTP server.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

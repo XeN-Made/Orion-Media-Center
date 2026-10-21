@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Components: BarChart, LineChart, DonutChart and Legend.
+// ORION Media Center - Components: BarChart, LineChart, DonutChart and Legend.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 //

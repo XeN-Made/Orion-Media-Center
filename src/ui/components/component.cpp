@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Components: shared helpers and the gliding focus highlight.
+// ORION Media Center - Components: shared helpers and the gliding focus highlight.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - ORION's library preferences: custom tabs, placements, the last tab.
+// ORION Media Center - ORION's library preferences: custom tabs, placements, the last tab.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 
@@ -104,7 +104,6 @@ struct Placement
 //     "moved_leave_shelf": true,
 //     "auto_art": true,
 //     "return_on_close": true,
-//     "shortcut_test": false,
 //     "game_backgrounds": true,
 //     "blurred_covers": false,
 //     "background_strength": 1.0,
@@ -154,9 +153,6 @@ struct LibraryPrefs
     bool auto_art = true;
     // A game started from ORION brings ORION back when it closes.
     bool return_on_close = true;
-    // Experiment: during a game, L3 + R3 held shows a notification if the
-    // launch helper can see the controller. Nothing is closed.
-    bool shortcut_test = false;
     // The focused game's home-screen picture behind the library; for games
     // with none, their cover blurred (blurred_covers). Strength 0.2 to 1:
     // below 1 the sky and its clouds show through.

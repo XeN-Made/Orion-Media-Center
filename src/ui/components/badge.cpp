@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Components: Badge, Chip, Avatar and AvatarStack.
+// ORION Media Center - Components: Badge, Chip, Avatar and AvatarStack.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

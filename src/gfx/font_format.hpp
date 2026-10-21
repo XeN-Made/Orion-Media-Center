@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Binary layout of baked SDF fonts (assets/fonts/*.huifont).
+// ORION Media Center - Binary layout of baked SDF fonts (assets/fonts/*.huifont).
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

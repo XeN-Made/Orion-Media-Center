@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Tests: decoding title icons.
+// ORION Media Center - Tests: decoding title icons.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

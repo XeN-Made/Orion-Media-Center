@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Component: KeyBinder.
+// ORION Media Center - Component: KeyBinder.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

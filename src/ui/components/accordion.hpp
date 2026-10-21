@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Component: Accordion, sections that open and close under their headers.
+// ORION Media Center - Component: Accordion, sections that open and close under their headers.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

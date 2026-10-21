@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Title icons: PNG files turned into textures for the covers.
+// ORION Media Center - Title icons: PNG files turned into textures for the covers.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Controller input model tests.
+// ORION Media Center - Controller input model tests.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

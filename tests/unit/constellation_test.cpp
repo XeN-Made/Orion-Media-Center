@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Behaviour tests for the Constellation design.
+// ORION Media Center - Behaviour tests for the Constellation design.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 //

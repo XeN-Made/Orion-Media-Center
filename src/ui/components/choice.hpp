@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Component: ChoicePicker, one value from a list between two arrows.
+// ORION Media Center - Component: ChoicePicker, one value from a list between two arrows.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Tests: Form, Stepper, ChoicePicker and TextField behaviour.
+// ORION Media Center - Tests: Form, Stepper, ChoicePicker and TextField behaviour.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

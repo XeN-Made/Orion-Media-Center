@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Music streaming tests: Vorbis decode, loops, decks and mixing.
+// ORION Media Center - Music streaming tests: Vorbis decode, loops, decks and mixing.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

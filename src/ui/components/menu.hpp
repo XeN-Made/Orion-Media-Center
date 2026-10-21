@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Component: Menu, a context menu that springs from what it is about.
+// ORION Media Center - Component: Menu, a context menu that springs from what it is about.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

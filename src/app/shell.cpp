@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - The shell: switches between designs and draws shared chrome.
+// ORION Media Center - The shell: switches between designs and draws shared chrome.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

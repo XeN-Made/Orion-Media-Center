@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Components: Panel, Divider, SectionHeader and Spacer.
+// ORION Media Center - Components: Panel, Divider, SectionHeader and Spacer.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 //

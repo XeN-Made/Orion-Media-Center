@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Design "Pulse Dashboard": a bento grid of live data tiles.
+// ORION Media Center - Design "Pulse Dashboard": a bento grid of live data tiles.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 //

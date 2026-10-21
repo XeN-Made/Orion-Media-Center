@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Baked SDF font: loading, measuring and glyph layout.
+// ORION Media Center - Baked SDF font: loading, measuring and glyph layout.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

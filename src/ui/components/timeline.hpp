@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Component: Timeline, a vertical activity feed on a rail.
+// ORION Media Center - Component: Timeline, a vertical activity feed on a rail.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

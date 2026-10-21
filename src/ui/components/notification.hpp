@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Component: NotificationStack, notifications the player can answer.
+// ORION Media Center - Component: NotificationStack, notifications the player can answer.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 //

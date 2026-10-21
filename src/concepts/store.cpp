@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Design "Storefront": browse, inspect and buy titles.
+// ORION Media Center - Design "Storefront": browse, inspect and buy titles.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 //

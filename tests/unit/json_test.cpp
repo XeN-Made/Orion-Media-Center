@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Tests: the JSON reader.
+// ORION Media Center - Tests: the JSON reader.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

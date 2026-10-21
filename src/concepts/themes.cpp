@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Design "Theme Lab": one screen, thirty design languages.
+// ORION Media Center - Design "Theme Lab": one screen, thirty design languages.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 //

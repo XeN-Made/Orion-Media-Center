@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Component: Transition.
+// ORION Media Center - Component: Transition.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

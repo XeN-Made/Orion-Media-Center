@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Tests: PauseMenu, UnlockPopup, ProfilePicker, InventoryGrid, NodeMap, HUD.
+// ORION Media Center - Tests: PauseMenu, UnlockPopup, ProfilePicker, InventoryGrid, NodeMap, HUD.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

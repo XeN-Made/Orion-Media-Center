@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Tests: the indicator components (progress, badges, rating, counter, ...).
+// ORION Media Center - Tests: the indicator components (progress, badges, rating, counter, ...).
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Writes every built-in theme as an ORION theme file.
+// ORION Media Center - Writes every built-in theme as an ORION theme file.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 //

@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Component: TagSelect, a wrapping cloud of chips to pick from.
+// ORION Media Center - Component: TagSelect, a wrapping cloud of chips to pick from.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

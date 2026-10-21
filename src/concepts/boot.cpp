@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Design "Launch Sequence": everything before the main menu.
+// ORION Media Center - Design "Launch Sequence": everything before the main menu.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 //

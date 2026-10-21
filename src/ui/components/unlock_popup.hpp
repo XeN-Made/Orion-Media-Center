@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Component: UnlockPopup, the achievement or reward pop-up.
+// ORION Media Center - Component: UnlockPopup, the achievement or reward pop-up.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

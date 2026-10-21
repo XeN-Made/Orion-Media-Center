@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Cover art for the sample catalogue, rendered at start-up.
+// ORION Media Center - Cover art for the sample catalogue, rendered at start-up.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 //

@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Component Library page: TextView, ImageViewer, MediaControls, LoadingScreen.
+// ORION Media Center - Component Library page: TextView, ImageViewer, MediaControls, LoadingScreen.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 //

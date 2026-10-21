@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Design "Library": the titles installed on this console.
+// ORION Media Center - Design "Library": the titles installed on this console.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
@@ -2219,8 +2219,6 @@ class Library final : public app::Concept
         if (prefs_.return_on_close && !self.empty())
             request += "@return " + self + "\n@notify Close " + one_line(title->name) +
                        " from the PS button menu to return to ORION\n";
-        if (prefs_.shortcut_test)
-            request += "@shortcut\n";
         // How long it is played goes in ORION's own folder, which the helper
         // can write to (orion/playtime.hpp).
         const std::string &self_path = context_.library.self_path;

@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - EGL display and OpenGL 4.6 Core context.
+// ORION Media Center - EGL display and OpenGL 4.6 Core context.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

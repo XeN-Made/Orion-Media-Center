@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Controller input model: raw pad samples to logical actions.
+// ORION Media Center - Controller input model: raw pad samples to logical actions.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

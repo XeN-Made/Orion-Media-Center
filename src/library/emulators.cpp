@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Emulated systems: the emulators' games as library entries.
+// ORION Media Center - Emulated systems: the emulators' games as library entries.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

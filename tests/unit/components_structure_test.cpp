@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Tests: RadialMenu, Wizard, Accordion, TreeView and JumpBar behaviour.
+// ORION Media Center - Tests: RadialMenu, Wizard, Accordion, TreeView and JumpBar behaviour.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

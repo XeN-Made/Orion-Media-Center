@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Component: Tooltip, a small label bubble pointing at something.
+// ORION Media Center - Component: Tooltip, a small label bubble pointing at something.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

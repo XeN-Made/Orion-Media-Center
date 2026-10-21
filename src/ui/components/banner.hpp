@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Component: Banner, a message that stays until it is answered.
+// ORION Media Center - Component: Banner, a message that stays until it is answered.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 //

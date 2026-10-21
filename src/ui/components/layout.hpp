@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Components: layout helpers that compute rectangles.
+// ORION Media Center - Components: layout helpers that compute rectangles.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 //

@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Component: CoachMark.
+// ORION Media Center - Component: CoachMark.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

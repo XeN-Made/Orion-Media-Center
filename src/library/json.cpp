@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - A small JSON reader for param.json and ORION's own files.
+// ORION Media Center - A small JSON reader for param.json and ORION's own files.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

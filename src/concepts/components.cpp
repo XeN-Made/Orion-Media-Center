@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Design "Component Library": every reusable component, in every theme.
+// ORION Media Center - Design "Component Library": every reusable component, in every theme.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 //

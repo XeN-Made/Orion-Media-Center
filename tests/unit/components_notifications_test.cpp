@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Tests: NotificationStack, NotificationCenter and NotificationBell behaviour.
+// ORION Media Center - Tests: NotificationStack, NotificationCenter and NotificationBell behaviour.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

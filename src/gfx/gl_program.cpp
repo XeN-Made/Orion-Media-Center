@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - GLSL program compilation.
+// ORION Media Center - GLSL program compilation.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

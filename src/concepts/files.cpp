@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Design "File Browser": a file manager worth looking at.
+// ORION Media Center - Design "File Browser": a file manager worth looking at.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 //

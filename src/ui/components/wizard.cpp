@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Component: Wizard.
+// ORION Media Center - Component: Wizard.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

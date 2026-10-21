@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Tests: RetroArch's cores and content as library entries.
+// ORION Media Center - Tests: RetroArch's cores and content as library entries.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 //

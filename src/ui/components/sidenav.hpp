@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Component: SideNav, a vertical rail that collapses to its icons.
+// ORION Media Center - Component: SideNav, a vertical rail that collapses to its icons.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

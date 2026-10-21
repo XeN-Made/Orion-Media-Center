@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - ORION's play records: how long and how lately each game was played.
+// ORION Media Center - ORION's play records: how long and how lately each game was played.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

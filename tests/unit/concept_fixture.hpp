@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Test fixture: a design with real fonts and no OpenGL.
+// ORION Media Center - Test fixture: a design with real fonts and no OpenGL.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

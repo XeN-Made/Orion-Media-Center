@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Component: Select, a field that opens a list of options.
+// ORION Media Center - Component: Select, a field that opens a list of options.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

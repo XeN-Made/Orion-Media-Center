@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Components: ProgressBar, ProgressRing, Spinner and Meter.
+// ORION Media Center - Components: ProgressBar, ProgressRing, Spinner and Meter.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

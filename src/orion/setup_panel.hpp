@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - ORION's first-run setup: a few steps that set everything up.
+// ORION Media Center - ORION's first-run setup: a few steps that set everything up.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

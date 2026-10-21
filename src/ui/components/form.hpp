@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Component: Form, a scrolling column of rows that edit values.
+// ORION Media Center - Component: Form, a scrolling column of rows that edit values.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Offline SDF font atlas baker (host tool).
+// ORION Media Center - Offline SDF font atlas baker (host tool).
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 //

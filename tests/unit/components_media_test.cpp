@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Tests: TextView, ImageViewer, MediaControls and LoadingScreen.
+// ORION Media Center - Tests: TextView, ImageViewer, MediaControls and LoadingScreen.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Player settings and their save format.
+// ORION Media Center - Player settings and their save format.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Component Library page: Carousel, GridView and the Card they draw.
+// ORION Media Center - Component Library page: Carousel, GridView and the Card they draw.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 //

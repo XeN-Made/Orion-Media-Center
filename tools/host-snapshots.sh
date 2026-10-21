@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ps5-homebrew-ui - Render every design on the host (Mesa surfaceless EGL) to PNG.
+# ORION Media Center - Render every design on the host (Mesa surfaceless EGL) to PNG.
 # Copyright (C) 2026 BlackBearReloaded
 # SPDX-License-Identifier: GPL-3.0-or-later
 #

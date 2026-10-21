@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Components: Countdown, StorageBar and StatusBar.
+// ORION Media Center - Components: Countdown, StorageBar and StatusBar.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

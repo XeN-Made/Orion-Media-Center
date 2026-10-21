@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Component: Sheet, a drawer that slides in from an edge.
+// ORION Media Center - Component: Sheet, a drawer that slides in from an edge.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

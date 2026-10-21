@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Design "Satchel": an inventory you handle, not a list you browse.
+// ORION Media Center - Design "Satchel": an inventory you handle, not a list you browse.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 //

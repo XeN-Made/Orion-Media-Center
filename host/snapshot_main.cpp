@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Headless host renderer: runs the tour and writes PNG files.
+// ORION Media Center - Headless host renderer: runs the tour and writes PNG files.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
@@ -197,55 +197,6 @@ int main(int argc, char **argv)
     {
         std::fprintf(stderr, "cover art failed\n");
         return 1;
-    }
-
-    // HUI_ICON=<file.png>: draw the 512x512 launcher icon with the kit and stop.
-    if (const char *icon_path = std::getenv("HUI_ICON"))
-    {
-        constexpr int kIcon = 512;
-        GLuint target = 0;
-        GLuint storage = 0;
-        glGenFramebuffers(1, &target);
-        glGenRenderbuffers(1, &storage);
-        glBindRenderbuffer(GL_RENDERBUFFER, storage);
-        glRenderbufferStorage(GL_RENDERBUFFER, GL_RGBA8, kIcon, kIcon);
-        glBindFramebuffer(GL_FRAMEBUFFER, target);
-        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, storage);
-        using hui::gfx::Color;
-        hui::gfx::BackdropSpec spec;
-        spec.mode = hui::gfx::BackdropMode::aurora;
-        spec.colors[0] = Color::rgb(0x0b0e20);
-        spec.colors[1] = Color::rgb(0x1b1450);
-        spec.colors[2] = Color::rgb(0x3b6cff);
-        spec.colors[3] = Color::rgb(0x7cf0c8);
-        spec.time = 42.0f;
-        hui::gfx::DrawList list;
-        // Three cards fanned out, the front one focused: the app in one glance.
-        list.rotated_rect({118, 150, 230, 150}, 26, -0.28f, Color::rgb(0xffffff, 0.16f));
-        list.rotated_rect({150, 136, 230, 150}, 26, -0.12f, Color::rgb(0xffffff, 0.3f));
-        list.shadow({170, 150, 250, 160}, 30, 40, Color::rgb(0x000000, 0.5f));
-        list.glow({166, 128, 250, 160}, 30, 26, Color::rgb(0x7cf0c8, 0.55f));
-        list.gradient_rect({166, 128, 250, 160}, 30, Color::rgb(0xf4f7ff), Color::rgb(0xcfd8ff));
-        list.bordered_rect({160, 122, 262, 172}, 34, Color::rgb(0x000000, 0.0f), 5,
-                           Color::rgb(0x7cf0c8));
-        list.rounded_rect({196, 164, 96, 18}, 9, Color::rgb(0x1b1450));
-        list.rounded_rect({196, 198, 160, 12}, 6, Color::rgb(0x1b1450, 0.45f));
-        list.rounded_rect({196, 222, 124, 12}, 6, Color::rgb(0x1b1450, 0.45f));
-        list.arc(366, 176, 30, 9, 0.0f, 4.4f, Color::rgb(0x3b6cff));
-        hui::ui::text(list, fonts.display, "UI Lab", 256, 402, 82, Color::rgb(0xffffff),
-                      hui::gfx::Align::center);
-        hui::ui::text(list, fonts.semibold, "HOMEBREW", 256, 446, 24, Color::rgb(0x7cf0c8),
-                      hui::gfx::Align::center, 9.0f);
-        renderer.begin();
-        renderer.backdrop(spec);
-        renderer.draw(list);
-        renderer.present(target, kIcon, kIcon, 512.0f, 512.0f);
-        std::vector<unsigned char> icon(static_cast<std::size_t>(kIcon * kIcon * 4));
-        glReadPixels(0, 0, kIcon, kIcon, GL_RGBA, GL_UNSIGNED_BYTE, icon.data());
-        for (std::size_t i = 3; i < icon.size(); i += 4)
-            icon[i] = 255;
-        stbi_flip_vertically_on_write(1);
-        return stbi_write_png(icon_path, kIcon, kIcon, 4, icon.data(), kIcon * 4) != 0 ? 0 : 1;
     }
 
     // HUI_HOME_ART=<dir>: ORION's home-screen art, drawn with the kit in its

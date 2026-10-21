@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Component Library page: NotificationStack, NotificationCenter,
+// ORION Media Center - Component Library page: NotificationStack, NotificationCenter,
 // NotificationBell. Copyright (C) 2026 BlackBearReloaded SPDX-License-Identifier: GPL-3.0-or-later
 //
 // A home screen that is not listening (covers, a shelf of recent titles) and,

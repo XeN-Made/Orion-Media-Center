@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Component: JumpBar, an alphabet index that jumps a long list to a letter.
+// ORION Media Center - Component: JumpBar, an alphabet index that jumps a long list to a letter.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

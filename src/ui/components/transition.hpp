@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Component: Transition, how a region arrives, leaves or changes its content.
+// ORION Media Center - Component: Transition, how a region arrives, leaves or changes its content.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 //

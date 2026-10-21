@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Components: what the data components share.
+// ORION Media Center - Components: what the data components share.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

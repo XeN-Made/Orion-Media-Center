@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# ps5-homebrew-ui - Turns raw generated sound effects into game-ready cues.
+# ORION Media Center - Turns raw generated sound effects into game-ready cues.
 # Copyright (C) 2026 BlackBearReloaded
 # SPDX-License-Identifier: GPL-3.0-or-later
 """process-sfx.py <raw dir> <out dir>

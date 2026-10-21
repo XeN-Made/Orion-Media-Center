@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Lock-free ring of stereo float frames (one producer, one consumer).
+// ORION Media Center - Lock-free ring of stereo float frames (one producer, one consumer).
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

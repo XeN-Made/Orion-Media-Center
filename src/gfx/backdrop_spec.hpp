@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - What a backdrop or post overlay should paint (no GL here).
+// ORION Media Center - What a backdrop or post overlay should paint (no GL here).
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

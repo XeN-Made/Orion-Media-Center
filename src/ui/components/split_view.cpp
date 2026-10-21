@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Component: SplitView.
+// ORION Media Center - Component: SplitView.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

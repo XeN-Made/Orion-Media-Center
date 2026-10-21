@@ -1,9 +1,9 @@
-# ps5-homebrew-ui - Bug report form.
+# ORION Media Center - Bug report form.
 # Copyright (C) 2026 BlackBearReloaded
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 name: "Bug report"
-description: "Something in ps5-homebrew-ui does not work as it should"
+description: "Something in ORION Media Center does not work as it should"
 title: "[Bug] "
 labels: ["bug"]
 body:

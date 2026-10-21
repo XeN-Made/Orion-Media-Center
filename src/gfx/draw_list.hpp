@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - 2D draw list: instanced shapes, glyphs and images.
+// ORION Media Center - 2D draw list: instanced shapes, glyphs and images.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

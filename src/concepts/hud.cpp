@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Design "Field HUD": an in-game HUD and its pause menu.
+// ORION Media Center - Design "Field HUD": an in-game HUD and its pause menu.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 //

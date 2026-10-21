@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# ps5-homebrew-ui - Rewrite a release ZIP so every entry is stored open to all.
+# ORION Media Center - Rewrite a release ZIP so every entry is stored open to all.
 # Copyright (C) 2026 BlackBearReloaded
 # SPDX-License-Identifier: GPL-3.0-or-later
 """The console only starts an app whose files are open to every user (0777). A tool that

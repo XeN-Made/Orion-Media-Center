@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - OpenGL backend for the 2D draw list.
+// ORION Media Center - OpenGL backend for the 2D draw list.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

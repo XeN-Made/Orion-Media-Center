@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Easing curves and springs for UI motion.
+// ORION Media Center - Easing curves and springs for UI motion.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

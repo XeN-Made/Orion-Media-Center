@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - The thirty built-in themes.
+// ORION Media Center - The thirty built-in themes.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 //

@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Component: ColorPicker, preset swatches or a hue / saturation / value field.
+// ORION Media Center - Component: ColorPicker, preset swatches or a hue / saturation / value field.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

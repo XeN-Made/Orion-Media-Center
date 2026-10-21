@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Components: StatTile and EmptyState.
+// ORION Media Center - Components: StatTile and EmptyState.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

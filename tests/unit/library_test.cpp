@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Tests: reading the console library.
+// ORION Media Center - Tests: reading the console library.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 //

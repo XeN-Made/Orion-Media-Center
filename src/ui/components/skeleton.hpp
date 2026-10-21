@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Component: Skeleton, the shape of content that is still loading.
+// ORION Media Center - Component: Skeleton, the shape of content that is still loading.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Components: Slider and RangeSlider.
+// ORION Media Center - Components: Slider and RangeSlider.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

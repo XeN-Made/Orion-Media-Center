@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Component: Calendar, a month grid with a gliding focus.
+// ORION Media Center - Component: Calendar, a month grid with a gliding focus.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

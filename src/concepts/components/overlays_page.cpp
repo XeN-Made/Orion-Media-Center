@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Component Library page: Dialog, Sheet, ToastStack and Tooltip.
+// ORION Media Center - Component Library page: Dialog, Sheet, ToastStack and Tooltip.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 //

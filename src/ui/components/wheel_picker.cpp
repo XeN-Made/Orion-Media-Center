@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Components: WheelPicker, DatePicker and TimePicker.
+// ORION Media Center - Components: WheelPicker, DatePicker and TimePicker.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

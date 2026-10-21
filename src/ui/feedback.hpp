@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Feedback: the sounds and rumble a screen asks for this frame.
+// ORION Media Center - Feedback: the sounds and rumble a screen asks for this frame.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

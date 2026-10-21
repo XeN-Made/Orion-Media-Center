@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Tests: Dialog, Sheet, ToastStack and Tooltip behaviour.
+// ORION Media Center - Tests: Dialog, Sheet, ToastStack and Tooltip behaviour.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

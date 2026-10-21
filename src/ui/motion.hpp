@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Reusable motion helpers built on the springs in core/tween.hpp.
+// ORION Media Center - Reusable motion helpers built on the springs in core/tween.hpp.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

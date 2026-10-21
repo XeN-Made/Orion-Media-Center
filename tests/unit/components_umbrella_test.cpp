@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Tests: the umbrella header and the kit's independence.
+// ORION Media Center - Tests: the umbrella header and the kit's independence.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

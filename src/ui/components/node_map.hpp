@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Component: NodeMap, free-direction focus over nodes placed anywhere.
+// ORION Media Center - Component: NodeMap, free-direction focus over nodes placed anywhere.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

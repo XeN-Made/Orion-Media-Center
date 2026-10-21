@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Process-level runtime shims for the OpenGL runtime.
+// ORION Media Center - Process-level runtime shims for the OpenGL runtime.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 //

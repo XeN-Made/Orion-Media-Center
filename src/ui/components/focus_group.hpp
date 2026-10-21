@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Component: FocusGroup, spatial navigation for anything a screen draws.
+// ORION Media Center - Component: FocusGroup, spatial navigation for anything a screen draws.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 //

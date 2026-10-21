@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Component: Accordion.
+// ORION Media Center - Component: Accordion.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

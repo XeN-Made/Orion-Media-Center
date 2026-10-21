@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Component: TextField.
+// ORION Media Center - Component: TextField.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

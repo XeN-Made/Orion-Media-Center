@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Component Library page: the layout pieces, as one master-detail screen.
+// ORION Media Center - Component Library page: the layout pieces, as one master-detail screen.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 //

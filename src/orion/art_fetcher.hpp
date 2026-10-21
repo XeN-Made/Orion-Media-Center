@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - ORION's box art downloader: libretro thumbnails for RetroArch's games.
+// ORION Media Center - ORION's box art downloader: libretro thumbnails for RetroArch's games.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Component Library page: the pickers, as a "create your profile" board.
+// ORION Media Center - Component Library page: the pickers, as a "create your profile" board.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 //

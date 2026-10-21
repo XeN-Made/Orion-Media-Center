@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Frame-time histogram tests.
+// ORION Media Center - Frame-time histogram tests.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

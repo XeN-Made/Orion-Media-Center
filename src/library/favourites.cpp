@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - The titles the player starred, kept beside ORION's other state.
+// ORION Media Center - The titles the player starred, kept beside ORION's other state.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

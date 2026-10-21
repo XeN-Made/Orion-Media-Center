@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Component: Stepper, a whole number between a minus and a plus.
+// ORION Media Center - Component: Stepper, a whole number between a minus and a plus.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

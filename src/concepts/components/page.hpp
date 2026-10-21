@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Component Library: the contract of one gallery page.
+// ORION Media Center - Component Library: the contract of one gallery page.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 //

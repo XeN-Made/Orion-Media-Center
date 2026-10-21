@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Component: PauseMenu, the overlay a game shows when it stops.
+// ORION Media Center - Component: PauseMenu, the overlay a game shows when it stops.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

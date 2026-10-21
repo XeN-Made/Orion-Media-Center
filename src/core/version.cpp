@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - The app version, read from the packaged param.json.
+// ORION Media Center - The app version, read from the packaged param.json.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

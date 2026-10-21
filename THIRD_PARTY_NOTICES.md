@@ -2,7 +2,7 @@
 
 ## Credits and acknowledgements
 
-ps5-homebrew-ui exists thanks to the maintainers and contributors of:
+ORION Media Center exists thanks to the maintainers and contributors of:
 
 - [ps5-opengl](https://github.com/blackbearreloaded/ps5-opengl), with
   [Mesa](https://mesa3d.org/) and OpenGNM PSBC, for OpenGL 4.6 on PS5;
@@ -26,7 +26,8 @@ The rendering kit, the sound mixer and the sound effects come from
 [ProsperoPuzzles](https://github.com/blackbearreloaded/ProsperoPuzzles) and
 ProsperoEden, both by BlackBearReloaded.
 
-ps5-homebrew-ui is Copyright (C) 2026 BlackBearReloaded and licensed under
+ORION Media Center is built on ps5-homebrew-ui, Copyright (C) 2026
+BlackBearReloaded, and is licensed under
 GPL-3.0-or-later. It is built on `ps5-native-app-boilerplate`; the notices
 below cover the boilerplate's dependencies and every third-party component the
 project adds.
@@ -165,8 +166,8 @@ from. `sce_sys/snd0.at9`, the music the console plays while the title is
 selected, is the owner's own track, encoded with
 [ps5-at9-converter](https://github.com/blackbearreloaded/ps5-at9-converter)
 (57.6 s, 192 kb/s, -28 LUFS, whole-track loop).
-`HUI_ICON=<file> tools/host-snapshots.sh` still renders a plain icon
-with the project's own renderer, for forks that want one of their own. The
+They are drawn by ORION's own renderer
+(`HUI_HOME_ART=<dir> tools/host-snapshots.sh`, see AGENTS.md). The
 cover art inside the app is rendered at start-up from invented titles; no real
 product's name, artwork or trademark is used.
 

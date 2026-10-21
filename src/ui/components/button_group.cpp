@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Components: ButtonGroup and SplitButton.
+// ORION Media Center - Components: ButtonGroup and SplitButton.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Tests: the picker components.
+// ORION Media Center - Tests: the picker components.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

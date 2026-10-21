@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Themeable widgets: one set of controls, many design languages.
+// ORION Media Center - Themeable widgets: one set of controls, many design languages.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

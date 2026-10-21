@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Component: InventoryGrid, slots of items you lift and set down.
+// ORION Media Center - Component: InventoryGrid, slots of items you lift and set down.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

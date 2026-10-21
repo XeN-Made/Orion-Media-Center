@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Tests: the small FTP client, with a fake server.
+// ORION Media Center - Tests: the small FTP client, with a fake server.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

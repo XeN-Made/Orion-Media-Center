@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - A 5x7 bitmap typeface drawn from rectangles.
+// ORION Media Center - A 5x7 bitmap typeface drawn from rectangles.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Design "Now Playing": a living-room music player.
+// ORION Media Center - Design "Now Playing": a living-room music player.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 //

@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Component: ImageViewer, one picture with zoom and pan, or a gallery of them.
+// ORION Media Center - Component: ImageViewer, one picture with zoom and pan, or a gallery of them.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 

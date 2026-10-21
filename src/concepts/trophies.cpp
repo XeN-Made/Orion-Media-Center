@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Design "Trophy Room": an achievements screen with ceremony.
+// ORION Media Center - Design "Trophy Room": an achievements screen with ceremony.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 //

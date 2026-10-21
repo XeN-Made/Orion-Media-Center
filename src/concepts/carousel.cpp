@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Design "Cover Wheel": a carousel of covers you can spin.
+// ORION Media Center - Design "Cover Wheel": a carousel of covers you can spin.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 //

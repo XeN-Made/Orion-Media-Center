@@ -1,4 +1,4 @@
-// ps5-homebrew-ui - Describes every design and theme as JSON (host tool).
+// ORION Media Center - Describes every design and theme as JSON (host tool).
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 
