@@ -217,6 +217,16 @@ CoverShape cover_shape_of(std::string_view key)
 namespace
 {
 
+bool known_view(const std::string &view)
+{
+    for (const char *key : kViewKeys)
+    {
+        if (view == key)
+            return true;
+    }
+    return false;
+}
+
 const TabPrefs *find_tab_prefs(const std::vector<TabPrefs> &all, const std::string &tab)
 {
     for (const TabPrefs &entry : all)
@@ -245,7 +255,8 @@ void edit_tab_prefs(std::vector<TabPrefs> &all, const std::string &tab, Edit edi
         at = all.end() - 1;
     }
     edit(*at);
-    if (at->theme.empty() && at->cover == CoverShape::automatic && at->sort.empty() && !at->hidden)
+    if (at->theme.empty() && at->cover == CoverShape::automatic && at->sort.empty() &&
+        at->view.empty() && !at->hidden)
         all.erase(at);
 }
 
@@ -282,6 +293,17 @@ std::string LibraryPrefs::tab_sort(const std::string &tab) const
 void LibraryPrefs::set_tab_sort(const std::string &tab, const std::string &sort)
 {
     edit_tab_prefs(tab_prefs, tab, [&](TabPrefs &e) { e.sort = sort.size() <= 24 ? sort : ""; });
+}
+
+std::string LibraryPrefs::tab_view(const std::string &tab) const
+{
+    const TabPrefs *entry = find_tab_prefs(tab_prefs, tab);
+    return entry != nullptr ? entry->view : std::string();
+}
+
+void LibraryPrefs::set_tab_view(const std::string &tab, const std::string &view)
+{
+    edit_tab_prefs(tab_prefs, tab, [&](TabPrefs &e) { e.view = known_view(view) ? view : ""; });
 }
 
 bool LibraryPrefs::tab_hidden(const std::string &tab) const
@@ -407,10 +429,13 @@ LibraryPrefs load_prefs(const std::string &state_dir)
         prefs.set_tab_theme(member.first, value["theme"].string_or(""));
         prefs.set_tab_cover(member.first, cover_shape_of(value["cover"].string_or("")));
         prefs.set_tab_sort(member.first, value["sort"].string_or(""));
+        prefs.set_tab_view(member.first, value["view"].string_or(""));
         prefs.set_tab_hidden(member.first, value["hidden"].bool_or(false));
     }
     prefs.last_tab = root["last_tab"].string_or(prefs.last_tab);
     prefs.sort = root["sort"].string_or(prefs.sort);
+    if (const std::string view = root["view"].string_or(""); known_view(view))
+        prefs.view = view;
     prefs.reopen_last_tab = root["reopen_last_tab"].bool_or(prefs.reopen_last_tab);
     prefs.group_systems = root["group_systems"].bool_or(prefs.group_systems);
     prefs.continue_row = root["continue_row"].bool_or(prefs.continue_row);
@@ -449,6 +474,7 @@ bool save_prefs(const std::string &state_dir, const LibraryPrefs &prefs)
     std::string text = "{\n";
     text += "  \"last_tab\": " + json::quote(prefs.last_tab) + ",\n";
     text += "  \"sort\": " + json::quote(prefs.sort) + ",\n";
+    text += "  \"view\": " + json::quote(prefs.view) + ",\n";
     text +=
         std::string("  \"reopen_last_tab\": ") + (prefs.reopen_last_tab ? "true" : "false") + ",\n";
     text += std::string("  \"group_systems\": ") + (prefs.group_systems ? "true" : "false") + ",\n";
@@ -523,6 +549,7 @@ bool save_prefs(const std::string &state_dir, const LibraryPrefs &prefs)
         text += "    " + json::quote(entry.tab) + ": {\"theme\": " + json::quote(entry.theme) +
                 ", \"cover\": " + json::quote(cover_shape_key(entry.cover)) +
                 ", \"sort\": " + json::quote(entry.sort) +
+                ", \"view\": " + json::quote(entry.view) +
                 ", \"hidden\": " + (entry.hidden ? "true" : "false") + "}";
     }
     text += prefs.tab_prefs.empty() ? "}\n}\n" : "\n  }\n}\n";

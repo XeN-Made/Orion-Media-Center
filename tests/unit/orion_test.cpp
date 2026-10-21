@@ -141,6 +141,26 @@ TEST(OrionPrefs, EachTabKeepsItsCoversSortAndPlace)
     EXPECT_EQ(orion::load_prefs(dir).tab_theme("games"), "candy");
 }
 
+// The Library's view and a tab's own; a key ORION does not know is no view.
+TEST(OrionPrefs, EachTabKeepsItsView)
+{
+    const std::string dir = fresh_dir("orion-prefs-views");
+    orion::LibraryPrefs prefs;
+    EXPECT_EQ(prefs.view, "grid");
+    prefs.view = "list";
+    prefs.set_tab_view("favourites", "cases");
+    prefs.set_tab_view("games", "carousel");
+    ASSERT_TRUE(orion::save_prefs(dir, prefs));
+    orion::LibraryPrefs back = orion::load_prefs(dir);
+    EXPECT_EQ(back.view, "list");
+    EXPECT_EQ(back.tab_view("favourites"), "cases");
+    EXPECT_EQ(back.tab_view("games"), "");
+    back.set_tab_view("favourites", "");
+    EXPECT_TRUE(back.tab_prefs.empty());
+    ASSERT_TRUE(save::write_atomic(dir + "/library.json", R"({"view": "shelf"})").empty());
+    EXPECT_EQ(orion::load_prefs(dir).view, "grid");
+}
+
 TEST(OrionPrefs, BoxArtLivesWhereThePlayerSays)
 {
     const std::string dir = fresh_dir("orion-prefs-art-dir");

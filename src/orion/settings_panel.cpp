@@ -26,6 +26,7 @@ using gfx::Color;
 enum : int
 {
     kSort = 1,
+    kView,
     kReopen,
     kContinueRow,
     kGroupSystems,
@@ -86,6 +87,7 @@ enum : int
     kPageTheme,
     kPageCover,
     kPageSort,
+    kPageView,
     kPageCore,
     kPageRename,
     kPageLeft,
@@ -134,6 +136,16 @@ const char *section_name(SettingsPanel::Section section)
     default:
         return "Appearance";
     }
+}
+
+int view_index(const std::string &key)
+{
+    for (int i = 0; i < kViewCount; ++i)
+    {
+        if (key == kViewKeys[i])
+            return i;
+    }
+    return 0;
 }
 
 int sort_index(const std::string &key)
@@ -408,6 +420,8 @@ void SettingsPanel::build_library(const LibraryPrefs &prefs)
     form_
         .add_choice(kSort, "Sort by", {kSortNames, kSortNames + kSortCount}, sort_index(prefs.sort))
         .description = "The order of the covers, on every tab without an order of its own";
+    form_.add_choice(kView, "View", {kViewNames, kViewNames + kViewCount}, view_index(prefs.view))
+        .description = "Grid of covers, big cases three to a screen, or a list";
     form_.add_toggle(kReopen, "Reopen on last tab", prefs.reopen_last_tab).description =
         "ORION starts on the tab you left it on";
     form_.add_toggle(kContinueRow, "Continue playing", prefs.continue_row).description =
@@ -503,6 +517,12 @@ void SettingsPanel::build_tab_page(const LibraryPrefs &prefs)
     form_
         .add_choice(kPageSort, "Sort by", std::move(sorts), sort.empty() ? 0 : sort_index(sort) + 1)
         .description = "The order of the covers on this tab";
+    std::vector<std::string> views = {std::string("Default (") +
+                                      kViewNames[view_index(prefs.view)] + ")"};
+    views.insert(views.end(), kViewNames, kViewNames + kViewCount);
+    const std::string view = prefs.tab_view(page_);
+    form_.add_choice(kPageView, "View", std::move(views), view.empty() ? 0 : view_index(view) + 1)
+        .description = "Grid, Cases or List on this tab";
     if (system != nullptr && emulator_ != nullptr && system->cores.size() >= 2)
     {
         std::vector<std::string> cores;
@@ -1173,6 +1193,9 @@ SettingsPanel::Change SettingsPanel::handle(const InputFrame &input, ui::Feedbac
     case kSort:
         prefs->sort = kSortKeys[std::clamp(form_.choice_index(kSort), 0, kSortCount - 1)];
         return Change::prefs;
+    case kView:
+        prefs->view = kViewKeys[std::clamp(form_.choice_index(kView), 0, kViewCount - 1)];
+        return Change::prefs;
     case kMusicVolume:
     case kSfxVolume:
     case kUiVolume:
@@ -1266,6 +1289,13 @@ SettingsPanel::Change SettingsPanel::edit_tab_page(int id, LibraryPrefs *prefs)
         const int index = form_.choice_index(kPageSort);
         prefs->set_tab_sort(page_, index <= 0 ? std::string()
                                               : kSortKeys[std::min(index - 1, kSortCount - 1)]);
+        return Change::prefs;
+    }
+    case kPageView:
+    {
+        const int index = form_.choice_index(kPageView);
+        prefs->set_tab_view(page_, index <= 0 ? std::string()
+                                              : kViewKeys[std::min(index - 1, kViewCount - 1)]);
         return Change::prefs;
     }
     case kPageCore:

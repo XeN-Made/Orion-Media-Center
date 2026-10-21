@@ -71,8 +71,15 @@ struct TabPrefs
     std::string theme; // a theme file's id; empty: the main look
     CoverShape cover = CoverShape::automatic;
     std::string sort; // a sort key; empty: the Library's
+    std::string view; // a view key; empty: the Library's
     bool hidden = false;
 };
+
+// How a tab shows its titles: covers in a grid, big cases three to a screen
+// with their system's band across the top, or a list of rows.
+inline constexpr int kViewCount = 3;
+inline constexpr const char *kViewKeys[kViewCount] = {"grid", "cases", "list"};
+inline constexpr const char *kViewNames[kViewCount] = {"Grid", "Cases", "List"};
 
 // Where a title was moved to.
 struct Placement
@@ -87,6 +94,7 @@ struct Placement
 //   {
 //     "last_tab": "tab:t1",
 //     "sort": "recent",
+//     "view": "grid",
 //     "reopen_last_tab": true,
 //     "group_systems": true,
 //     "continue_row": true,
@@ -108,7 +116,8 @@ struct Placement
 //     "game_players": {"rom-0123456789ab": "retroarch:snes9x_libretro.so"},
 //     "systems": {"Nintendo - Game Boy Advance": {"enabled": true, "core": "mgba_libretro.so"}},
 //     "tab_settings": {"sys:Nintendo - Sony - PlayStation 2": {"theme": "sunset-nebula",
-//                      "cover": "portrait", "sort": "recent", "hidden": false}}
+//                      "cover": "portrait", "sort": "recent", "view": "cases",
+//                      "hidden": false}}
 //
 // (Files from before tab_settings kept themes alone in "tab_themes", which is
 // still read.)
@@ -125,6 +134,7 @@ struct LibraryPrefs
     // "all", "games", "homebrew", "media", "favourites" or "tab:<id>".
     std::string last_tab = "all";
     std::string sort = "name"; // "name", "name_reversed", "recent", "platform"
+    std::string view = "grid"; // a kViewKeys entry
     bool reopen_last_tab = true;
     // The emulated systems share one Emulators tab, a row of their own under it.
     bool group_systems = true;
@@ -187,6 +197,9 @@ struct LibraryPrefs
     // The tab's own sort key, or empty for the Library's.
     std::string tab_sort(const std::string &tab) const;
     void set_tab_sort(const std::string &tab, const std::string &sort);
+    // The tab's own view key, or empty for the Library's.
+    std::string tab_view(const std::string &tab) const;
+    void set_tab_view(const std::string &tab, const std::string &view);
     // "all" never hides; a system's tab hides by switching the system off.
     bool tab_hidden(const std::string &tab) const;
     void set_tab_hidden(const std::string &tab, bool hidden);
