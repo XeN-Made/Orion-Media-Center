@@ -106,6 +106,12 @@ TEST(Emulators, ListsWhatRetroArchsPlaylistsList)
       ]})json";
     EXPECT_EQ(library::read_retroarch_playlist(emulator, mixed, "Favourites.lpl", &roms), 2);
     EXPECT_EQ(library::read_retroarch_playlist(emulator, "not json", "x.lpl", &roms), 0);
+    // A file deleted from a folder that is there is left out.
+    const std::string here = std::string(HUI_SOURCE_DIR) + "/tests/fixtures";
+    const std::string gone =
+        R"json({"items": [{"path": ")json" + here +
+        R"json(/no-such-game.gba", "label": "Gone", "db_name": "gba.lpl"}]})json";
+    EXPECT_EQ(library::read_retroarch_playlist(emulator, gone, "gba.lpl", &roms), 0);
     ASSERT_EQ(roms.size(), before + 4u);
 
     const auto find = [&](const std::string &name) -> const library::Title *

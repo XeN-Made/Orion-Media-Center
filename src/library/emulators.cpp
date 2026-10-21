@@ -867,6 +867,15 @@ int read_retroarch_playlist(Emulator &emulator, std::string_view text, const std
         if (rom.system.empty())
             continue; // nothing says what plays it
         rom.path = file.rfind("/app0/", 0) == 0 ? app->root + file.substr(5) : file;
+        // A game deleted since RetroArch listed it (its folder is there, the
+        // file is not) is not listed; one on a drive not plugged in still is.
+        {
+            const std::size_t slash = rom.path.rfind('/');
+            struct stat info = {};
+            if (slash != std::string::npos && slash > 0 && is_folder(rom.path.substr(0, slash)) &&
+                ::stat(rom.path.c_str(), &info) != 0)
+                continue;
+        }
         const std::string label = item["label"].string_or("");
         // Labels have no extension; the dot keeps rom_display_name from
         // taking one off ("Super Mario Bros. 3").

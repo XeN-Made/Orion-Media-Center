@@ -21,8 +21,10 @@
 #include "orion/art_fetcher.hpp"
 #include "orion/backdrop_copies.hpp"
 #include "orion/look.hpp"
+#include "orion/local_http.hpp"
 #include "orion/playtime.hpp"
 #include "orion/prefs.hpp"
+#include "orion/remover.hpp"
 #include "orion/settings_panel.hpp"
 #include "orion/setup_panel.hpp"
 #include "orion/storage.hpp"
@@ -31,6 +33,7 @@
 #include "ui/components/carousel.hpp"
 #include "ui/components/grid.hpp"
 #include "ui/components/keyboard.hpp"
+#include "ui/components/dialog.hpp"
 #include "ui/components/menu.hpp"
 #include "ui/components/select.hpp"
 #include "ui/components/tabs.hpp"
@@ -40,6 +43,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cerrno>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -47,6 +51,7 @@
 #include <ctime>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include <sys/stat.h>
@@ -83,6 +88,9 @@ constexpr std::size_t kMaxPath = 160; // bytes, as orion::valid_art_dir takes th
 // The launch helper shipped in the app folder, and the console's ELF loader.
 constexpr const char *kLauncherPath = "/app0/assets/payloads/orion-launcher.elf";
 constexpr int kLoaderPort = 9021;
+// ShadowMountPlus's API on the console, for removing games (orion/remover.hpp).
+constexpr int kShadowMountPort = 10101;
+constexpr float kHoldToDelete = 1.5f; // seconds of Cross on Delete
 // The launch helper reads a request of 4 KiB; a game's path is one line of it.
 constexpr std::size_t kMaxRequestPath = 1024;
 // The FTP server payload players commonly run (ftpsrv): it can read what
@@ -141,6 +149,10 @@ enum : int
     kItemClose,
     kItemHide,
     kItemPlayWith,
+    kItemRemove,
+    kItemRemoveHome,
+    kItemRemoveErase,
+    kItemRemoveRom,
     kItemMove = 100,   // + the tab's index
     kItemPlayer = 300, // 0: the default, then 1 + an index in library::players_for
 };
@@ -528,6 +540,7 @@ class Library final : public app::Concept
         keys_.on_backspace = [this] { erase(); };
 
         menu_.set_bounds({kMargin, 120.0f, gfx::kVirtualWidth - 2.0f * kMargin, 900.0f});
+        menu_.style.width = 420.0f;  // room for "Remove from home screen…"
         menu_.style.backing = 0.86f; // readable over bright covers
         menu_.style.scrim = 0.25f;
 
@@ -698,7 +711,7 @@ class Library final : public app::Concept
         }
 
         const bool browsing = typing_ == Typing::none && !menu_.is_open() && !settings_.is_open() &&
-                              !setup_.is_open();
+                              !setup_.is_open() && !dialog_.is_open();
         const bool back_held = (input.held & action_bit(Action::back)) != 0;
         if (browsing && input.is_pressed(Action::back))
             hold_armed_ = true;
@@ -718,7 +731,9 @@ class Library final : public app::Concept
         }
         // One layer has the input: the keyboard, then a menu, then the setup
         // or Settings, then the library itself.
-        if (typing_ != Typing::none)
+        if (dialog_.is_open())
+            update_dialog(input, dt, feedback);
+        else if (typing_ != Typing::none)
             update_typing(input, feedback);
         else if (menu_.is_open())
             update_menu(input, feedback);
@@ -742,6 +757,8 @@ class Library final : public app::Concept
         want_icons();
         keys_.update(dt);
         menu_.update(dt);
+        dialog_.update(dt);
+        poll_remover(feedback);
         settings_.update(dt);
         setup_.update(dt);
         if (launch_exit_ > 0.0f)
@@ -830,7 +847,8 @@ class Library final : public app::Concept
         setup_.draw(canvas);
         if (keyboard_shown_.value > 0.01f && over_settings)
             draw_keyboard(canvas, paint);
-        menu_.draw(canvas); // last: it belongs to whatever it was opened over
+        menu_.draw(canvas);   // last: it belongs to whatever it was opened over
+        dialog_.draw(canvas); // a question over everything
         sort_.draw_popover(canvas);
         list.pop_opacity();
     }
@@ -849,6 +867,8 @@ class Library final : public app::Concept
         shown_ = shown_look();
         theme_ = orion::themed(shown_, themes_);
         tabs_.style.theme = grid_.style.theme = menu_.style.theme = sort_.style.theme = theme_;
+        dialog_.style.theme = theme_;
+        dialog_.style.reduced_motion = reduced_;
         subtabs_.style.theme = theme_;
         sort_.style.reduced_motion = context_.settings.reduced_motion;
         keys_.style.theme = clear_glass(theme_);
@@ -979,6 +999,25 @@ class Library final : public app::Concept
             if (now.total > 0)
                 progress = static_cast<float>(now.done) / static_cast<float>(now.total);
         }
+        else if (remover_.running())
+        {
+            const orion::Remover::Progress now = remover_.progress();
+            if (now.kind == orion::Remover::Kind::home_screen)
+                status = "Removing " + now.name + " from the home screen…";
+            else
+            {
+                status = "Deleting " + now.name;
+                if (now.total_bytes > 0)
+                {
+                    status +=
+                        "  ·  " + gigabytes(now.done_bytes) + " of " + gigabytes(now.total_bytes);
+                    progress = static_cast<float>(static_cast<double>(now.done_bytes) /
+                                                  static_cast<double>(now.total_bytes));
+                }
+                else
+                    status += "…";
+            }
+        }
         else if (backdrop_copies_.running())
             status = "Copying game backgrounds…";
         if (!status.empty())
@@ -986,8 +1025,10 @@ class Library final : public app::Concept
             status_ = std::move(status);
             status_progress_ = progress;
         }
-        status_shown_.target =
-            art_.running() || backdrop_copies_.running() || context_.rescan_requested ? 1.0f : 0.0f;
+        status_shown_.target = art_.running() || backdrop_copies_.running() ||
+                                       context_.rescan_requested || remover_.running()
+                                   ? 1.0f
+                                   : 0.0f;
         status_shown_.update(dt, context_.settings.reduced_motion ? 60.0f : 6.0f);
     }
 
@@ -1543,6 +1584,13 @@ class Library final : public app::Concept
         ui::MenuItem rule;
         rule.separator = true;
         items.push_back(rule);
+        if (removable(title))
+        {
+            ui::MenuItem remove = menu_item("Remove…");
+            remove.tag = kItemRemove;
+            remove.danger = true;
+            items.push_back(remove);
+        }
         ui::MenuItem close = menu_item("Close ORION");
         close.shortcut = "Hold Circle";
         close.tag = kItemClose;
@@ -1552,6 +1600,211 @@ class Library final : public app::Concept
     }
 
     // The orders for the active tab: its own choice, or the Library's.
+    // ---- removing ----
+
+    // "12.4 GB", for the status line.
+    static std::string gigabytes(std::uint64_t bytes)
+    {
+        char text[32];
+        std::snprintf(text, sizeof(text), "%.1f GB", static_cast<double>(bytes) / 1e9);
+        return text;
+    }
+
+    // What Remove… is offered for: a game for an emulator (its file), or a
+    // console title ShadowMountPlus registered from a folder or an image. An
+    // emulator other games play with is not, while it has them.
+    bool removable(const Title &title) const
+    {
+        if (title.is_rom())
+            return !title.path.empty();
+        if (title.path.empty())
+            return false;
+        for (const library::EmulatorApp &app : context_.library.emulator.apps)
+        {
+            if (app.title_id == title.id && app.games > 0)
+                return false;
+        }
+        return true;
+    }
+
+    void open_remove_menu(app::Feedback &feedback)
+    {
+        const Title *title = find_title(menu_title_);
+        if (title == nullptr)
+            return;
+        std::vector<ui::MenuItem> items;
+        if (title->is_rom())
+        {
+            ui::MenuItem erase = menu_item("Delete the game file…");
+            erase.tag = kItemRemoveRom;
+            erase.danger = true;
+            items.push_back(erase);
+        }
+        else
+        {
+            ui::MenuItem home = menu_item("Remove from home screen…");
+            home.tag = kItemRemoveHome;
+            items.push_back(home);
+            ui::MenuItem erase = menu_item("Delete from the console…");
+            erase.tag = kItemRemoveErase;
+            erase.danger = true;
+            items.push_back(erase);
+        }
+        menu_.set_items(std::move(items));
+        menu_.open(grid_.cell_rect(grid_.focus()), feedback);
+    }
+
+    // The question before a removal. A delete asks for Cross held down on
+    // its button, so a stray press never erases anything.
+    void ask_remove(int kind, app::Feedback &feedback)
+    {
+        const Title *title = find_title(menu_title_);
+        if (title == nullptr)
+            return;
+        if (kind != kItemRemoveRom && remover_.running())
+        {
+            show_note(false, "Another removal is still running: " + remover_.progress().name);
+            feedback.play(audio::Cue::error);
+            return;
+        }
+        remove_kind_ = kind;
+        remove_id_ = title->id;
+        remove_hold_ = 0.0f;
+        ui::DialogContent content;
+        if (kind == kItemRemoveHome)
+        {
+            content.icon = ui::StatusKind::warning;
+            content.title = "Remove " + title->name + " from the home screen?";
+            content.body = "Its files stay where they are:\n" + title->path +
+                           "\nORION moves it to the Hidden tab.";
+            content.buttons = {{"Cancel"}, {"Remove", ui::ButtonKind::primary, false}};
+        }
+        else
+        {
+            content.icon = ui::StatusKind::danger;
+            content.title = "Delete " + title->name + "?";
+            content.body =
+                (kind == kItemRemoveRom ? std::string("Its game file is erased for good:")
+                                        : std::string("Its files are erased for good:")) +
+                "\n" + title->path +
+                (kind == kItemRemoveRom ? "" : "\nIt leaves the home screen too.") +
+                "\nThis cannot be undone.";
+            content.buttons = {{"Cancel"}, {delete_label(0.0f), ui::ButtonKind::primary, true}};
+        }
+        content.default_button = 0;
+        dialog_.open(std::move(content), feedback);
+    }
+
+    static std::string delete_label(float held)
+    {
+        if (held <= 0.0f)
+            return "Hold Cross to delete"; // the fonts have no ✕
+        return "Keep holding… " + std::to_string(static_cast<int>(held / kHoldToDelete * 100.0f)) +
+               "%";
+    }
+
+    void update_dialog(const InputFrame &input, float dt, app::Feedback &feedback)
+    {
+        const bool hold = remove_kind_ != kItemRemoveHome && dialog_.focus() == 1;
+        if (hold &&
+            (input.is_pressed(Action::confirm) || (input.held & action_bit(Action::confirm)) != 0))
+        {
+            const float was = remove_hold_;
+            remove_hold_ += dt;
+            if (remove_hold_ >= kHoldToDelete)
+            {
+                dialog_.close(feedback);
+                remove_hold_ = 0.0f;
+                do_remove(feedback);
+                return;
+            }
+            // The label counts up in tenths, so it changes as you hold.
+            if (static_cast<int>(was * 10.0f) != static_cast<int>(remove_hold_ * 10.0f) ||
+                was == 0.0f)
+            {
+                ui::DialogContent content = dialog_.content();
+                content.buttons[1].label = delete_label(remove_hold_);
+                dialog_.set_content(std::move(content));
+            }
+            return;
+        }
+        if (remove_hold_ > 0.0f)
+        {
+            // Let go too soon: nothing happens.
+            remove_hold_ = 0.0f;
+            ui::DialogContent content = dialog_.content();
+            content.buttons[1].label = delete_label(0.0f);
+            dialog_.set_content(std::move(content));
+        }
+        const ui::Event event = dialog_.handle(input, feedback);
+        if (event == ui::Event::activated && dialog_.choice() == 1 &&
+            remove_kind_ == kItemRemoveHome)
+            do_remove(feedback);
+    }
+
+    void do_remove(app::Feedback &feedback)
+    {
+        const Title *title = find_title(remove_id_);
+        if (title == nullptr)
+            return;
+        if (remove_kind_ == kItemRemoveRom)
+        {
+            // A game's file: ORION erases it itself, then looks again.
+            struct stat info = {};
+            if (::stat(title->path.c_str(), &info) != 0 || !S_ISREG(info.st_mode) ||
+                std::remove(title->path.c_str()) != 0)
+            {
+                show_note(false,
+                          "Could not delete " + title->path + " (" + std::strerror(errno) + ")");
+                feedback.play(audio::Cue::error);
+                return;
+            }
+            removed_ids_.insert(title->id);
+            tabs_changed();
+            show_note(true, "Deleted " + title->name);
+            feedback.play(audio::Cue::erase);
+            return;
+        }
+        const orion::Remover::Kind kind = remove_kind_ == kItemRemoveHome
+                                              ? orion::Remover::Kind::home_screen
+                                              : orion::Remover::Kind::erase;
+        if (!remover_.start(kind, title->id, title->name))
+        {
+            show_note(false, "Another removal is still running");
+            feedback.play(audio::Cue::error);
+            return;
+        }
+        feedback.play(audio::Cue::select);
+    }
+
+    // A removal through ShadowMountPlus that ended: say how, and take the
+    // title off its tabs.
+    void poll_remover(app::Feedback &feedback)
+    {
+        if (!remover_.take_finished())
+            return;
+        const orion::Remover::Progress done = remover_.progress();
+        if (!done.ok)
+        {
+            show_note(false, "Could not remove " + done.name + ": " + done.error);
+            feedback.play(audio::Cue::error);
+            return;
+        }
+        if (done.kind == orion::Remover::Kind::home_screen)
+        {
+            // Its files stay, so ORION would list it again: it waits on Hidden.
+            prefs_.set_title_hidden(done.title_id, true);
+            show_note(true, done.name + " left the home screen; it is on the Hidden tab");
+        }
+        else
+        {
+            removed_ids_.insert(done.title_id);
+            show_note(true, "Deleted " + done.name);
+        }
+        tabs_changed();
+        feedback.play(audio::Cue::complete);
+    }
+
     // What a game plays with, short: "Snes9x", "Porpoise".
     std::string player_label(const Title &title) const
     {
@@ -1609,6 +1862,16 @@ class Library final : public app::Concept
         if (tag == kItemLaunch)
         {
             launch(menu_title_, feedback);
+            return;
+        }
+        if (tag == kItemRemove)
+        {
+            open_remove_menu(feedback);
+            return;
+        }
+        if (tag == kItemRemoveHome || tag == kItemRemoveErase || tag == kItemRemoveRom)
+        {
+            ask_remove(tag, feedback);
             return;
         }
         if (tag == kItemClose)
@@ -2423,6 +2686,9 @@ class Library final : public app::Concept
 
     bool on_tab(const Title &title, const std::string &key) const
     {
+        // A title removed since the scan is on no tab.
+        if (removed_ids_.count(title.id) != 0)
+            return false;
         // A hidden title is on the Hidden tab and nowhere else.
         if (prefs_.title_hidden(title.id))
             return key == kHiddenTab;
@@ -3269,6 +3535,21 @@ class Library final : public app::Concept
     tween::Spring status_shown_;
     ui::Keyboard keys_;
     ui::Menu menu_;
+    // Remove: the question, what it is about, and the job that does it.
+    ui::Dialog dialog_;
+    int remove_kind_ = 0;      // the menu tag that asked (kItemRemoveHome, ...)
+    std::string remove_id_;    // the title or game it is about
+    float remove_hold_ = 0.0f; // seconds Cross has been held on a delete
+    orion::Remover remover_{
+        [](const std::string &path, const std::string &json, std::string *reply, std::string *error)
+        {
+            orion::HttpReply answer;
+            if (!orion::post_local_json(kShadowMountPort, path, json, &answer, error))
+                return false;
+            *reply = answer.body;
+            return true;
+        }};
+    std::unordered_set<std::string> removed_ids_; // gone since the scan: on no tab
     orion::SettingsPanel settings_;
     orion::SetupPanel setup_;
     bool setup_pending_ = false; // the setup opens on the first frame (it needs feedback)

@@ -10,6 +10,7 @@
 #include "orion/prefs.hpp"
 
 #include <cstdio>
+#include <filesystem>
 
 #include <string>
 
@@ -330,6 +331,59 @@ TEST_F(LibraryDesign, AHiddenTitleLeavesItsShelvesForTheHiddenTab)
     EXPECT_TRUE(played(Cue::tab));
     expect_drawable(*design);
     EXPECT_TRUE(hui::library::is_item_id(hidden));
+}
+
+// Remove… on a game for an emulator deletes its file, but only after Cross
+// has been held on Delete: a press, or letting go early, erases nothing.
+TEST_F(LibraryDesign, DeletingAGameFileWantsCrossHeld)
+{
+    const std::string dir = ::testing::TempDir() + "orion-design-delete";
+    ASSERT_TRUE(hui::save::ensure_directory(dir));
+    std::remove((dir + "/library.json").c_str());
+    const std::string file = dir + "/Doomed (USA).gba";
+    ASSERT_TRUE(hui::save::write_atomic(file, "rom").empty());
+    library_.state_dir = dir;
+    auto design_without = with_fixture(); // fills library_.titles
+    hui::library::Title rom;
+    rom.id = "rom-000000000abc";
+    rom.name = "Doomed";
+    rom.system = "Nintendo - Game Boy Advance";
+    rom.rom = file;
+    rom.path = file;
+    rom.source = hui::library::Source::image;
+    library_.titles.push_back(rom);
+    hui::library::System gba;
+    gba.name = rom.system;
+    gba.short_name = "GBA";
+    gba.games = 1;
+    library_.emulator.systems.push_back(gba);
+    auto design = hui::concepts::make_library(context_);
+    // All, Games, Homebrew, Media, Favourites, Emulators: Doomed alone.
+    for (int i = 0; i < 5; ++i)
+        send(*design, press(hui::Action::page_next));
+    // Options: Launch, Favourite, Hide, Move to a new tab, Remove….
+    send(*design, press(hui::Action::menu));
+    for (int i = 0; i < 4; ++i)
+        send(*design, nav(Direction::down));
+    send(*design, press(hui::Action::confirm)); // Remove…
+    send(*design, press(hui::Action::confirm)); // Delete the game file…
+    expect_drawable(*design);
+    send(*design, nav(Direction::right)); // the dialog opens on Cancel
+    // A press alone, then a short hold, then letting go: still there.
+    send(*design, press(hui::Action::confirm), 0.0f);
+    hui::InputFrame held = idle();
+    held.held = hui::action_bit(hui::Action::confirm);
+    for (int frame = 0; frame < 30; ++frame)
+        send(*design, held, 0.0f);
+    send(*design, idle(), 0.0f);
+    EXPECT_TRUE(std::filesystem::exists(file));
+    // Held for the whole second and a half: gone, and off its tab.
+    send(*design, press(hui::Action::confirm), 0.0f);
+    for (int frame = 0; frame < 100; ++frame)
+        send(*design, held, 0.0f);
+    EXPECT_FALSE(std::filesystem::exists(file));
+    send(*design, nav(Direction::right));
+    expect_drawable(*design);
 }
 
 TEST_F(LibraryDesign, LaunchSaysWhatHappenedAndLogsIt)
