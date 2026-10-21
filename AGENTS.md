@@ -143,6 +143,7 @@ Other outputs of the same program:
 | `HUI_REEL=out/clips tools/host-snapshots.sh out/scratch aurora 640 360` | An animated WebP of the whole tour |
 | `tools/render-media.sh all` | Everything under `docs/media` (pictures and clips) |
 | `HUI_MANIFEST=build/manifest.json tools/host-snapshots.sh build/snapshots aurora` then `python3 tools/gen-docs.py build/manifest.json` | The galleries, the component catalogue, the component index and the counts |
+| `HUI_SHOWCASE=build/showcase tools/host-snapshots.sh out`, then `HUI_LIBRARY=build/showcase` | A console library of the catalogue's 24 invented games, for pictures with no real product in them (`docs/screenshots/`) |
 | `HUI_HOME_ART=out/art tools/host-snapshots.sh out` | ORION's home-screen art: `icon0.png`, `pic0.png`, `pic1.png` (3840 x 2160; `tools/prepare-assets.sh` makes the DDS files) |
 
 What the preview cannot tell you, and must be reported as not verified until

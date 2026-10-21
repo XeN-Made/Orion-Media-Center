@@ -28,6 +28,7 @@
 #include "gfx/renderer.hpp"
 #include "library/emulators.hpp"
 #include "library/icon.hpp"
+#include "library/json.hpp"
 #include "library/library.hpp"
 #include "manifest.hpp"
 #include "orion/prefs.hpp"
@@ -197,6 +198,66 @@ int main(int argc, char **argv)
     {
         std::fprintf(stderr, "cover art failed\n");
         return 1;
+    }
+
+    // HUI_SHOWCASE=<dir>: a console library of the catalogue's invented games
+    // (<dir>/homebrew/<id>/sce_sys: param.json, icon0.png from their covers),
+    // for pictures of ORION with no real product in them. Then stop; point
+    // HUI_LIBRARY at <dir> to photograph it.
+    if (const char *showcase = std::getenv("HUI_SHOWCASE"))
+    {
+        constexpr int kSize = hui::demo::Catalog::kCoverSize;
+        GLuint target = 0;
+        GLuint storage = 0;
+        glGenFramebuffers(1, &target);
+        glGenRenderbuffers(1, &storage);
+        glBindRenderbuffer(GL_RENDERBUFFER, storage);
+        glRenderbufferStorage(GL_RENDERBUFFER, GL_RGBA8, kSize, kSize);
+        glBindFramebuffer(GL_FRAMEBUFFER, target);
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, storage);
+        const auto size = static_cast<float>(kSize);
+        int written = 0;
+        for (std::size_t i = 0; i < catalog.size(); ++i)
+        {
+            const hui::demo::Item &item = catalog[i];
+            // Every fifth a PS4 game, so both kinds of case show.
+            char id[16];
+            std::snprintf(id, sizeof(id), "%s%05zu", i % 5 == 4 ? "CUSA" : "PPSA", 92000 + i);
+            // One level at a time: ensure_directory makes only the last.
+            std::string folder = showcase;
+            for (const std::string &part :
+                 {std::string("homebrew"), std::string(id), std::string("sce_sys")})
+            {
+                hui::save::ensure_directory(folder);
+                folder += "/" + part;
+            }
+            hui::save::ensure_directory(folder);
+            hui::gfx::DrawList list;
+            list.image(item.cover, {0.0f, 0.0f, size, size}, hui::gfx::kCanvasUv,
+                       hui::gfx::Color::rgb(0xffffff), 0.0f);
+            renderer.begin();
+            renderer.draw(list);
+            renderer.present(target, kSize, kSize, size, size);
+            std::vector<unsigned char> pixels(static_cast<std::size_t>(kSize * kSize * 4));
+            glReadPixels(0, 0, kSize, kSize, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+            for (std::size_t p = 3; p < pixels.size(); p += 4)
+                pixels[p] = 255;
+            stbi_flip_vertically_on_write(1);
+            if (stbi_write_png((folder + "/icon0.png").c_str(), kSize, kSize, 4, pixels.data(),
+                               kSize * 4) == 0)
+                return 1;
+            const std::string param =
+                std::string("{\n  \"applicationCategoryType\": 0,\n") +
+                "  \"contentVersion\": \"01.000.000\",\n" + "  \"localizedParameters\": {\n" +
+                "    \"defaultLanguage\": \"en-US\",\n" +
+                "    \"en-US\": {\"titleName\": " + hui::json::quote(item.title) + "}\n  },\n" +
+                "  \"titleId\": \"" + id + "\"\n}\n";
+            if (!hui::save::write_atomic(folder + "/param.json", param).empty())
+                return 1;
+            ++written;
+        }
+        std::fprintf(stderr, "showcase: %d titles in %s\n", written, showcase);
+        return 0;
     }
 
     // HUI_HOME_ART=<dir>: ORION's home-screen art, drawn with the kit in its

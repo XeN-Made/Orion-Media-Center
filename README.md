@@ -7,6 +7,55 @@ everything can be changed in Settings.
 
 Title ID: `PPSA99061`.
 
+![ORION's library in Grid view](docs/screenshots/grid.jpg)
+
+## Features
+
+**One library for everything**
+- PS5 and PS4 games, homebrew and media apps, found where ShadowMountPlus
+  mounts them (`/data/homebrew`, `/mnt/ext0/homebrew`, USB drives).
+- Emulated games next to them: RetroArch (its folders and every playlist),
+  Porpoise for GameCube and Wii, PS5SX2 for PS2, and folders of your own.
+- Start a game straight from its cover: emulated games open directly in the
+  emulator that plays them, and ORION asks which one when two can.
+- Box art downloaded as the covers scroll into view, or taken from what
+  PS5SX2 and Porpoise already downloaded.
+
+**Three ways to look at it**
+
+| Grid | Cases | List |
+| --- | --- | --- |
+| ![Grid](docs/screenshots/grid.jpg) | ![Cases](docs/screenshots/cases.jpg) | ![List](docs/screenshots/list.jpg) |
+| Covers, many to a screen | Big game cases with their system's band, three at a time | One row per title, quick for large collections |
+
+Each tab keeps its own view and its own order: by name, recently added,
+platform, tag (Games, Homebrew, Media, under separators), recently played or
+most played.
+
+**Yours to arrange**
+- Tabs: All, Games, Homebrew, Media, Favourites, one Emulators tab with a
+  row per system (or a tab per system), and tabs of your own.
+- Favourites, Continue playing (what you played last, over the All tab),
+  hidden titles, search.
+- Play time for every game, and when you last played it.
+- Remove a title from the home screen, or delete it, from ORION.
+
+**Made for the controller**
+- Every setting in one place, Settings (R3), with a first-run setup that
+  walks through the look, emulators, box art and autoboot.
+- Themes and a look of your own: colours, the galaxy sky, glass, corners,
+  focus ring, per tab if you like.
+- Background music (add your own `.ogg` files) and sound effects.
+- Opens by itself after the jailbreak (autoboot), returns to ORION when a game
+  closes, and tells you when a newer ORION is out.
+
+| Settings | First-run setup |
+| --- | --- |
+| ![Settings](docs/screenshots/settings.jpg) | ![Setup](docs/screenshots/setup.jpg) |
+
+The pictures show invented titles: ORION's renderer drew them on a PC
+(`HUI_SHOWCASE`, see [AGENTS.md](AGENTS.md)).
+
 ## What you need
 
 - A PS5 you own, jailbroken, with a homebrew loader that runs folder apps
