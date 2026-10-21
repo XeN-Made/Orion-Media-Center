@@ -57,6 +57,11 @@ class Shell
     {
         return std::exchange(context_.wanted_icons, {});
     }
+    // Titles the designs show large now (Context::sharp_icons).
+    const std::vector<std::string> &sharp_icons() const
+    {
+        return context_.sharp_icons;
+    }
     // The song the music plays now, for the designs (Context::now_playing).
     void set_now_playing(const std::string &song)
     {

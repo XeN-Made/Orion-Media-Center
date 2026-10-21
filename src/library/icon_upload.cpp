@@ -56,4 +56,38 @@ int load_wanted_icons(Library &library, const std::vector<std::string> &ids, gfx
     return uploaded;
 }
 
+int load_sharp_icons(Library &library, const std::vector<std::string> &ids, gfx::GlBatch &batch,
+                     int budget)
+{
+    int uploaded = 0;
+    for (Title &title : library.titles)
+    {
+        const bool wanted = std::find(ids.begin(), ids.end(), title.id) != ids.end();
+        if (!wanted)
+        {
+            if (title.sharp_texture != 0)
+                batch.delete_texture(title.sharp_texture);
+            title.sharp_texture = 0;
+            title.sharp_width = title.sharp_height = 0;
+            continue;
+        }
+        if (title.sharp_texture != 0 || title.sharp_width < 0 || title.icon.empty() ||
+            uploaded >= budget)
+            continue;
+        std::string bytes;
+        Image image;
+        if (!save::read_file(title.icon, &bytes, kMaxFile) ||
+            !decode_png(bytes, kSharpSize, &image))
+        {
+            title.sharp_width = -1;
+            continue;
+        }
+        title.sharp_texture = batch.create_texture(image.width, image.height, image.rgba.data());
+        title.sharp_width = title.sharp_texture != 0 ? image.width : -1;
+        title.sharp_height = image.height;
+        ++uploaded;
+    }
+    return uploaded;
+}
+
 } // namespace hui::library

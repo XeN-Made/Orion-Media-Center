@@ -434,6 +434,8 @@ int main()
         // Games' box art that comes into view.
         if (auto wanted = shell.take_wanted_icons(); !wanted.empty())
             library::load_wanted_icons(titles, wanted, renderer.batch());
+        // Sharp copies for what is shown large: one new one a frame.
+        library::load_sharp_icons(titles, shell.sharp_icons(), renderer.batch(), 1);
         // Box art ORION downloaded: loaded as the scan's icons were (a
         // game's picture waits until it is wanted).
         if (auto icons = shell.take_new_icons(); !icons.empty())

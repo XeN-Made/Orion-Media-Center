@@ -58,6 +58,12 @@ struct Title
     std::uint32_t texture = 0;
     int icon_width = 0;
     int icon_height = 0;
+    // The same picture kept sharp (up to kSharpSize) while a design shows it
+    // large, then released (load_sharp_icons). sharp_width < 0: it could not
+    // be read; not tried again.
+    std::uint32_t sharp_texture = 0;
+    int sharp_width = 0;
+    int sharp_height = 0;
     // A game for an emulator (library/emulators.hpp): the system it is for
     // ("Nintendo - Game Boy Advance"), the file as the emulator sees it, and
     // the app that plays it. Empty for the console's own titles.

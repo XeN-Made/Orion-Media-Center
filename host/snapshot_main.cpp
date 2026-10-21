@@ -562,6 +562,7 @@ int main(int argc, char **argv)
         shell.update(input, kDt);
         if (auto wanted = shell.take_wanted_icons(); !wanted.empty())
             hui::library::load_wanted_icons(titles, wanted, renderer.batch());
+        hui::library::load_sharp_icons(titles, shell.sharp_icons(), renderer.batch(), 1);
         ++frames;
         if (!tour.capture().empty())
         {

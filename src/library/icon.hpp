@@ -45,4 +45,13 @@ int load_icons(Library &library, gfx::GlBatch &batch);
 // The icons of these titles (by id), when they have none uploaded yet.
 int load_wanted_icons(Library &library, const std::vector<std::string> &ids, gfx::GlBatch &batch);
 
+// Big covers (Cases view) are drawn from a sharp copy of the picture, up to
+// this many pixels on a side, kept only for the few titles on screen.
+constexpr int kSharpSize = 1024;
+// Makes the sharp copies match `ids`: releases those of titles not in it and
+// uploads at most `budget` new ones (a decode is a few milliseconds; spread
+// over frames, scrolling stays smooth). Returns how many it uploaded.
+int load_sharp_icons(Library &library, const std::vector<std::string> &ids, gfx::GlBatch &batch,
+                     int budget);
+
 } // namespace hui::library
