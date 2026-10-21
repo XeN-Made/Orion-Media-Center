@@ -163,6 +163,20 @@ grid.draw(canvas);
 The scroll thumb is drawn 8 px outside the right edge of the bounds, like
 `ListView`'s: leave it that room.
 
+### Sections
+
+`set_sections()` groups the cells under labels: each `GridSection` names the
+item it starts at, begins a row of its own, and has its label (with a hairline
+to the right edge, `style.section_rule`) in `style.section_gap` above that row.
+Up and down follow the uneven rows and keep the chosen column; the grid
+scrolls so a section's label comes into view with its first row. Call it after
+`set_items()`, which drops the sections (the order changed, so must they).
+
+```cpp
+grid.set_items(items);                       // sorted so each group is together
+grid.set_sections({{0, "Games"}, {12, "Homebrew"}, {19, "Media"}});
+```
+
 ### A grid over a data source
 
 `set_items()` keeps a `CardItem` per cell, which is right for a library of a

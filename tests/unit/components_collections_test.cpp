@@ -197,6 +197,40 @@ TEST_F(ComponentsCollections, GridScrollsByRowsAndKeepsTheFocusInside)
     EXPECT_EQ(grid_.focus(), focus);
 }
 
+// Sections start rows of their own under a label; up and down follow the
+// uneven rows, keeping the column, and new items drop them.
+TEST_F(ComponentsCollections, GridSectionsStartRowsOfTheirOwn)
+{
+    const float plain_y = grid_.cell_rect(3).y;
+    std::vector<hui::ui::GridSection> sections(2);
+    sections[0].label = "Games";
+    sections[1].first = 2;
+    sections[1].label = "Homebrew";
+    grid_.set_sections(sections);
+    EXPECT_EQ(grid_.rows(), 3); // [0 1] [2 3 4] [5 6]
+    EXPECT_GT(grid_.cell_rect(0).y, grid_.bounds().y);
+    EXPECT_FLOAT_EQ(grid_.cell_rect(2).x, grid_.cell_rect(0).x);
+    EXPECT_GT(grid_.cell_rect(3).y, plain_y); // a label above each section
+    grid_.set_focus(1);
+    EXPECT_EQ(send(grid_, nav(Direction::down)), Event::moved);
+    EXPECT_EQ(grid_.focus(), 3);
+    EXPECT_EQ(send(grid_, nav(Direction::right)), Event::moved);
+    EXPECT_EQ(send(grid_, nav(Direction::down)), Event::moved);
+    EXPECT_EQ(grid_.focus(), 6); // the short row's last cell
+    EXPECT_EQ(send(grid_, nav(Direction::up)), Event::moved);
+    EXPECT_EQ(grid_.focus(), 4); // ... and the third column comes back
+    EXPECT_EQ(send(grid_, nav(Direction::right)), Event::refused); // the row ends
+    // The focused cell stays inside the view as the labels push rows down.
+    const Rect cell = grid_.cell_rect(grid_.focus());
+    EXPECT_LE(cell.y + cell.h, grid_.bounds().y + grid_.bounds().h + 0.5f);
+
+    grid_.set_items(make_items(7));
+    EXPECT_TRUE(grid_.sections().empty());
+    EXPECT_EQ(grid_.rows(), 3);
+    grid_.set_focus(0); // scrolled back to the top, where plain_y was measured
+    EXPECT_FLOAT_EQ(grid_.cell_rect(3).y, plain_y);
+}
+
 TEST_F(ComponentsCollections, GridConfirmActivatesSelectsOrRefuses)
 {
     EXPECT_EQ(send(grid_, press(Action::confirm)), Event::activated);
@@ -449,6 +483,15 @@ TEST_F(ComponentsCollections, DrawsInEveryThemeAndVariant)
                     ++slot_calls;
                     to.list.rounded_rect(art, radius, theme.accent);
                 };
+            std::vector<hui::ui::GridSection> sections;
+            if (variant == 1)
+            {
+                sections.resize(2);
+                sections[0].label = "Games";
+                sections[1].first = 4;
+                sections[1].label = "Homebrew";
+            }
+            grid_.set_sections(sections);
             send(grid_, variant % 2 == 0 ? nav(Direction::right) : nav(Direction::down));
             hui::ui::Canvas grid_target = canvas();
             grid_.draw(grid_target);

@@ -17,6 +17,8 @@ using gfx::Rect;
 void GridView::set_items(std::vector<CardItem> items)
 {
     items_ = std::move(items);
+    sections_.clear();
+    placed_columns_ = -1;
     virtual_count_ = -1;
     checks_.assign(items_.size(), 0.0f);
     for (std::size_t i = 0; i < items_.size(); ++i)
@@ -33,9 +35,110 @@ void GridView::set_count(int count)
     const bool first = virtual_count_ < 0;
     items_.clear();
     checks_.clear();
+    placed_columns_ = -1;
     virtual_count_ = count;
     focus_ = std::clamp(focus_, 0, std::max(count - 1, 0));
     retarget(first);
+}
+
+void GridView::set_sections(std::vector<GridSection> sections)
+{
+    sections_ = std::move(sections);
+    std::stable_sort(sections_.begin(), sections_.end(),
+                     [](const GridSection &a, const GridSection &b) { return a.first < b.first; });
+    placed_columns_ = -1;
+    column_ = column_of(focus_);
+    retarget(true);
+}
+
+void GridView::place() const
+{
+    if (placed_columns_ == columns())
+        return;
+    placed_columns_ = columns();
+    row_starts_.clear();
+    row_sections_.clear();
+    row_headers_.clear();
+    const int count = this->count();
+    std::size_t next = 0;
+    int headers = 0;
+    for (int index = 0; index < count;)
+    {
+        // Sections that begin past the end, or on the same cell, collapse.
+        int opens = -1;
+        while (next < sections_.size() && sections_[next].first <= index)
+            opens = static_cast<int>(next++);
+        const int section_end =
+            next < sections_.size() ? std::min(sections_[next].first, count) : count;
+        if (opens >= 0)
+            ++headers;
+        row_starts_.push_back(index);
+        row_sections_.push_back(opens);
+        row_headers_.push_back(headers);
+        index = std::min(index + placed_columns_, section_end);
+    }
+    row_starts_.push_back(count);
+}
+
+int GridView::row_of(int index) const
+{
+    if (sections_.empty())
+        return index / columns();
+    place();
+    const auto after = std::upper_bound(row_starts_.begin(), row_starts_.end() - 1, index);
+    return std::max(static_cast<int>(after - row_starts_.begin()) - 1, 0);
+}
+
+int GridView::column_of(int index) const
+{
+    return sections_.empty() ? index % columns() : index - row_start(row_of(index));
+}
+
+int GridView::row_start(int row) const
+{
+    if (sections_.empty())
+        return row * columns();
+    place();
+    return row_starts_[static_cast<std::size_t>(std::clamp(row, 0, rows()))];
+}
+
+int GridView::row_length(int row) const
+{
+    if (sections_.empty())
+        return std::clamp(count() - row * columns(), 0, columns());
+    return row_start(row + 1) - row_start(row);
+}
+
+bool GridView::row_opens_section(int row) const
+{
+    if (sections_.empty() || row < 0 || row >= rows())
+        return false;
+    place();
+    return row_sections_[static_cast<std::size_t>(row)] >= 0;
+}
+
+float GridView::row_y(const Layout &at, int row) const
+{
+    float y = static_cast<float>(row) * at.pitch;
+    if (!sections_.empty() && row >= 0 && row < rows())
+    {
+        place();
+        y += static_cast<float>(row_headers_[static_cast<std::size_t>(row)]) * style.section_gap;
+    }
+    return y;
+}
+
+float GridView::scroll_for(const Layout &at, int top) const
+{
+    // A row that opens a section brings its label into view with it.
+    if (top <= 0)
+        return 0.0f;
+    return row_y(at, top) - (row_opens_section(top) ? style.section_gap : 0.0f);
+}
+
+float GridView::content_height(const Layout &at) const
+{
+    return at.rows > 0 ? row_y(at, at.rows - 1) + at.cell_h : 0.0f;
 }
 
 const CardItem &GridView::item_at(int index) const
@@ -60,7 +163,7 @@ void GridView::set_focus(int index, bool snap)
     if (count() == 0)
         return;
     focus_ = std::clamp(index, 0, count() - 1);
-    column_ = focus_ % columns();
+    column_ = column_of(focus_);
     retarget(snap);
 }
 
@@ -69,8 +172,8 @@ void GridView::set_focus_at_top(int index)
     if (count() == 0)
         return;
     focus_ = std::clamp(index, 0, count() - 1);
-    column_ = focus_ % columns();
-    top_row_ = focus_ / columns(); // retarget keeps it in the range the list allows
+    column_ = column_of(focus_);
+    top_row_ = row_of(focus_); // retarget keeps it in the range the list allows
     retarget(true);
 }
 
@@ -86,7 +189,10 @@ int GridView::columns() const
 
 int GridView::rows() const
 {
-    return (count() + columns() - 1) / columns();
+    if (sections_.empty())
+        return (count() + columns() - 1) / columns();
+    place();
+    return static_cast<int>(row_starts_.size()) - 1;
 }
 
 GridView::Layout GridView::layout() const
@@ -128,10 +234,8 @@ GridView::Layout GridView::layout() const
 
 Rect GridView::content_rect(const Layout &at, int index) const
 {
-    const int row = index / at.columns;
-    const int column = index % at.columns;
-    return {static_cast<float>(column) * (at.cell_w + style.gap_x),
-            static_cast<float>(row) * (at.cell_h + style.gap_y), at.cell_w, at.cell_h};
+    return {static_cast<float>(column_of(index)) * (at.cell_w + style.gap_x),
+            row_y(at, row_of(index)), at.cell_w, at.cell_h};
 }
 
 Rect GridView::cell_rect(int index) const
@@ -147,11 +251,14 @@ int GridView::step(const Layout &at, Direction direction, bool round) const
 {
     const int count = this->count();
     const int across = at.columns;
-    const int row = focus_ / across;
-    const int column = focus_ % across;
+    const int row = row_of(focus_);
+    const int column = column_of(focus_);
     const int last_row = at.rows - 1;
-    const int in_row = std::min(across, count - row * across);
+    const int in_row = row_length(row);
     const int wanted = std::min(column_, across - 1);
+    // A short row (the last one, or a section's) takes its last cell; the
+    // column is remembered.
+    const auto in = [&](int r) { return row_start(r) + std::min(wanted, row_length(r) - 1); };
     round = round && style.wrap != GridWrap::none;
     switch (direction)
     {
@@ -162,7 +269,7 @@ int GridView::step(const Layout &at, Direction direction, bool round) const
             return focus_ - 1;
         if (!round)
             return -1;
-        return style.wrap == GridWrap::rows ? row * across + in_row - 1 : count - 1;
+        return style.wrap == GridWrap::rows ? row_start(row) + in_row - 1 : count - 1;
     case Direction::right:
         if (column + 1 < in_row)
             return focus_ + 1;
@@ -170,16 +277,15 @@ int GridView::step(const Layout &at, Direction direction, bool round) const
             return focus_ + 1;
         if (!round)
             return -1;
-        return style.wrap == GridWrap::rows ? row * across : 0;
+        return style.wrap == GridWrap::rows ? row_start(row) : 0;
     case Direction::up:
         if (row > 0)
-            return (row - 1) * across + wanted;
-        // A short last row takes its last cell; the column is remembered.
-        return round ? std::min(last_row * across + wanted, count - 1) : -1;
+            return in(row - 1);
+        return round ? in(last_row) : -1;
     case Direction::down:
         if (row < last_row)
-            return std::min((row + 1) * across + wanted, count - 1);
-        return round ? wanted : -1;
+            return in(row + 1);
+        return round ? in(0) : -1;
     default:
         return -1;
     }
@@ -195,10 +301,28 @@ void GridView::retarget(bool snap)
     // The grid scrolls by whole rows, the least that brings the focused row
     // into view: no row is ever cut at the top, and whatever does not fit at
     // the bottom peeks in, faded, to say there is more.
-    const int row = focus_ / at.columns;
-    top_row_ = std::clamp(top_row_, row - at.full_rows + 1, row);
-    top_row_ = std::clamp(top_row_, 0, std::max(at.rows - at.full_rows, 0));
-    scroll_.target = static_cast<float>(top_row_) * at.pitch;
+    const int row = row_of(focus_);
+    if (sections_.empty())
+    {
+        top_row_ = std::clamp(top_row_, row - at.full_rows + 1, row);
+        top_row_ = std::clamp(top_row_, 0, std::max(at.rows - at.full_rows, 0));
+    }
+    else
+    {
+        // Uneven rows: the same rule, measured. Never past the top that
+        // shows the last row whole, never below the focused row, and as
+        // little as brings the focused row in.
+        const auto fits = [&](int top, int r)
+        { return row_y(at, r) + at.cell_h - scroll_for(at, top) <= at.view.h + 0.5f; };
+        int lowest = 0;
+        while (lowest < at.rows - 1 && !fits(lowest, at.rows - 1))
+            ++lowest;
+        top_row_ = std::clamp(top_row_, 0, row);
+        while (top_row_ < row && !fits(top_row_, row))
+            ++top_row_;
+        top_row_ = std::min(top_row_, lowest);
+    }
+    scroll_.target = scroll_for(at, top_row_);
     highlight_.target(target);
     const Color lit = accent_of(focus_);
     glow_.target(lit);
@@ -234,10 +358,10 @@ Event GridView::handle(const InputFrame &input, Feedback &feedback)
         }
         focus_ = next;
         if (input.nav == Direction::left || input.nav == Direction::right)
-            column_ = focus_ % at.columns;
+            column_ = column_of(focus_);
         retarget(false);
         const float along =
-            at.rows > 1 ? static_cast<float>(focus_ / at.columns) / static_cast<float>(at.rows - 1)
+            at.rows > 1 ? static_cast<float>(row_of(focus_)) / static_cast<float>(at.rows - 1)
                         : 0.0f;
         play_cue(feedback, style, style.sounds.move, at.view.x + content_rect(at, focus_).cx(),
                  style.pitch_by_row ? tween::lerp(1.05f, 0.95f, along) : 1.0f);
@@ -303,7 +427,8 @@ void GridView::draw(Canvas &canvas) const
     gfx::DrawList &list = canvas.list;
     const Layout at = layout();
     const float scroll = scroll_.value;
-    const bool overflow = at.rows > at.full_rows;
+    const bool overflow =
+        sections_.empty() ? at.rows > at.full_rows : content_height(at) > at.view.h + 0.5f;
     const float active = active_amount_.value;
 
     // Sideways the clip is wide enough for shadows and rings; up and down it
@@ -332,8 +457,8 @@ void GridView::draw(Canvas &canvas) const
             return tween::cubic_out(age_ / 0.2f);
         // Counted from the first row in view: a list entered far down (a
         // jump of thousands of rows) arrives as quickly as one at its top.
-        const int row = std::max(index / at.columns - top_row_, 0);
-        return tween::stagger(age_, row + index % at.columns, style.entrance_step, 0.34f);
+        const int row = std::max(row_of(index) - top_row_, 0);
+        return tween::stagger(age_, row + column_of(index), style.entrance_step, 0.34f);
     };
 
     // A refusal nudges the focused cell and its ring along the refused axis.
@@ -381,12 +506,50 @@ void GridView::draw(Canvas &canvas) const
     int hot[kHot];
     float hot_focus[kHot];
     int hot_count = 0;
-    const int first_row = std::clamp(static_cast<int>(std::floor((scroll - at.pad_y) / at.pitch)),
-                                     0, std::max(at.rows - 1, 0));
-    const int last_row =
+    int first_row = std::clamp(static_cast<int>(std::floor((scroll - at.pad_y) / at.pitch)), 0,
+                               std::max(at.rows - 1, 0));
+    int last_row =
         std::clamp(static_cast<int>(std::floor((scroll + bounds_.h) / at.pitch)), 0, at.rows - 1);
+    if (!sections_.empty())
+    {
+        // Labels push rows down: walk to the ones in view.
+        first_row = 0;
+        while (first_row < at.rows - 1 && row_y(at, first_row + 1) <= scroll - at.pad_y)
+            ++first_row;
+        last_row = first_row;
+        while (last_row < at.rows - 1 && row_y(at, last_row + 1) < scroll + bounds_.h)
+            ++last_row;
+        const Painter paint(list, canvas.fonts, theme, canvas.glass);
+        const Color ink = style.card.on_panel ? theme.text_muted : paint.page_text_muted();
+        const FontRef &font = canvas.fonts.semibold;
+        for (int row = first_row; row <= last_row; ++row)
+        {
+            const int opens = row_sections_[static_cast<std::size_t>(row)];
+            if (opens < 0)
+                continue;
+            const std::string &label = sections_[static_cast<std::size_t>(opens)].label;
+            const Rect band =
+                on_screen({0.0f, row_y(at, row) - style.section_gap, at.view.w, style.section_gap});
+            const float alpha = visibility(band) * entrance(row_start(row));
+            if (alpha <= 0.0f)
+                continue;
+            // Clear of the focused card's lift and ring, which grow upwards.
+            const float baseline = band.y + band.h * 0.5f + style.section_text * 0.1f;
+            list.push_opacity(alpha);
+            text(list, font, label.c_str(), band.x, baseline, style.section_text, ink);
+            if (style.section_rule)
+            {
+                const float from = band.x + font.font->measure(label, style.section_text) + 18.0f;
+                if (from < band.x + band.w)
+                    list.rounded_rect(
+                        {from, baseline - style.section_text * 0.32f, band.x + band.w - from, 1.0f},
+                        0.0f, ink.with_alpha(0.3f));
+            }
+            list.pop_opacity();
+        }
+    }
     const int count = this->count();
-    for (int index = first_row * at.columns; index < std::min((last_row + 1) * at.columns, count);
+    for (int index = row_start(first_row); index < std::min(row_start(last_row + 1), count);
          ++index)
     {
         const float focus = highlight_.coverage(content_rect(at, index)) * active;
@@ -432,10 +595,20 @@ void GridView::draw(Canvas &canvas) const
         const Painter paint(list, canvas.fonts, theme, canvas.glass);
         const Color ink = style.card.on_panel ? theme.text_muted : paint.page_text_muted();
         const float track = bounds_.h - 16.0f;
-        const float size =
-            std::max(track * static_cast<float>(at.full_rows) / static_cast<float>(at.rows), 36.0f);
+        const float total = sections_.empty() ? static_cast<float>(at.rows) * at.pitch
+                                              : content_height(at) + style.gap_y;
+        const float size = std::max(track * std::min(at.view.h / total, 1.0f), 36.0f);
         const float travel = track - size;
-        const float along = scroll / (static_cast<float>(at.rows - at.full_rows) * at.pitch);
+        float reach = static_cast<float>(at.rows - at.full_rows) * at.pitch;
+        if (!sections_.empty())
+        {
+            int lowest = 0;
+            while (lowest < at.rows - 1 &&
+                   content_height(at) - scroll_for(at, lowest) > at.view.h + 0.5f)
+                ++lowest;
+            reach = scroll_for(at, lowest);
+        }
+        const float along = reach > 0.0f ? scroll / reach : 0.0f;
         const float x = bounds_.x + bounds_.w + 8.0f;
         const float round = theme.corner == Corner::round && theme.radius >= 2.0f ? 2.0f : 0.0f;
         list.rounded_rect({x, bounds_.y + 8.0f, 4.0f, track}, round, ink.with_alpha(0.16f));

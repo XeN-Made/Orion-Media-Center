@@ -7,6 +7,7 @@
 #include "ui/components/card.hpp"
 
 #include <functional>
+#include <string>
 #include <vector>
 
 namespace hui::ui
@@ -40,6 +41,17 @@ struct GridStyle : ComponentStyle
     EdgeExits exits;                // edges that hand the focus back; an exit beats the wrap
     bool select_on_confirm = false; // confirm toggles the item's check and reports `changed`
     bool pitch_by_row = true;       // lower rows sound lower
+    // ---- sections (set_sections) ----
+    float section_gap = 52.0f;  // room above a section's first row for its label
+    float section_text = 20.0f; // the label's size
+    bool section_rule = true;   // a hairline from the label to the right edge
+};
+
+// A run of cells under a label: it starts a new row at item `first`.
+struct GridSection
+{
+    int first = 0;
+    std::string label;
 };
 
 // A grid of cards: one focus that glides between cells, rows that scroll on a
@@ -76,6 +88,14 @@ class GridView
     // the count may be in the tens of thousands. Every cell is drawn by the
     // `content` slot, which receives an empty item. set_items() ends it.
     void set_count(int count);
+    // Groups the cells under labels (Games, Homebrew...): each section begins
+    // a row of its own, its label above it. Sorted by `first`; an empty list
+    // (the default, and what set_items() leaves) is one unlabelled run.
+    void set_sections(std::vector<GridSection> sections);
+    const std::vector<GridSection> &sections() const
+    {
+        return sections_;
+    }
     int count() const
     {
         return virtual_count_ >= 0 ? virtual_count_ : static_cast<int>(items_.size());
@@ -142,6 +162,16 @@ class GridView
     };
     Layout layout() const;
     gfx::Rect content_rect(const Layout &at, int index) const;
+    // Rows with sections are uneven: where each one starts, how long it is.
+    void place() const;
+    int row_of(int index) const;
+    int column_of(int index) const;
+    int row_start(int row) const;
+    int row_length(int row) const;
+    bool row_opens_section(int row) const;
+    float row_y(const Layout &at, int row) const;      // its cells' top, in content space
+    float scroll_for(const Layout &at, int top) const; // with `top` the first row in view
+    float content_height(const Layout &at) const;
     int step(const Layout &at, Direction direction, bool round) const;
     void retarget(bool snap);
 
@@ -149,7 +179,14 @@ class GridView
     gfx::Color accent_of(int index) const;
 
     std::vector<CardItem> items_;
-    int virtual_count_ = -1; // 0 or more: set_count() is in charge
+    std::vector<GridSection> sections_;
+    // Worked out from sections_ for a number of columns (placed_columns_ < 0:
+    // stale); unused without sections.
+    mutable int placed_columns_ = -1;
+    mutable std::vector<int> row_starts_;   // each row's first index, then count()
+    mutable std::vector<int> row_sections_; // each row: the section it opens, or -1
+    mutable std::vector<int> row_headers_;  // labels at or above each row
+    int virtual_count_ = -1;                // 0 or more: set_count() is in charge
     CardItem blank_;
     std::vector<float> checks_;
     gfx::Rect bounds_{0.0f, 0.0f, 800.0f, 500.0f};
