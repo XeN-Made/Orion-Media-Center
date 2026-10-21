@@ -63,6 +63,23 @@ TEST(Icon, ShrinksByAWholeFactor)
     EXPECT_EQ(third.height, 85);
 }
 
+// PS5SX2's covers are JPEGs (covers/<serial>.jpg): they decode too.
+TEST(Icon, DecodesAJpeg)
+{
+    std::string bytes;
+    ASSERT_TRUE(
+        save::read_file(std::string(HUI_SOURCE_DIR) + "/tests/fixtures/images/cover.jpg", &bytes));
+    library::Image image;
+    ASSERT_TRUE(library::decode_png(bytes, 256, &image));
+    EXPECT_EQ(image.width, 32);
+    EXPECT_EQ(image.height, 16);
+    const std::uint8_t *middle = pixel(image, 16, 8);
+    EXPECT_NEAR(middle[0], 48, 4);
+    EXPECT_NEAR(middle[1], 112, 4);
+    EXPECT_NEAR(middle[2], 208, 4);
+    EXPECT_EQ(middle[3], 255);
+}
+
 TEST(Icon, RefusesWhatIsNotAPng)
 {
     library::Image image;
