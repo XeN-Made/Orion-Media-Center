@@ -27,6 +27,7 @@
 #include "gfx/gl_program.hpp"
 #include "gfx/renderer.hpp"
 #include "library/emulators.hpp"
+#include "library/favourites.hpp"
 #include "library/icon.hpp"
 #include "library/json.hpp"
 #include "library/library.hpp"
@@ -200,10 +201,12 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    // HUI_SHOWCASE=<dir>: a console library of the catalogue's invented games
-    // (<dir>/homebrew/<id>/sce_sys: param.json, icon0.png from their covers),
-    // for pictures of ORION with no real product in them. Then stop; point
-    // HUI_LIBRARY at <dir> to photograph it.
+    // HUI_SHOWCASE=<dir>: a console library of the catalogue's invented games,
+    // for pictures of ORION with no real product in them: PS5 and PS4 games
+    // and homebrew (<dir>/homebrew/<id>/sce_sys: param.json, icon0.png from
+    // their covers), and DS, GBA and SNES games in a RetroArch folder with
+    // their covers as box art. Then stop; point HUI_LIBRARY at <dir> (and hide
+    // the RetroArch tile, PPSA92100, with hidden_titles) to photograph it.
     if (const char *showcase = std::getenv("HUI_SHOWCASE"))
     {
         constexpr int kSize = hui::demo::Catalog::kCoverSize;
@@ -216,22 +219,19 @@ int main(int argc, char **argv)
         glBindFramebuffer(GL_FRAMEBUFFER, target);
         glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, storage);
         const auto size = static_cast<float>(kSize);
-        int written = 0;
-        for (std::size_t i = 0; i < catalog.size(); ++i)
+        // ensure_directory makes only the last level: one at a time.
+        const auto folder_of = [](std::string path, std::initializer_list<std::string> parts)
         {
-            const hui::demo::Item &item = catalog[i];
-            // Every fifth a PS4 game, so both kinds of case show.
-            char id[16];
-            std::snprintf(id, sizeof(id), "%s%05zu", i % 5 == 4 ? "CUSA" : "PPSA", 92000 + i);
-            // One level at a time: ensure_directory makes only the last.
-            std::string folder = showcase;
-            for (const std::string &part :
-                 {std::string("homebrew"), std::string(id), std::string("sce_sys")})
+            for (const std::string &part : parts)
             {
-                hui::save::ensure_directory(folder);
-                folder += "/" + part;
+                hui::save::ensure_directory(path);
+                path += "/" + part;
             }
-            hui::save::ensure_directory(folder);
+            hui::save::ensure_directory(path);
+            return path;
+        };
+        const auto cover_png = [&](const hui::demo::Item &item, const std::string &path)
+        {
             hui::gfx::DrawList list;
             list.image(item.cover, {0.0f, 0.0f, size, size}, hui::gfx::kCanvasUv,
                        hui::gfx::Color::rgb(0xffffff), 0.0f);
@@ -243,16 +243,75 @@ int main(int argc, char **argv)
             for (std::size_t p = 3; p < pixels.size(); p += 4)
                 pixels[p] = 255;
             stbi_flip_vertically_on_write(1);
-            if (stbi_write_png((folder + "/icon0.png").c_str(), kSize, kSize, 4, pixels.data(),
-                               kSize * 4) == 0)
-                return 1;
+            return stbi_write_png(path.c_str(), kSize, kSize, 4, pixels.data(), kSize * 4) != 0;
+        };
+        const auto title_folder = [&](const std::string &id, const std::string &name, bool free)
+        {
+            const std::string folder = folder_of(showcase, {"homebrew", id, "sce_sys"});
             const std::string param =
                 std::string("{\n  \"applicationCategoryType\": 0,\n") +
+                "  \"applicationDrmType\": \"" + (free ? "free" : "standard") + "\",\n" +
                 "  \"contentVersion\": \"01.000.000\",\n" + "  \"localizedParameters\": {\n" +
                 "    \"defaultLanguage\": \"en-US\",\n" +
-                "    \"en-US\": {\"titleName\": " + hui::json::quote(item.title) + "}\n  },\n" +
+                "    \"en-US\": {\"titleName\": " + hui::json::quote(name) + "}\n  },\n" +
                 "  \"titleId\": \"" + id + "\"\n}\n";
-            if (!hui::save::write_atomic(folder + "/param.json", param).empty())
+            hui::save::write_atomic(folder + "/param.json", param);
+            return folder;
+        };
+        // The emulated games' systems: the database RetroArch names, the
+        // ROM's extension and the invented core that plays it.
+        struct System
+        {
+            const char *database;
+            const char *extension;
+            const char *core;
+            const char *core_name;
+        };
+        constexpr System kSystems[] = {
+            {"Nintendo - Nintendo DS", "nds", "desmume", "DeSmuME"},
+            {"Nintendo - Game Boy Advance", "gba", "mgba", "mGBA"},
+            {"Nintendo - Super Nintendo Entertainment System", "sfc", "snes9x", "Snes9x"},
+        };
+        constexpr std::size_t kHomebrewFrom = 14; // 0..13 games, then 4 homebrew
+        constexpr std::size_t kRomsFrom = 18;     // then 6 emulated games
+        const std::string retroarch = title_folder("PPSA92100", "RetroArch", true);
+        const std::string arch_root = retroarch.substr(0, retroarch.size() - 8); // no /sce_sys
+        for (const System &system : kSystems)
+        {
+            const std::string cores = folder_of(arch_root, {"cores"});
+            const std::string core = cores + "/" + system.core + "_libretro";
+            hui::save::write_atomic(core + ".so", "");
+            hui::save::write_atomic(
+                core + ".info", std::string("display_name = \"") + system.core_name +
+                                    "\"\ncorename = \"" + system.core_name + "\"\ndatabase = \"" +
+                                    system.database + "\"\nsupported_extensions = \"" +
+                                    system.extension + "\"\n");
+        }
+        int written = 0;
+        for (std::size_t i = 0; i < catalog.size(); ++i)
+        {
+            const hui::demo::Item &item = catalog[i];
+            bool ok = true;
+            if (i >= kRomsFrom)
+            {
+                const System &system = kSystems[(i - kRomsFrom) % 3];
+                const std::string stem = std::string(item.title) + " (USA)";
+                const std::string content = folder_of(arch_root, {"content", system.database});
+                ok = hui::save::write_atomic(content + "/" + stem + "." + system.extension, "")
+                         .empty();
+                const std::string art =
+                    folder_of(arch_root, {"thumbnails", system.database, "Named_Boxarts"});
+                ok = ok && cover_png(item, art + "/" + stem + ".png");
+            }
+            else
+            {
+                // Every fifth game a PS4 one, so both kinds of case show.
+                char id[16];
+                std::snprintf(id, sizeof(id), "%s%05zu", i % 5 == 4 ? "CUSA" : "PPSA", 92000 + i);
+                const std::string folder = title_folder(id, item.title, i >= kHomebrewFrom);
+                ok = cover_png(item, folder + "/icon0.png");
+            }
+            if (!ok)
                 return 1;
             ++written;
         }
@@ -421,6 +480,18 @@ int main(int argc, char **argv)
         const hui::orion::LibraryPrefs prefs = hui::orion::load_prefs(titles.state_dir);
         hui::library::add_emulator_games(titles, hui::orion::game_folders(prefs),
                                          titles.state_dir + "/art");
+        // HUI_FAVOURITE_ALL=1: every title starred, the hidden ones aside:
+        // Favourites then holds games, homebrew and emulated games together.
+        if (std::getenv("HUI_FAVOURITE_ALL") != nullptr)
+        {
+            std::vector<std::string> ids;
+            for (const hui::library::Title &title : titles.titles)
+            {
+                if (!prefs.title_hidden(title.id))
+                    ids.push_back(title.id);
+            }
+            hui::library::save_favourites(titles.state_dir, ids);
+        }
         const int icons = hui::library::load_icons(titles, renderer.batch());
         std::fprintf(stderr, "library: %zu titles, %d icons from %s\n", titles.titles.size(), icons,
                      base.c_str());

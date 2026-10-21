@@ -21,6 +21,11 @@ Title ID: `PPSA99061`.
 - Box art downloaded as the covers scroll into view, or taken from what
   PS5SX2 and Porpoise already downloaded.
 
+![PS5 games, homebrew, and DS and GBA games side by side in Favourites](docs/screenshots/mixed.jpg)
+
+*One tab, every kind of title: PS5 games, homebrew, and DS and GBA games, each
+started with Cross, the emulated ones straight in their emulator.*
+
 **Three ways to look at it**
 
 | Grid | Cases | List |
