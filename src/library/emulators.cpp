@@ -1378,8 +1378,137 @@ int attach_emulator_covers(std::vector<Title> &roms, const std::string &pcsx2_di
     return found;
 }
 
+int version_score(std::string_view file)
+{
+    const std::size_t slash = file.rfind('/');
+    if (slash != std::string_view::npos)
+        file.remove_prefix(slash + 1);
+    const std::size_t dot = file.rfind('.');
+    if (dot != std::string_view::npos)
+        file = file.substr(0, dot);
+    const auto flag = [](std::string_view tag, char letter)
+    {
+        // [b], [b1], [b2]...: GoodTools' marks are a letter and a number.
+        return !tag.empty() && tag[0] == letter &&
+               (tag.size() == 1 || std::isdigit(static_cast<unsigned char>(tag[1])) != 0);
+    };
+    int score = 0;
+    int region = 0;
+    for (std::size_t at = 0; at < file.size(); ++at)
+    {
+        const char open = file[at];
+        if (open != '[' && open != '(')
+            continue;
+        const std::size_t close = file.find(open == '[' ? ']' : ')', at + 1);
+        if (close == std::string_view::npos)
+            break;
+        const std::string_view tag = file.substr(at + 1, close - at - 1);
+        at = close;
+        if (open == '[')
+        {
+            if (tag == "!")
+                score += 20; // verified good
+            else if (flag(tag, 'b'))
+                score -= 100; // bad dump
+            else if (flag(tag, 'o'))
+                score -= 60; // overdump
+            else if (flag(tag, 'h'))
+                score -= 50; // hack
+            else if (flag(tag, 'p'))
+                score -= 40; // pirate
+            else if (flag(tag, 't'))
+                score -= 30; // trainer
+            else if (tag.rfind("T+", 0) == 0 || tag.rfind("T-", 0) == 0)
+                score -= 25; // translation
+            else if (flag(tag, 'f'))
+                score -= 20; // fixed
+            else if (flag(tag, 'a'))
+                score -= 10; // alternate
+            continue;
+        }
+        const std::string words = lower(tag);
+        for (const char *poor : {"hack", "beta", "proto", "demo", "sample", "kiosk", "debug"})
+        {
+            if (words.find(poor) != std::string::npos)
+                score -= words.find("hack") != std::string::npos ? 50 : 35;
+        }
+        if (words.rfind("rev ", 0) == 0 || (words.size() > 1 && words[0] == 'v' &&
+                                            std::isdigit(static_cast<unsigned char>(words[1]))))
+            score += 1; // a later revision
+        // The region, as GoodTools (U, E, J, UE) and No-Intro (USA, Europe) write it.
+        for (const std::string &part : split(words, ',', true))
+        {
+            const std::string name = trim(part);
+            if (name == "u" || name == "usa" || name == "ue" || name == "ju" || name == "w" ||
+                name == "world")
+                region = std::max(region, 15);
+            else if (name == "e" || name == "europe" || name == "uk" || name == "a" ||
+                     name == "australia")
+                region = std::max(region, 10);
+            else if (name == "j" || name == "japan")
+                region = std::max(region, 5);
+        }
+    }
+    return score + region;
+}
+
+int keep_best_versions(std::vector<Title> &roms, const std::string &launcher)
+{
+    // A game is its system's tab and its name; a disc or side keeps its own
+    // ("(Disc 2)"), since those are not versions of each other.
+    const auto key_of = [](const Title &rom)
+    {
+        std::string key = shelf_system(rom.system) + "\n" + lower(rom.name);
+        const std::string file = lower(rom.path);
+        for (const char *part : {"(disc ", "(side ", "(disk "})
+        {
+            const std::size_t at = file.rfind(part);
+            if (at != std::string::npos)
+                key += file.substr(at, file.find(')', at) - at);
+        }
+        return key;
+    };
+    std::unordered_map<std::string, std::size_t> best;
+    std::vector<bool> keep(roms.size(), true);
+    for (std::size_t i = 0; i < roms.size(); ++i)
+    {
+        const Title &rom = roms[i];
+        if (!rom.is_rom() || rom.launcher != launcher || launcher.empty())
+            continue;
+        const auto [at, fresh] = best.emplace(key_of(rom), i);
+        if (fresh)
+            continue;
+        const Title &held = roms[at->second];
+        const int mine = version_score(rom.path);
+        const int theirs = version_score(held.path);
+        const bool better = mine != theirs ? mine > theirs
+                            : rom.path.size() != held.path.size()
+                                ? rom.path.size() < held.path.size()
+                                : rom.path < held.path;
+        keep[better ? at->second : i] = false;
+        if (better)
+            at->second = i;
+    }
+    int dropped = 0;
+    std::size_t to = 0;
+    for (std::size_t i = 0; i < roms.size(); ++i)
+    {
+        if (!keep[i])
+        {
+            ++dropped;
+            continue;
+        }
+        if (to != i)
+            roms[to] = std::move(roms[i]);
+        ++to;
+    }
+    roms.resize(to);
+    return dropped;
+}
+
 int add_emulator_games(Library &library, const std::vector<GameFolder> &folders,
-                       const std::string &art_dir, const std::function<void(const char *)> &step)
+                       const std::string &art_dir, bool every_version,
+                       const std::function<void(const char *)> &step)
 {
     const auto at = [&step](const char *stage)
     {
@@ -1390,6 +1519,19 @@ int add_emulator_games(Library &library, const std::vector<GameFolder> &folders,
     std::vector<Title> roms;
     library.emulator = scan_emulators(library.titles, folders, &roms);
     at("emulator games found");
+    if (const EmulatorApp *retroarch = library.emulator.app("retroarch");
+        !every_version && retroarch != nullptr && keep_best_versions(roms, retroarch->title_id) > 0)
+    {
+        // The tabs' and the emulators' counts follow what is left.
+        for (System &system : library.emulator.systems)
+            system.games = static_cast<int>(
+                std::count_if(roms.begin(), roms.end(), [&](const Title &rom)
+                              { return shelf_system(rom.system) == system.name; }));
+        for (EmulatorApp &app : library.emulator.apps)
+            app.games =
+                static_cast<int>(std::count_if(roms.begin(), roms.end(), [&](const Title &rom)
+                                               { return rom.launcher == app.title_id; }));
+    }
     // The emulators' own covers first: high quality, and nothing to download.
     attach_emulator_covers(roms, "/data/PCSX2", "/data/porpoise");
     at("emulator covers");

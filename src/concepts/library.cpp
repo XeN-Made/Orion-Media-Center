@@ -1612,6 +1612,8 @@ class Library final : public app::Concept
             scan_emulators(feedback);
             break;
         case orion::SettingsPanel::Change::scan_emulators:
+            // The scan reads the prefs from disk (Every version of a game).
+            save_prefs();
             scan_emulators(feedback);
             break;
         case orion::SettingsPanel::Change::sound:

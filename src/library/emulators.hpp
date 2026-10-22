@@ -81,11 +81,22 @@ int attach_emulator_covers(std::vector<Title> &roms, const std::string &pcsx2_di
 // The library's emulators and their games, (re)made: games found by an
 // earlier scan leave library.titles, scan_emulators runs over the rest, box
 // art is attached (attach_rom_art, art_dir) and the games are appended.
-// Returns how many there are. step, when given, hears each stage as it
+// Returns how many there are. Unless every_version, a game RetroArch plays
+// shows once (keep_best_versions). step, when given, hears each stage as it
 // begins (the start-up's breadcrumbs).
 int add_emulator_games(Library &library, const std::vector<GameFolder> &folders,
-                       const std::string &art_dir,
+                       const std::string &art_dir, bool every_version = false,
                        const std::function<void(const char *)> &step = {});
+// Full ROM sets hold many files of one game: bad dumps ([b1]), overdumps
+// ([o1]), hacks ([h1], (Hack)), pirates ([p1]), trainers ([t1]), fixes
+// ([f1]), alternates ([a1]), translations ([T+Eng]), betas and demos, other
+// regions. How good a file is by those marks, GoodTools' and No-Intro's:
+// higher is better, a verified dump ([!]) from (USA) or (World) best.
+int version_score(std::string_view file);
+// Of the games launcher starts, one file per game (its system's tab and its
+// name; each disc or side its own): the best by version_score, then the
+// shorter name. Returns how many were left out.
+int keep_best_versions(std::vector<Title> &roms, const std::string &launcher);
 // One of RetroArch's playlists (<root>/playlists/<name>, JSON): every game it
 // has scanned, wherever the files are (/mnt/usb0/roms/snes), so ORION lists
 // what RetroArch lists without being told the folder. The system comes from

@@ -100,7 +100,8 @@ struct Placement
 //     "continue_row": true,
 //     "ask_player": true,
 //     "setup_done": true,
-//     "autostart": true,
+//     "autostart": false,
+//     "every_version": false,
 //     "moved_leave_shelf": true,
 //     "auto_art": true,
 //     "return_on_close": true,
@@ -144,8 +145,12 @@ struct LibraryPrefs
     bool ask_player = true;
     bool setup_done = false;
     // The autostart payload opens ORION after the jailbreak; off writes
-    // <state_dir>/autostart-off, which the payload honours.
-    bool autostart = true;
+    // <state_dir>/autostart-off, which the payload honours. Off until the
+    // player turns it on: opening by itself is a choice, not a default.
+    bool autostart = false;
+    // Every file of a game RetroArch plays has a cover (bad dumps, hacks,
+    // other regions); off, only the best of them (library::keep_best_versions).
+    bool every_version = false;
     // A title moved to a custom tab leaves its Games / Homebrew / Media
     // shelf; it always stays in All.
     bool moved_leave_shelf = true;

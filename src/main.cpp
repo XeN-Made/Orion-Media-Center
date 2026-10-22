@@ -232,7 +232,7 @@ int main()
         const orion::LibraryPrefs prefs = orion::load_prefs(titles.state_dir);
         return library::add_emulator_games(
             titles, orion::game_folders(prefs), orion::art_folder(prefs, titles.state_dir),
-            starting ? boot_step : std::function<void(const char *)>());
+            prefs.every_version, starting ? boot_step : std::function<void(const char *)>());
     };
     {
         library::ScanOptions scan = library::console_defaults();

@@ -52,8 +52,9 @@ most played.
 - Themes and a look of your own: colours, the galaxy sky, glass, corners,
   focus ring, per tab if you like.
 - Background music (add your own `.ogg` files) and sound effects.
-- Opens by itself after the jailbreak (autoboot), returns to ORION when a game
-  closes, and updates itself when a newer ORION is out.
+- Opens by itself after the jailbreak if you like (autoboot, off until you turn
+  it on), returns to ORION when a game closes, and updates itself when a newer
+  ORION is out.
 
 | Settings | First-run setup |
 | --- | --- |
@@ -132,6 +133,10 @@ autoloader sends it with the others; it waits until nothing else is in front
 (the browser has closed), then opens ORION. If you start a game straight away
 instead, it stays out of the way.
 
+Autoboot is **off** until you turn it on: in the first-run setup, or later in
+Settings, Library, **Autoboot ORION after the jailbreak**. Then add the payload
+to your autoloader as below.
+
 The payload is in the release ZIP at
 `PPSA99061/assets/payloads/orion-autostart.elf` (and on the console at
 `/data/homebrew/PPSA99061/assets/payloads/orion-autostart.elf`).
@@ -163,11 +168,12 @@ drive or in `/data`) takes one payload per line, run in order. Put
 `orion-autostart.elf` in that folder and add its name as the last line, after
 ShadowMountPlus.
 
-### Turning it off, and checking it
+### Turning it on or off, and checking it
 
-To stop it without touching the autoloader: Settings, Library, **Autoboot ORION
-after the jailbreak**. It gives up if nothing has let it open ORION within 30
-minutes. Every step it took is written to `/data/orion/autostart.txt`.
+Settings, Library, **Autoboot ORION after the jailbreak** turns it on or off
+without touching the autoloader. It gives up if nothing has let it open ORION
+within 30 minutes. Every step it took is written to
+`/data/orion/autostart.txt`.
 
 ## Using it
 
@@ -213,6 +219,11 @@ PS5SX2 and PS5-ECAM and the games they can see:
   `.rpx` or a folder of NUS files (`title.tmd`), 3DS as `.3ds`, `.cci`, `.cia`,
   `.cxi`, `.3dsx`, DS as `.nds` or `.zip`, Switch as `.xci`, `.nsp`, `.nro`.
 - **Your own folders**: Settings, Emulators, an emulator, **Add a game folder**.
+
+A full ROM set holds many files of one game: bad dumps, hacks, trainers,
+translations, other regions. ORION shows each RetroArch game once, the best
+file of it (a verified dump from the USA first). Settings, Emulators, **Every
+version of a game** shows them all.
 
 When two emulators can play a game, ORION asks which one the first time and
 remembers (Options, Play with… changes it). PS2 games start straight in

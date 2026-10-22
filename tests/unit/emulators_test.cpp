@@ -559,6 +559,58 @@ TEST(Emulators, UsesTheCoversTheEmulatorsDownloaded)
     fs::remove_all(root);
 }
 
+// A full ROM set's many files of one game show as one, the best: a verified
+// dump from the USA over bad dumps, hacks, trainers and translations; discs
+// stay apart, and another emulator's games are left alone.
+TEST(Emulators, KeepsTheBestVersionOfEachGame)
+{
+    EXPECT_GT(library::version_score("Lantern Night (U) [!].gb"),
+              library::version_score("Lantern Night (U) [b1].gb"));
+    EXPECT_GT(library::version_score("Lantern Night (U).gb"),
+              library::version_score("Lantern Night (U) [h1].gb"));
+    EXPECT_GT(library::version_score("Lantern Night (USA).gb"),
+              library::version_score("Lantern Night (Japan).gb"));
+    EXPECT_GT(library::version_score("Lantern Night (J) [T+Eng].gb"),
+              library::version_score("Lantern Night (J) [b2].gb"));
+    EXPECT_GT(library::version_score("Lantern Night (Europe) (Rev 1).gb"),
+              library::version_score("Lantern Night (Europe) (Beta).gb"));
+
+    const auto rom = [](const std::string &file, const std::string &name, const char *system,
+                        const std::string &launcher)
+    {
+        library::Title title;
+        title.path = "/mnt/usb1/gbc/" + file;
+        title.rom = title.path;
+        title.id = library::rom_id(title.path);
+        title.name = name;
+        title.system = system;
+        title.launcher = launcher;
+        title.source = library::Source::image;
+        return title;
+    };
+    constexpr const char *kGb = "Nintendo - Game Boy";
+    constexpr const char *kGbc = "Nintendo - Game Boy Color";
+    constexpr const char *kPs1 = "Sony - PlayStation";
+    std::vector<library::Title> roms = {
+        rom("Comet Post (U) [C][b1].gbc", "Comet Post", kGbc, "RA"),
+        rom("Comet Post (U) [C][!].gbc", "Comet Post", kGbc, "RA"),
+        rom("Comet Post (U) [C][t1].gbc", "Comet Post", kGbc, "RA"),
+        rom("Comet Post (J) [T+Eng].gb", "Comet Post", kGb, "RA"), // the same tab
+        rom("Quiet Bay (USA) (Disc 1).chd", "Quiet Bay", kPs1, "RA"),
+        rom("Quiet Bay (USA) (Disc 2).chd", "Quiet Bay", kPs1, "RA"),
+        rom("Paper Moon (U) [b1].gb", "Paper Moon", kGb, "OTHER"),
+        rom("Paper Moon (U) [!].gb", "Paper Moon", kGb, "OTHER"),
+    };
+    EXPECT_EQ(library::keep_best_versions(roms, "RA"), 3);
+    ASSERT_EQ(roms.size(), 5u);
+    EXPECT_EQ(roms[0].path, "/mnt/usb1/gbc/Comet Post (U) [C][!].gbc");
+    EXPECT_EQ(roms[1].name, "Quiet Bay");
+    EXPECT_EQ(roms[2].name, "Quiet Bay"); // two discs, both kept
+    EXPECT_EQ(roms[3].launcher, "OTHER"); // not RetroArch's: both kept
+    EXPECT_EQ(roms[4].launcher, "OTHER");
+    EXPECT_EQ(library::keep_best_versions(roms, ""), 0);
+}
+
 // Game Boy games share the Game Boy Color's tab, each keeping its own system
 // (its box art is the Game Boy's).
 TEST(Emulators, PutsGameBoyGamesOnTheColorsTab)

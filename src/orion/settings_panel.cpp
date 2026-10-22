@@ -89,6 +89,7 @@ enum : int
     kBrowseUp,
     kBrowseType,
     kScanEmulators,
+    kEveryVersion,
     kAppInfo,
     kAppStarts,
     // A tab's page.
@@ -637,6 +638,9 @@ void SettingsPanel::build_emulators(const LibraryPrefs &prefs)
 
     form_.add_toggle(kAskPlayer, "Ask which emulator to use", prefs.ask_player).description =
         "A game more than one emulator plays asks the first time; Options, Play with changes it";
+    form_.add_toggle(kEveryVersion, "Every version of a game", prefs.every_version).description =
+        "Bad dumps, hacks, translations and other regions as covers of their own; off shows "
+        "the best one";
     if (emulator_ == nullptr || emulator_->systems.empty())
         return;
     form_.add_header("Systems");
@@ -1288,6 +1292,10 @@ SettingsPanel::Change SettingsPanel::handle(const InputFrame &input, ui::Feedbac
     case kAskPlayer:
         prefs->ask_player = form_.toggle_value(kAskPlayer);
         return Change::prefs;
+    case kEveryVersion:
+        // The games are listed again, with or without the other versions.
+        prefs->every_version = form_.toggle_value(kEveryVersion);
+        return Change::scan_emulators;
     case kGroupSystems:
         prefs->group_systems = form_.toggle_value(kGroupSystems);
         return Change::prefs;
