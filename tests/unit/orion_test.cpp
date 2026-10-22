@@ -417,6 +417,58 @@ TEST(OrionThemeFile, RefusesWhatIsNotATheme)
     EXPECT_EQ(orion::theme_id_from_name("  --  "), "");
 }
 
+// A .theme file: sections for the JSON's objects, comments that never eat a
+// colour, lists, an id made from the name, the later of two values.
+TEST(OrionThemeFile, ReadsTheThemeTextFormat)
+{
+    const char *text = "# a comment\n"
+                       "name    = Nebula Noir   # shown in Settings\n"
+                       "author  = \"you # and me\"\n"
+                       "extends = acrylic\n"
+                       "\n"
+                       "[page]\n"
+                       "background = galaxy\n"
+                       "colors     = #000000, #010203 #3a1f6a\n"
+                       "[palette]\n"
+                       "accent  = #ffc94a80 ; labels\n"
+                       "accent  = #ffc94a\n"
+                       "[orion]\n"
+                       "clouds = 50\r\n"
+                       "badges = false\n";
+    std::string json;
+    std::string error;
+    ASSERT_TRUE(orion::theme_text_to_json(text, &json, &error)) << error;
+    orion::ThemeFile file;
+    ASSERT_TRUE(orion::parse_theme(json, nullptr, &file, &error)) << error << "\n" << json;
+    EXPECT_EQ(file.id, "nebula-noir");
+    EXPECT_EQ(file.name, "Nebula Noir");
+    EXPECT_EQ(file.author, "you # and me");
+    EXPECT_EQ(file.theme.style, kit().find("acrylic")->theme.style);
+    EXPECT_EQ(file.theme.backdrop.mode, gfx::BackdropMode::stars);
+    EXPECT_TRUE(orion::same_rgb(file.theme.backdrop.colors[2], gfx::Color::rgb(0x3a1f6a)));
+    EXPECT_TRUE(orion::same_rgb(file.theme.accent, gfx::Color::rgb(0xffc94a)));
+    EXPECT_NEAR(file.theme.accent.a, 1.0f, 0.01f); // the later value
+    EXPECT_FLOAT_EQ(file.clouds, 0.5f);
+    EXPECT_FALSE(file.chrome.badges);
+
+    // A line it cannot read is named.
+    for (const char *broken : {"name = A\n[page\n", "name = A\njust words\n", "Name = A\n"})
+    {
+        EXPECT_FALSE(orion::theme_text_to_json(broken, &json, &error)) << broken;
+        EXPECT_EQ(error.rfind("line ", 0), 0u) << error;
+    }
+
+    // The template ORION's docs offer reads as a theme of every key.
+    std::string template_text;
+    ASSERT_TRUE(save::read_file(std::string(HUI_SOURCE_DIR) + "/docs/themes/template.theme",
+                                &template_text, 1u << 20));
+    ASSERT_TRUE(orion::theme_text_to_json(template_text, &json, &error)) << error;
+    ASSERT_TRUE(orion::parse_theme(json, nullptr, &file, &error)) << error << "\n" << json;
+    EXPECT_EQ(file.id, "template");
+    EXPECT_FLOAT_EQ(file.cover_corners, 22.0f);
+    EXPECT_TRUE(orion::same_rgb(file.theme.accent, gfx::Color::rgb(0x8fe3ff)));
+}
+
 TEST(OrionThemeFile, TheLibraryReadsBothFoldersAndSavesThePlayers)
 {
     const std::string root = ::testing::TempDir() + "orion-themes";
@@ -426,7 +478,8 @@ TEST(OrionThemeFile, TheLibraryReadsBothFoldersAndSavesThePlayers)
         ASSERT_TRUE(save::ensure_directory(dir));
     for (const char *name : {"/zeta.json", "/orion.json"})
         std::remove((builtin + name).c_str());
-    for (const char *name : {"/mine.json", "/broken.json", "/clash.json", "/saved.json"})
+    for (const char *name :
+         {"/mine.json", "/broken.json", "/clash.json", "/saved.json", "/fancy.theme"})
         std::remove((user + name).c_str());
 
     ASSERT_TRUE(save::write_atomic(builtin + "/zeta.json",
@@ -440,11 +493,15 @@ TEST(OrionThemeFile, TheLibraryReadsBothFoldersAndSavesThePlayers)
                     .empty());
     ASSERT_TRUE(save::write_atomic(user + "/broken.json", "{nope").empty());
     ASSERT_TRUE(
+        save::write_atomic(user + "/fancy.theme", "name = Fancy\nextends = zeta\n").empty());
+    ASSERT_TRUE(
         save::write_atomic(user + "/clash.json", R"({"id": "zeta", "name": "Again"})").empty());
 
     orion::ThemeLibrary themes;
     themes.load(builtin, user);
-    ASSERT_EQ(themes.size(), 3u);
+    ASSERT_EQ(themes.size(), 4u);
+    ASSERT_NE(themes.find("fancy"), nullptr);
+    EXPECT_EQ(themes.find("fancy")->theme.style, kit().find("brutal")->theme.style);
     EXPECT_EQ(themes.at(0).id, "orion"); // ORION leads
     EXPECT_FALSE(themes.at(0).user);
     const orion::ThemeFile *mine = themes.find("mine");

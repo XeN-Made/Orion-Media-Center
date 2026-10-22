@@ -190,6 +190,9 @@ minutes. Every step it took is written to `/data/orion/autostart.txt`.
   own.
 - **Continue playing**: the titles you played last, over the All tab.
 - **Tabs of your own**, a theme per tab, hidden titles: Settings, Tabs.
+- **Themes of your own**: a `.theme` text file in `/data/orion/themes/`;
+  [docs/ORION_THEMES.md](docs/ORION_THEMES.md) has every key and
+  [template.theme](docs/themes/template.theme) to start from.
 - **Removing a title**: Options, Remove. *Remove from home screen* takes it off
   the home screen and keeps its files; *Delete* erases its files (hold Cross
   to confirm). ORION closes while ShadowMountPlus does it, then opens again.

@@ -1,20 +1,68 @@
 # ORION themes
 
 Everything ORION Media Center looks like comes from a **theme file**: one
-JSON document that says what the sky is, what the glass is tinted with, how
-round things are, which fonts and sounds to use. The themes ORION ships are
-theme files too (`assets/themes/*.json` in the app folder), so a theme you
-write is exactly the same kind of thing as the built-in ones.
+document that says what the sky is, what the glass is tinted with, how round
+things are, which fonts and sounds to use. The themes ORION ships are theme
+files too (`assets/themes/*.json` in the app folder), so a theme you write is
+exactly the same kind of thing as the built-in ones.
+
+A theme can be written two ways, with the same keys:
+
+- **`.theme`**, made for writing by hand: `key = value` lines, a `[section]`
+  for each group, and `#` comments. Start from
+  [`template.theme`](themes/template.theme), which lists every key with what
+  it does.
+- **`.json`**, the format *Save as new theme* writes and the built-in themes
+  use.
 
 ## Installing a theme
 
-1. Save it as `<something>.json`.
+1. Save it as `<something>.theme` (or `.json`).
 2. Copy it to the console's `/data/orion/themes/` (over FTP, for example).
 3. Open ORION, press **R3** (or **Options** then *Settings*) and pick it in
    **Appearance > Theme**. Your themes are marked *(yours)*.
 
 A file ORION cannot use is skipped, never fatal; the reason is written to
-`/data/orion/themes.txt`.
+`/data/orion/themes.txt` (for a `.theme`, with the line it could not read).
+
+## A theme for one tab
+
+Every tab can wear a theme of its own: **Settings > Tabs**, pick the tab,
+then **Theme**. The rest of ORION keeps the main look from Appearance. A
+Retro tab in Pixel, Favourites in gold: each is just a theme file, and a tab
+set back to *Main theme* follows Appearance again.
+
+## The .theme format
+
+```ini
+# nebula-noir.theme
+name    = Nebula Noir        # shown in Settings; the id is made from it
+extends = orion              # start from this theme, built-in or yours
+
+[page]
+background = galaxy
+colors     = #000000 #02040b #3a1f6a #0a4a66
+
+[palette]
+accent  = #ffc94a            # labels, counts, the text cursor
+primary = #ffc94a            # the selected tab, focused keys
+
+[orion]
+tabs          = plain
+cover_corners = 28
+```
+
+- Keys before the first `[section]` are the theme's own: `name`, `id`,
+  `author`, `description`, `family`, `extends`, `dark`.
+- Each section is one group of the keys below: `[page]`, `[palette]`,
+  `[shape]`, `[type]`, `[motion]`, `[orion]`.
+- A comment is a line that starts with `#` (or `;` or `//`), or anything
+  after ` # ` on a line. Colours like `#ffc94a` are never mistaken for one.
+- `colors` and `params` are lists, by spaces or commas. `true`, `false` and
+  numbers are themselves; anything else is text. Put text in quotes when it
+  holds ` # ` (`author = "Ann # Bo"`).
+- No `id`? It is made from `name`: *Nebula Noir* becomes `nebula-noir`.
+- A key written twice keeps the later value.
 
 You can also make one on the console: adjust the look in Settings, then
 choose **Save as new theme** and give it a name. ORION writes the file to
@@ -23,8 +71,19 @@ share it.
 
 ## The smallest theme
 
-Every key except `id` and `name` is optional. What a theme leaves out comes
-from the theme it **extends** (ORION's own, when it names none):
+Every key except `id` and `name` is optional (in a `.theme`, only `name`).
+What a theme leaves out comes from the theme it **extends** (ORION's own,
+when it names none):
+
+```ini
+name = Gold Rush
+
+[palette]
+accent  = #ffc94a
+primary = #ffc94a
+```
+
+or, as JSON:
 
 ```json
 {
@@ -37,6 +96,9 @@ from the theme it **extends** (ORION's own, when it names none):
 ```
 
 ## Every key
+
+As JSON below; in a `.theme` each object is a `[section]`, and
+[`template.theme`](themes/template.theme) is this same list in that form.
 
 ```json
 {

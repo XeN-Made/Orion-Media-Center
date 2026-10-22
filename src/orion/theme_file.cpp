@@ -1,4 +1,4 @@
-// ORION Media Center - ORION theme files: a whole look as one JSON document.
+// ORION Media Center - ORION theme files: a whole look as one JSON or .theme document.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 
@@ -440,6 +440,217 @@ void ThemeLibrary::add(std::unique_ptr<ThemeFile> file)
     themes_.push_back(std::move(file));
 }
 
+namespace
+{
+
+// Keys whose value is always text, whatever it looks like ("name = 1999").
+bool text_key(std::string_view key)
+{
+    for (const char *known : {"id", "name", "author", "description", "family", "extends", "format"})
+    {
+        if (key == known)
+            return true;
+    }
+    return false;
+}
+
+bool is_number(std::string_view text)
+{
+    std::size_t at = text.empty() || text[0] != '-' ? 0 : 1;
+    bool digits = false;
+    bool dot = false;
+    for (; at < text.size(); ++at)
+    {
+        if (std::isdigit(static_cast<unsigned char>(text[at])) != 0)
+            digits = true;
+        else if (text[at] == '.' && !dot)
+            dot = true;
+        else
+            return false;
+    }
+    return digits;
+}
+
+// One value as JSON: true and false, a number, else text.
+std::string json_value(std::string_view key, std::string_view value)
+{
+    if (!text_key(key) && (value == "true" || value == "false" || is_number(value)))
+        return std::string(value);
+    return json::quote(value);
+}
+
+std::string trim_text(std::string_view text)
+{
+    std::size_t start = 0;
+    std::size_t end = text.size();
+    while (start < end && (text[start] == ' ' || text[start] == '\t'))
+        ++start;
+    while (end > start && (text[end - 1] == ' ' || text[end - 1] == '\t' || text[end - 1] == '\r'))
+        --end;
+    return std::string(text.substr(start, end - start));
+}
+
+// The line without its comment. A comment starts at "#", ";" or "//" at the
+// start of the line, or after a space when a space (or nothing) follows: a
+// colour ("#ffc94a") is never one.
+std::string without_comment(std::string_view line)
+{
+    const std::string trimmed = trim_text(line);
+    if (trimmed.empty() || trimmed[0] == '#' || trimmed[0] == ';' || trimmed.rfind("//", 0) == 0)
+        return "";
+    bool quoted = false;
+    for (std::size_t at = 0; at < trimmed.size(); ++at)
+    {
+        const char c = trimmed[at];
+        if (c == '"')
+            quoted = !quoted;
+        if (quoted || at == 0 || (trimmed[at - 1] != ' ' && trimmed[at - 1] != '\t'))
+            continue;
+        const bool spaced = at + 1 >= trimmed.size() || trimmed[at + 1] == ' ' ||
+                            trimmed[at + 1] == '\t' || trimmed[at + 1] == '#';
+        if ((c == '#' && spaced) || c == ';' ||
+            (c == '/' && at + 1 < trimmed.size() && trimmed[at + 1] == '/'))
+            return trim_text(std::string_view(trimmed).substr(0, at));
+    }
+    return trimmed;
+}
+
+bool valid_key(std::string_view key)
+{
+    return !key.empty() &&
+           std::all_of(key.begin(), key.end(), [](char c)
+                       { return (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_'; });
+}
+
+} // namespace
+
+bool theme_text_to_json(std::string_view text, std::string *json, std::string *error)
+{
+    // Keys in the order written, each section's under its name; a key written
+    // twice keeps the later value, as a theme's own value wins over the base.
+    struct Section
+    {
+        std::string name; // empty: the top
+        std::vector<std::pair<std::string, std::string>> keys;
+    };
+    std::vector<Section> sections(1);
+    std::size_t current = 0;
+    int number = 0;
+    std::size_t start = 0;
+    while (start <= text.size())
+    {
+        std::size_t end = text.find('\n', start);
+        if (end == std::string_view::npos)
+            end = text.size();
+        const std::string line = without_comment(text.substr(start, end - start));
+        start = end + 1;
+        ++number;
+        const auto fail = [&](const std::string &why)
+        {
+            if (error != nullptr)
+                *error = "line " + std::to_string(number) + ": " + why;
+            return false;
+        };
+        if (line.empty())
+            continue;
+        if (line.front() == '[')
+        {
+            if (line.back() != ']')
+                return fail("a section is written [name]");
+            const std::string name = trim_text(std::string_view(line).substr(1, line.size() - 2));
+            if (!valid_key(name))
+                return fail("a section's name is lowercase letters, digits and _");
+            current = sections.size();
+            for (std::size_t i = 1; i < sections.size(); ++i)
+            {
+                if (sections[i].name == name)
+                    current = i;
+            }
+            if (current == sections.size())
+                sections.push_back({name, {}});
+            continue;
+        }
+        const std::size_t equals = line.find('=');
+        if (equals == std::string::npos)
+            return fail("expected key = value");
+        const std::string key = trim_text(std::string_view(line).substr(0, equals));
+        std::string value = trim_text(std::string_view(line).substr(equals + 1));
+        if (!valid_key(key))
+            return fail("a key is lowercase letters, digits and _");
+        std::string as_json;
+        if (value.size() >= 2 && value.front() == '"' && value.back() == '"')
+            as_json = json::quote(std::string_view(value).substr(1, value.size() - 2));
+        else if (key == "colors" || key == "params")
+        {
+            // A list: colours or numbers, by spaces or commas.
+            for (char &c : value)
+            {
+                if (c == ',')
+                    c = ' ';
+            }
+            as_json = "[";
+            std::size_t at = 0;
+            while (at < value.size())
+            {
+                while (at < value.size() && (value[at] == ' ' || value[at] == '\t'))
+                    ++at;
+                std::size_t stop = at;
+                while (stop < value.size() && value[stop] != ' ' && value[stop] != '\t')
+                    ++stop;
+                if (stop > at)
+                    as_json += (as_json.size() > 1 ? ", " : "") +
+                               json_value(key, std::string_view(value).substr(at, stop - at));
+                at = stop;
+            }
+            as_json += "]";
+        }
+        else
+            as_json = json_value(key, value);
+        auto &keys = sections[current].keys;
+        const auto known = std::find_if(keys.begin(), keys.end(),
+                                        [&](const auto &entry) { return entry.first == key; });
+        if (known != keys.end())
+            known->second = as_json;
+        else
+            keys.emplace_back(key, as_json);
+    }
+    auto &top = sections.front().keys;
+    const auto has = [&](const char *key)
+    {
+        return std::any_of(top.begin(), top.end(),
+                           [&](const auto &entry) { return entry.first == key; });
+    };
+    // A .theme names itself; its id can come from the name.
+    if (!has("id"))
+    {
+        const auto name = std::find_if(top.begin(), top.end(),
+                                       [](const auto &entry) { return entry.first == "name"; });
+        json::Value parsed;
+        if (name != top.end() && json::parse(name->second, &parsed))
+            top.emplace_back("id", json::quote(theme_id_from_name(parsed.string_or(""))));
+    }
+    std::string out = "{\n";
+    bool first = true;
+    const auto write = [&](const std::string &key, const std::string &value, const char *indent)
+    {
+        out += std::string(first ? "" : ",\n") + indent + json::quote(key) + ": " + value;
+        first = false;
+    };
+    for (const auto &[key, value] : top)
+        write(key, value, "  ");
+    for (std::size_t i = 1; i < sections.size(); ++i)
+    {
+        std::string inner = "{";
+        for (std::size_t k = 0; k < sections[i].keys.size(); ++k)
+            inner += std::string(k == 0 ? "" : ", ") + json::quote(sections[i].keys[k].first) +
+                     ": " + sections[i].keys[k].second;
+        write(sections[i].name, inner + "}", "  ");
+    }
+    out += "\n}\n";
+    *json = std::move(out);
+    return true;
+}
+
 void ThemeLibrary::read_dir(const std::string &dir, bool user)
 {
     if (dir.empty())
@@ -448,8 +659,9 @@ void ThemeLibrary::read_dir(const std::string &dir, bool user)
     for (const save::DirectoryEntry &entry : save::list_directory(dir))
     {
         const std::string &name = entry.name;
-        if (entry.directory || name.front() == '.' || name.size() < 6 ||
-            name.compare(name.size() - 5, 5, ".json") != 0)
+        const bool json_file = name.size() > 5 && name.compare(name.size() - 5, 5, ".json") == 0;
+        const bool theme_file = name.size() > 6 && name.compare(name.size() - 6, 6, ".theme") == 0;
+        if (entry.directory || name.front() == '.' || (!json_file && !theme_file))
             continue;
         const std::string path = dir + "/" + name;
         if (themes_.size() >= kMaxThemes)
@@ -460,9 +672,13 @@ void ThemeLibrary::read_dir(const std::string &dir, bool user)
         std::string text;
         std::string why;
         auto file = std::make_unique<ThemeFile>();
+        std::string converted;
         if (!save::read_file(path, &text, kMaxThemeFile))
             why = "cannot be read (or is over 256 KiB)";
-        else if (parse_theme(text, resolve, file.get(), &why) && find(file->id) != nullptr)
+        else if (theme_file && !theme_text_to_json(text, &converted, &why))
+            ; // why says which line
+        else if (parse_theme(theme_file ? converted : text, resolve, file.get(), &why) &&
+                 find(file->id) != nullptr)
             why = "the id \"" + file->id + "\" is already taken";
         else if (why.empty())
         {

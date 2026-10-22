@@ -1,4 +1,4 @@
-// ORION Media Center - ORION theme files: a whole look as one JSON document.
+// ORION Media Center - ORION theme files: a whole look as one JSON or .theme document.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 
@@ -88,6 +88,21 @@ using ThemeResolver = std::function<const ThemeFile *(std::string_view id)>;
 // usable theme; *out is then untouched.
 bool parse_theme(std::string_view text, const ThemeResolver &resolve, ThemeFile *out,
                  std::string *error);
+// The same document as a .theme file, which is easier to write by hand:
+// "key = value" lines, a [section] for each of the JSON's objects, and #
+// comments (a "#" at the start of a line, or after a space with a space
+// after it, so colours stay colours). Lists (colors, params) are separated
+// by spaces or commas; true, false and numbers are themselves, anything else
+// is text, quoted or not. With no id, the id comes from the name:
+//
+//   name    = Nebula Noir
+//   extends = orion
+//   [palette]
+//   accent  = #ffc94a   # labels, counts
+//
+// Turns one into the JSON parse_theme reads. False, with *error naming the
+// line, for a line it cannot read.
+bool theme_text_to_json(std::string_view text, std::string *json, std::string *error);
 // The complete document for a theme: every key written, nothing extended,
 // so the file stands on its own.
 std::string write_theme(const ThemeFile &file);
@@ -101,7 +116,7 @@ std::string theme_id_from_name(std::string_view name);
 class ThemeLibrary
 {
   public:
-    // Reads builtin_dir/*.json, then user_dir/*.json. When the app's folder
+    // Reads builtin_dir/*.json and *.theme, then user_dir's. When the app's folder
     // holds no theme files (a PC test run without them) the kit's themes are
     // used instead, so there is always something to wear.
     void load(const std::string &builtin_dir, const std::string &user_dir);

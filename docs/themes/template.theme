@@ -1,0 +1,85 @@
+# ORION Media Center - template.theme: every key a theme can set, explained.
+#
+# Copy this file, rename it (nebula-noir.theme), change what you like and
+# copy it to the console's /data/orion/themes/. Open ORION, Settings,
+# Appearance, Theme, and pick it: your themes are marked (yours).
+#
+# Every key is optional except name. A key you delete keeps the value of the
+# theme named in "extends", so a theme can be three lines long. Lines that
+# start with # are comments, and so is anything after " # " on a line.
+# Colours are #rrggbb, or #rrggbbaa where aa is the opacity (00 to ff).
+# A file ORION cannot read is skipped; why is written to
+# /data/orion/themes.txt, with the line number.
+
+name        = Template              # shown in Settings, 1-40 characters
+# id        = template              # optional: made from the name when left out
+author      = you
+description = Every key, as ORION's own look
+family      = Galaxy glass          # the design language it belongs to
+extends     = orion                 # start from this theme: a built-in one or yours
+dark        = true                  # light controller glyphs: the page is dark
+
+[page]
+# What is behind everything: galaxy, aurora, waves, bokeh, gradient,
+# synthwave, dots, vista, paper, phosphor or none (docs/ORION_THEMES.md,
+# Backgrounds, says what each one's colours and params do).
+background = galaxy
+colors     = #000000 #02040b #16285e #0a4a66   # the background's four colours
+params     = 0 0 0 0                           # background-specific numbers
+color      = #04050d                           # the page behind everything
+text       = #f3f1ff                           # text drawn straight on the page
+text_muted = #c9c6eec7
+
+[palette]
+surface      = #0d102466   # panels and cards; the alpha is the glass opacity
+surface_high = #ffffff1f   # tracks, chips, fields
+text         = #f6f4ff     # text on panels
+text_muted   = #ffffffad
+primary      = #a9b8ff     # the selected tab, focused keys
+on_primary   = #0b0b33     # text on primary
+secondary    = #ffffff1a
+on_secondary = #ffffff
+accent       = #8fe3ff     # labels, counts, the text cursor
+outline      = #ffffff38
+focus        = #ffffff     # the focus ring
+shadow       = #00000080
+light        = #ffffff7a   # the rim of glass
+danger       = #e5484d
+success      = #30a46c
+warning      = #f5a524
+
+[shape]
+style            = glass   # flat, soft, hard, neumorphic, bevel, gloss, glass, outline, glow, pixel, sketch
+corner           = round   # round, chamfer or pixel
+radius           = 100     # controls; 100 or more makes pills
+radius_card      = 26      # panels and dialogs
+border           = 0
+button_border    = -1      # -1: the same as border
+pill_chips       = false
+pill_switches    = true
+shadow_offset    = 12
+shadow_blur      = 36
+focus_width      = 3
+focus_gap        = 5
+underline_fields = false
+
+[type]
+heading  = display    # regular, semibold, display, mono, pixel, hand
+label    = semibold
+caps     = false      # labels in capitals
+tracking = 0          # extra space between label letters
+
+[motion]
+omega   = 16          # how fast things move; 60 or more snaps
+damping = 1           # 1 settles, 0.5 bounces
+sounds  = glass       # glass or paper
+
+[orion]
+clouds        = 100      # 0-200 %: nebula clouds drifting behind glass
+motion        = true     # the background drifts
+cover_corners = 22       # 0-48: how round the covers are
+tabs          = plain    # plain (home-screen text) or pills
+focus_ring    = aurora   # aurora (drifting colour) or theme
+plates        = none     # bottom bars: none, outline or glass
+badges        = true     # GAME / HOMEBREW / MEDIA / PS4 banners
+cover_rim     = false    # a hairline of light around covers
