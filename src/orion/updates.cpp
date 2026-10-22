@@ -367,6 +367,30 @@ bool UpdateInstaller::start(Release release, std::string title_id, std::string u
     return true;
 }
 
+bool UpdateInstaller::resume(const Release &release, const std::string &update_dir)
+{
+    if (running_.load())
+        return false;
+    std::string staged;
+    std::string list;
+    if (!save::read_file(update_dir + "/stage/version.txt", &staged, 64) ||
+        !save::read_file(update_dir + "/stage/files.txt", &list, 1u << 20) || list.empty())
+        return false;
+    while (!staged.empty() && (staged.back() == '\n' || staged.back() == '\r'))
+        staged.pop_back();
+    if (staged != release.version)
+        return false;
+    update_log(log_, "install: " + release.version + " is already unpacked; ready again");
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        state_ = State::ready;
+        release_ = release;
+        error_.clear();
+    }
+    finished_ = true;
+    return true;
+}
+
 std::string UpdateInstaller::download_path() const
 {
     std::lock_guard<std::mutex> lock(mutex_);

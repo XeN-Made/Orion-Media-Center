@@ -95,18 +95,24 @@ be there.
 ### Updating
 
 ORION updates itself. Each time it opens it asks GitHub for the latest
-release; when there is a newer one it downloads it in the background,
-checks it against the release's published SHA256 sum, and asks: **Update
-now** closes ORION, puts the new files in place, and opens it again. Your
-settings, favourites and box art stay. The files it replaced are kept in
-`/data/orion/update/previous`.
+release; when there is a newer one it says so (a notification), downloads
+it in the background with its progress at the top right, checks it against
+the release's published SHA256 sum, and asks: **Update now** closes ORION,
+puts the new files in place, and opens it again. Your settings, favourites
+and box art stay. Keep ORION open while it downloads.
 
-Settings, Library: **Check for updates**, **Download updates by themselves**,
-**Check now**, and **Install ORION …** once one is ready. Releases are at
+The files an update replaced are kept in `/data/orion/update/previous`, the
+way back to the version before. Every step is written to
+`/data/orion/update/log.txt`.
+
+Settings, **About** shows the version you have and has the update
+controls: **Check now**, **Install ORION …** once one is ready, **Check for
+updates** and **Download updates by themselves**. Releases are at
 [github.com/XeN-Made/Orion-Media-Center/releases](https://github.com/XeN-Made/Orion-Media-Center/releases).
 
-To install one by hand instead, close ORION (hold Circle on the library, or close it from the PS button
-menu), then upload the new `PPSA99061` folder over the old one. Your
+To install one by hand instead, close ORION (hold Circle on the library, or
+close it from the PS button menu), then upload the new `PPSA99061` folder
+over the old one. Your
 settings, favourites and box art live in `/data/orion` and are kept.
 
 The home screen keeps its own copy of the icon and backgrounds from the first

@@ -139,6 +139,10 @@ class UpdateInstaller
     }
     // False while one is running.
     bool start(Release release, std::string title_id, std::string update_dir);
+    // When <update_dir>/stage already holds this release, unpacked and
+    // checked by an earlier start (version.txt and files.txt), it is ready
+    // again without a download: true, and take_finished() says so.
+    bool resume(const Release &release, const std::string &update_dir);
     State state() const;
     Release release() const;
     std::string error() const;

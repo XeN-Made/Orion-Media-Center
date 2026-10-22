@@ -323,4 +323,22 @@ std::vector<DirectoryEntry> list_directory(const std::string &directory, Listing
     return entries;
 }
 
+bool remove_tree(const std::string &path)
+{
+    if (path.size() < 2 || path.front() != '/' || path.find("..") != std::string::npos)
+        return false;
+    for (const DirectoryEntry &entry : list_directory(path))
+    {
+        const std::string child = path + "/" + entry.name;
+        if (entry.directory)
+            remove_tree(child);
+        else
+            ::unlink(child.c_str());
+    }
+    struct stat info
+    {
+    };
+    return ::rmdir(path.c_str()) == 0 || ::stat(path.c_str(), &info) != 0;
+}
+
 } // namespace hui::save

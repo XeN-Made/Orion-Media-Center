@@ -78,4 +78,8 @@ std::vector<std::string> list_files(const std::string &directory);
 // Creates a directory if it does not exist (single level).
 bool ensure_directory(const std::string &path);
 
+// Removes a directory and everything in it. Refuses a relative path, "/"
+// and one with ".."; true when nothing of it is left.
+bool remove_tree(const std::string &path);
+
 } // namespace hui::save

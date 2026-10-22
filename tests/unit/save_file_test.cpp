@@ -7,6 +7,8 @@
 
 #include <gtest/gtest.h>
 
+#include <filesystem>
+
 #include <algorithm>
 #include <cstdlib>
 #include <string>
@@ -120,6 +122,26 @@ TEST(Settings, ClampsOutOfRangeValuesAndRejectsGarbage)
     data[0] = 77; // unknown version
     EXPECT_FALSE(hui::decode_settings(data, &untouched));
     EXPECT_EQ(untouched.music_volume, 2);
+}
+
+TEST(SaveFile, RemovesATreeButNothingOutsideIt)
+{
+    const std::filesystem::path root = std::filesystem::temp_directory_path() / "hui-remove-tree";
+    std::filesystem::remove_all(root);
+    std::filesystem::create_directories(root / "stage/assets/audio");
+    std::filesystem::create_directories(root / "keep");
+    hui::save::write_atomic((root / "stage/eboot.bin").string(), "eboot");
+    hui::save::write_atomic((root / "stage/assets/audio/song.ogg").string(), "ogg");
+    hui::save::write_atomic((root / "keep/log.txt").string(), "log");
+    EXPECT_TRUE(hui::save::remove_tree((root / "stage").string()));
+    EXPECT_FALSE(std::filesystem::exists(root / "stage"));
+    EXPECT_TRUE(std::filesystem::exists(root / "keep/log.txt"));
+    EXPECT_TRUE(hui::save::remove_tree((root / "stage").string())); // already gone
+    EXPECT_FALSE(hui::save::remove_tree("relative/path"));
+    EXPECT_FALSE(hui::save::remove_tree("/"));
+    EXPECT_FALSE(hui::save::remove_tree((root / "keep/../keep").string()));
+    EXPECT_TRUE(std::filesystem::exists(root / "keep/log.txt"));
+    std::filesystem::remove_all(root);
 }
 
 TEST(SaveFile, ListFilesPrefersTheIndex)

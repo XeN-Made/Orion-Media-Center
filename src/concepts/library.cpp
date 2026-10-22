@@ -615,6 +615,7 @@ class Library final : public app::Concept
         // A removal the launch helper did while ORION was closed.
         take_remove_result();
         take_update_result();
+        tidy_update_folder();
         rebuild_tabs(start);
         restyle();
         rebuild();
@@ -2678,6 +2679,8 @@ class Library final : public app::Concept
         if (state.empty() || own_title_id().empty())
             return;
         installer_.set_log(update_log_path());
+        if (installer_.resume(release, state + "/update"))
+            return; // downloaded before, never installed: asked again
         if (!installer_.start(release, own_title_id(), state + "/update"))
         {
             orion::update_log(update_log_path(), "orion: a download is already running");
@@ -2802,12 +2805,37 @@ class Library final : public app::Concept
         {
             show_note(true, "ORION is updated to " + version);
             std::remove((update + "/failed.txt").c_str());
+            tidy_update_folder();
             return;
         }
         show_note(false, "ORION could not update to " + version + ": " + why);
         // Not fetched again by itself, or it would ask on every start: Check
         // now (Settings, About) tries again.
         save::write_atomic(update + "/failed.txt", version + "\t" + why + "\n");
+    }
+
+    // A staged update this ORION is already as new as is spent: tens of MB,
+    // removed. "previous" (the files the last update replaced) stays, as
+    // the way back; the helper wrote it, and the next update overwrites it.
+    void tidy_update_folder()
+    {
+        const std::string &state = context_.library.state_dir;
+        if (state.empty() || context_.version.empty())
+            return;
+        const std::string stage = state + "/update/stage";
+        std::string staged;
+        struct stat info = {};
+        if (::stat(stage.c_str(), &info) != 0)
+            return;
+        save::read_file(stage + "/version.txt", &staged, 64);
+        while (!staged.empty() && (staged.back() == '\n' || staged.back() == '\r'))
+            staged.pop_back();
+        if (!staged.empty() && orion::compare_versions(staged, context_.version) > 0)
+            return; // newer than this ORION: still to be installed
+        const bool gone = save::remove_tree(stage);
+        std::remove((state + "/update/" + own_title_id() + ".zip").c_str());
+        orion::update_log(update_log_path(), gone ? "orion: removed the spent update files"
+                                                  : "orion: could not remove " + stage);
     }
 
     // The version whose install failed, and why; empty when none did.

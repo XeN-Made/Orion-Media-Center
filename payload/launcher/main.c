@@ -674,6 +674,12 @@ static void refresh_home_screen(const char *title, const char *target)
     }
 }
 
+// A line of files.txt the helper acts on: a relative path that stays inside.
+static int installable(const char *line)
+{
+    return line[0] != '\0' && line[0] != '/' && strstr(line, "..") == NULL;
+}
+
 // Copies the staged files over the title's, keeping each one it replaces in
 // <update dir>/previous. A failure puts back what was already replaced.
 static int apply_update(const char *title, const char *stage, const char *target, char *error,
@@ -713,7 +719,7 @@ static int apply_update(const char *title, const char *stage, const char *target
         char *end = strchr(line, '\n');
         if (end != NULL)
             *end = '\0';
-        if (line[0] != '\0' && strstr(line, "..") == NULL && line[0] != '/')
+        if (installable(line))
         {
             char from[1024];
             char to[1024];
@@ -738,17 +744,20 @@ static int apply_update(const char *title, const char *stage, const char *target
     }
     if (!ok)
     {
-        // Back to the old files, those that were replaced.
+        // Back to the old files: the first `done` installable lines, the
+        // ones that were replaced (the list's newlines are NULs by now).
         line = list;
-        for (int i = 0; i < done && *line != '\0'; ++i)
+        for (int i = 0; i < done && line < list + size; line += strlen(line) + 1)
         {
+            if (!installable(line))
+                continue;
             char to[1024];
             char keep[1024];
             snprintf(to, sizeof(to), "%s/%s", target, line);
             snprintf(keep, sizeof(keep), "%s/%s", previous, line);
             if (access(keep, F_OK) == 0)
                 copy_file(keep, to);
-            line += strlen(line) + 1;
+            ++i;
         }
         return 0;
     }

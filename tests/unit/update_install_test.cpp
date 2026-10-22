@@ -158,6 +158,22 @@ TEST(OrionUpdates, DownloadsChecksAndStagesARelease)
     ASSERT_TRUE(save::read_file(dir + "/stage/version.txt", &version));
     EXPECT_EQ(version, "01.001.001\n");
 
+    // Downloaded and unpacked before, never installed: ready again with no
+    // download. Another release's stage is not this one.
+    orion::UpdateInstaller again(
+        get,
+        [](const std::string &, const std::string &, std::size_t, std::string *) -> bool
+        {
+            ADD_FAILURE() << "downloaded again";
+            return false;
+        });
+    ASSERT_TRUE(again.resume(release, dir));
+    EXPECT_TRUE(again.take_finished());
+    EXPECT_EQ(again.state(), orion::UpdateInstaller::State::ready);
+    orion::Release other = release;
+    other.version = "01.001.002";
+    EXPECT_FALSE(again.resume(other, dir));
+
     // A download that does not match its published sum installs nothing.
     std::string tampered = zip;
     tampered[tampered.size() / 2] ^= 1;
