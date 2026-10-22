@@ -85,4 +85,36 @@ TEST_F(OrionSettings, TheFolderBrowserPicksAGameFolder)
     fs::remove_all(root);
 }
 
+// The rows that change the look preview: Appearance's, and a tab's own page,
+// which also says which tab the library should show. Choosing the section
+// is not previewing; leaving its rows ends it.
+TEST_F(OrionSettings, PreviewsTheLookBesideTheLibrary)
+{
+    SettingsPanel panel;
+    panel.set_tabs({{"all", "All"}, {"games", "Games"}});
+    panel.open(look_, prefs_, feedback_);
+    EXPECT_FALSE(panel.previewing());
+    for (int i = 0; i < 12 && panel.section() != SettingsPanel::Section::appearance; ++i)
+        send_to(panel, press(Action::page_next));
+    ASSERT_EQ(panel.section(), SettingsPanel::Section::appearance);
+    EXPECT_FALSE(panel.previewing()); // still on the sections
+    send_to(panel, press(Action::confirm));
+    EXPECT_TRUE(panel.previewing());
+    EXPECT_EQ(panel.preview_tab(), "");
+    for (int i = 0; i < 40; ++i)
+        panel.update(kFrame);
+    auto c = canvas();
+    panel.draw(c);
+    expect_drawn("Appearance as a panel beside the library");
+    send_to(panel, press(Action::back));
+    EXPECT_FALSE(panel.previewing());
+
+    panel.open_tab("games", look_, prefs_, feedback_);
+    EXPECT_TRUE(panel.previewing());
+    EXPECT_EQ(panel.preview_tab(), "games");
+    panel.close(feedback_);
+    EXPECT_FALSE(panel.previewing());
+    EXPECT_EQ(panel.preview_tab(), "");
+}
+
 } // namespace

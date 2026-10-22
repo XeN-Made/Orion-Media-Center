@@ -218,12 +218,11 @@ constexpr app::TourStep kTour[] = {
     {0.8f, 0, Direction::none, "settings-tab-page"},
     {0.2f, action_bit(Action::back)},
     {0.2f, action_bit(Action::back)},
-    // Emulators: Scan, every emulator found, then the second one's page (its
-    // game folders) when there are two.
+    // Emulators: Scan, every emulator found, then the first installed one's
+    // page (its game folders; the rows of ones not installed are skipped).
     {0.3f, action_bit(Action::jump_next)},
     {0.2f, 0, Direction::right},
     {0.8f, 0, Direction::none, "settings-emulators"},
-    {0.12f, 0, Direction::down},
     {0.12f, 0, Direction::down},
     {0.3f, action_bit(Action::confirm)},
     {0.8f, 0, Direction::none, "settings-emulator-page"},
@@ -242,6 +241,10 @@ constexpr app::TourStep kTour[] = {
     {0.3f, action_bit(Action::jump_next)},
     {0.2f, 0, Direction::right},
     {0.8f, 0, Direction::none, "settings-appearance"},
+    // The next theme, seen at once beside the panel, then back to ORION's.
+    {0.2f, 0, Direction::right},
+    {0.9f, 0, Direction::none, "settings-appearance-live"},
+    {0.2f, 0, Direction::left},
     {0.2f, action_bit(Action::back)},
     {0.3f, action_bit(Action::jump_next)},
     {0.2f, 0, Direction::right},
@@ -800,6 +803,7 @@ class Library final : public app::Concept
         menu_.update(dt);
         dialog_.update(dt);
         settings_.update(dt);
+        follow_preview();
         setup_.update(dt);
         if (launch_exit_ > 0.0f)
         {
@@ -1463,6 +1467,34 @@ class Library final : public app::Concept
         // New games look for their box art, as at start-up.
         if (prefs_.auto_art && sys::on_console())
             start_art(false);
+    }
+
+    // While Settings previews a tab's page, the library shows that tab (its
+    // own theme, view and covers, as they are being chosen), then goes back
+    // to the tab it was on. A hidden tab has nothing to show.
+    void follow_preview()
+    {
+        const std::string want = settings_.preview_tab();
+        const bool shown = std::find(tab_keys_.begin(), tab_keys_.end(), want) != tab_keys_.end() ||
+                           std::find(sub_keys_.begin(), sub_keys_.end(), want) != sub_keys_.end();
+        if (!want.empty() && shown && want != active_key())
+        {
+            if (preview_return_.empty())
+                preview_return_ = active_key();
+            show_tab(want);
+        }
+        else if (want.empty() && !preview_return_.empty())
+        {
+            show_tab(preview_return_);
+            preview_return_.clear();
+        }
+    }
+
+    void show_tab(const std::string &key)
+    {
+        rebuild_tabs(key);
+        restyle();
+        rebuild();
     }
 
     // After the tabs changed: the tab bar, the covers and Settings follow.
@@ -4415,6 +4447,7 @@ class Library final : public app::Concept
     float backdrop_dwell_ = 0.0f;    // seconds the focus has rested on it
     float backdrop_alpha_ = 0.0f;
     std::vector<std::string> tab_keys_; // the key of each tab, in tab order
+    std::string preview_return_;        // the tab to go back to after a tab's preview
     std::vector<int> view_;             // indices into the library, in display order
     std::string query_;
     std::string name_; // a tab name being typed

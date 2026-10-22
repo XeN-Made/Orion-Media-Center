@@ -5,6 +5,7 @@
 #pragma once
 
 #include "core/settings.hpp"
+#include "core/tween.hpp"
 #include "library/library.hpp"
 #include "orion/look.hpp"
 #include "orion/prefs.hpp"
@@ -219,6 +220,12 @@ class SettingsPanel
     {
         return page_;
     }
+    // Previewing: in the rows that change the look (Appearance, a tab's own
+    // page) Settings narrows to a panel at the side, so the library behind
+    // shows each change as it is made.
+    bool previewing() const;
+    // The tab the library shows while a tab's page is previewed, or empty.
+    std::string preview_tab() const;
 
     void update(float dt);
     void draw(ui::Canvas &canvas) const;
@@ -256,6 +263,8 @@ class SettingsPanel
     ui::Sheet sheet_;
     ui::SideNav nav_;
     ui::Form form_;
+    tween::Spring width_;           // the sheet's width: the whole screen, or the preview's panel
+    float wide_ = 1.0f;             // 1 at the whole screen, 0 at the panel: the rail fades with it
     std::vector<Section> sections_; // the rail's entries
     Section section_ = Section::library;
     bool in_rows_ = false;

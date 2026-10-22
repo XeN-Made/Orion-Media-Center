@@ -222,6 +222,7 @@ SettingsPanel::SettingsPanel()
     sheet_.style.scrim = 0.35f;
     sheet_.style.title_size = 40.0f;
     sheet_.style.handle = false; // nothing to drag: it fills the screen
+    width_.snap(gfx::kVirtualWidth);
     sheet_.set_title("Settings");
     sheet_.content = [this](ui::Canvas &canvas, const gfx::Rect &, float opacity)
     { draw_content(canvas, opacity); };
@@ -340,9 +341,22 @@ void SettingsPanel::layout()
     const gfx::Rect area = sheet_.content_rect();
     constexpr float kHints = 70.0f; // the button hints under everything
     nav_.set_bounds({area.x, area.y, 0.0f, area.h - kHints});
-    const float left = area.x + nav_.style.expanded_width + 56.0f;
+    // The rail of sections gives its room up as the sheet narrows.
+    const float left = area.x + (nav_.style.expanded_width + 56.0f) * wide_;
     const float width = std::min(area.x + area.w - left, 1180.0f);
+    form_.style.control_width = 340.0f + 80.0f * wide_;
     form_.set_bounds({left, area.y, width, area.h - kHints});
+}
+
+bool SettingsPanel::previewing() const
+{
+    return sheet_.is_open() && in_rows_ &&
+           (section_ == Section::appearance || (section_ == Section::tabs && !page_.empty()));
+}
+
+std::string SettingsPanel::preview_tab() const
+{
+    return previewing() && section_ == Section::tabs ? page_ : std::string();
 }
 
 void SettingsPanel::show(Section section, const Look &look, const LibraryPrefs &prefs)
@@ -1445,6 +1459,24 @@ SettingsPanel::Change SettingsPanel::edit_appearance(int id, Look *look, const L
 
 void SettingsPanel::update(float dt)
 {
+    // Wide enough for the rows and their values, and no wider: the rest of
+    // the screen is the preview.
+    constexpr float kPanel = 820.0f;
+    width_.target = previewing() ? kPanel : gfx::kVirtualWidth;
+    if (sheet_.style.reduced_motion || !sheet_.visible())
+        width_.snap(width_.target);
+    else
+        width_.update(dt, 14.0f);
+    const float wide =
+        std::clamp((width_.value - kPanel) / (gfx::kVirtualWidth - kPanel), 0.0f, 1.0f);
+    if (sheet_.style.size != width_.value || wide != wide_)
+    {
+        sheet_.style.size = width_.value;
+        // No veil over what is being previewed.
+        sheet_.style.scrim = 0.35f * wide;
+        wide_ = wide;
+        layout();
+    }
     sheet_.update(dt);
     nav_.update(dt);
     form_.update(dt);
@@ -1453,7 +1485,12 @@ void SettingsPanel::update(float dt)
 void SettingsPanel::draw_content(ui::Canvas &canvas, float opacity) const
 {
     (void)opacity;
-    nav_.draw(canvas);
+    if (wide_ > 0.01f)
+    {
+        canvas.list.push_opacity(wide_);
+        nav_.draw(canvas);
+        canvas.list.pop_opacity();
+    }
     form_.draw(canvas);
     // What the buttons do here, under the rows.
     const ui::Theme &theme = form_.style.theme;

@@ -209,7 +209,9 @@ another: `flat`, `soft`, `hard`, `neumorphic`, `bevel`, `gloss`, `glass`
 The **Appearance** rows in Settings (background, sky, nebula, clouds, glass,
 highlight, accent, corners) adjust whichever theme you picked, and are kept
 in `/data/orion/theme.json`. Picking another theme starts those rows over
-from it. *Save as new theme* turns the theme and your adjustments into one
+from it. While you are in those rows (or on a tab's own page), Settings
+narrows to a panel at the side and the library behind shows every change
+as you make it; a tab's page shows that tab. *Save as new theme* turns the theme and your adjustments into one
 new theme file.
 
 ## The built-in themes
