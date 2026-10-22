@@ -1131,6 +1131,17 @@ class Library final : public app::Concept
 
     // What ORION is doing in the background, for the line at the header's
     // top right: it shows while there is something, then fades.
+    bool updating() const
+    {
+        return installer_.state() == orion::UpdateInstaller::State::downloading ||
+               installer_.state() == orion::UpdateInstaller::State::unpacking;
+    }
+
+    static std::string megabytes(std::size_t bytes)
+    {
+        return std::to_string((bytes + 512u * 1024u) / (1024u * 1024u)) + " MB";
+    }
+
     void update_status(float dt)
     {
         std::string status;
@@ -1147,13 +1158,35 @@ class Library final : public app::Concept
         }
         else if (backdrop_copies_.running())
             status = "Copying game backgrounds…";
+        else if (updating())
+        {
+            const orion::Release release = installer_.release();
+            if (installer_.state() == orion::UpdateInstaller::State::unpacking)
+                status = "Checking and unpacking ORION " + release.version + "…";
+            else
+            {
+                // The file as it grows, against the size GitHub lists.
+                struct stat part = {};
+                const std::size_t done = ::stat(installer_.download_path().c_str(), &part) == 0
+                                             ? static_cast<std::size_t>(part.st_size)
+                                             : 0;
+                status = "Downloading ORION " + release.version + "  ·  " + megabytes(done);
+                if (release.zip_size > 0)
+                {
+                    status += " of " + megabytes(release.zip_size);
+                    progress = static_cast<float>(done) / static_cast<float>(release.zip_size);
+                }
+            }
+        }
         if (!status.empty())
         {
             status_ = std::move(status);
             status_progress_ = progress;
         }
         status_shown_.target =
-            art_.running() || backdrop_copies_.running() || context_.rescan_requested ? 1.0f : 0.0f;
+            art_.running() || backdrop_copies_.running() || context_.rescan_requested || updating()
+                ? 1.0f
+                : 0.0f;
         status_shown_.update(dt, context_.settings.reduced_motion ? 60.0f : 6.0f);
     }
 
@@ -2639,7 +2672,14 @@ class Library final : public app::Concept
             return;
         installer_.set_log(update_log_path());
         if (!installer_.start(release, own_title_id(), state + "/update"))
+        {
             orion::update_log(update_log_path(), "orion: a download is already running");
+            return;
+        }
+        // It is big: say so, so nobody closes ORION halfway.
+        show_note(true, "Downloading ORION " + release.version +
+                            (release.zip_size > 0 ? " (" + megabytes(release.zip_size) + ")" : "") +
+                            ". Keep ORION open; it asks before it installs.");
     }
 
     void update_installer()

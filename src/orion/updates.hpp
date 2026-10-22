@@ -24,10 +24,11 @@ inline constexpr const char *kReleasesPage = "github.com/XeN-Made/Orion-Media-Ce
 
 struct Release
 {
-    std::string version; // the tag: "01.001.000"
-    std::string page;    // its page on GitHub
-    std::string zip;     // the ZIP to install from; empty when it has none
-    std::string sums;    // its SHA256SUMS; empty when it has none
+    std::string version;      // the tag: "01.001.000"
+    std::string page;         // its page on GitHub
+    std::string zip;          // the ZIP to install from; empty when it has none
+    std::string sums;         // its SHA256SUMS; empty when it has none
+    std::size_t zip_size = 0; // bytes, as GitHub lists it; 0 when unknown
 };
 
 // Appends "<time>  <line>" to the update log (orion's state dir,
@@ -143,10 +144,14 @@ class UpdateInstaller
     std::string error() const;
     // True once after it ended.
     bool take_finished();
+    // Where the ZIP is written while it downloads, for its progress (its
+    // size against Release::zip_size); empty before a start.
+    std::string download_path() const;
 
   private:
     HttpGet get_;
     HttpDownload download_;
+    std::string download_path_;
     std::thread worker_;
     std::atomic<bool> running_{false};
     std::atomic<bool> finished_{false};

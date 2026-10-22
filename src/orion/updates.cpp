@@ -88,7 +88,10 @@ bool parse_release(std::string_view text, Release *out)
     {
         const std::string name = asset["name"].string_or("");
         if (name.size() > 4 && name.compare(name.size() - 4, 4, ".zip") == 0 && release.zip.empty())
+        {
             release.zip = asset["browser_download_url"].string_or("");
+            release.zip_size = static_cast<std::size_t>(asset["size"].number_or(0.0));
+        }
         else if (name == "SHA256SUMS")
             release.sums = asset["browser_download_url"].string_or("");
     }
@@ -301,6 +304,7 @@ bool UpdateInstaller::start(Release release, std::string title_id, std::string u
         state_ = State::downloading;
         release_ = release;
         error_.clear();
+        download_path_ = update_dir + "/" + title_id + ".zip.part";
     }
     running_ = true;
     worker_ = std::thread(
@@ -361,6 +365,12 @@ bool UpdateInstaller::start(Release release, std::string title_id, std::string u
             finished_ = true;
         });
     return true;
+}
+
+std::string UpdateInstaller::download_path() const
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    return download_path_;
 }
 
 UpdateInstaller::State UpdateInstaller::state() const

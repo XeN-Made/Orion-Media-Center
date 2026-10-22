@@ -22,7 +22,8 @@ const char *const kLatest = R"json({
   "name": "ORION Media Center 01.001.000",
   "assets": [
     {"name": "SHA256SUMS", "browser_download_url": "https://example.invalid/SHA256SUMS"},
-    {"name": "PPSA99061.zip", "browser_download_url": "https://example.invalid/PPSA99061.zip"}
+    {"name": "PPSA99061.zip", "size": 38592417,
+     "browser_download_url": "https://example.invalid/PPSA99061.zip"}
   ]
 })json";
 
@@ -64,6 +65,8 @@ TEST(OrionUpdates, ReadsTheVersionThePageAndTheZip)
     EXPECT_EQ(release.page,
               "https://github.com/XeN-Made/Orion-Media-Center/releases/tag/01.001.000");
     EXPECT_EQ(release.zip, "https://example.invalid/PPSA99061.zip");
+    EXPECT_EQ(release.zip_size, 38592417u); // for the download's progress
+    EXPECT_EQ(release.sums, "https://example.invalid/SHA256SUMS");
     // A tag that is not a version is no release ORION can compare.
     EXPECT_FALSE(orion::parse_release(R"({"tag_name": "beta-1"})", &release));
     EXPECT_FALSE(orion::parse_release("not json", &release));

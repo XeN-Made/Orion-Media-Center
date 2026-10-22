@@ -284,12 +284,18 @@ bool http_download(const std::string &url, const std::string &path, std::size_t 
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, 15L * 60L);
     curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
     curl_easy_setopt(curl, CURLOPT_USERAGENT, "ORION-Media-Center/1");
+    // IPv4 only. With both, a finished request still waited ~30 s (once
+    // for good) before its handle let go: the console's resolver is slow
+    // to answer for the IPv6 addresses, and nothing here needs them.
+    curl_easy_setopt(curl, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
     art_trace(("download " + url).c_str());
     const CURLcode code = curl_easy_perform(curl);
     art_trace(("download done: " + std::string(curl_easy_strerror(code))).c_str());
     long status = 0;
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status);
+    art_trace("cleanup");
     curl_easy_cleanup(curl);
+    art_trace("cleanup done");
     const bool closed = ::fsync(fd) == 0 && ::close(fd) == 0;
     if (code != CURLE_OK || status != 200 || !closed)
     {
@@ -337,12 +343,18 @@ bool http_get(const std::string &url, std::size_t limit, std::string *body, std:
     // Signals and threads do not mix: a worker thread calls this.
     curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
     curl_easy_setopt(curl, CURLOPT_USERAGENT, "ORION-Media-Center/1");
+    // IPv4 only. With both, a finished request still waited ~30 s (once
+    // for good) before its handle let go: the console's resolver is slow
+    // to answer for the IPv6 addresses, and nothing here needs them.
+    curl_easy_setopt(curl, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
     art_trace(("perform " + url).c_str());
     const CURLcode code = curl_easy_perform(curl);
     art_trace(("perform done: " + std::string(curl_easy_strerror(code))).c_str());
     long status = 0;
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status);
+    art_trace("cleanup");
     curl_easy_cleanup(curl);
+    art_trace("cleanup done");
     if (code != CURLE_OK)
     {
         *error = sink.over ? std::string("too large") : std::string(curl_easy_strerror(code));
