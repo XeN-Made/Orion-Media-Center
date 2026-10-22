@@ -20,7 +20,8 @@ A theme can be written two ways, with the same keys:
 1. Save it as `<something>.theme` (or `.json`).
 2. Copy it to the console's `/data/orion/themes/` (over FTP, for example).
 3. Open ORION, press **R3** (or **Options** then *Settings*) and pick it in
-   **Appearance > Theme**. Your themes are marked *(yours)*.
+   **Appearance > Theme for every tab** (or for one tab). Your themes are
+   marked *(yours)*.
 
 A file ORION cannot use is skipped, never fatal; the reason is written to
 `/data/orion/themes.txt` (for a `.theme`, with the line it could not read).

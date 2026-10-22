@@ -2,7 +2,7 @@
 #
 # Copy this file, rename it (nebula-noir.theme), change what you like and
 # copy it to the console's /data/orion/themes/. Open ORION, Settings,
-# Appearance, Theme, and pick it: your themes are marked (yours).
+# Appearance, Theme for every tab, and pick it: yours are marked (yours).
 #
 # Every key is optional except name. A key you delete keeps the value of the
 # theme named in "extends", so a theme can be three lines long. Lines that
