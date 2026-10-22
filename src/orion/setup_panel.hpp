@@ -138,7 +138,7 @@ class SetupPanel
     const ThemeLibrary *themes_ = nullptr;
     const library::Emulator *emulator_ = nullptr;
     int titles_ = 0;
-    std::string scan_status_ = "Finds RetroArch, Porpoise and PS5SX2, and their games";
+    std::string scan_status_ = "Finds RetroArch, Porpoise, PS5SX2 and PS5-ECAM, and their games";
     std::string payload_ = "/data/homebrew/PPSA99061/assets/payloads/orion-autostart.elf";
     std::string state_dir_ = "/data/orion";
 };

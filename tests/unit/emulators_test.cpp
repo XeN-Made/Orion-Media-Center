@@ -559,5 +559,116 @@ TEST(Emulators, UsesTheCoversTheEmulatorsDownloaded)
     fs::remove_all(root);
 }
 
+// PS5-ECAM's own list: its games with the covers it downloaded (the box by
+// the GameTDB ID, else the icon by the title ID), a deleted game left out, a
+// game RetroArch listed first given PS5-ECAM's cover. Then a folder of its
+// with a game it has not listed yet.
+TEST(Emulators, ListsPs5EcamsGamesWithItsCovers)
+{
+    namespace fs = std::filesystem;
+    const fs::path root = fs::temp_directory_path() / "hui-ecam";
+    fs::remove_all(root);
+    const fs::path data = root / "ps5cemu";
+    const fs::path drive = root / "drive";
+    write_file(data / "covers/boxart/wiiu/AQBE01.tga", "tga");
+    write_file(data / "covers/0005000010aaaa00.tga", "icon");
+    write_file(data / "covers/0005000010bbbb00.tga", "icon");
+    write_file(data / "covers/boxart/ds/AMGE.tga", "tga");
+    const fs::path bay = drive / "wiiu/Quiet Bay [0005000010AAAA00]/title.tmd";
+    const fs::path tower = drive / "wiiu/Paper Tower [0005000010BBBB00]/title.tmd";
+    const fs::path moon = drive / "switch/Moon Garden [0100AAAA00000000][v0][US].xci";
+    const fs::path lantern = drive / "switch/Lantern Night (USA).nsp";
+    const fs::path comet = drive / "nds/Comet Post (USA).zip";
+    write_file(bay, "tmd");
+    write_file(tower, "tmd");
+    write_file(moon, "xci");
+    write_file(lantern, "nsp");
+    write_file(comet, "zip");
+    write_file(drive / "switch/notes.txt", "not a game");
+
+    library::Emulator emulator;
+    library::EmulatorApp ecam;
+    ecam.key = "ecam";
+    ecam.name = "PS5-ECAM";
+    ecam.title_id = "PPSA90140";
+    ecam.root = (root / "PPSA90140").string();
+    ecam.starts_games = true;
+    emulator.apps.push_back(ecam);
+    EXPECT_EQ(library::emulator_key(app_title("PPSA90140", "PS5-ECAM", ecam.root)), "ecam");
+
+    // RetroArch's DS game, listed first, with no picture.
+    std::vector<library::Title> roms(1);
+    roms[0].id = library::rom_id(comet.string());
+    roms[0].rom = comet.string();
+    roms[0].path = comet.string();
+    roms[0].system = "Nintendo - Nintendo DS";
+    const auto item = [](const std::string &title_id, const std::string &name, const fs::path &path,
+                         const std::string &game_id)
+    {
+        return R"({"titleId": ")" + title_id + R"(", "name": ")" + name + R"(", "path": ")" +
+               path.string() + R"(", "gameId": ")" + game_id + R"("})";
+    };
+    const std::string text =
+        R"({"version": 1, "wiiu": [)" + item("0005000010aaaa00", "Quiet Bay", bay, "AQBE01") + "," +
+        item("0005000010bbbb00", "Paper Tower", tower, "") + R"(], "3ds": [], "ds": [)" +
+        item("d500aaaa45414141", "Comet Post", comet, "AMGE") + R"(], "switch": [)" +
+        item("0100aaaa00000000", "Moon Garden", moon, "") + "," +
+        item("0100bbbb00000000", "Gone", drive / "switch/Gone.xci", "") + "," +
+        item("0100cccc00000000", "Far Away", "/mnt/usb7/switch/Far Away.xci", "") + "]}";
+    EXPECT_EQ(library::read_ecam_library(emulator, text, data.string(), &roms), 4);
+    EXPECT_EQ(library::read_ecam_library(emulator, "not json", data.string(), &roms), 0);
+    EXPECT_EQ(emulator.apps.front().games, 4);
+
+    const auto find = [&](const std::string &name) -> const library::Title *
+    {
+        for (const library::Title &rom : roms)
+        {
+            if (rom.name == name)
+                return &rom;
+        }
+        return nullptr;
+    };
+    const library::Title *quiet = find("Quiet Bay");
+    ASSERT_NE(quiet, nullptr);
+    EXPECT_EQ(quiet->system, "Nintendo - Wii U");
+    EXPECT_EQ(quiet->rom, bay.string());
+    EXPECT_EQ(quiet->launcher, "PPSA90140");
+    EXPECT_EQ(quiet->icon, (data / "covers/boxart/wiiu/AQBE01.tga").string());
+    ASSERT_NE(find("Paper Tower"), nullptr);
+    EXPECT_EQ(find("Paper Tower")->icon, (data / "covers/0005000010bbbb00.tga").string());
+    ASSERT_NE(find("Moon Garden"), nullptr);
+    EXPECT_EQ(find("Moon Garden")->system, "Nintendo - Switch");
+    EXPECT_EQ(find("Moon Garden")->icon, "");
+    EXPECT_EQ(find("Gone"), nullptr);     // its folder is there, the file is not
+    ASSERT_NE(find("Far Away"), nullptr); // on a drive not plugged in
+    EXPECT_EQ(roms[0].icon, (data / "covers/boxart/ds/AMGE.tga").string());
+    EXPECT_EQ(library::short_system_name("Nintendo - Wii U"), "Wii U");
+
+    // Its Switch folder: the game it has not listed yet joins, Moon Garden
+    // is not listed twice and the text file is no game.
+    EXPECT_EQ(library::scan_game_folder(emulator, {(drive / "switch").string(), "", "ecam"}, &roms),
+              1);
+    ASSERT_NE(find("Lantern Night"), nullptr);
+    EXPECT_EQ(find("Lantern Night")->system, "Nintendo - Switch");
+    // A Wii U game kept as NUS files is its folder, named for the folder.
+    library::Emulator fresh;
+    fresh.apps.push_back(ecam);
+    std::vector<library::Title> found;
+    EXPECT_EQ(library::scan_game_folder(fresh, {(drive / "wiiu").string(), "", "ecam"}, &found), 2);
+    ASSERT_EQ(found.size(), 2u);
+    EXPECT_EQ(found[0].name, "Paper Tower");
+    EXPECT_EQ(found[0].rom, tower.string());
+    EXPECT_EQ(found[0].system, "Nintendo - Wii U");
+
+    // It starts them as Porpoise does, and plays RetroArch's DS game too.
+    const std::vector<library::Player> players = library::players_for(emulator, *quiet);
+    ASSERT_EQ(players.size(), 1u);
+    EXPECT_EQ(players[0].key, "ecam");
+    EXPECT_EQ(players[0].rom, bay.string());
+    ASSERT_EQ(library::players_for(emulator, roms[0]).size(), 1u);
+    EXPECT_EQ(library::players_for(emulator, roms[0])[0].key, "ecam");
+    fs::remove_all(root);
+}
+
 } // namespace
 } // namespace hui

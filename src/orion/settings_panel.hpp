@@ -277,7 +277,7 @@ class SettingsPanel
     std::vector<std::string> browse_folders_;
     std::vector<std::pair<std::string, std::string>> places_;
     int folder_page_ = -1; // the game folder whose page is open (in prefs.rom_folders); -1: none
-    std::string scan_status_ = "Finds RetroArch, Porpoise and PS5SX2, and their games";
+    std::string scan_status_ = "Finds RetroArch, Porpoise, PS5SX2 and PS5-ECAM, and their games";
     std::string update_status_ = "Not checked yet";
     std::string update_ready_;
     std::string version_;

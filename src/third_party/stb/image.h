@@ -5,9 +5,11 @@
 #pragma once
 
 // PNG and JPEG, decoded from memory: icons are read with save::read_file
-// first. JPEG for the covers PS5SX2 downloads (covers/<serial>.jpg).
+// first. JPEG for the covers PS5SX2 downloads (covers/<serial>.jpg), TGA for
+// PS5-ECAM's (covers/boxart/<side>/<game ID>.tga).
 #define STBI_ONLY_PNG 1
 #define STBI_ONLY_JPEG 1
+#define STBI_ONLY_TGA 1
 #define STBI_NO_STDIO 1
 #define STBI_NO_LINEAR 1
 #define STBI_NO_HDR 1

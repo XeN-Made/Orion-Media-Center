@@ -15,11 +15,12 @@ Title ID: `PPSA99061`.
 - PS5 and PS4 games, homebrew and media apps, found where ShadowMountPlus
   mounts them (`/data/homebrew`, `/mnt/ext0/homebrew`, USB drives).
 - Emulated games next to them: RetroArch (its folders and every playlist),
-  Porpoise for GameCube and Wii, PS5SX2 for PS2, and folders of your own.
+  Porpoise for GameCube and Wii, PS5SX2 for PS2, PS5-ECAM for Wii U, 3DS, DS
+  and Switch, and folders of your own.
 - Start a game straight from its cover: emulated games open directly in the
   emulator that plays them, and ORION asks which one when two can.
 - Box art downloaded as the covers scroll into view, or taken from what
-  PS5SX2 and Porpoise already downloaded.
+  PS5SX2, Porpoise and PS5-ECAM already downloaded.
 
 ![PS5 games, homebrew, and DS and GBA games side by side in Favourites](docs/screenshots/mixed.jpg)
 
@@ -75,7 +76,8 @@ The pictures show invented titles: ORION's renderer drew them on a PC
   the home screen shows behind a game).
 
 Optional, for retro games: **RetroArch**, **Porpoise** (Dolphin for PS5:
-GameCube and Wii) and **PS5SX2** (PS2), installed as folder apps too.
+GameCube and Wii), **PS5SX2** (PS2) and **PS5-ECAM** (Wii U, 3DS, DS and
+Switch), installed as folder apps too.
 
 ## Install
 
@@ -194,8 +196,8 @@ minutes. Every step it took is written to `/data/orion/autostart.txt`.
 
 ## Emulators and their games
 
-Settings, Emulators, **Scan for emulators** finds RetroArch, Porpoise and
-PS5SX2 and the games they can see:
+Settings, Emulators, **Scan for emulators** finds RetroArch, Porpoise,
+PS5SX2 and PS5-ECAM and the games they can see:
 
 - **RetroArch**: games in its own `content/<system>/` folders and every game in
   its playlists, wherever the files are.
@@ -203,18 +205,23 @@ PS5SX2 and the games they can see:
   `/data/porpoise/games`, `/data/games`, `/data/roms` and `/data/iso`.
 - **PS5SX2**: PS2 discs (`.iso`, `.chd`, `.cso`, `.zso`) in `/data/PCSX2/games`,
   `/data/PCSX2`, and `PS2/` or `PCSX2/games/` on a drive.
+- **PS5-ECAM**: every game in its own library (Wii U, 3DS, DS and Switch), and
+  the games folders set in its Settings: Wii U games as `.wua`, `.wud`, `.wux`,
+  `.rpx` or a folder of NUS files (`title.tmd`), 3DS as `.3ds`, `.cci`, `.cia`,
+  `.cxi`, `.3dsx`, DS as `.nds` or `.zip`, Switch as `.xci`, `.nsp`, `.nro`.
 - **Your own folders**: Settings, Emulators, an emulator, **Add a game folder**.
 
 When two emulators can play a game, ORION asks which one the first time and
 remembers (Options, Play with… changes it). PS2 games start straight in
-PS5SX2; GameCube and Wii games straight in Porpoise; every other system in
-RetroArch with the core you chose for it.
+PS5SX2; GameCube and Wii games straight in Porpoise; Wii U, 3DS and Switch
+games straight in PS5-ECAM; every other system in RetroArch with the core you
+chose for it.
 
 ## Box art and music
 
 - Box art downloads as the covers scroll into view and is kept in
   `/data/orion/art` (Settings, Box art, can move it to a USB drive). Covers
-  PS5SX2 and Porpoise already downloaded are used as they are.
+  PS5SX2, Porpoise and PS5-ECAM already downloaded are used as they are.
 - Background music: every `.ogg` in `/data/orion/music` joins ORION's own
   tracks. Settings, Sound sets the volumes and skips a song.
 

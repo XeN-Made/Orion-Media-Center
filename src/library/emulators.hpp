@@ -41,6 +41,10 @@ Emulator scan_retroarch(const Title &retroarch, std::vector<Title> *roms);
 //   ps5sx2     PS5SX2: PS2 discs in /data/PCSX2/games, /data/PCSX2 and a
 //              drive's PS2/ or PCSX2/games/. Starts a game through the
 //              note its disc helper leaves it (kPs5sx2LaunchNote, below).
+//   ecam       PS5-ECAM: Wii U (Cemu), 3DS (Azahar), DS (melonDS) and Switch
+//              (Eden) games: the list it keeps (read_ecam_library), then its
+//              sides' folders (ps5cemu.json). Starts a game from its command
+//              line as Porpoise does (porpoise_arguments): its own tiles'.
 struct KnownEmulator
 {
     const char *key;   // what the prefs name it by
@@ -92,6 +96,16 @@ int add_emulator_games(Library &library, const std::vector<GameFolder> &folders,
 // games were added (ones already listed are not).
 int read_retroarch_playlist(Emulator &emulator, std::string_view text, const std::string &name,
                             std::vector<Title> *roms);
+// PS5-ECAM's data folder: its library.json, settings and covers.
+inline constexpr const char *kEcamData = "/data/ps5cemu";
+// The games PS5-ECAM has listed itself (<data_dir>/library.json: a list per
+// side, "wiiu", "3ds", "ds", "switch", of each game's name, file, title ID
+// and GameTDB ID), with the covers it downloaded (<data_dir>/covers: the box
+// at boxart/<side>/<game ID>.tga, else the game's icon). A game another
+// emulator listed first gets the cover when it has none. Returns how many
+// games were added.
+int read_ecam_library(Emulator &emulator, std::string_view text, const std::string &data_dir,
+                      std::vector<Title> *roms);
 // A way to play a game here: an installed emulator (and for RetroArch, one
 // of its cores) and the game's file as that emulator sees it.
 struct Player
@@ -121,7 +135,8 @@ struct Disc
 bool read_nintendo_disc(std::string_view head, Disc *disc);
 
 // The command line Porpoise starts a disc with (one argument a line, the
-// launch helper's request format after the title ID).
+// launch helper's request format after the title ID). PS5-ECAM takes the
+// same.
 std::string porpoise_arguments(const std::string &title_id, const std::string &disc,
                                bool exit_after_game);
 

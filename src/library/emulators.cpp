@@ -44,6 +44,8 @@ constexpr ShortName kShortNames[] = {
     {"Nintendo - Super Nintendo Entertainment System", "SNES", "snes"},
     {"Nintendo - GameCube", "GameCube", "gc"},
     {"Nintendo - Wii", "Wii", "wii"},
+    {"Nintendo - Wii U", "Wii U", "wiiu"},
+    {"Nintendo - Switch", "Switch", "switch"},
     {"Nintendo - Virtual Boy", "Virtual Boy", "virtualboy"},
     {"Nintendo - Pokemon Mini", "Pokemon Mini", "pokemini"},
     {"Sony - PlayStation", "PS1", "psx"},
@@ -552,10 +554,27 @@ constexpr KnownEmulator kKnownEmulators[] = {
     {"retroarch", "RetroArch", "Every system its cores play"},
     {"porpoise", "Porpoise", "GameCube, Wii"},
     {"ps5sx2", "PS5SX2", "PS2"},
+    {"ecam", "PS5-ECAM", "Wii U, 3DS, DS, Switch"},
 };
 constexpr const char *kGameCube = "Nintendo - GameCube";
 constexpr const char *kWii = "Nintendo - Wii";
 constexpr const char *kPs2 = "Sony - PlayStation 2";
+constexpr const char *kWiiU = "Nintendo - Wii U";
+constexpr const char *k3ds = "Nintendo - Nintendo 3DS";
+constexpr const char *kDs = "Nintendo - Nintendo DS";
+constexpr const char *kSwitch = "Nintendo - Switch";
+// PS5-ECAM's sides, as its library.json and its covers folders name them.
+struct EcamSide
+{
+    const char *side;
+    const char *system;
+};
+constexpr EcamSide kEcamSides[] = {
+    {"wiiu", kWiiU},
+    {"3ds", k3ds},
+    {"ds", kDs},
+    {"switch", kSwitch},
+};
 constexpr std::size_t kDiscHead = 1024; // enough for every header read_nintendo_disc knows
 
 std::uint32_t big32(std::string_view bytes, std::size_t at)
@@ -623,6 +642,36 @@ bool porpoise_takes(const std::string &ext)
             return true;
     }
     return false;
+}
+
+// The system a PS5-ECAM game's file is for, from its extension (empty when
+// PS5-ECAM does not take it): Cemu, Azahar, melonDS and Eden's own formats.
+std::string ecam_system(const std::string &ext)
+{
+    for (const char *known : {"tmd", "wua", "wud", "wux", "rpx"})
+    {
+        if (ext == known)
+            return kWiiU;
+    }
+    for (const char *known : {"3ds", "cci", "cia", "cxi", "3dsx"})
+    {
+        if (ext == known)
+            return k3ds;
+    }
+    if (ext == "nds")
+        return kDs;
+    for (const char *known : {"xci", "nsp", "nro"})
+    {
+        if (ext == known)
+            return kSwitch;
+    }
+    return "";
+}
+
+bool ecam_takes(const std::string &system, const std::string &ext)
+{
+    // melonDS opens a DS game zipped, as No-Intro sets come.
+    return ecam_system(ext) == system || (system == kDs && ext == "zip");
 }
 
 bool ps2_takes(const std::string &ext)
@@ -695,12 +744,70 @@ int place_games(Emulator &emulator, std::vector<Title> &found, std::vector<Title
     return added;
 }
 
+// One folder's games for PS5-ECAM (system: the side whose folder it is, or
+// empty to tell from each file). A Wii U game kept as its NUS files is a
+// folder holding title.tmd, which is what PS5-ECAM starts.
+int add_ecam_folder(Emulator &emulator, std::size_t app_index, const std::string &dir,
+                    const std::string &system, std::vector<Title> *roms)
+{
+    const EmulatorApp &app = emulator.apps[app_index];
+    std::unordered_set<std::string> listed;
+    for (const Title &rom : *roms)
+        listed.insert(rom.id);
+    std::vector<Title> found;
+    // name: what the game is called by, its folder's for a title.tmd ("."
+    // so that rom_display_name keeps all of it).
+    const auto add = [&](const std::string &path, const std::string &name, const std::string &ext)
+    {
+        const std::string own = !system.empty() ? system : ecam_system(ext);
+        if (own.empty() || !ecam_takes(own, ext))
+            return;
+        Title rom;
+        rom.rom = path;
+        rom.id = rom_id(path);
+        if (!listed.insert(rom.id).second)
+            return;
+        rom.system = own;
+        rom.name = rom_display_name(name);
+        rom.launcher = app.title_id;
+        rom.category = Category::game;
+        rom.platform = Platform::unknown;
+        rom.source = Source::image;
+        rom.path = path;
+        found.push_back(std::move(rom));
+    };
+    const std::size_t slash = dir.rfind('/');
+    const std::string folder_name = slash == std::string::npos ? dir : dir.substr(slash + 1);
+    for (const save::DirectoryEntry &entry : save::list_directory(dir))
+    {
+        if (entry.name.front() == '.')
+            continue;
+        const std::string path = dir + "/" + entry.name;
+        if (entry.directory)
+        {
+            struct stat info = {};
+            const std::string tmd = path + "/title.tmd";
+            if (::stat(tmd.c_str(), &info) == 0 && S_ISREG(info.st_mode))
+                add(tmd, entry.name + ".", "tmd");
+        }
+        else if (entry.name == "title.tmd")
+            add(path, folder_name + ".", "tmd");
+        else
+            add(path, entry.name, extension_of(entry.name));
+    }
+    const int added = place_games(emulator, found, roms);
+    emulator.apps[app_index].games += added;
+    return added;
+}
+
 // One folder's discs for Porpoise or PS5SX2 (system: the player's choice, or
 // empty to tell from each disc). Games already listed are skipped.
 int add_app_folder(Emulator &emulator, std::size_t app_index, const std::string &dir,
                    const std::string &system, std::vector<Title> *roms)
 {
     const EmulatorApp &app = emulator.apps[app_index];
+    if (app.key == "ecam")
+        return add_ecam_folder(emulator, app_index, dir, system, roms);
     const bool porpoise = app.key == "porpoise";
     std::vector<Title> found;
     for (const save::DirectoryEntry &entry : save::list_directory(dir))
@@ -773,6 +880,36 @@ int add_app_tree(Emulator &emulator, std::size_t app_index, const std::string &p
     return added;
 }
 
+// PS5-ECAM's games: the list it keeps (read_ecam_library), then whatever its
+// sides' folders (ps5cemu.json) hold that it has not listed yet.
+void add_ecam_games(Emulator &emulator, std::size_t index, const std::string &data,
+                    std::vector<Title> *roms)
+{
+    std::string text;
+    if (save::read_file(data + "/library.json", &text, kMaxPlaylist))
+        read_ecam_library(emulator, text, data, roms);
+    json::Value root;
+    if (!save::read_file(data + "/ps5cemu.json", &text, kMaxInfo) || !json::parse(text, &root) ||
+        !root.is_object())
+        return;
+    // The Wii U's folder is at the top; each other side has an object.
+    const std::pair<std::string, const char *> folders[] = {
+        {root["gamesFolder"].string_or(""), kWiiU},
+        {root["n3ds"]["gamesFolder"].string_or(""), k3ds},
+        {root["nds"]["gamesFolder"].string_or(""), kDs},
+        {root["switch"]["gamesFolder"].string_or(""), kSwitch},
+    };
+    for (const auto &[folder, system] : folders)
+    {
+        if (folder.empty() || !is_folder(folder))
+            continue;
+        std::vector<std::string> &own = emulator.apps[index].folders;
+        if (std::find(own.begin(), own.end(), folder) == own.end())
+            own.push_back(folder);
+        add_app_tree(emulator, index, folder, system, roms);
+    }
+}
+
 } // namespace
 
 std::span<const KnownEmulator> known_emulators()
@@ -792,6 +929,8 @@ std::string emulator_key(const Title &title)
         return "porpoise";
     if (name.find("ps5sx2") != std::string::npos || name.find("pcsx2") != std::string::npos)
         return "ps5sx2";
+    if (name.find("ecam") != std::string::npos || name.find("ps5cemu") != std::string::npos)
+        return "ecam";
     return "";
 }
 
@@ -851,7 +990,95 @@ std::vector<std::string> known_systems(const Emulator &emulator, std::string_vie
         return {kGameCube, kWii};
     if (key == "ps5sx2")
         return {kPs2};
+    if (key == "ecam")
+        return {kWiiU, k3ds, kDs, kSwitch};
     return known_systems(emulator);
+}
+
+int read_ecam_library(Emulator &emulator, std::string_view text, const std::string &data_dir,
+                      std::vector<Title> *roms)
+{
+    std::size_t index = emulator.apps.size();
+    for (std::size_t i = 0; i < emulator.apps.size(); ++i)
+    {
+        if (emulator.apps[i].key == "ecam")
+            index = i;
+    }
+    json::Value root;
+    if (index == emulator.apps.size() || !json::parse(text, &root) || !root.is_object())
+        return 0;
+    const EmulatorApp &app = emulator.apps[index];
+    // Where each game listed so far is, for the covers of games another
+    // emulator listed first (RetroArch's DS games).
+    constexpr std::size_t kNew = static_cast<std::size_t>(-1);
+    std::unordered_map<std::string, std::size_t> listed;
+    for (std::size_t i = 0; i < roms->size(); ++i)
+        listed.emplace((*roms)[i].id, i);
+    FolderIndex files;
+    const auto cover_for = [&](const char *side, const json::Value &item)
+    {
+        const std::string covers = data_dir + "/covers";
+        const std::string title_id = item["titleId"].string_or("");
+        const std::string game_id = item["gameId"].string_or("");
+        std::vector<std::string> candidates;
+        // The box (GameTDB's, by the game's ID), then the game's own icon:
+        // the DS side's in a folder of its own, the Wii U's at the top.
+        if (!game_id.empty())
+            candidates.push_back(covers + "/boxart/" + side + "/" + game_id + ".tga");
+        if (!title_id.empty())
+        {
+            candidates.push_back(covers + "/" + side + "/" + title_id + ".tga");
+            candidates.push_back(covers + "/" + title_id + ".tga");
+        }
+        for (const std::string &candidate : candidates)
+        {
+            if (files.has(candidate))
+                return candidate;
+        }
+        return std::string();
+    };
+    std::vector<Title> found;
+    for (const EcamSide &side : kEcamSides)
+    {
+        for (const json::Value &item : root[side.side].elements())
+        {
+            std::string path = item["path"].string_or("");
+            if (path.empty() || path.size() > 1024)
+                continue;
+            if (path.rfind("/app0/", 0) == 0)
+                path = app.root + path.substr(5);
+            const std::string id = rom_id(path);
+            const auto known = listed.find(id);
+            if (known != listed.end())
+            {
+                if (known->second != kNew && (*roms)[known->second].icon.empty())
+                    (*roms)[known->second].icon = cover_for(side.side, item);
+                continue;
+            }
+            listed.emplace(id, kNew);
+            // As with RetroArch's lists: a game deleted since (its folder is
+            // there, the file is not) is left out.
+            struct stat info = {};
+            if (files.folder_of(path) && !files.has(path) && ::stat(path.c_str(), &info) != 0)
+                continue;
+            Title rom;
+            rom.rom = path;
+            rom.id = id;
+            rom.path = path;
+            rom.system = side.system;
+            const std::string name = item["name"].string_or("");
+            rom.name = !name.empty() ? name : rom_display_name(path.substr(path.rfind('/') + 1));
+            rom.icon = cover_for(side.side, item);
+            rom.launcher = app.title_id;
+            rom.category = Category::game;
+            rom.platform = Platform::unknown;
+            rom.source = Source::image;
+            found.push_back(std::move(rom));
+        }
+    }
+    const int added = place_games(emulator, found, roms);
+    emulator.apps[index].games += added;
+    return added;
 }
 
 int read_retroarch_playlist(Emulator &emulator, std::string_view text, const std::string &name,
@@ -1000,6 +1227,7 @@ std::vector<Player> players_for(const Emulator &emulator, const Title &game)
     standalone("porpoise", "Porpoise",
                (game.system == kGameCube || game.system == kWii) && porpoise_takes(ext));
     standalone("ps5sx2", "PS5SX2", game.system == kPs2 && ps2_takes(ext));
+    standalone("ecam", "PS5-ECAM", ecam_takes(game.system, ext));
     // PS5SX2 reads its launch note after its jailbreak, where /data is /data.
     if (!players.empty() && players.back().key == "ps5sx2")
         players.back().rom = game.path;
@@ -1069,7 +1297,7 @@ Emulator scan_emulators(const std::vector<Title> &titles, const std::vector<Game
             app.title_id = title.id;
             app.root = title.path;
             app.systems = known_systems(emulator, known.key);
-            app.starts_games = app.key == "porpoise" || app.key == "ps5sx2";
+            app.starts_games = app.key == "porpoise" || app.key == "ps5sx2" || app.key == "ecam";
             for (const std::string &folder : own_folders(app.key, app.root))
             {
                 if (is_folder(folder))
@@ -1077,6 +1305,11 @@ Emulator scan_emulators(const std::vector<Title> &titles, const std::vector<Game
             }
             emulator.apps.push_back(std::move(app));
             const std::size_t index = emulator.apps.size() - 1;
+            if (known.key == std::string_view("ecam"))
+            {
+                add_ecam_games(emulator, index, kEcamData, roms);
+                continue;
+            }
             const std::vector<std::string> own = emulator.apps[index].folders;
             for (const std::string &folder : own)
                 add_app_tree(emulator, index, folder, "", roms);
