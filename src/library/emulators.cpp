@@ -1075,6 +1075,7 @@ int read_ecam_library(Emulator &emulator, std::string_view text, const std::stri
             const std::string name = item["name"].string_or("");
             rom.name = !name.empty() ? name : rom_display_name(path.substr(path.rfind('/') + 1));
             rom.icon = cover_for(side.side, item);
+            rom.serial = item["gameId"].string_or("");
             rom.launcher = app.title_id;
             rom.category = Category::game;
             rom.platform = Platform::unknown;

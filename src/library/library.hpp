@@ -70,6 +70,9 @@ struct Title
     std::string system;
     std::string rom;
     std::string launcher;
+    // GameTDB's ID for it, where its emulator keeps one ("ALZE01"): its box
+    // art is fetched by it (orion/art_fetcher.hpp).
+    std::string serial;
     bool is_rom() const
     {
         return !system.empty();
@@ -193,6 +196,10 @@ ScanOptions console_defaults();
 // Reads every root. Unreadable roots, folders without metadata and unknown
 // files are skipped silently; the result is sorted by name.
 std::vector<Title> scan(const ScanOptions &options);
+// The console's titles whose sharper picture ORION saved (<folder>/<ID>.png,
+// the home screen's 512-pixel icon0.png; ShadowMountPlus caches 128 pixels)
+// show that instead. Returns how many.
+int prefer_saved_icons(Library &library, const std::string &folder);
 
 // "PPSA01234" style: four capital letters and five digits.
 bool is_title_id(std::string_view text);

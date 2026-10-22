@@ -166,5 +166,76 @@ TEST(ArtFetcher, StopsAskingWhenTheNetworkIsGone)
     EXPECT_TRUE(art.take_missing().empty()); // failures are worth another try
 }
 
+// GameTDB: covers by a game's ID, its region first; Switch games by name,
+// through an index of GameTDB's list.
+TEST(ArtMatch, FindsGameTdbCoversByIdAndSwitchGamesByName)
+{
+    EXPECT_EQ(library::gametdb_platform("Nintendo - Wii U"), "wiiu");
+    EXPECT_EQ(library::gametdb_platform("Nintendo - Switch"), "switch");
+    EXPECT_EQ(library::gametdb_platform("Nintendo - Game Boy"), "");
+    const std::vector<std::string> wiiu = library::gametdb_covers("wiiu", "AQBP01");
+    ASSERT_EQ(wiiu.size(), 6u);
+    EXPECT_EQ(wiiu[0], "https://art.gametdb.com/wiiu/coverHQ/EN/AQBP01.jpg"); // P: Europe
+    EXPECT_EQ(wiiu[1], "https://art.gametdb.com/wiiu/coverHQ/US/AQBP01.jpg");
+    EXPECT_EQ(wiiu[3], "https://art.gametdb.com/wiiu/coverM/EN/AQBP01.jpg");
+    EXPECT_EQ(library::gametdb_covers("switch", "AQB7A")[0],
+              "https://art.gametdb.com/switch/coverHQ/US/AQB7A.jpg");
+
+    const char *xml = R"xml(<datafile>
+        <game name="Moon Garden: Second Bloom (EN,FR)"><id>AMG2A</id><region>ALL</region></game>
+        <game name="Moon Garden: Second Bloom (JA)"><id>AMG2B</id></game>
+        <game name="Quiet Bay &amp; Friends (EN)"><id>AQBFA</id></game>
+        <game name="No Id Here (EN)"></game>
+    </datafile>)xml";
+    const std::string index = library::gametdb_title_index(xml);
+    EXPECT_EQ(library::gametdb_id(index, "Moon Garden Second Bloom"), "AMG2A"); // the first
+    EXPECT_EQ(library::gametdb_id(index, "Quiet Bay & Friends"), "AQBFA");
+    EXPECT_EQ(library::gametdb_id(index, "No Id Here"), "");
+    EXPECT_EQ(library::gametdb_id(index, "Elsewhere"), "");
+}
+
+TEST(ArtFetcher, DownloadsGameTdbCoversByIdAndName)
+{
+    const std::string dir = ::testing::TempDir() + "hui-art-gametdb";
+    const std::string wiiu = dir + "/art/Nintendo - Wii U";
+    const std::string nx = dir + "/art/Nintendo - Switch";
+    for (const std::string &file : {wiiu + "/Quiet Bay.png", nx + "/Moon Garden.png"})
+        std::remove(file.c_str());
+    ASSERT_TRUE(orion::make_directories(nx));
+    // The Switch index, as a run before left it.
+    ASSERT_TRUE(save::write_atomic(nx + "/gametdb-switch.tsv", "moongarden\tAMG7A\n").empty());
+    const std::string jpeg = std::string("\xff\xd8\xff\xe0", 4) + "cover";
+    FakeServer server;
+    server.pages["https://art.gametdb.com/wiiu/coverHQ/US/AQBE01.jpg"] = jpeg;
+    server.pages["https://art.gametdb.com/switch/coverM/US/AMG7A.jpg"] = jpeg; // no HQ one
+    orion::ArtFetcher art(server.get());
+    orion::ArtJob bay;
+    bay.id = "rom-00000000000b";
+    bay.system = "Nintendo - Wii U";
+    bay.rom_file = "title.tmd";
+    bay.serial = "AQBE01";
+    bay.target = wiiu + "/Quiet Bay.png";
+    orion::ArtJob moon;
+    moon.id = "rom-00000000000c";
+    moon.system = "Nintendo - Switch";
+    moon.rom_file = "Moon Garden [0100AAAA00000000][v0][US].xci";
+    moon.name = "Moon Garden";
+    moon.target = nx + "/Moon Garden.png";
+    orion::ArtJob unknown = moon;
+    unknown.id = "rom-00000000000d";
+    unknown.name = "Not In The List";
+    ASSERT_TRUE(art.start({bay, moon, unknown}, ""));
+    art.wait();
+    const orion::ArtFetcher::Progress done = art.progress();
+    EXPECT_EQ(done.found, 2);
+    EXPECT_EQ(done.missing, 1);
+    std::string bytes;
+    ASSERT_TRUE(save::read_file(wiiu + "/Quiet Bay.png", &bytes));
+    EXPECT_EQ(bytes, jpeg);
+    // No libretro index was asked for: GameTDB has these.
+    EXPECT_TRUE(std::none_of(server.asked.begin(), server.asked.end(), [](const std::string &url)
+                             { return url.find("libretro") != std::string::npos; }));
+}
+
 } // namespace
 } // namespace hui

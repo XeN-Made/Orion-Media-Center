@@ -153,6 +153,7 @@ enum : int
     kItemRemoveHome,
     kItemRemoveErase,
     kItemRemoveRom,
+    kItemHdArt,
     kItemMove = 100,   // + the tab's index
     kItemPlayer = 300, // 0: the default, then 1 + an index in library::players_for
 };
@@ -649,6 +650,66 @@ class Library final : public app::Concept
         }
         if (prefs_.game_backgrounds && sys::on_console())
             request_backdrops();
+        if (sys::on_console())
+            request_icons();
+    }
+
+    // ---- sharper pictures for the console's titles ----
+    // ShadowMountPlus keeps 128-pixel icons of the games it mounts from
+    // images; the home screen has the 512-pixel icon0.png in
+    // /user/appmeta/<ID>/. It is copied once, through the console's FTP
+    // server, to <state>/icons/<ID>.png (or <ID>.none when there is none),
+    // and shown from there (library::prefer_saved_icons).
+    std::string icon_folder() const
+    {
+        return context_.library.state_dir + "/icons";
+    }
+
+    void request_icons()
+    {
+        if (context_.library.state_dir.empty())
+            return;
+        const std::string folder = icon_folder();
+        std::vector<std::string> ids;
+        for (const Title &title : titles())
+        {
+            struct stat info = {};
+            if (title.is_rom() || title.icon.find("/icon-cache/") == std::string::npos ||
+                ::stat((folder + "/" + title.id + ".png").c_str(), &info) == 0 ||
+                ::stat((folder + "/" + title.id + ".none").c_str(), &info) == 0)
+                continue;
+            ids.push_back(title.id);
+        }
+        if (!ids.empty())
+            icons_waiting_ = std::move(ids); // after the backgrounds: one FTP run at a time
+    }
+
+    // False while a run is going.
+    bool start_icon_copies(std::vector<std::string> ids)
+    {
+        if (icon_copies_.running() || backdrop_copies_.running() ||
+            !orion::make_directories(icon_folder()))
+            return false;
+        icon_ids_ = ids;
+        return icon_copies_.start(std::move(ids), icon_folder(), kFtpPort, {"/icon0.png"});
+    }
+
+    // Starts the waiting run when the FTP server is free; reports what a run
+    // copied, so the covers show it at once.
+    void poll_icon_copies()
+    {
+        if (!icons_waiting_.empty() && start_icon_copies(icons_waiting_))
+            icons_waiting_.clear();
+        if (icon_ids_.empty() || icon_copies_.running())
+            return;
+        for (const std::string &id : icon_ids_)
+        {
+            const std::string path = icon_folder() + "/" + id + ".png";
+            struct stat info = {};
+            if (::stat(path.c_str(), &info) == 0)
+                context_.new_icons.emplace_back(id, path);
+        }
+        icon_ids_.clear();
     }
 
     // Titles with no home-screen picture in their own folder: the launch
@@ -742,6 +803,7 @@ class Library final : public app::Concept
         clock_ += dt;
         follow_backdrop(dt);
         poll_art(feedback);
+        poll_icon_copies();
         const bool reduced = context_.settings.reduced_motion;
         if (reduced != reduced_)
         {
@@ -1166,6 +1228,8 @@ class Library final : public app::Concept
         }
         else if (backdrop_copies_.running())
             status = "Copying game backgrounds…";
+        else if (icon_copies_.running())
+            status = "Copying HD pictures…";
         else if (updating())
         {
             const orion::Release release = installer_.release();
@@ -1191,10 +1255,11 @@ class Library final : public app::Concept
             status_ = std::move(status);
             status_progress_ = progress;
         }
-        status_shown_.target =
-            art_.running() || backdrop_copies_.running() || context_.rescan_requested || updating()
-                ? 1.0f
-                : 0.0f;
+        status_shown_.target = art_.running() || backdrop_copies_.running() ||
+                                       icon_copies_.running() || context_.rescan_requested ||
+                                       updating()
+                                   ? 1.0f
+                                   : 0.0f;
         status_shown_.update(dt, context_.settings.reduced_motion ? 60.0f : 6.0f);
     }
 
@@ -1803,6 +1868,16 @@ class Library final : public app::Concept
         ui::MenuItem hide = menu_item(hidden ? "Show this title" : "Hide this title");
         hide.tag = kItemHide;
         items.push_back(hide);
+        // A sharper picture: the home screen's for a console title shown from
+        // ShadowMountPlus's small copy, box art again for a game.
+        if (title.is_rom() || title.icon.find("/icon-cache/") != std::string::npos ||
+            title.icon.find("/icons/") != std::string::npos)
+        {
+            ui::MenuItem art =
+                menu_item(title.is_rom() ? "Download box art again" : "Download HD picture");
+            art.tag = kItemHdArt;
+            items.push_back(art);
+        }
         ui::MenuItem line;
         line.separator = true;
         items.push_back(line);
@@ -2217,6 +2292,45 @@ class Library final : public app::Concept
             feedback.play(audio::Cue::select);
             return;
         }
+        if (tag == kItemHdArt)
+        {
+            const Title *title = find_title(menu_title_);
+            if (title == nullptr)
+                return;
+            if (!sys::on_console())
+            {
+                show_note(false, "Pictures are downloaded on the console");
+                feedback.play(audio::Cue::error);
+                return;
+            }
+            if (title->is_rom())
+            {
+                if (art_.running() ||
+                    !art_.start({art_job(*title)}, context_.library.state_dir + "/art.txt"))
+                {
+                    show_note(false, "Box art is downloading; try again when it is done");
+                    feedback.play(audio::Cue::error);
+                    return;
+                }
+                art_manual_ = true;
+                show_note(true, "Looking for box art for " + title->name + "\u2026");
+            }
+            else
+            {
+                const std::string folder = icon_folder();
+                std::remove((folder + "/" + title->id + ".png").c_str());
+                std::remove((folder + "/" + title->id + ".none").c_str());
+                if (!start_icon_copies({title->id}))
+                {
+                    show_note(false, "Pictures are being copied; try again in a moment");
+                    feedback.play(audio::Cue::error);
+                    return;
+                }
+                show_note(true, "Copying the home screen's picture of " + title->name + "\u2026");
+            }
+            feedback.play(audio::Cue::select);
+            return;
+        }
         if (tag == kItemHide)
         {
             const bool hide = !prefs_.title_hidden(menu_title_);
@@ -2393,6 +2507,39 @@ class Library final : public app::Concept
 
     // Games for an emulator that have no box art yet. Without retry, games a
     // run already found nothing for are left alone (art/tried.txt).
+    // What the box art downloader needs for one game: where it goes, and
+    // what it is found by (its file, its name, its GameTDB ID).
+    orion::ArtJob art_job(const Title &title) const
+    {
+        const std::size_t slash = title.rom.rfind('/');
+        const std::string file =
+            slash == std::string::npos ? title.rom : title.rom.substr(slash + 1);
+        const std::size_t dot = file.rfind('.');
+        const std::string stem = dot == std::string::npos || dot == 0 ? file : file.substr(0, dot);
+        orion::ArtJob job;
+        job.id = title.id;
+        job.system = title.system;
+        job.rom_file = file;
+        job.name = title.name;
+        job.serial = title.serial;
+        // A Wii U game is its folder's title.tmd: the folder names it.
+        const std::string own =
+            stem == "title" && slash != std::string::npos ? folder_name(title.rom) : stem;
+        job.target = orion::art_folder(prefs_, context_.library.state_dir) + "/" + title.system +
+                     "/" + own + ".png";
+        return job;
+    }
+
+    static std::string folder_name(const std::string &file)
+    {
+        const std::size_t slash = file.rfind('/');
+        const std::size_t before = slash == std::string::npos || slash == 0
+                                       ? std::string::npos
+                                       : file.rfind('/', slash - 1);
+        return before == std::string::npos ? std::string("title")
+                                           : file.substr(before + 1, slash - before - 1);
+    }
+
     std::vector<orion::ArtJob> art_jobs(bool retry) const
     {
         const std::string &state = context_.library.state_dir;
@@ -2408,19 +2555,7 @@ class Library final : public app::Concept
                 !prefs_.system_enabled(library::shelf_system(title.system)) ||
                 tried.find(title.id + "\n") != std::string::npos)
                 continue;
-            const std::size_t slash = title.rom.rfind('/');
-            const std::string file =
-                slash == std::string::npos ? title.rom : title.rom.substr(slash + 1);
-            const std::size_t dot = file.rfind('.');
-            const std::string stem =
-                dot == std::string::npos || dot == 0 ? file : file.substr(0, dot);
-            orion::ArtJob job;
-            job.id = title.id;
-            job.system = title.system;
-            job.rom_file = file;
-            job.target =
-                orion::art_folder(prefs_, state) + "/" + title.system + "/" + stem + ".png";
-            jobs.push_back(std::move(job));
+            jobs.push_back(art_job(title));
         }
         return jobs;
     }
@@ -4449,9 +4584,12 @@ class Library final : public app::Concept
     orion::PlayLog plays_;
     std::string art_folder_was_; // where box art was before the folder last changed
     orion::BackdropCopies backdrop_copies_;
-    std::string backdrop_candidate_; // what the focused game shows (backdrop_of)
-    std::string backdrop_drawn_;     // what is drawn now; it changes once faded out
-    float backdrop_dwell_ = 0.0f;    // seconds the focus has rested on it
+    orion::BackdropCopies icon_copies_;      // the home screen's icon0.png (request_icons)
+    std::vector<std::string> icons_waiting_; // to copy once the FTP server is free
+    std::vector<std::string> icon_ids_;      // what the running copy is for
+    std::string backdrop_candidate_;         // what the focused game shows (backdrop_of)
+    std::string backdrop_drawn_;             // what is drawn now; it changes once faded out
+    float backdrop_dwell_ = 0.0f;            // seconds the focus has rested on it
     float backdrop_alpha_ = 0.0f;
     std::vector<std::string> tab_keys_; // the key of each tab, in tab order
     std::string preview_return_;        // the tab to go back to after a tab's preview

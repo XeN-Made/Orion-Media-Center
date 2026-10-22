@@ -261,6 +261,7 @@ int main()
         titles.state_dir = "/data/orion";
         titles.themes_dir = std::string(kAssets) + "/themes";
         titles.offer_setup = true;
+        library::prefer_saved_icons(titles, titles.state_dir + "/icons");
         scan_emulators(true);
         const int icons = library::load_icons(titles, renderer.batch());
         char summary[128];
@@ -451,11 +452,22 @@ int main()
             {
                 for (library::Title &title : titles.titles)
                 {
-                    if (title.id == id && title.texture == 0)
-                        title.icon = path;
+                    if (title.id != id)
+                        continue;
+                    // A picture already shown is replaced (Download HD picture);
+                    // a game's first one waits until it is wanted on screen.
+                    const bool shown = title.texture != 0;
+                    if (shown)
+                        renderer.batch().delete_texture(title.texture);
+                    if (title.sharp_texture != 0)
+                        renderer.batch().delete_texture(title.sharp_texture);
+                    title.texture = title.sharp_texture = 0;
+                    title.sharp_width = title.sharp_height = 0;
+                    title.icon = path;
+                    if (shown || !title.is_rom())
+                        icon_queue.insert(icon_queue.begin(), id);
                 }
             }
-            library::load_icons(titles, renderer.batch());
         }
         if (shell.take_settings_changed())
         {

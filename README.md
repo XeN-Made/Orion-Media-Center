@@ -236,6 +236,13 @@ chose for it.
 - Box art downloads as the covers scroll into view and is kept in
   `/data/orion/art` (Settings, Box art, can move it to a USB drive). Covers
   PS5SX2, Porpoise and PS5-ECAM already downloaded are used as they are.
+  RetroArch's systems get theirs from the libretro thumbnail sets; Switch,
+  Wii U, 3DS and DS games from GameTDB (Switch games are matched by name).
+- Games mounted from disc images show the home screen's sharp 512-pixel
+  picture (copied once into `/data/orion/icons`) instead of ShadowMountPlus's
+  small one.
+- Options on a title: **Download HD picture** (console games) or **Download
+  box art again** (emulated games) fetches its picture afresh.
 - Background music: every `.ogg` in `/data/orion/music` joins ORION's own
   tracks. Settings, Sound sets the volumes and skips a song.
 

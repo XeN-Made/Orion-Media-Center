@@ -217,6 +217,111 @@ std::string match_art(std::string_view rom_file, const std::vector<std::string> 
     return chosen == nullptr ? std::string() : *chosen;
 }
 
+std::string gametdb_platform(std::string_view system)
+{
+    if (system == "Nintendo - Wii U")
+        return "wiiu";
+    if (system == "Nintendo - Nintendo 3DS")
+        return "3ds";
+    if (system == "Nintendo - Nintendo DS")
+        return "ds";
+    if (system == "Nintendo - Switch")
+        return "switch";
+    return "";
+}
+
+std::vector<std::string> gametdb_covers(std::string_view platform, std::string_view id)
+{
+    std::vector<std::string> regions;
+    if (id.size() >= 4 && platform != "switch")
+    {
+        switch (id[3])
+        {
+        case 'E':
+            regions.emplace_back("US");
+            break;
+        case 'P':
+            regions.emplace_back("EN");
+            break;
+        case 'J':
+            regions.emplace_back("JA");
+            break;
+        case 'K':
+            regions.emplace_back("KO");
+            break;
+        default:
+            break;
+        }
+    }
+    for (const char *region : {"US", "EN", "JA"})
+    {
+        if (std::find(regions.begin(), regions.end(), region) == regions.end())
+            regions.emplace_back(region);
+    }
+    std::vector<std::string> urls;
+    for (const char *size : {"coverHQ", "coverM"})
+    {
+        for (const std::string &region : regions)
+            urls.push_back("https://art.gametdb.com/" + std::string(platform) + "/" + size + "/" +
+                           region + "/" + std::string(id) + ".jpg");
+    }
+    return urls;
+}
+
+std::string gametdb_title_index(std::string_view xml)
+{
+    std::string index;
+    std::string seen = "\n";
+    std::size_t at = 0;
+    while ((at = xml.find("<game name=\"", at)) != std::string_view::npos)
+    {
+        const std::size_t start = at + 12;
+        const std::size_t quote = xml.find('"', start);
+        const std::size_t end = xml.find("</game>", start);
+        if (quote == std::string_view::npos || end == std::string_view::npos)
+            break;
+        at = end;
+        // "The Legend of Zelda: Tears of the Kingdom (EN,FR,DE,...)": the
+        // languages in brackets are not part of the title.
+        std::string_view name = xml.substr(start, quote - start);
+        if (const std::size_t bracket = name.rfind(" ("); bracket != std::string_view::npos)
+            name = name.substr(0, bracket);
+        const std::size_t id_at = xml.find("<id>", quote);
+        if (id_at == std::string_view::npos || id_at > end)
+            continue;
+        const std::size_t id_end = xml.find("</id>", id_at);
+        const std::string_view id = xml.substr(id_at + 4, id_end - id_at - 4);
+        // The XML escapes &, quotes and apostrophes; art_key reads & as "and".
+        std::string plain(name);
+        replace_all(plain, "&amp;", "&");
+        replace_all(plain, "&apos;", "'");
+        replace_all(plain, "&#39;", "'");
+        replace_all(plain, "&quot;", "\"");
+        const std::string key = art_key(plain);
+        if (key.empty() || id.empty() || id.size() > 16 ||
+            seen.find("\n" + key + "\n") != std::string::npos)
+            continue;
+        seen += key + "\n";
+        index += key + "\t" + std::string(id) + "\n";
+    }
+    return index;
+}
+
+std::string gametdb_id(std::string_view index, std::string_view name)
+{
+    const std::string key = art_key(name);
+    if (key.empty())
+        return "";
+    const std::string line = "\n" + key + "\t";
+    const std::string padded = "\n" + std::string(index);
+    const std::size_t at = padded.find(line);
+    if (at == std::string::npos)
+        return "";
+    const std::size_t start = at + line.size();
+    const std::size_t end = padded.find('\n', start);
+    return padded.substr(start, end == std::string::npos ? std::string::npos : end - start);
+}
+
 std::string url_encode(std::string_view text)
 {
     std::string out;

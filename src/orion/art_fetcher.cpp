@@ -5,8 +5,10 @@
 #include "orion/art_fetcher.hpp"
 
 #include "core/save_file.hpp"
+#include "core/zip.hpp"
 #include "library/art_match.hpp"
 
+#include <algorithm>
 #include <cerrno>
 #include <cstdio>
 #include <fcntl.h>
@@ -45,6 +47,18 @@ bool is_png(const std::string &bytes)
 {
     return bytes.size() > 8 && bytes.compare(0, 8, "\x89PNG\r\n\x1a\n", 8) == 0;
 }
+
+// GameTDB's covers are JPEG. They keep the target's .png name, where
+// attach_rom_art looks; the decoder goes by the bytes, not the name.
+bool is_picture(const std::string &bytes)
+{
+    return is_png(bytes) || (bytes.size() > 3 && bytes.compare(0, 3, "\xff\xd8\xff", 3) == 0);
+}
+
+// GameTDB's Switch list: about 3.5 MB zipped, read once, then kept as a
+// small index beside the Switch covers.
+constexpr const char *kSwitchList = "https://www.gametdb.com/switchtdb.zip?LANG=EN";
+constexpr std::size_t kMaxSwitchIndex = 4u << 20;
 
 } // namespace
 
@@ -126,8 +140,47 @@ void ArtFetcher::wait()
         worker_.join();
 }
 
+const std::string &ArtFetcher::switch_ids(const ArtJob &job, const std::string &log_path)
+{
+    if (switch_loaded_)
+        return switch_index_;
+    switch_loaded_ = true;
+    const std::size_t slash = job.target.rfind('/');
+    const std::string folder = slash == std::string::npos ? "." : job.target.substr(0, slash);
+    const std::string cache = folder + "/gametdb-switch.tsv";
+    if (save::read_file(cache, &switch_index_, kMaxSwitchIndex) && !switch_index_.empty())
+        return switch_index_;
+    switch_index_.clear();
+    std::string archive;
+    std::string error;
+    if (!get_(kSwitchList, kMaxIndex, &archive, &error))
+    {
+        append_line(log_path, "GameTDB's Switch list: " + error);
+        return switch_index_;
+    }
+    unzip(
+        archive,
+        [&](const std::string &name, std::string_view data)
+        {
+            if (name == "switchtdb.xml")
+                switch_index_ = library::gametdb_title_index(data);
+            return true;
+        },
+        &error);
+    std::string().swap(archive);
+    if (!switch_index_.empty() && make_directories(folder))
+        save::write_atomic(cache, switch_index_);
+    append_line(log_path,
+                "GameTDB's Switch list: " +
+                    std::to_string(std::count(switch_index_.begin(), switch_index_.end(), '\n')) +
+                    " titles" + (error.empty() ? "" : " (" + error + ")"));
+    return switch_index_;
+}
+
 void ArtFetcher::run(std::vector<ArtJob> jobs, std::string log_path)
 {
+    switch_loaded_ = false;
+    switch_index_.clear();
     // One index per system, fetched when its first game comes up.
     append_line(log_path, "art thread running: " + std::to_string(jobs.size()) + " games");
     std::map<std::string, std::vector<std::string>> indexes;
@@ -145,6 +198,28 @@ void ArtFetcher::run(std::vector<ArtJob> jobs, std::string log_path)
             missing_.push_back(job.id);
         append_line(log_path, job.system + "/" + job.rom_file + ": " + note);
     };
+    // A picture downloaded: written where the library looks, and reported.
+    const auto keep = [&](const ArtJob &job, const std::string &bytes, const std::string &note)
+    {
+        const std::size_t slash = job.target.rfind('/');
+        if (slash == std::string::npos || !make_directories(job.target.substr(0, slash)))
+        {
+            settle(job, &Progress::failed, "cannot make " + job.target,
+                   "cannot write the art folder");
+            return;
+        }
+        const std::string written = save::write_atomic(job.target, bytes);
+        if (!written.empty())
+        {
+            settle(job, &Progress::failed, "write: " + written, written);
+            return;
+        }
+        {
+            const std::lock_guard<std::mutex> lock(mutex_);
+            found_.push_back({job.id, job.target});
+        }
+        settle(job, &Progress::found, note, "");
+    };
     for (const ArtJob &job : jobs)
     {
         if (cancel_.load())
@@ -152,6 +227,39 @@ void ArtFetcher::run(std::vector<ArtJob> jobs, std::string log_path)
         if (failures_in_a_row >= kGiveUpAfter)
         {
             settle(job, &Progress::failed, "skipped (no network)", "");
+            continue;
+        }
+        // GameTDB by the game's ID: what PS5-ECAM names its games by, and the
+        // only covers for Switch games (found by name, see switch_ids).
+        if (const std::string platform = library::gametdb_platform(job.system);
+            !platform.empty() && (!job.serial.empty() || platform == "switch"))
+        {
+            std::string id = job.serial;
+            if (id.empty())
+                id = library::gametdb_id(switch_ids(job, log_path), job.name);
+            if (id.empty())
+            {
+                settle(job, &Progress::missing, "no GameTDB ID for \"" + job.name + "\"", "");
+                continue;
+            }
+            std::string bytes;
+            std::string used;
+            for (const std::string &url : library::gametdb_covers(platform, id))
+            {
+                std::string error;
+                if (get_(url, kMaxPicture, &bytes, &error) && is_picture(bytes))
+                {
+                    used = url;
+                    break;
+                }
+            }
+            if (used.empty())
+            {
+                settle(job, &Progress::missing, "GameTDB has no cover for " + id, "");
+                continue;
+            }
+            failures_in_a_row = 0;
+            keep(job, bytes, used);
             continue;
         }
         const std::string folder =
@@ -197,24 +305,7 @@ void ArtFetcher::run(std::vector<ArtJob> jobs, std::string log_path)
             settle(job, &Progress::failed, picture + ": not a PNG", "not a PNG");
             continue;
         }
-        const std::size_t slash = job.target.rfind('/');
-        if (slash == std::string::npos || !make_directories(job.target.substr(0, slash)))
-        {
-            settle(job, &Progress::failed, "cannot make " + job.target,
-                   "cannot write the art folder");
-            continue;
-        }
-        const std::string written = save::write_atomic(job.target, bytes);
-        if (!written.empty())
-        {
-            settle(job, &Progress::failed, "write: " + written, written);
-            continue;
-        }
-        {
-            const std::lock_guard<std::mutex> lock(mutex_);
-            found_.push_back({job.id, job.target});
-        }
-        settle(job, &Progress::found, picture, "");
+        keep(job, bytes, picture);
     }
     {
         const std::lock_guard<std::mutex> lock(mutex_);

@@ -38,8 +38,10 @@ class BackdropCopies
     BackdropCopies(const BackdropCopies &) = delete;
     BackdropCopies &operator=(const BackdropCopies &) = delete;
 
-    // False while a run is going.
-    bool start(std::vector<std::string> ids, std::string folder, int port);
+    // False while a run is going. pictures: the files of /user/appmeta/<ID>
+    // to try, in order ("/icon0.png" for the sharper icons).
+    bool start(std::vector<std::string> ids, std::string folder, int port,
+               std::vector<std::string> pictures = {"/pic0.png", "/pic1.png"});
     bool running() const
     {
         return running_.load();
@@ -49,7 +51,8 @@ class BackdropCopies
     void wait();
 
   private:
-    void run(std::vector<std::string> ids, std::string folder, int port);
+    void run(std::vector<std::string> ids, std::string folder, int port,
+             std::vector<std::string> pictures);
 
     std::thread worker_;
     std::atomic<bool> running_{false};

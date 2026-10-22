@@ -720,6 +720,26 @@ TEST(Emulators, ListsPs5EcamsGamesWithItsCovers)
     EXPECT_EQ(quiet->rom, bay.string());
     EXPECT_EQ(quiet->launcher, "PPSA90140");
     EXPECT_EQ(quiet->icon, (data / "covers/boxart/wiiu/AQBE01.tga").string());
+    EXPECT_EQ(quiet->serial, "AQBE01"); // its box art can be fetched by it
+
+    // The console's titles show the sharper picture ORION saved, never a game.
+    {
+        const fs::path icons = root / "icons";
+        write_file(icons / "PPSA90150.png", "png");
+        write_file(icons / "rom-000000000099.png", "png");
+        library::Library shelf;
+        shelf.titles.resize(3);
+        shelf.titles[0].id = "PPSA90150";
+        shelf.titles[0].icon = "/data/shadowmount/icon-cache/PPSA90150-128-1-1.png";
+        shelf.titles[1].id = "PPSA90151"; // nothing saved
+        shelf.titles[1].icon = "/kept.png";
+        shelf.titles[2].id = "rom-000000000099";
+        shelf.titles[2].system = "Nintendo - Wii U";
+        EXPECT_EQ(library::prefer_saved_icons(shelf, icons.string()), 1);
+        EXPECT_EQ(shelf.titles[0].icon, (icons / "PPSA90150.png").string());
+        EXPECT_EQ(shelf.titles[1].icon, "/kept.png");
+        EXPECT_EQ(shelf.titles[2].icon, "");
+    }
     ASSERT_NE(find("Paper Tower"), nullptr);
     EXPECT_EQ(find("Paper Tower")->icon, (data / "covers/0005000010bbbb00.tga").string());
     ASSERT_NE(find("Moon Garden"), nullptr);

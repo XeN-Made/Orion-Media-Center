@@ -33,4 +33,19 @@ std::string art_key(std::string_view name);
 // Percent-encodes a path segment for a URL (everything but A-Z a-z 0-9 - _ . ~).
 std::string url_encode(std::string_view text);
 
+// GameTDB (art.gametdb.com) has covers the libretro sets lack (Switch) or
+// that an emulator names its games by (PS5-ECAM's Wii U, 3DS and DS IDs).
+// Its platform folder for a system ("wiiu", "3ds", "ds", "switch"), or empty.
+std::string gametdb_platform(std::string_view system);
+// The covers for a game's GameTDB ID, most likely first: the HQ cover, then
+// the medium one, in the region the ID says (its fourth letter: E USA, P
+// Europe, J Japan, K Korea), then USA, Europe and Japan.
+std::vector<std::string> gametdb_covers(std::string_view platform, std::string_view id);
+// GameTDB's Switch list (switchtdb.xml) as "<art_key of the title>\t<ID>\n"
+// lines: Switch games are known by title ID, which the list does not have,
+// so they are matched by name. The first ID of a title is kept.
+std::string gametdb_title_index(std::string_view xml);
+// The ID for a game's name in such an index, or empty.
+std::string gametdb_id(std::string_view index, std::string_view name);
+
 } // namespace hui::library

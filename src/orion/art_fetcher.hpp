@@ -22,6 +22,8 @@ struct ArtJob
     std::string system;   // "Nintendo - Nintendo DS": the thumbnail set's folder
     std::string rom_file; // "3055 - Chrono Trigger (U)(XenoPhobia).nds"
     std::string target;   // where the PNG goes: <state>/art/<system>/<rom stem>.png
+    std::string name;     // as the library shows it: what a Switch game is matched by
+    std::string serial;   // GameTDB's ID, where the emulator knows it ("ALZE01")
 };
 
 struct ArtFound
@@ -88,6 +90,11 @@ class ArtFetcher
 
   private:
     void run(std::vector<ArtJob> jobs, std::string log_path);
+    // The index of GameTDB's Switch titles (library::gametdb_title_index),
+    // loaded once a run: from its copy beside job's target, else downloaded.
+    const std::string &switch_ids(const ArtJob &job, const std::string &log_path);
+    std::string switch_index_; // the run's thread alone uses these two
+    bool switch_loaded_ = false;
 
     HttpGet get_;
     std::thread worker_;

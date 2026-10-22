@@ -361,9 +361,10 @@ TEST_F(LibraryDesign, DeletingAGameFileWantsCrossHeld)
     // All, Games, Homebrew, Media, Favourites, Emulators: Doomed alone.
     for (int i = 0; i < 5; ++i)
         send(*design, press(hui::Action::page_next));
-    // Options: Launch, Favourite, Hide, Move to a new tab, Remove….
+    // Options: Launch, Favourite, Hide, Download box art again, Move to a
+    // new tab, Remove….
     send(*design, press(hui::Action::menu));
-    for (int i = 0; i < 4; ++i)
+    for (int i = 0; i < 5; ++i)
         send(*design, nav(Direction::down));
     send(*design, press(hui::Action::confirm)); // Remove…
     send(*design, press(hui::Action::confirm)); // Delete the game file…

@@ -305,6 +305,20 @@ bool parse_image_name(std::string_view file_name, Title *title)
     return true;
 }
 
+int prefer_saved_icons(Library &library, const std::string &folder)
+{
+    int found = 0;
+    for (Title &title : library.titles)
+    {
+        const std::string saved = folder + "/" + title.id + ".png";
+        if (title.is_rom() || title.icon == saved || !file_exists(saved))
+            continue;
+        title.icon = saved;
+        ++found;
+    }
+    return found;
+}
+
 ScanOptions console_defaults()
 {
     ScanOptions options;
