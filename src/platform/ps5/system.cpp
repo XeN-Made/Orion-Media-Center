@@ -7,7 +7,12 @@
 #include <arpa/inet.h>
 #include <curl/curl.h>
 #include <fcntl.h>
+#include <condition_variable>
+#include <deque>
 #include <mutex>
+#include <netdb.h>
+#include <thread>
+#include <utility>
 #include <cerrno>
 #include <cstdarg>
 #include <netinet/in.h>
@@ -176,26 +181,7 @@ namespace
 
 // Mozilla's CA list, as Ubuntu's ca-certificates ships it (THIRD_PARTY_NOTICES.md).
 constexpr const char *kCaBundle = "/app0/assets/certs/cacert.pem";
-
-struct Sink
-{
-    std::string *body;
-    std::size_t limit;
-    bool over = false;
-};
-
-std::size_t sink_write(char *data, std::size_t size, std::size_t count, void *user)
-{
-    auto *sink = static_cast<Sink *>(user);
-    const std::size_t bytes = size * count;
-    if (sink->body->size() + bytes > sink->limit)
-    {
-        sink->over = true;
-        return 0; // curl stops with CURLE_WRITE_ERROR
-    }
-    sink->body->append(data, bytes);
-    return bytes;
-}
+constexpr int kMaxHops = 5; // redirects followed (GitHub's downloads take one)
 
 // curl's global set-up, once, whichever request comes first.
 void curl_ready()
@@ -210,47 +196,238 @@ void curl_ready()
                    });
 }
 
-struct FileSink
+// ---- handles let go of in the background ----
+//
+// On the console a finished request's curl_easy_cleanup took exactly 30 s,
+// and once never returned: curl waits there for its own name lookup to end
+// (the threaded resolver), which the console's resolver drags out. Requests
+// now give curl the address themselves (resolve_ipv4), and the clean-up is
+// handed to this thread anyway, so a request returns as soon as its data is
+// in. Past kMaxPending waiting, a request cleans up its own handle again.
+constexpr std::size_t kMaxPending = 16;
+
+struct Reaper
 {
-    int fd;
-    std::size_t limit;
+    std::mutex mutex;
+    std::condition_variable wake;
+    std::deque<std::pair<CURL *, curl_slist *>> pending;
+    bool started = false;
+};
+
+Reaper &reaper()
+{
+    static Reaper instance;
+    return instance;
+}
+
+void let_go(CURL *curl, curl_slist *resolve)
+{
+    Reaper &r = reaper();
+    {
+        std::lock_guard<std::mutex> lock(r.mutex);
+        if (r.pending.size() < kMaxPending)
+        {
+            r.pending.emplace_back(curl, resolve);
+            if (!r.started)
+            {
+                r.started = true;
+                std::thread(
+                    [&r]
+                    {
+                        for (;;)
+                        {
+                            std::unique_lock<std::mutex> lock(r.mutex);
+                            r.wake.wait(lock, [&r] { return !r.pending.empty(); });
+                            const auto [handle, list] = r.pending.front();
+                            r.pending.pop_front();
+                            lock.unlock();
+                            curl_easy_cleanup(handle);
+                            curl_slist_free_all(list);
+                        }
+                    })
+                    .detach();
+            }
+            r.wake.notify_one();
+            return;
+        }
+    }
+    curl_easy_cleanup(curl);
+    curl_slist_free_all(resolve);
+}
+
+// The host's IPv4 address, from the system's resolver; empty when it has
+// none. Given to curl (CURLOPT_RESOLVE), so curl starts no lookup of its own.
+std::string resolve_ipv4(const std::string &host)
+{
+    addrinfo hints = {};
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_STREAM;
+    addrinfo *found = nullptr;
+    if (::getaddrinfo(host.c_str(), nullptr, &hints, &found) != 0 || found == nullptr)
+        return {};
+    char text[INET_ADDRSTRLEN] = "";
+    const auto *address = reinterpret_cast<const sockaddr_in *>(found->ai_addr);
+    const bool ok = ::inet_ntop(AF_INET, &address->sin_addr, text, sizeof(text)) != nullptr;
+    ::freeaddrinfo(found);
+    return ok ? std::string(text) : std::string();
+}
+
+// "host:443:1.2.3.4" for an https URL, or empty.
+std::string resolve_entry(const std::string &url, std::string *host_out)
+{
+    CURLU *parts = curl_url();
+    char *host = nullptr;
+    char *port = nullptr;
+    std::string entry;
+    if (curl_url_set(parts, CURLUPART_URL, url.c_str(), 0) == CURLUE_OK &&
+        curl_url_get(parts, CURLUPART_HOST, &host, 0) == CURLUE_OK &&
+        curl_url_get(parts, CURLUPART_PORT, &port, CURLU_DEFAULT_PORT) == CURLUE_OK)
+    {
+        *host_out = host;
+        const std::string address = resolve_ipv4(host);
+        if (!address.empty())
+            entry = std::string(host) + ":" + port + ":" + address;
+    }
+    curl_free(host);
+    curl_free(port);
+    curl_url_cleanup(parts);
+    return entry;
+}
+
+// What a request writes to: a string or a file. reset() starts it over (a
+// redirect's own body is thrown away).
+struct Target
+{
+    std::string *body = nullptr; // or
+    int fd = -1;
+    std::size_t limit = 0;
     std::size_t written = 0;
     bool over = false;
     bool failed = false;
+
+    void reset()
+    {
+        written = 0;
+        if (body != nullptr)
+            body->clear();
+        if (fd >= 0 && (::ftruncate(fd, 0) != 0 || ::lseek(fd, 0, SEEK_SET) != 0))
+            failed = true;
+    }
 };
 
-std::size_t file_write(char *data, std::size_t size, std::size_t count, void *user)
+std::size_t target_write(char *data, std::size_t size, std::size_t count, void *user)
 {
-    auto *sink = static_cast<FileSink *>(user);
+    auto *target = static_cast<Target *>(user);
     const std::size_t bytes = size * count;
-    if (sink->written + bytes > sink->limit)
+    if (target->written + bytes > target->limit)
     {
-        sink->over = true;
-        return 0;
+        target->over = true;
+        return 0; // curl stops with CURLE_WRITE_ERROR
     }
-    std::size_t done = 0;
-    while (done < bytes)
+    if (target->body != nullptr)
+        target->body->append(data, bytes);
+    else
     {
-        const ssize_t result = ::write(sink->fd, data + done, bytes - done);
-        if (result < 0 && errno == EINTR)
-            continue;
-        if (result <= 0)
+        std::size_t done = 0;
+        while (done < bytes)
         {
-            sink->failed = true;
-            return 0;
+            const ssize_t result = ::write(target->fd, data + done, bytes - done);
+            if (result < 0 && errno == EINTR)
+                continue;
+            if (result <= 0)
+            {
+                target->failed = true;
+                return 0;
+            }
+            done += static_cast<std::size_t>(result);
         }
-        done += static_cast<std::size_t>(result);
     }
-    sink->written += bytes;
+    target->written += bytes;
     return bytes;
+}
+
+// One https GET into `target`, redirects followed here, each host looked up
+// by resolve_ipv4. `whole` caps the transfer in seconds (0: none, only a
+// stall of 30 s ends it). Empty when it worked, else why not.
+std::string fetch(std::string url, Target *target, long whole)
+{
+    curl_ready();
+    for (int hop = 0; hop <= kMaxHops; ++hop)
+    {
+        std::string host;
+        const std::string entry = resolve_entry(url, &host);
+        if (entry.empty())
+            return host.empty() ? "not an https address" : "cannot find " + host;
+        CURL *curl = curl_easy_init();
+        if (curl == nullptr)
+            return "curl did not start";
+        curl_slist *resolve = curl_slist_append(nullptr, entry.c_str());
+        target->reset();
+        curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+        curl_easy_setopt(curl, CURLOPT_RESOLVE, resolve);
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, target_write);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, target);
+        curl_easy_setopt(curl, CURLOPT_CAINFO, kCaBundle);
+        curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 0L); // followed here
+#if LIBCURL_VERSION_NUM >= 0x075500
+        curl_easy_setopt(curl, CURLOPT_PROTOCOLS_STR, "https");
+#endif
+        curl_easy_setopt(curl, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
+        curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 10L);
+        curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, 1024L);
+        curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, 30L);
+        if (whole > 0)
+            curl_easy_setopt(curl, CURLOPT_TIMEOUT, whole);
+        // Signals and threads do not mix: worker threads call this.
+        curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
+        curl_easy_setopt(curl, CURLOPT_USERAGENT, "ORION-Media-Center/1");
+        art_trace(("perform " + url).c_str());
+        const CURLcode code = curl_easy_perform(curl);
+        art_trace(("perform done: " + std::string(curl_easy_strerror(code))).c_str());
+        long status = 0;
+        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status);
+        char *location = nullptr;
+        curl_easy_getinfo(curl, CURLINFO_REDIRECT_URL, &location);
+        const std::string next = location != nullptr ? location : "";
+        let_go(curl, resolve);
+        if (code != CURLE_OK)
+            return target->over     ? std::string("too large")
+                   : target->failed ? std::string("could not write the file (disk full?)")
+                                    : std::string(curl_easy_strerror(code));
+        if (status >= 300 && status < 400 && !next.empty())
+        {
+            url = next;
+            continue;
+        }
+        if (status != 200)
+            return "HTTP " + std::to_string(status);
+        return {};
+    }
+    return "too many redirects";
 }
 
 } // namespace
 
+// The request as the payload SDK's hello_world sends it (payload/launcher).
+struct NotifyRequest
+{
+    char useless1[45];
+    char message[3075];
+};
+extern "C" int sceKernelSendNotificationRequest(int device, NotifyRequest *request,
+                                                std::size_t size, int blocking);
+
+void notify(const std::string &text)
+{
+    static NotifyRequest request;
+    std::memset(&request, 0, sizeof(request));
+    std::snprintf(request.message, sizeof(request.message), "%s", text.c_str());
+    sceKernelSendNotificationRequest(0, &request, sizeof(request), 0);
+}
+
 bool http_download(const std::string &url, const std::string &path, std::size_t limit,
                    std::string *error)
 {
-    curl_ready();
     const std::string part = path + ".part";
     const int fd = ::open(part.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0666);
     if (fd < 0)
@@ -258,59 +435,20 @@ bool http_download(const std::string &url, const std::string &path, std::size_t 
         *error = "cannot write " + part + " (errno " + std::to_string(errno) + ")";
         return false;
     }
-    CURL *curl = curl_easy_init();
-    if (curl == nullptr)
-    {
-        ::close(fd);
-        ::unlink(part.c_str());
-        *error = "curl did not start";
-        return false;
-    }
-    FileSink sink{fd, limit};
-    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, file_write);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &sink);
-    curl_easy_setopt(curl, CURLOPT_CAINFO, kCaBundle);
-    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
-    curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 3L);
-#if LIBCURL_VERSION_NUM >= 0x075500
-    curl_easy_setopt(curl, CURLOPT_PROTOCOLS_STR, "https");
-    curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS_STR, "https");
-#endif
-    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 10L);
-    // No limit on the whole: a slow line takes minutes. Stalled is over.
-    curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, 1024L);
-    curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, 30L);
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 15L * 60L);
-    curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
-    curl_easy_setopt(curl, CURLOPT_USERAGENT, "ORION-Media-Center/1");
-    // IPv4 only. With both, a finished request still waited ~30 s (once
-    // for good) before its handle let go: the console's resolver is slow
-    // to answer for the IPv6 addresses, and nothing here needs them.
-    curl_easy_setopt(curl, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
-    art_trace(("download " + url).c_str());
-    const CURLcode code = curl_easy_perform(curl);
-    art_trace(("download done: " + std::string(curl_easy_strerror(code))).c_str());
-    long status = 0;
-    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status);
-    art_trace("cleanup");
-    curl_easy_cleanup(curl);
-    art_trace("cleanup done");
+    Target target;
+    target.fd = fd;
+    target.limit = limit;
+    // No limit on the whole but 15 minutes: a slow line takes a while.
+    std::string why = fetch(url, &target, 15L * 60L);
     const bool closed = ::fsync(fd) == 0 && ::close(fd) == 0;
-    if (code != CURLE_OK || status != 200 || !closed)
+    if (why.empty() && !closed)
+        why = "could not finish the file";
+    if (why.empty() && ::rename(part.c_str(), path.c_str()) != 0)
+        why = "cannot rename the download (errno " + std::to_string(errno) + ")";
+    if (!why.empty())
     {
         ::unlink(part.c_str());
-        *error = sink.over          ? std::string("too large")
-                 : sink.failed      ? std::string("could not write the file (disk full?)")
-                 : code != CURLE_OK ? std::string(curl_easy_strerror(code))
-                 : status != 200    ? "HTTP " + std::to_string(status)
-                                    : std::string("could not finish the file");
-        return false;
-    }
-    if (::rename(part.c_str(), path.c_str()) != 0)
-    {
-        ::unlink(part.c_str());
-        *error = "cannot rename the download (errno " + std::to_string(errno) + ")";
+        *error = why;
         return false;
     }
     return true;
@@ -318,51 +456,13 @@ bool http_download(const std::string &url, const std::string &path, std::size_t 
 
 bool http_get(const std::string &url, std::size_t limit, std::string *body, std::string *error)
 {
-    curl_ready();
-    body->clear();
-    art_trace("curl_easy_init");
-    CURL *curl = curl_easy_init();
-    if (curl == nullptr)
+    Target target;
+    target.body = body;
+    target.limit = limit;
+    const std::string why = fetch(url, &target, 60L);
+    if (!why.empty())
     {
-        *error = "curl did not start";
-        return false;
-    }
-    Sink sink{body, limit};
-    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, sink_write);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &sink);
-    curl_easy_setopt(curl, CURLOPT_CAINFO, kCaBundle);
-    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
-    curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 3L);
-#if LIBCURL_VERSION_NUM >= 0x075500
-    curl_easy_setopt(curl, CURLOPT_PROTOCOLS_STR, "https");
-    curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS_STR, "https");
-#endif
-    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 10L);
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 60L);
-    // Signals and threads do not mix: a worker thread calls this.
-    curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
-    curl_easy_setopt(curl, CURLOPT_USERAGENT, "ORION-Media-Center/1");
-    // IPv4 only. With both, a finished request still waited ~30 s (once
-    // for good) before its handle let go: the console's resolver is slow
-    // to answer for the IPv6 addresses, and nothing here needs them.
-    curl_easy_setopt(curl, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
-    art_trace(("perform " + url).c_str());
-    const CURLcode code = curl_easy_perform(curl);
-    art_trace(("perform done: " + std::string(curl_easy_strerror(code))).c_str());
-    long status = 0;
-    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status);
-    art_trace("cleanup");
-    curl_easy_cleanup(curl);
-    art_trace("cleanup done");
-    if (code != CURLE_OK)
-    {
-        *error = sink.over ? std::string("too large") : std::string(curl_easy_strerror(code));
-        return false;
-    }
-    if (status != 200)
-    {
-        *error = "HTTP " + std::to_string(status);
+        *error = why;
         return false;
     }
     return true;

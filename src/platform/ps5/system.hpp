@@ -49,6 +49,11 @@ int launch_app(const char *title_id);
 // accepted, else the errno of what failed (kLaunchUnsupported on a PC).
 int send_payload(const std::string &elf, int port);
 
+// A system notification (the pop-up at the top right), as the launch
+// helper sends them; seen over ORION and over Settings alike. Nothing on
+// a PC.
+void notify(const std::string &text);
+
 // Appends one line to /data/orion/art-trace.txt and syncs it, so the last
 // line names the step a crash happened in. reset starts the file over.
 // Nothing on a PC.

@@ -85,6 +85,11 @@ bool http_download(const std::string &url, const std::string &path, std::size_t 
     return false;
 }
 
+void notify(const std::string &text)
+{
+    std::fprintf(stderr, "[HUI] notification: %s\n", text.c_str());
+}
+
 int send_payload(const std::string &elf, int port)
 {
     std::fprintf(stderr, "[HUI] payload of %zu bytes for port %d: not on a console\n", elf.size(),

@@ -2676,10 +2676,14 @@ class Library final : public app::Concept
             orion::update_log(update_log_path(), "orion: a download is already running");
             return;
         }
-        // It is big: say so, so nobody closes ORION halfway.
-        show_note(true, "Downloading ORION " + release.version +
-                            (release.zip_size > 0 ? " (" + megabytes(release.zip_size) + ")" : "") +
-                            ". Keep ORION open; it asks before it installs.");
+        // It is big: say so, so nobody closes ORION halfway; a system
+        // notification too, which shows over Settings and anything else.
+        const std::string note =
+            "Downloading ORION " + release.version +
+            (release.zip_size > 0 ? " (" + megabytes(release.zip_size) + ")" : "") +
+            ". Keep ORION open; it asks before it installs.";
+        show_note(true, note);
+        sys::notify(note);
     }
 
     void update_installer()
@@ -2694,6 +2698,7 @@ class Library final : public app::Concept
                                         " is ready to install");
             settings_.refresh(look_, prefs_);
             update_waiting_ = true; // asked as soon as nothing else is open
+            sys::notify("ORION " + release.version + " is ready to install");
             return;
         }
         settings_.set_update_status("ORION " + context_.version +
