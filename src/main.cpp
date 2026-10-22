@@ -382,6 +382,7 @@ int main()
     PadSample samples[64];
     gfx::Canvas capture;
     std::int64_t last_frame_start = sys::monotonic_us();
+    std::vector<std::string> icon_queue; // box art wanted on screen, not loaded yet
     for (;;)
     {
         const std::int64_t now = sys::monotonic_us();
@@ -433,9 +434,13 @@ int main()
                      titles.emulator.apps.size(), games);
         }
         shell.update(input, dt);
-        // Games' box art that comes into view.
+        // Games' box art that comes into view, a few a frame. The newest
+        // wishes go first: after a quick run through the tabs, the one on
+        // screen loads before those passed on the way.
         if (auto wanted = shell.take_wanted_icons(); !wanted.empty())
-            library::load_wanted_icons(titles, wanted, renderer.batch());
+            icon_queue.insert(icon_queue.begin(), wanted.begin(), wanted.end());
+        if (!icon_queue.empty())
+            library::load_wanted_icons(titles, &icon_queue, renderer.batch(), 3);
         // Sharp copies for what is shown large: one new one a frame.
         library::load_sharp_icons(titles, shell.sharp_icons(), renderer.batch(), 1);
         // Box art ORION downloaded: loaded as the scan's icons were (a

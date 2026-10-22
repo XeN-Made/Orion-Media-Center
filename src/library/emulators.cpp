@@ -278,6 +278,12 @@ std::string short_system_name(std::string_view database)
     return std::string(dash == std::string_view::npos ? database : database.substr(dash + 3));
 }
 
+const std::string &shelf_of(const std::string &system)
+{
+    static const std::string color = "Nintendo - Game Boy Color";
+    return system == "Nintendo - Game Boy" ? color : system;
+}
+
 std::string shelf_system(std::string_view system)
 {
     if (system == "Nintendo - Game Boy")

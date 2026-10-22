@@ -3320,14 +3320,15 @@ class Library final : public app::Concept
         // a few hundred ROMs would bury everything else.
         if (title.is_rom())
         {
-            if (!prefs_.system_enabled(library::shelf_system(title.system)))
+            const std::string &shelf = library::shelf_of(title.system);
+            if (!prefs_.system_enabled(shelf))
                 return false;
             if (key == kEmulatorsTab)
                 return true;
             if (key == "favourites")
                 return favourite_of(title.id);
             if (key.rfind("sys:", 0) == 0)
-                return key.compare(4, std::string::npos, library::shelf_system(title.system)) == 0;
+                return key.compare(4, std::string::npos, shelf) == 0;
             if (key.rfind("tab:", 0) == 0)
             {
                 const orion::CustomTab *placed = prefs_.placement(title.id);

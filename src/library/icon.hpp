@@ -42,8 +42,13 @@ const char *png_failure();
 // Games for an emulator are left out: there can be thousands, so their box
 // art is uploaded only once a design wants it on screen (load_wanted_icons).
 int load_icons(Library &library, gfx::GlBatch &batch);
-// The icons of these titles (by id), when they have none uploaded yet.
-int load_wanted_icons(Library &library, const std::vector<std::string> &ids, gfx::GlBatch &batch);
+// The icons of these titles (by id), when they have none uploaded yet, at
+// most budget of them: each is read and decoded on the frame that draws, so
+// a tab full of box art loads over a few frames instead of stalling one.
+// What was loaded (or turned out to need nothing) leaves *ids; the rest wait
+// for the next call.
+int load_wanted_icons(Library &library, std::vector<std::string> *ids, gfx::GlBatch &batch,
+                      int budget);
 
 // Big covers (Cases view) are drawn from a sharp copy of the picture, up to
 // this many pixels on a side, kept only for the few titles on screen.

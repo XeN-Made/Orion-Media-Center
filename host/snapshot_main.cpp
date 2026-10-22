@@ -643,8 +643,9 @@ int main(int argc, char **argv)
             ++titles.generation;
         }
         shell.update(input, kDt);
+        // All at once: a picture is taken when its covers are there.
         if (auto wanted = shell.take_wanted_icons(); !wanted.empty())
-            hui::library::load_wanted_icons(titles, wanted, renderer.batch());
+            hui::library::load_wanted_icons(titles, &wanted, renderer.batch(), 1 << 20);
         hui::library::load_sharp_icons(titles, shell.sharp_icons(), renderer.batch(), 1);
         ++frames;
         if (!tour.capture().empty())

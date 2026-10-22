@@ -45,14 +45,20 @@ int load_icons(Library &library, gfx::GlBatch &batch)
     return uploaded;
 }
 
-int load_wanted_icons(Library &library, const std::vector<std::string> &ids, gfx::GlBatch &batch)
+int load_wanted_icons(Library &library, std::vector<std::string> *ids, gfx::GlBatch &batch,
+                      int budget)
 {
     int uploaded = 0;
-    for (Title &title : library.titles)
+    std::size_t done = 0;
+    for (; done < ids->size() && uploaded < budget; ++done)
     {
-        if (std::find(ids.begin(), ids.end(), title.id) != ids.end())
-            uploaded += load_icon(title, batch) ? 1 : 0;
+        const std::string &id = (*ids)[done];
+        const auto title = std::find_if(library.titles.begin(), library.titles.end(),
+                                        [&](const Title &t) { return t.id == id; });
+        if (title != library.titles.end() && title->texture == 0)
+            uploaded += load_icon(*title, batch) ? 1 : 0;
     }
+    ids->erase(ids->begin(), ids->begin() + static_cast<std::ptrdiff_t>(done));
     return uploaded;
 }
 

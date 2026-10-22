@@ -185,6 +185,8 @@ std::string short_system_name(std::string_view database);
 // games: they share the Game Boy Color's (the same cores play both, and sets
 // keep them in one folder). The game keeps its own system for its box art.
 std::string shelf_system(std::string_view system);
+// The same without a copy, for a check made for every game on every tab.
+const std::string &shelf_of(const std::string &system);
 // "nds" for "Nintendo - Nintendo DS": ES-DE's name for a system; empty when
 // unknown.
 std::string esde_system_name(std::string_view database);
