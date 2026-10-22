@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ORION Media Center</title>
+  <meta name="description" content="A launcher for a jailbroken PS5: PS5 and PS4 games, homebrew, media apps and emulated games in one library, driven with the controller and themed to your taste.">
+  <link rel="icon" href="icon.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="wrap">
+      <a class="brand" href="./"><img src="icon.png" alt="">ORION</a>
+      <nav aria-label="Pages">
+        <a href="#features">Features</a>
+        <a href="#emulators">Emulators</a>
+        <a href="themes.html">Themes</a>
+        <a href="#install">Install</a>
+        <a href="https://github.com/XeN-Made/Orion-Media-Center">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <div class="wrap hero">
+      <span class="eyebrow">ORION Media Center · for PS5</span>
+      <h1>Every game you own,<br><span>one library.</span></h1>
+      <p class="lead">A launcher for a jailbroken PS5: your PS5 and PS4 games, homebrew, media apps
+        and emulated games side by side, with box art, favourites, tabs of your own and a galaxy
+        glass look. Everything is driven with the controller, and everything can be changed in
+        Settings.</p>
+      <div class="actions">
+        <a class="button primary" href="https://github.com/XeN-Made/Orion-Media-Center/releases/latest">Download the latest release</a>
+        <a class="button" href="themes.html">Make it yours: themes</a>
+      </div>
+      <figure>
+        <img class="shot" src="screenshots/grid.jpg" width="1920" height="1080"
+             alt="ORION's library in Grid view: covers in rows under the tab bar">
+      </figure>
+    </div>
+
+    <section id="features">
+      <div class="wrap">
+        <div class="section-head">
+          <span class="eyebrow">Features</span>
+          <h2>One library for everything</h2>
+          <p>ORION finds what is on the console by itself and starts each title the way it should
+            be started, emulated games straight in the emulator that plays them.</p>
+        </div>
+        <div class="grid">
+          <div class="card">
+            <span class="tag">Library</span>
+            <h3>Games, homebrew and media</h3>
+            <p>PS5 and PS4 games, homebrew and media apps, found where ShadowMountPlus mounts them:
+              <code>/data/homebrew</code>, <code>/mnt/ext0/homebrew</code> and USB drives.</p>
+          </div>
+          <div class="card">
+            <span class="tag">Emulation</span>
+            <h3>Start a game from its cover</h3>
+            <p>Emulated games open directly in the emulator that plays them, no menus in between.
+              When two emulators can play a game, ORION asks once and remembers.</p>
+          </div>
+          <div class="card">
+            <span class="tag">Box art</span>
+            <h3>Covers as you scroll</h3>
+            <p>Box art downloads as the covers scroll into view, or comes from what PS5SX2,
+              Porpoise and PS5-ECAM have already downloaded.</p>
+          </div>
+          <div class="card">
+            <span class="tag">Tabs</span>
+            <h3>Arranged your way</h3>
+            <p>All, Games, Homebrew, Media, Favourites, one Emulators tab with a row per system (or
+              a tab per system), and tabs of your own. Each keeps its own view, sort and theme.</p>
+          </div>
+          <div class="card">
+            <span class="tag">Themes</span>
+            <h3>A look of your own</h3>
+            <p>31 built-in themes, a theme per tab, and theme files you write in a few lines of
+              text. Settings shows every change live beside the library.
+              <a href="themes.html">The theming guide</a>.</p>
+          </div>
+          <div class="card">
+            <span class="tag">Console</span>
+            <h3>Made for the controller</h3>
+            <p>Every setting in one place (R3), a first-run setup, background music and sound
+              effects, autoboot after the jailbreak, a return to ORION when a game closes, and
+              updates that install themselves.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="wrap split">
+        <div>
+          <span class="eyebrow">Side by side</span>
+          <h2>Every kind of title in one tab</h2>
+          <p class="lead" style="margin:0 0 1em;text-align:left">PS5 games, homebrew, and DS and GBA games in Favourites, each
+            started with Cross: the emulated ones straight in their emulator.</p>
+          <p style="color:var(--muted)">Play time for every game and when you last played it,
+            Continue playing over the All tab, favourites, hidden titles, search, and removing a
+            title from the home screen (or deleting it) without leaving ORION.</p>
+        </div>
+        <figure>
+          <img class="shot" src="screenshots/mixed.jpg" width="1920" height="1080" loading="lazy"
+               alt="Favourites holding PS5 games, homebrew, and DS and GBA games side by side">
+        </figure>
+      </div>
+    </section>
+
+    <section>
+      <div class="wrap">
+        <div class="section-head">
+          <span class="eyebrow">Three views</span>
+          <h2>Look at it three ways</h2>
+          <p>Each tab keeps its own view and its own order: by name, recently added, platform, tag
+            (Games, Homebrew, Media, under separators), recently played or most played.</p>
+        </div>
+        <div class="views">
+          <figure>
+            <img class="shot" src="screenshots/grid.jpg" width="1920" height="1080" loading="lazy" alt="Grid view">
+            <figcaption><strong>Grid</strong>: covers, many to a screen</figcaption>
+          </figure>
+          <figure>
+            <img class="shot" src="screenshots/cases.jpg" width="1920" height="1080" loading="lazy" alt="Cases view">
+            <figcaption><strong>Cases</strong>: big game cases with their system's band, three at a time</figcaption>
+          </figure>
+          <figure>
+            <img class="shot" src="screenshots/list.jpg" width="1920" height="1080" loading="lazy" alt="List view">
+            <figcaption><strong>List</strong>: one row per title, quick for large collections</figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <section id="emulators">
+      <div class="wrap">
+        <div class="section-head">
+          <span class="eyebrow">Emulators</span>
+          <h2>The emulators ORION works with</h2>
+          <p>Settings, Emulators, <strong>Scan for emulators</strong> finds them and the games they can
+            see. Games start straight in the emulator, which closes back to ORION when you are done.</p>
+        </div>
+        <div class="table">
+          <table>
+            <thead>
+              <tr><th>Emulator</th><th>Systems</th><th>Where ORION finds the games</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>RetroArch</strong></td>
+                <td>Every system its cores play: NES, SNES, N64, Game Boy and Color, GBA, DS, PS1,
+                  PSP, Genesis, Saturn, Dreamcast, arcade and more</td>
+                <td>Its own <code>content/&lt;system&gt;/</code> folders and every game in its
+                  playlists, wherever the files are</td>
+              </tr>
+              <tr>
+                <td><strong>Porpoise</strong></td>
+                <td>GameCube, Wii</td>
+                <td>Its <code>porpoise/games</code> folder, <code>/data/porpoise/games</code>,
+                  <code>/data/games</code>, <code>/data/roms</code>, <code>/data/iso</code></td>
+              </tr>
+              <tr>
+                <td><strong>PS5SX2</strong></td>
+                <td>PS2</td>
+                <td><code>.iso</code>, <code>.chd</code>, <code>.cso</code>, <code>.zso</code> in
+                  <code>/data/PCSX2/games</code>, <code>/data/PCSX2</code>, and <code>PS2/</code>
+                  or <code>PCSX2/games/</code> on a drive</td>
+              </tr>
+              <tr>
+                <td><strong>PS5-ECAM</strong></td>
+                <td>Wii U, 3DS, DS, Switch</td>
+                <td>Every game in its own library, and the games folders set in its Settings
+                  (Wii U as <code>.wua</code>, <code>.wud</code>, <code>.wux</code>,
+                  <code>.rpx</code> or NUS files; 3DS, DS and Switch by their usual files)</td>
+              </tr>
+              <tr>
+                <td><strong>Your folders</strong></td>
+                <td>Any of the above</td>
+                <td>Settings, Emulators, an emulator, <strong>Add a game folder</strong></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="note">ORION does not come with games, emulators or system files. It lists and starts
+          what you have installed yourself.</p>
+      </div>
+    </section>
+
+    <section>
+      <div class="wrap split flip">
+        <div>
+          <span class="eyebrow">Themes</span>
+          <h2>See every change as you make it</h2>
+          <p style="color:var(--muted)">Pick one of 31 themes, tune the sky, the glass, the colours and the corners,
+            or give each tab a theme of its own. While you are in Appearance, Settings steps
+            aside and the library shows each change live.</p>
+          <p style="color:var(--muted)">Themes are plain text files you can write, share and
+            drop into <code>/data/orion/themes/</code>.</p>
+          <a class="button" href="themes.html">Read the theming guide</a>
+        </div>
+        <figure>
+          <img class="shot" src="screenshots/theme-preview.jpg" width="1920" height="1080" loading="lazy"
+               alt="Settings narrowed to a panel at the side while the library behind wears the theme being chosen">
+        </figure>
+      </div>
+    </section>
+
+    <section id="install">
+      <div class="wrap">
+        <div class="section-head">
+          <span class="eyebrow">Install</span>
+          <h2>Get it on your console</h2>
+          <p>You need a PS5 you own, jailbroken, with a homebrew loader for folder apps,
+            <strong>ShadowMountPlus</strong> loaded after each jailbreak, an <strong>ELF loader on
+            port 9021</strong> and an <strong>FTP server</strong> on the console.</p>
+        </div>
+        <ol class="steps">
+          <li><strong>Download</strong> the
+            <a href="https://github.com/XeN-Made/Orion-Media-Center/releases/latest">latest release ZIP</a>
+            and extract it. It holds one folder, <code>PPSA99061</code>.</li>
+          <li><strong>Upload that folder whole</strong> to <code>/data/homebrew/</code> with a plain FTP
+            client in binary mode, so you have <code>/data/homebrew/PPSA99061/eboot.bin</code>. Some
+            upload tools leave out files they do not expect in an app; copy every file.</li>
+          <li><strong>Wait about ten seconds.</strong> ShadowMountPlus registers the title and ORION
+            appears on the home screen. If it does not, run ShadowMountPlus again.</li>
+          <li><strong>Open ORION.</strong> A short setup walks you through the look, your emulators,
+            box art, how the library is sorted and autoboot.</li>
+        </ol>
+      </div>
+    </section>
+
+    <section>
+      <div class="wrap grid">
+        <div class="card">
+          <span class="tag">Updates</span>
+          <h3>It updates itself</h3>
+          <p>Each time it opens, ORION asks GitHub for the latest release, downloads a newer one in
+            the background, checks it against its published SHA256 sum and asks before installing.
+            Your settings, favourites and box art stay.</p>
+        </div>
+        <div class="card">
+          <span class="tag">Autoboot</span>
+          <h3>Opens after the jailbreak</h3>
+          <p>Add the bundled <code>orion-autostart.elf</code> last to your autoloader's list (for
+            example Payload Manager's Autoload) and ORION opens once nothing else is in front.</p>
+        </div>
+        <div class="card">
+          <span class="tag">Help</span>
+          <h3>When something goes wrong</h3>
+          <p>Every launch, update and scan is written to a log in <code>/data/orion</code>. The
+            <a href="https://github.com/XeN-Made/Orion-Media-Center#readme">README</a> lists them,
+            with the fixes for the usual problems.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <span>ORION Media Center · GPL-3.0-or-later</span>
+      <span>The pictures show invented titles, drawn by ORION's own renderer.</span>
+      <a href="https://github.com/XeN-Made/Orion-Media-Center">Source on GitHub</a>
+    </div>
+  </footer>
+</body>
+</html>

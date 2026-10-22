@@ -1,0 +1,434 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ORION Themes</title>
+  <meta name="description" content="How to theme ORION Media Center: the .theme file format, every key it takes, a theme per tab, and the live preview in Settings.">
+  <link rel="icon" href="icon.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="wrap">
+      <a class="brand" href="./"><img src="icon.png" alt="">ORION</a>
+      <nav aria-label="Pages">
+        <a href="./#features">Features</a>
+        <a href="./#emulators">Emulators</a>
+        <a href="themes.html" aria-current="page">Themes</a>
+        <a href="./#install">Install</a>
+        <a href="https://github.com/XeN-Made/Orion-Media-Center">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <div class="wrap hero">
+      <span class="eyebrow">Theming guide</span>
+      <h1>Make ORION <span>yours.</span></h1>
+      <p class="lead">Everything ORION looks like comes from a theme: the sky behind it, the glass,
+        the colours, how round things are, the fonts and the sounds. A theme is a short text file.
+        Write one in a few lines, give each tab its own, and watch every change happen live.</p>
+      <div class="actions">
+        <a class="button primary" href="template.theme" download>Download template.theme</a>
+        <a class="button" href="#format">The .theme format</a>
+      </div>
+    </div>
+
+    <div class="wrap">
+      <ul class="toc" aria-label="On this page">
+        <li><a href="#quick">Your first theme</a></li>
+        <li><a href="#live">Live preview</a></li>
+        <li><a href="#tabs">A theme per tab</a></li>
+        <li><a href="#format">The .theme format</a></li>
+        <li><a href="#keys">Every key</a></li>
+        <li><a href="#backgrounds">Backgrounds</a></li>
+        <li><a href="#styles">Surface styles</a></li>
+        <li><a href="#builtin">Built-in themes</a></li>
+        <li><a href="#examples">Examples</a></li>
+        <li><a href="#trouble">When a theme is skipped</a></li>
+      </ul>
+    </div>
+
+    <section id="quick">
+      <div class="wrap split">
+        <div>
+          <span class="eyebrow">Your first theme</span>
+          <h2>Three lines, five steps</h2>
+          <p style="color:var(--muted)">A theme only says what it changes. Everything else comes
+            from the theme it <strong>extends</strong>, ORION's own unless it names another.</p>
+          <ol class="steps">
+            <li>Make a text file, say <code>gold-rush.theme</code>, with the lines on the right.</li>
+            <li>Copy it to the console's <code>/data/orion/themes/</code> (over FTP, for example).</li>
+            <li>Open ORION and press <strong>R3</strong> for Settings.</li>
+            <li>Go to <strong>Appearance</strong>, then <strong>Theme</strong>.</li>
+            <li>Pick <strong>Gold Rush</strong>. Your own themes are marked <em>(yours)</em>.</li>
+          </ol>
+        </div>
+        <div>
+<pre><code><span class="c"># gold-rush.theme</span>
+<span class="k">name</span> = <span class="s">Gold Rush</span>
+
+[<span class="k">palette</span>]
+<span class="k">accent</span>  = <span class="v">#ffc94a</span>   <span class="c"># labels, counts, the cursor</span>
+<span class="k">primary</span> = <span class="v">#ffc94a</span>   <span class="c"># the selected tab, focused keys</span></code></pre>
+          <p class="note">You can also make one on the console: adjust the look in Appearance, then
+            choose <strong>Save as new theme</strong> and name it. ORION writes it to
+            <code>/data/orion/themes/</code>, where you can copy it off, edit it and share it.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="live">
+      <div class="wrap split flip">
+        <div>
+          <span class="eyebrow">Live preview</span>
+          <h2>See it before you leave Settings</h2>
+          <p style="color:var(--muted)">While you are in the <strong>Appearance</strong> rows,
+            Settings narrows to a panel at the side and the library behind it shows each change the
+            moment you make it: a new theme, background, sky, nebula, clouds, glass tint and opacity,
+            highlight, accent, corners, tab style, focus ring and the rest.</p>
+          <p style="color:var(--muted)">Step back to the list of sections and Settings fills the
+            screen again. Your choices are saved as you go, in
+            <code>/data/orion/theme.json</code>, on top of the theme you picked.</p>
+        </div>
+        <figure>
+          <img class="shot" src="screenshots/theme-preview.jpg" width="1920" height="1080" loading="lazy"
+               alt="Settings as a panel at the right; the library behind it wears the Acrylic theme just chosen">
+          <figcaption>Choosing Acrylic in Appearance: the sky, the tab pills and the glass change behind the panel.</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section id="tabs">
+      <div class="wrap split">
+        <div>
+          <span class="eyebrow">A theme per tab</span>
+          <h2>Every tab can dress differently</h2>
+          <p style="color:var(--muted)">A Retro tab in Pixel, Favourites in gold, the SNES tab in
+            something purple: <strong>Settings, Tabs</strong>, pick the tab, then
+            <strong>Theme</strong>. The rest of ORION keeps the main look from Appearance.</p>
+          <p style="color:var(--muted)">On a tab's page the library behind Settings switches to
+            that tab, so you see its theme, cover shape, sort and view as you choose them. Leave the
+            page and ORION goes back to the tab you were on. Set a tab back to
+            <strong>Main theme</strong> to make it follow Appearance again.</p>
+          <p style="color:var(--muted)">Systems count as tabs too: on the Emulators tab, each system
+            (GBA, SNES, PS2, …) can wear its own theme.</p>
+        </div>
+        <figure>
+          <img class="shot" src="screenshots/tab-theme.jpg" width="1920" height="1080" loading="lazy"
+               alt="The SNES tab's page in Settings, with the SNES tab showing in the library behind it">
+          <figcaption>The SNES tab's own page: Theme, Cover shape, Sort by and View, with the SNES tab behind.</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section id="format">
+      <div class="wrap">
+        <div class="section-head">
+          <span class="eyebrow">The .theme format</span>
+          <h2>Readable, forgiving, and nothing runs</h2>
+          <p>A <code>.theme</code> file is lines of <code>key = value</code>, grouped under
+            <code>[sections]</code>, with comments wherever you like. It is data, not a program: a theme
+            can change how ORION looks, never what it does.</p>
+        </div>
+        <div class="split">
+          <div class="card">
+            <h3>The rules</h3>
+            <ul>
+              <li>Keys before the first section belong to the theme itself: <code>name</code>,
+                <code>id</code>, <code>author</code>, <code>description</code>, <code>family</code>,
+                <code>extends</code>, <code>dark</code>.</li>
+              <li>Each section is one group of keys: <code>[page]</code>, <code>[palette]</code>,
+                <code>[shape]</code>, <code>[type]</code>, <code>[motion]</code>, <code>[orion]</code>.</li>
+              <li>A line starting with <code>#</code>, <code>;</code> or <code>//</code> is a
+                comment, and so is anything after <code> # </code> on a line. A colour such as
+                <code>#ffc94a</code> is never mistaken for one.</li>
+              <li>Colours are <code>#rrggbb</code>, or <code>#rrggbbaa</code> with an opacity from
+                <code>00</code> to <code>ff</code>.</li>
+              <li><code>colors</code> and <code>params</code> are lists, separated by spaces or
+                commas.</li>
+              <li><code>true</code>, <code>false</code> and numbers are themselves; anything else is
+                text. Quote text that holds <code> # </code>: <code>author = "Ann # Bo"</code>.</li>
+              <li>No <code>id</code>? It is made from the name: <em>Nebula Noir</em> becomes
+                <code>nebula-noir</code>.</li>
+              <li>A key written twice keeps the later value. Numbers out of range are clamped;
+                keys ORION does not know are ignored.</li>
+            </ul>
+          </div>
+<pre><code><span class="c"># nebula-noir.theme</span>
+<span class="k">name</span>    = <span class="s">Nebula Noir</span>   <span class="c"># shown in Settings</span>
+<span class="k">author</span>  = <span class="s">you</span>
+<span class="k">extends</span> = <span class="s">orion</span>         <span class="c"># built-in or yours</span>
+
+[<span class="k">page</span>]
+<span class="k">background</span> = <span class="s">galaxy</span>
+<span class="k">colors</span>     = <span class="v">#000000 #02040b #3a1f6a #0a4a66</span>
+
+[<span class="k">palette</span>]
+<span class="k">surface</span> = <span class="v">#140b2a80</span>   <span class="c"># glass tint, 50 % opaque</span>
+<span class="k">accent</span>  = <span class="v">#ffc94a</span>
+<span class="k">primary</span> = <span class="v">#ffc94a</span>
+
+[<span class="k">shape</span>]
+<span class="k">radius_card</span> = <span class="v">30</span>
+
+[<span class="k">orion</span>]
+<span class="k">clouds</span>        = <span class="v">80</span>      <span class="c"># percent</span>
+<span class="k">cover_corners</span> = <span class="v">28</span>
+<span class="k">tabs</span>          = <span class="s">plain</span>
+<span class="k">focus_ring</span>    = <span class="s">aurora</span></code></pre>
+        </div>
+        <p class="note"><strong>JSON works too.</strong> The built-in themes and
+          <em>Save as new theme</em> use <code>.json</code> with the same keys, each section an object
+          (<code>"palette": {"accent": "#ffc94a"}</code>). ORION reads both from the same folder.</p>
+      </div>
+    </section>
+
+    <section id="keys">
+      <div class="wrap">
+        <div class="section-head">
+          <span class="eyebrow">Reference</span>
+          <h2>Every key</h2>
+          <p>All optional except <code>name</code>. <a href="template.theme" download>template.theme</a>
+            has every one of them with ORION's own values, ready to copy.</p>
+        </div>
+
+        <h3>The theme itself (before any section)</h3>
+        <div class="table"><table>
+          <thead><tr><th>Key</th><th>Value</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td><code>name</code></td><td>1–40 characters</td><td>Shown in Settings</td></tr>
+            <tr><td><code>id</code></td><td>1–40 of <code>a-z 0-9 - _</code></td><td>Unique among your themes; made from the name when left out</td></tr>
+            <tr><td><code>author</code>, <code>description</code></td><td>text</td><td>Who made it, one line about it</td></tr>
+            <tr><td><code>family</code></td><td>text</td><td>The design language it belongs to</td></tr>
+            <tr><td><code>extends</code></td><td>a theme id</td><td>Where every key it leaves out comes from: a built-in theme or one of yours (default <code>orion</code>)</td></tr>
+            <tr><td><code>dark</code></td><td><code>true</code> / <code>false</code></td><td>Light controller glyphs for a dark page</td></tr>
+          </tbody>
+        </table></div>
+
+        <h3>[page]: what is behind everything</h3>
+        <div class="table"><table>
+          <thead><tr><th>Key</th><th>Value</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td><code>background</code></td><td>a name</td><td>The animated backdrop, see <a href="#backgrounds">Backgrounds</a></td></tr>
+            <tr><td><code>colors</code></td><td>up to 4 colours</td><td>The backdrop's colours</td></tr>
+            <tr><td><code>params</code></td><td>up to 4 numbers</td><td>Backdrop-specific settings</td></tr>
+            <tr><td><code>color</code></td><td>colour</td><td>The page behind everything</td></tr>
+            <tr><td><code>text</code>, <code>text_muted</code></td><td>colour</td><td>Text drawn straight on the page (the title, the tab names)</td></tr>
+          </tbody>
+        </table></div>
+
+        <h3>[palette]: the colours of everything on it</h3>
+        <div class="table"><table>
+          <thead><tr><th>Key</th><th>ORION's</th><th>Used for</th></tr></thead>
+          <tbody>
+            <tr><td><code>surface</code></td><td><span class="swatch" style="background:#0d102466"></span><code>#0d102466</code></td><td>Panels and cards; the alpha is the glass opacity</td></tr>
+            <tr><td><code>surface_high</code></td><td><span class="swatch" style="background:#ffffff1f"></span><code>#ffffff1f</code></td><td>Tracks, chips, fields</td></tr>
+            <tr><td><code>text</code>, <code>text_muted</code></td><td><span class="swatch" style="background:#f6f4ff"></span><code>#f6f4ff</code></td><td>Text on panels</td></tr>
+            <tr><td><code>primary</code>, <code>on_primary</code></td><td><span class="swatch" style="background:#a9b8ff"></span><code>#a9b8ff</code></td><td>The selected tab, focused keys, and the text on them</td></tr>
+            <tr><td><code>secondary</code>, <code>on_secondary</code></td><td><span class="swatch" style="background:#ffffff1a"></span><code>#ffffff1a</code></td><td>Secondary buttons and their text</td></tr>
+            <tr><td><code>accent</code></td><td><span class="swatch" style="background:#8fe3ff"></span><code>#8fe3ff</code></td><td>Labels, counts, the text cursor</td></tr>
+            <tr><td><code>outline</code>, <code>focus</code></td><td><span class="swatch" style="background:#ffffff"></span><code>#ffffff</code></td><td>Hairlines, and the focus ring</td></tr>
+            <tr><td><code>shadow</code>, <code>light</code></td><td><span class="swatch" style="background:#ffffff7a"></span><code>#ffffff7a</code></td><td>Shadows, and the rim of the glass</td></tr>
+            <tr><td><code>danger</code>, <code>success</code>, <code>warning</code></td><td><span class="swatch" style="background:#e5484d"></span><code>#e5484d</code></td><td>Delete, done, careful</td></tr>
+          </tbody>
+        </table></div>
+
+        <h3>[shape]: how things are built</h3>
+        <div class="table"><table>
+          <thead><tr><th>Key</th><th>Value</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td><code>style</code></td><td>a style</td><td>The surface style, see <a href="#styles">Surface styles</a></td></tr>
+            <tr><td><code>corner</code></td><td><code>round</code>, <code>chamfer</code>, <code>pixel</code></td><td>The shape of corners</td></tr>
+            <tr><td><code>radius</code></td><td>0–200</td><td>Controls; 100 or more makes pills</td></tr>
+            <tr><td><code>radius_card</code></td><td>number</td><td>Panels and dialogs</td></tr>
+            <tr><td><code>border</code>, <code>button_border</code></td><td>number (−1: same as border)</td><td>Outline widths</td></tr>
+            <tr><td><code>pill_chips</code>, <code>pill_switches</code></td><td><code>true</code> / <code>false</code></td><td>Fully round chips and switches</td></tr>
+            <tr><td><code>shadow_offset</code>, <code>shadow_blur</code></td><td>number</td><td>The drop shadow</td></tr>
+            <tr><td><code>focus_width</code>, <code>focus_gap</code></td><td>number</td><td>The focus ring's thickness and distance</td></tr>
+            <tr><td><code>underline_fields</code></td><td><code>true</code> / <code>false</code></td><td>Text fields as an underline instead of a box</td></tr>
+          </tbody>
+        </table></div>
+
+        <h3>[type], [motion]: letters and movement</h3>
+        <div class="table"><table>
+          <thead><tr><th>Key</th><th>Value</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td><code>heading</code>, <code>label</code></td><td><code>regular</code>, <code>semibold</code>, <code>display</code>, <code>mono</code>, <code>pixel</code>, <code>hand</code></td><td>The faces for headings and labels</td></tr>
+            <tr><td><code>caps</code></td><td><code>true</code> / <code>false</code></td><td>Labels in capitals</td></tr>
+            <tr><td><code>tracking</code></td><td>number</td><td>Extra space between label letters</td></tr>
+            <tr><td><code>omega</code></td><td>number</td><td>How fast things move; 60 or more snaps</td></tr>
+            <tr><td><code>damping</code></td><td>number</td><td>1 settles, 0.5 bounces</td></tr>
+            <tr><td><code>sounds</code></td><td><code>glass</code>, <code>paper</code></td><td>The sound effects</td></tr>
+          </tbody>
+        </table></div>
+
+        <h3>[orion]: ORION's own pieces</h3>
+        <div class="table"><table>
+          <thead><tr><th>Key</th><th>Value</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td><code>clouds</code></td><td>0–200 (%)</td><td>Nebula clouds drifting behind the glass</td></tr>
+            <tr><td><code>motion</code></td><td><code>true</code> / <code>false</code></td><td>The background drifts, or holds still</td></tr>
+            <tr><td><code>cover_corners</code></td><td>0–48</td><td>How round the covers are</td></tr>
+            <tr><td><code>tabs</code></td><td><code>plain</code>, <code>pills</code></td><td>Home-screen text tabs, or pills on a frosted track</td></tr>
+            <tr><td><code>focus_ring</code></td><td><code>aurora</code>, <code>theme</code></td><td>A ring of drifting colour, or the theme's own</td></tr>
+            <tr><td><code>plates</code></td><td><code>none</code>, <code>outline</code>, <code>glass</code></td><td>Behind the bottom bars</td></tr>
+            <tr><td><code>badges</code></td><td><code>true</code> / <code>false</code></td><td>GAME, HOMEBREW, MEDIA, PS4 banners on covers</td></tr>
+            <tr><td><code>cover_rim</code></td><td><code>true</code> / <code>false</code></td><td>A hairline of light around each cover</td></tr>
+          </tbody>
+        </table></div>
+      </div>
+    </section>
+
+    <section id="backgrounds">
+      <div class="wrap">
+        <div class="section-head">
+          <span class="eyebrow">[page] background</span>
+          <h2>Backgrounds</h2>
+          <p>Every background is animated and drawn by ORION itself. <code>colors</code> sets its
+            four colours, in the order below.</p>
+        </div>
+        <div class="table"><table>
+          <thead><tr><th>Name</th><th>What it is</th><th>Its colours</th></tr></thead>
+          <tbody>
+            <tr><td><code>galaxy</code></td><td>A star field with a nebula (ORION's)</td><td>space, space, nebula, far nebula</td></tr>
+            <tr><td><code>aurora</code></td><td>Slow, warped colour clouds</td><td>base, base, clouds, clouds</td></tr>
+            <tr><td><code>waves</code></td><td>Layered ribbons</td><td>base, base, ribbons, ribbons</td></tr>
+            <tr><td><code>bokeh</code></td><td>Drifting soft discs</td><td>base, base, discs, discs</td></tr>
+            <tr><td><code>gradient</code></td><td>A gradient with a highlight; params 0–2 are its x, y and strength</td><td>top, bottom, highlight</td></tr>
+            <tr><td><code>synthwave</code></td><td>A neon floor and a sun</td><td>sky, horizon, lines, sun</td></tr>
+            <tr><td><code>dots</code></td><td>A dot matrix with a travelling pulse</td><td>base, base, dots</td></tr>
+            <tr><td><code>vista</code></td><td>Parallax ridges under a sky; param 0 is the scroll speed</td><td>sky, haze, far ridge, near ridge</td></tr>
+            <tr><td><code>paper</code></td><td>Warm paper with grain</td><td>paper, paper, light</td></tr>
+            <tr><td><code>phosphor</code></td><td>CRT glass</td><td>dark, glow</td></tr>
+            <tr><td><code>none</code></td><td>Only the page colour</td><td></td></tr>
+          </tbody>
+        </table></div>
+      </div>
+    </section>
+
+    <section id="styles">
+      <div class="wrap">
+        <div class="section-head">
+          <span class="eyebrow">[shape] style</span>
+          <h2>Surface styles</h2>
+          <p>The style is most of what makes one design language different from another.</p>
+        </div>
+        <div class="grid">
+          <div class="card"><h3>glass</h3><p>ORION's: the screen behind, blurred and tinted with <code>surface</code>.</p></div>
+          <div class="card"><h3>flat · soft · hard</h3><p>Plain fills; soft shadows; hard offset shadows for neo-brutalism.</p></div>
+          <div class="card"><h3>neumorphic · bevel · gloss</h3><p>Pressed-in clay, a bevelled desktop, glossy skeuomorphic buttons.</p></div>
+          <div class="card"><h3>outline · glow</h3><p>Only the rims; rims that glow, for a sci-fi console.</p></div>
+          <div class="card"><h3>pixel · sketch</h3><p>Square 8-bit edges with a pixel face; hand-drawn lines on paper.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="builtin">
+      <div class="wrap">
+        <div class="section-head">
+          <span class="eyebrow">extends</span>
+          <h2>31 built-in themes to start from</h2>
+          <p>Name any of these in <code>extends</code> and change only what you want. The id is
+            what goes in the file.</p>
+        </div>
+        <div class="table"><table>
+          <thead><tr><th>Theme</th><th>id</th><th>Theme</th><th>id</th></tr></thead>
+          <tbody>
+            <tr><td>ORION</td><td><code>orion</code></td><td>Acrylic</td><td><code>acrylic</code></td></tr>
+            <tr><td>Admin</td><td><code>admin</code></td><td>Blueprint</td><td><code>blueprint</code></td></tr>
+            <tr><td>Brutal</td><td><code>brutal</code></td><td>Candy</td><td><code>candy</code></td></tr>
+            <tr><td>Chakra</td><td><code>chakra</code></td><td>Classic</td><td><code>classic</code></td></tr>
+            <tr><td>Clay</td><td><code>clay</code></td><td>Code</td><td><code>code</code></td></tr>
+            <tr><td>Contrast</td><td><code>contrast</code></td><td>Crisp</td><td><code>crisp</code></td></tr>
+            <tr><td>Daisy</td><td><code>daisy</code></td><td>Enterprise</td><td><code>ant</code></td></tr>
+            <tr><td>Featherweight</td><td><code>light</code></td><td>Fresh</td><td><code>fresh</code></td></tr>
+            <tr><td>Friendly</td><td><code>friendly</code></td><td>Gloss</td><td><code>gloss</code></td></tr>
+            <tr><td>Hazard</td><td><code>hazard</code></td><td>Humane</td><td><code>humane</code></td></tr>
+            <tr><td>Layers</td><td><code>layers</code></td><td>Material</td><td><code>paper</code></td></tr>
+            <tr><td>Neutral</td><td><code>neutral</code></td><td>Pico</td><td><code>pico</code></td></tr>
+            <tr><td>Pill</td><td><code>pill</code></td><td>Pixel</td><td><code>pixel</code></td></tr>
+            <tr><td>Sketch</td><td><code>sketch</code></td><td>Soft</td><td><code>soft</code></td></tr>
+            <tr><td>Standard</td><td><code>standard</code></td><td>Tiles</td><td><code>tiles</code></td></tr>
+            <tr><td>Utility</td><td><code>utility</code></td><td></td><td></td></tr>
+          </tbody>
+        </table></div>
+      </div>
+    </section>
+
+    <section id="examples">
+      <div class="wrap">
+        <div class="section-head">
+          <span class="eyebrow">Examples</span>
+          <h2>Small files, big changes</h2>
+        </div>
+        <div class="views">
+<pre><code><span class="c"># retro.theme: an 8-bit tab</span>
+<span class="k">name</span>    = <span class="s">Retro Night</span>
+<span class="k">extends</span> = <span class="s">pixel</span>
+
+[<span class="k">page</span>]
+<span class="k">background</span> = <span class="s">synthwave</span>
+<span class="k">colors</span> = <span class="v">#12002b #3b0a5e #ff3ea5 #ffb347</span>
+
+[<span class="k">orion</span>]
+<span class="k">cover_corners</span> = <span class="v">0</span></code></pre>
+<pre><code><span class="c"># paper.theme: light and calm</span>
+<span class="k">name</span>    = <span class="s">Notebook</span>
+<span class="k">extends</span> = <span class="s">sketch</span>
+<span class="k">dark</span>    = <span class="v">false</span>
+
+[<span class="k">palette</span>]
+<span class="k">accent</span>  = <span class="v">#c2410c</span>
+<span class="k">primary</span> = <span class="v">#1d4ed8</span>
+
+[<span class="k">motion</span>]
+<span class="k">sounds</span> = <span class="s">paper</span></code></pre>
+<pre><code><span class="c"># still.theme: ORION, holding still</span>
+<span class="k">name</span> = <span class="s">Still Galaxy</span>
+
+[<span class="k">orion</span>]
+<span class="k">motion</span>     = <span class="v">false</span>
+<span class="k">clouds</span>     = <span class="v">40</span>
+<span class="k">focus_ring</span> = <span class="s">theme</span>
+<span class="k">badges</span>     = <span class="v">false</span>
+<span class="k">cover_rim</span>  = <span class="v">true</span></code></pre>
+        </div>
+      </div>
+    </section>
+
+    <section id="trouble">
+      <div class="wrap grid">
+        <div class="card">
+          <span class="tag">Skipped, never fatal</span>
+          <h3>When a theme does not appear</h3>
+          <p>A file ORION cannot use is skipped and the rest still load. Why is written to
+            <code>/data/orion/themes.txt</code>, with the line number for a <code>.theme</code>:
+            <code>line 7: expected key = value</code>.</p>
+        </div>
+        <div class="card">
+          <span class="tag">Names</span>
+          <h3>Ids must be unique</h3>
+          <p>Two themes with the same id: the second is skipped. A theme of yours cannot reuse a
+            built-in theme's id; <code>extends</code> it instead.</p>
+        </div>
+        <div class="card">
+          <span class="tag">Limits</span>
+          <h3>Size and count</h3>
+          <p>A theme file can be up to 256 KiB, and ORION keeps at most 128 themes. Files end in
+            <code>.theme</code> or <code>.json</code>; anything else in the folder is ignored.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <span>ORION Media Center · GPL-3.0-or-later</span>
+      <span>The full reference is also in <a href="https://github.com/XeN-Made/Orion-Media-Center/blob/main/docs/ORION_THEMES.md">docs/ORION_THEMES.md</a>.</span>
+      <a href="./">Back to the start</a>
+    </div>
+  </footer>
+</body>
+</html>
