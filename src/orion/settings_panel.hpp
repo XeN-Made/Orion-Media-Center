@@ -110,6 +110,12 @@ class SettingsPanel
         themes_ = &themes;
     }
     // Every tab, in the tab bar's order, hidden ones included.
+    // The tab the library was on when Settings opened: Appearance offers a
+    // theme for it alone, above the theme every tab wears.
+    void set_current_tab(std::string key)
+    {
+        current_tab_ = std::move(key);
+    }
     void set_tabs(std::vector<TabEntry> tabs)
     {
         tabs_ = std::move(tabs);
@@ -268,7 +274,8 @@ class SettingsPanel
     std::vector<Section> sections_; // the rail's entries
     Section section_ = Section::library;
     bool in_rows_ = false;
-    std::string page_; // the tab whose page is open; empty: the list
+    std::string page_;        // the tab whose page is open; empty: the list
+    std::string current_tab_; // the library's tab behind Settings
     const ThemeLibrary *themes_ = nullptr;
     const library::Emulator *emulator_ = nullptr;
     std::vector<TabEntry> tabs_;

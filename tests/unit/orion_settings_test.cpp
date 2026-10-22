@@ -117,4 +117,32 @@ TEST_F(OrionSettings, PreviewsTheLookBesideTheLibrary)
     EXPECT_EQ(panel.preview_tab(), "");
 }
 
+// Appearance's first row is the theme of the tab behind Settings alone: it
+// goes in the prefs for that tab, and the look every tab wears is untouched.
+TEST_F(OrionSettings, AppearanceSetsTheThemeOfTheTabBehindIt)
+{
+    hui::orion::ThemeLibrary themes;
+    themes.load(std::string(HUI_SOURCE_DIR) + "/assets/themes", "");
+    ASSERT_GT(themes.size(), 2u);
+    look_ = hui::orion::default_look(themes);
+    const std::string base = look_.base;
+
+    SettingsPanel panel;
+    panel.set_themes(themes);
+    panel.set_tabs({{"all", "All"}, {"games", "Games"}});
+    panel.set_current_tab("games");
+    panel.open(look_, prefs_, feedback_);
+    for (int i = 0; i < 12 && panel.section() != SettingsPanel::Section::appearance; ++i)
+        send_to(panel, press(Action::page_next));
+    ASSERT_EQ(panel.section(), SettingsPanel::Section::appearance);
+    send_to(panel, press(Action::confirm)); // into the rows: Theme for Games
+    EXPECT_EQ(send_to(panel, nav(Direction::right)), SettingsPanel::Change::prefs);
+    EXPECT_FALSE(prefs_.tab_theme("games").empty());
+    EXPECT_TRUE(prefs_.tab_theme("all").empty());
+    EXPECT_EQ(look_.base, base);
+    // Back to the theme every tab wears.
+    EXPECT_EQ(send_to(panel, nav(Direction::left)), SettingsPanel::Change::prefs);
+    EXPECT_TRUE(prefs_.tab_theme("games").empty());
+}
+
 } // namespace

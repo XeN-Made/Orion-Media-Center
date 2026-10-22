@@ -241,9 +241,12 @@ constexpr app::TourStep kTour[] = {
     {0.3f, action_bit(Action::jump_next)},
     {0.2f, 0, Direction::right},
     {0.8f, 0, Direction::none, "settings-appearance"},
-    // The next theme, seen at once beside the panel, then back to ORION's.
+    // A theme for this tab alone (past ORION, the first), seen at once
+    // beside the panel, then back to the theme every tab wears.
+    {0.2f, 0, Direction::right},
     {0.2f, 0, Direction::right},
     {0.9f, 0, Direction::none, "settings-appearance-live"},
+    {0.2f, 0, Direction::left},
     {0.2f, 0, Direction::left},
     {0.2f, action_bit(Action::back)},
     {0.3f, action_bit(Action::jump_next)},
@@ -1412,6 +1415,7 @@ class Library final : public app::Concept
         settings_.set_version(context_.version);
         settings_.set_storage(context_.library.self_path,
                               orion::count_files(backdrop_folder(), ".png"));
+        settings_.set_current_tab(active_key());
         settings_.open(look_, prefs_, feedback);
     }
 

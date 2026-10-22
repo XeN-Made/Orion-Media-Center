@@ -45,6 +45,7 @@ enum : int
     kAboutReleases,
     kAboutLog,
     kLeaveShelf,
+    kTabTheme,
     kBase,
     kBackground,
     kSky,
@@ -924,7 +925,25 @@ void SettingsPanel::build_appearance(const Look &look, const LibraryPrefs &prefs
     }
     if (style_names.empty())
         style_names.emplace_back("ORION");
-    form_.add_choice(kBase, "Theme", std::move(style_names), base).description =
+    // The tab behind Settings can wear a theme of its own: chosen here, where
+    // the preview shows it, as well as on its page under Tabs.
+    if (const TabEntry *tab = tab_entry(current_tab_))
+    {
+        std::vector<std::string> themes = {"Same as every tab"};
+        int theme = 0;
+        const std::string chosen = prefs.tab_theme(current_tab_);
+        const std::vector<std::string> names = theme_names();
+        for (std::size_t i = 0; i < names.size(); ++i)
+        {
+            themes.push_back(names[i]);
+            if (themes_ != nullptr && themes_->at(i).id == chosen)
+                theme = static_cast<int>(i) + 1;
+        }
+        form_.add_choice(kTabTheme, "Theme for " + tab->name, std::move(themes), theme)
+            .description = theme == 0 ? "Only this tab; it now wears the theme below"
+                                      : "Only this tab; the rows below are every other tab's";
+    }
+    form_.add_choice(kBase, "Theme for every tab", std::move(style_names), base).description =
         "Built in, or a theme file of yours; everything below adjusts it";
     std::vector<std::string> background_names;
     int background = 0;
@@ -1308,7 +1327,20 @@ SettingsPanel::Change SettingsPanel::handle(const InputFrame &input, ui::Feedbac
         return Change::art_folder;
     }
     default:
+    {
+        // The one Appearance row that is the tab's, kept in the prefs.
+        if (id == kTabTheme)
+        {
+            const int index = form_.choice_index(kTabTheme);
+            const bool own =
+                themes_ != nullptr && index > 0 && index <= static_cast<int>(themes_->size());
+            prefs->set_tab_theme(current_tab_,
+                                 own ? themes_->at(static_cast<std::size_t>(index - 1)).id : "");
+            refresh(*look, *prefs); // its description says which rows apply
+            return Change::prefs;
+        }
         return edit_appearance(id, look, *prefs);
+    }
     }
 }
 

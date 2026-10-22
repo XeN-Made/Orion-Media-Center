@@ -27,8 +27,10 @@ A file ORION cannot use is skipped, never fatal; the reason is written to
 
 ## A theme for one tab
 
-Every tab can wear a theme of its own: **Settings > Tabs**, pick the tab,
-then **Theme**. The rest of ORION keeps the main look from Appearance. A
+Every tab can wear a theme of its own. Open Settings on that tab and the
+first row of **Appearance** is **Theme for <the tab>**; or go to **Settings >
+Tabs**, pick the tab, then **Theme**. The rest of ORION keeps the main look,
+**Theme for every tab** and the rows under it. A
 Retro tab in Pixel, Favourites in gold: each is just a theme file, and a tab
 set back to *Main theme* follows Appearance again.
 
