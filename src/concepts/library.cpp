@@ -2638,7 +2638,14 @@ class Library final : public app::Concept
         {
         case orion::UpdateCheck::State::available:
             status += ". ORION " + latest.version + " is out";
-            if (prefs_.auto_update || manual_update_check_)
+            if (!manual_update_check_ && failed_update().first == latest.version)
+            {
+                status += ". It could not be installed (" + failed_update().second +
+                          "): Check now tries again";
+                orion::update_log(update_log_path(),
+                                  "orion: " + latest.version + " failed before; not by itself");
+            }
+            else if (prefs_.auto_update || manual_update_check_)
             {
                 orion::update_log(update_log_path(), "orion: downloading " + latest.version);
                 download_update(latest);
@@ -2743,7 +2750,12 @@ class Library final : public app::Concept
             why = "ORION does not know its own folder";
         else
         {
-            std::remove((update + "/result.txt").c_str());
+            std::remove((self_path + "/update-result.txt").c_str());
+            // The helper keeps the old files here; it may not make folders in
+            // ORION's data folder, so the folder is made for it, open to it.
+            save::ensure_directory(update + "/previous");
+            ::chmod((update + "/previous").c_str(), 0777);
+            orion::update_log(update_log_path(), "orion: handing the install to the helper");
             why = send_helper(self + "\n@update " + update + "/stage\t" + self_path + "\n");
         }
         if (!why.empty())
@@ -2767,11 +2779,12 @@ class Library final : public app::Concept
     void take_update_result()
     {
         const std::string update = context_.library.state_dir + "/update";
+        const std::string result = context_.library.self_path + "/update-result.txt";
         std::string text;
-        if (context_.library.state_dir.empty() ||
-            !save::read_file(update + "/result.txt", &text, 4096) || text.empty())
+        if (context_.library.state_dir.empty() || context_.library.self_path.empty() ||
+            !save::read_file(result, &text, 4096) || text.empty())
             return;
-        std::remove((update + "/result.txt").c_str());
+        std::remove(result.c_str());
         std::remove((update + "/stage/files.txt").c_str()); // the stage is spent
         // "1 <version>" or "0 <version>\t<why>"
         while (!text.empty() && (text.back() == '\n' || text.back() == '\r'))
@@ -2781,11 +2794,32 @@ class Library final : public app::Concept
         const std::string version =
             text.size() > 2 ? text.substr(2, tab == std::string::npos ? std::string::npos : tab - 2)
                             : std::string();
+        const std::string why = tab == std::string::npos ? std::string() : text.substr(tab + 1);
+        orion::update_log(update_log_path(),
+                          ok ? "helper: installed " + version
+                             : "helper: could not install " + version + ": " + why);
         if (ok)
+        {
             show_note(true, "ORION is updated to " + version);
-        else
-            show_note(false, "ORION could not update to " + version + ": " +
-                                 (tab == std::string::npos ? std::string() : text.substr(tab + 1)));
+            std::remove((update + "/failed.txt").c_str());
+            return;
+        }
+        show_note(false, "ORION could not update to " + version + ": " + why);
+        // Not fetched again by itself, or it would ask on every start: Check
+        // now (Settings, About) tries again.
+        save::write_atomic(update + "/failed.txt", version + "\t" + why + "\n");
+    }
+
+    // The version whose install failed, and why; empty when none did.
+    std::pair<std::string, std::string> failed_update() const
+    {
+        std::string text;
+        if (!save::read_file(context_.library.state_dir + "/update/failed.txt", &text, 4096))
+            return {};
+        while (!text.empty() && (text.back() == '\n' || text.back() == '\r'))
+            text.pop_back();
+        const std::size_t tab = text.find('\t');
+        return {text.substr(0, tab), tab == std::string::npos ? "" : text.substr(tab + 1)};
     }
 
     void show_note(bool ok, std::string message)

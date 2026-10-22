@@ -689,10 +689,22 @@ static int apply_update(const char *title, const char *stage, const char *target
         return 0;
     }
     list[size] = '\0';
+    // The old files go beside the stage; where the helper may not write in
+    // ORION's data folder (it cannot make folders there), into a hidden one
+    // in ORION's own folder instead.
     char previous[512];
     snprintf(previous, sizeof(previous), "%.*sprevious", (int)(strrchr(stage, '/') - stage + 1),
              stage);
-    mkdir(previous, 0777);
+    if (mkdir(previous, 0777) != 0 && errno != EEXIST)
+    {
+        snprintf(previous, sizeof(previous), "%s/.orion-previous", target);
+        if (mkdir(previous, 0777) != 0 && errno != EEXIST)
+        {
+            snprintf(error, error_size, "no folder for the old files (errno %d)", errno);
+            return 0;
+        }
+    }
+    say("update: the old files go to %s", previous);
     int done = 0;
     int ok = 1;
     char *line = list;
@@ -745,8 +757,11 @@ static int apply_update(const char *title, const char *stage, const char *target
     return 1;
 }
 
-// <update dir>/result.txt: "1 <version>" or "0 <version>\t<why>".
-static void write_update_result(const char *stage, int ok, const char *error)
+// <target>/update-result.txt: "1 <version>" or "0 <version>\t<why>".
+// In ORION's own folder (<target>/update-result.txt), where the helper can
+// write, as it does remove-result.txt; ORION's data folder it may not.
+static void write_update_result(const char *stage, const char *target, int ok,
+                                const char *error)
 {
     char version[64] = "";
     char path[1024];
@@ -756,7 +771,7 @@ static void write_update_result(const char *stage, int ok, const char *error)
     char *newline = strchr(version, '\n');
     if (newline != NULL)
         *newline = '\0';
-    snprintf(path, sizeof(path), "%.*sresult.txt", (int)(strrchr(stage, '/') - stage + 1), stage);
+    snprintf(path, sizeof(path), "%s/update-result.txt", target);
     char text[512];
     const int length = snprintf(text, sizeof(text), "%d %s%s%s\n", ok, version, ok ? "" : "\t",
                                 ok ? "" : error);
@@ -945,7 +960,7 @@ int main(void)
             ok = apply_update(job.title, update_stage, update_target, error, sizeof(error));
         say("update: %s%s", ok ? "done" : "failed: ", ok ? "" : error);
         notify(ok ? "ORION is updated; it opens again now" : "ORION could not be updated");
-        write_update_result(update_stage, ok, error);
+        write_update_result(update_stage, update_target, ok, error);
     }
     for (int i = 0; i < file_count; ++i)
     {
