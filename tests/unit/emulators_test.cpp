@@ -488,7 +488,7 @@ TEST(Emulators, FindsPorpoiseAndPs5sx2AndTheirGames)
     std::vector<std::string> systems;
     for (const library::System &system : emulator.systems)
         systems.push_back(system.short_name);
-    EXPECT_EQ(systems, (std::vector<std::string>{"GameCube", "PS2", "Wii"}));
+    EXPECT_EQ(systems, (std::vector<std::string>{"NGC", "PS2", "Wii"}));
 
     const library::Title *quiet = nullptr;
     const library::Title *lantern = nullptr;
@@ -557,6 +557,40 @@ TEST(Emulators, UsesTheCoversTheEmulatorsDownloaded)
     EXPECT_EQ(roms[1].icon, (root / "porpoise/covers/GQBP01.png").string());
     EXPECT_EQ(roms[2].icon, "/kept.png");
     fs::remove_all(root);
+}
+
+// Game Boy games share the Game Boy Color's tab, each keeping its own system
+// (its box art is the Game Boy's).
+TEST(Emulators, PutsGameBoyGamesOnTheColorsTab)
+{
+    std::vector<library::Title> roms;
+    library::Emulator emulator = library::scan_retroarch(retroarch(), &roms);
+    const std::size_t before = roms.size();
+    const std::string playlist = R"json({"items": [
+        {"path": "/mnt/usb9/gbc/Lantern Night (U).gb", "label": "Lantern Night",
+         "db_name": "Nintendo - Game Boy.lpl"},
+        {"path": "/mnt/usb9/gbc/Comet Post (U).gbc", "label": "Comet Post",
+         "db_name": "Nintendo - Game Boy Color.lpl"}]})json";
+    EXPECT_EQ(library::read_retroarch_playlist(emulator, playlist, "usb9.lpl", &roms), 2);
+    ASSERT_EQ(roms.size(), before + 2u);
+    // Sorted by name: Comet Post, then Lantern Night.
+    EXPECT_EQ(roms[before].system, "Nintendo - Game Boy Color");
+    EXPECT_EQ(roms[before + 1].system, "Nintendo - Game Boy");
+    int shelves = 0;
+    for (const library::System &system : emulator.systems)
+    {
+        EXPECT_NE(system.name, "Nintendo - Game Boy");
+        if (system.name == "Nintendo - Game Boy Color")
+        {
+            ++shelves;
+            EXPECT_EQ(system.short_name, "GBC");
+            EXPECT_EQ(system.games, 2);
+        }
+    }
+    EXPECT_EQ(shelves, 1);
+    EXPECT_EQ(library::shelf_system("Nintendo - Game Boy"), "Nintendo - Game Boy Color");
+    EXPECT_EQ(library::shelf_system("Nintendo - Game Boy Advance"), "Nintendo - Game Boy Advance");
+    EXPECT_EQ(library::short_system_name("Nintendo - GameCube"), "NGC");
 }
 
 // PS5-ECAM's own list: its games with the covers it downloaded (the box by

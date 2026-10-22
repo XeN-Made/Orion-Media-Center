@@ -23,8 +23,8 @@ namespace
 {
 
 constexpr std::size_t kMaxInfo = 64u << 10;
-constexpr std::size_t kMaxRomsPerSystem = 5000;
-constexpr std::size_t kMaxPlaylist = 16u << 20; // a few thousand entries is a few megabytes
+constexpr std::size_t kMaxRomsPerSystem = 10000; // a tab; Game Boy and Color share one
+constexpr std::size_t kMaxPlaylist = 16u << 20;  // a few thousand entries is a few megabytes
 
 struct ShortName
 {
@@ -42,7 +42,7 @@ constexpr ShortName kShortNames[] = {
     {"Nintendo - Nintendo Entertainment System", "NES", "nes"},
     {"Nintendo - Family Computer Disk System", "FDS", "fds"},
     {"Nintendo - Super Nintendo Entertainment System", "SNES", "snes"},
-    {"Nintendo - GameCube", "GameCube", "gc"},
+    {"Nintendo - GameCube", "NGC", "gc"},
     {"Nintendo - Wii", "Wii", "wii"},
     {"Nintendo - Wii U", "Wii U", "wiiu"},
     {"Nintendo - Switch", "Switch", "switch"},
@@ -278,6 +278,13 @@ std::string short_system_name(std::string_view database)
     return std::string(dash == std::string_view::npos ? database : database.substr(dash + 3));
 }
 
+std::string shelf_system(std::string_view system)
+{
+    if (system == "Nintendo - Game Boy")
+        return "Nintendo - Game Boy Color";
+    return std::string(system);
+}
+
 std::string esde_system_name(std::string_view database)
 {
     for (const ShortName &entry : kShortNames)
@@ -356,25 +363,33 @@ std::string rom_id(std::string_view path)
 // has none yet). dir is the folder as ORION sees it, seen as RetroArch does
 // (its own content is /app0/content/... to it; anything else is the same
 // path). Games already listed (the same file) are skipped.
+// The System of a shelf (shelf_system), made when there is none yet, with
+// every core that plays a system on it.
+static std::vector<System>::iterator system_for(Emulator &emulator, const std::string &game_system)
+{
+    const std::string shelf = shelf_system(game_system);
+    auto at = std::find_if(emulator.systems.begin(), emulator.systems.end(),
+                           [&](const System &s) { return s.name == shelf; });
+    if (at != emulator.systems.end())
+        return at;
+    System system;
+    system.name = shelf;
+    system.short_name = short_system_name(shelf);
+    for (const Core &core : emulator.cores)
+    {
+        if (std::any_of(core.databases.begin(), core.databases.end(),
+                        [&](const std::string &database)
+                        { return shelf_system(database) == shelf; }))
+            system.cores.push_back(core.file);
+    }
+    emulator.systems.push_back(std::move(system));
+    return emulator.systems.end() - 1;
+}
+
 static int add_system_folder(Emulator &emulator, const std::string &name, const std::string &dir,
                              const std::string &seen, std::vector<Title> *roms)
 {
-    auto at = std::find_if(emulator.systems.begin(), emulator.systems.end(),
-                           [&](const System &s) { return s.name == name; });
-    if (at == emulator.systems.end())
-    {
-        System system;
-        system.name = name;
-        system.short_name = short_system_name(name);
-        for (const Core &core : emulator.cores)
-        {
-            if (std::find(core.databases.begin(), core.databases.end(), name) !=
-                core.databases.end())
-                system.cores.push_back(core.file);
-        }
-        emulator.systems.push_back(std::move(system));
-        at = emulator.systems.end() - 1;
-    }
+    auto at = system_for(emulator, name);
     System &system = *at;
     std::vector<Title> found;
     for (const save::DirectoryEntry &entry : save::list_directory(dir))
@@ -402,7 +417,7 @@ static int add_system_folder(Emulator &emulator, const std::string &name, const 
         if (std::any_of(roms->begin(), roms->end(), [&](const Title &t) { return t.id == rom.id; }))
             continue;
         rom.name = rom_display_name(entry.name);
-        rom.system = system.name;
+        rom.system = name;
         const EmulatorApp *retroarch = emulator.app("retroarch");
         rom.launcher = retroarch != nullptr ? retroarch->title_id : std::string();
         rom.category = Category::game;
@@ -719,22 +734,7 @@ int place_games(Emulator &emulator, std::vector<Title> &found, std::vector<Title
     int added = 0;
     for (Title &rom : found)
     {
-        auto at = std::find_if(emulator.systems.begin(), emulator.systems.end(),
-                               [&](const System &s) { return s.name == rom.system; });
-        if (at == emulator.systems.end())
-        {
-            System made;
-            made.name = rom.system;
-            made.short_name = short_system_name(rom.system);
-            for (const Core &core : emulator.cores)
-            {
-                if (std::find(core.databases.begin(), core.databases.end(), made.name) !=
-                    core.databases.end())
-                    made.cores.push_back(core.file);
-            }
-            emulator.systems.push_back(std::move(made));
-            at = emulator.systems.end() - 1;
-        }
+        const auto at = system_for(emulator, rom.system);
         if (at->games >= static_cast<int>(kMaxRomsPerSystem))
             continue;
         ++at->games;

@@ -2366,7 +2366,8 @@ class Library final : public app::Concept
             save::read_file(state + "/art/tried.txt", &tried, 1u << 20);
         for (const Title &title : titles())
         {
-            if (!title.is_rom() || !title.icon.empty() || !prefs_.system_enabled(title.system) ||
+            if (!title.is_rom() || !title.icon.empty() ||
+                !prefs_.system_enabled(library::shelf_system(title.system)) ||
                 tried.find(title.id + "\n") != std::string::npos)
                 continue;
             const std::size_t slash = title.rom.rfind('/');
@@ -3075,10 +3076,11 @@ class Library final : public app::Concept
     // its system, else the first core that plays it.
     std::string core_for(const Title &title) const
     {
-        const std::string chosen = prefs_.system_core(title.system);
+        const std::string shelf = library::shelf_system(title.system);
+        const std::string chosen = prefs_.system_core(shelf);
         for (const library::System &system : context_.library.emulator.systems)
         {
-            if (system.name != title.system)
+            if (system.name != shelf)
                 continue;
             if (!chosen.empty() &&
                 std::find(system.cores.begin(), system.cores.end(), chosen) != system.cores.end())
@@ -3280,14 +3282,14 @@ class Library final : public app::Concept
         // a few hundred ROMs would bury everything else.
         if (title.is_rom())
         {
-            if (!prefs_.system_enabled(title.system))
+            if (!prefs_.system_enabled(library::shelf_system(title.system)))
                 return false;
             if (key == kEmulatorsTab)
                 return true;
             if (key == "favourites")
                 return favourite_of(title.id);
             if (key.rfind("sys:", 0) == 0)
-                return key.compare(4, std::string::npos, title.system) == 0;
+                return key.compare(4, std::string::npos, library::shelf_system(title.system)) == 0;
             if (key.rfind("tab:", 0) == 0)
             {
                 const orion::CustomTab *placed = prefs_.placement(title.id);
@@ -3557,7 +3559,7 @@ class Library final : public app::Concept
         {
             const Title &title = titles()[i];
             if (played(title).sessions > 0 && !prefs_.title_hidden(title.id) &&
-                (!title.is_rom() || prefs_.system_enabled(title.system)))
+                (!title.is_rom() || prefs_.system_enabled(library::shelf_system(title.system))))
                 continue_view_.push_back(static_cast<int>(i));
         }
         std::stable_sort(continue_view_.begin(), continue_view_.end(), [&](int a, int b)

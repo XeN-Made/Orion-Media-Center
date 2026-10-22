@@ -170,6 +170,10 @@ std::string rom_display_name(std::string_view file);
 // "Nintendo - Game Boy Advance" -> "GBA"; unknown systems keep what follows
 // the maker ("Sega - Saturn" -> "Saturn").
 std::string short_system_name(std::string_view database);
+// The system whose tab a game is on, which is its own but for Game Boy
+// games: they share the Game Boy Color's (the same cores play both, and sets
+// keep them in one folder). The game keeps its own system for its box art.
+std::string shelf_system(std::string_view system);
 // "nds" for "Nintendo - Nintendo DS": ES-DE's name for a system; empty when
 // unknown.
 std::string esde_system_name(std::string_view database);
