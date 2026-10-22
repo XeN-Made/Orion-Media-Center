@@ -222,6 +222,10 @@ RetroArch with the core you chose for it.
   `/data/homebrew/PPSA99061/launch-helper.txt`.
 - **ORION does not open after rest mode**: restart the console (not rest
   mode) and jailbreak again; a jailbreak does not survive rest mode well.
+- **An update does not finish**: `/data/orion/update/log.txt` has each step,
+  and `/data/homebrew/PPSA99061/launch-helper.txt` what the install did.
+  A version that failed to install is not downloaded again by itself:
+  Settings, About, **Check now** tries again.
 - **Start-up**: each step is noted in `/data/orion/boot.txt`.
 - **Start over**: delete `/data/orion/library.json` and ORION runs its setup
   again, keeping your box art.
