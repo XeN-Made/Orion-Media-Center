@@ -82,7 +82,10 @@ GameCube and Wii) and **PS5SX2** (PS2), installed as folder apps too.
 1. Download the ORION release ZIP and extract it. It holds one folder,
    `PPSA99061`.
 2. With an FTP client, upload that folder to `/data/homebrew/` on the
-   console, so you have `/data/homebrew/PPSA99061/eboot.bin`.
+   console, so you have `/data/homebrew/PPSA99061/eboot.bin`. Copy the
+   folder whole, every file as it is, with a plain FTP client (binary
+   mode); some upload tools leave out files they do not expect in an app,
+   such as the `.txt` files ORION reads.
 3. Wait about ten seconds: ShadowMountPlus registers the new title, and ORION
    appears on the home screen. If it does not, run ShadowMountPlus again.
 4. Open ORION. The first time, a short setup walks you through the look,

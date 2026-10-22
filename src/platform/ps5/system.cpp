@@ -4,6 +4,8 @@
 
 #include "platform/ps5/system.hpp"
 
+#include "platform/ps5/ca_bundle.hpp"
+
 #include <arpa/inet.h>
 #include <curl/curl.h>
 #include <fcntl.h>
@@ -179,8 +181,6 @@ void art_trace(const char *step, bool reset)
 namespace
 {
 
-// Mozilla's CA list, as Ubuntu's ca-certificates ships it (THIRD_PARTY_NOTICES.md).
-constexpr const char *kCaBundle = "/app0/assets/certs/cacert.pem";
 constexpr int kMaxHops = 5; // redirects followed (GitHub's downloads take one)
 
 // curl's global set-up, once, whichever request comes first.
@@ -367,7 +367,11 @@ std::string fetch(std::string url, Target *target, long whole)
         curl_easy_setopt(curl, CURLOPT_RESOLVE, resolve);
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, target_write);
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, target);
-        curl_easy_setopt(curl, CURLOPT_CAINFO, kCaBundle);
+        // Mozilla's CA list (THIRD_PARTY_NOTICES.md), built into the app: the
+        // file in assets/certs can be missing, as some upload tools skip it.
+        curl_blob certificates{const_cast<char *>(ca_bundle().data()), ca_bundle().size(),
+                               CURL_BLOB_NOCOPY};
+        curl_easy_setopt(curl, CURLOPT_CAINFO_BLOB, &certificates);
         curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 0L); // followed here
 #if LIBCURL_VERSION_NUM >= 0x075500
         curl_easy_setopt(curl, CURLOPT_PROTOCOLS_STR, "https");
