@@ -120,6 +120,59 @@ bool is_folder(const std::string &path)
     return ::stat(path.c_str(), &info) == 0 && S_ISDIR(info.st_mode);
 }
 
+namespace
+{
+
+// The files of each folder asked about, listed once. A stat per game costs
+// little on the console's own storage and a great deal on a USB drive: a
+// playlist of 13,000 games there kept ORION from opening.
+class FolderIndex
+{
+  public:
+    // Whether the folder holding file exists, and whether file is in it.
+    bool folder_of(const std::string &file)
+    {
+        return folder(parent(file)).exists;
+    }
+    bool has(const std::string &file)
+    {
+        const Folder &listed = folder(parent(file));
+        return listed.exists && listed.files.count(file.substr(file.rfind('/') + 1)) != 0;
+    }
+
+  private:
+    struct Folder
+    {
+        bool exists = false;
+        std::unordered_set<std::string> files;
+    };
+    static std::string parent(const std::string &file)
+    {
+        const std::size_t slash = file.rfind('/');
+        return slash == std::string::npos || slash == 0 ? std::string() : file.substr(0, slash);
+    }
+    const Folder &folder(const std::string &path)
+    {
+        const auto known = folders_.find(path);
+        if (known != folders_.end())
+            return known->second;
+        Folder &made = folders_[path];
+        made.exists = !path.empty() && is_folder(path);
+        if (made.exists)
+        {
+            for (save::DirectoryEntry &entry : save::list_directory(path))
+            {
+                if (!entry.directory)
+                    made.files.insert(std::move(entry.name));
+            }
+        }
+        return made;
+    }
+    std::unordered_map<std::string, Folder> folders_;
+};
+
+} // namespace
+
 std::string lower(std::string_view text)
 {
     std::string out(text);
@@ -246,11 +299,8 @@ std::string thumbnail_name(std::string_view stem)
 
 int attach_rom_art(std::vector<Title> &roms, const std::string &root, const std::string &art_dir)
 {
-    const auto is_file = [](const std::string &file)
-    {
-        struct stat info = {};
-        return ::stat(file.c_str(), &info) == 0 && S_ISREG(info.st_mode);
-    };
+    FolderIndex index;
+    const auto is_file = [&index](const std::string &file) { return index.has(file); };
     int found = 0;
     for (Title &rom : roms)
     {
@@ -825,6 +875,16 @@ int read_retroarch_playlist(Emulator &emulator, std::string_view text, const std
         return dot == std::string::npos ? file : file.substr(0, dot);
     };
     // A core's file ("/app0/cores/snes9x_libretro.so") to the system it plays.
+    // Each lookup walks every core's systems; a big playlist asks the same
+    // few names thousands of times.
+    std::unordered_map<std::string, std::string> systems;
+    const auto system_named = [&](const std::string &name) -> const std::string &
+    {
+        const auto known = systems.find(name);
+        if (known != systems.end())
+            return known->second;
+        return systems[name] = system_of_folder(name, emulator);
+    };
     const auto core_system = [&](const std::string &core_path)
     {
         const std::size_t slash = core_path.rfind('/');
@@ -848,6 +908,7 @@ int read_retroarch_playlist(Emulator &emulator, std::string_view text, const std
     for (const Title &rom : *roms)
         listed.insert(rom.id);
     std::vector<Title> found;
+    FolderIndex folders;
     for (const json::Value &item : root["items"].elements())
     {
         Title rom;
@@ -857,7 +918,7 @@ int read_retroarch_playlist(Emulator &emulator, std::string_view text, const std
         rom.id = rom_id(rom.rom);
         if (!listed.insert(rom.id).second)
             continue;
-        rom.system = system_of_folder(stem(item["db_name"].string_or("")), emulator);
+        rom.system = system_named(stem(item["db_name"].string_or("")));
         if (rom.system.empty())
             rom.system = core_system(item["core_path"].string_or(""));
         if (rom.system.empty())
@@ -867,7 +928,7 @@ int read_retroarch_playlist(Emulator &emulator, std::string_view text, const std
         // The extension, where it names a system (.gba, .nds), before a core
         // that plays several (mGBA: Game Boy, Color and Advance).
         if (rom.system.empty())
-            rom.system = system_of_folder(extension_of(rom.rom), emulator);
+            rom.system = system_named(extension_of(rom.rom));
         if (rom.system.empty())
             rom.system = core_system(default_core);
         if (rom.system.empty())
@@ -875,10 +936,11 @@ int read_retroarch_playlist(Emulator &emulator, std::string_view text, const std
         rom.path = file.rfind("/app0/", 0) == 0 ? app->root + file.substr(5) : file;
         // A game deleted since RetroArch listed it (its folder is there, the
         // file is not) is not listed; one on a drive not plugged in still is.
+        // The folder is listed once; a stat only for a name not in it (a
+        // drive that ignores case).
         {
-            const std::size_t slash = rom.path.rfind('/');
             struct stat info = {};
-            if (slash != std::string::npos && slash > 0 && is_folder(rom.path.substr(0, slash)) &&
+            if (folders.folder_of(rom.path) && !folders.has(rom.path) &&
                 ::stat(rom.path.c_str(), &info) != 0)
                 continue;
         }
@@ -1084,15 +1146,23 @@ int attach_emulator_covers(std::vector<Title> &roms, const std::string &pcsx2_di
 }
 
 int add_emulator_games(Library &library, const std::vector<GameFolder> &folders,
-                       const std::string &art_dir)
+                       const std::string &art_dir, const std::function<void(const char *)> &step)
 {
+    const auto at = [&step](const char *stage)
+    {
+        if (step)
+            step(stage);
+    };
     std::erase_if(library.titles, [](const Title &title) { return title.is_rom(); });
     std::vector<Title> roms;
     library.emulator = scan_emulators(library.titles, folders, &roms);
+    at("emulator games found");
     // The emulators' own covers first: high quality, and nothing to download.
     attach_emulator_covers(roms, "/data/PCSX2", "/data/porpoise");
+    at("emulator covers");
     const EmulatorApp *retroarch = library.emulator.app("retroarch");
     attach_rom_art(roms, retroarch != nullptr ? retroarch->root : std::string(), art_dir);
+    at("box art found");
     const int count = static_cast<int>(roms.size());
     for (Title &rom : roms)
         library.titles.push_back(std::move(rom));

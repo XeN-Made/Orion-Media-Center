@@ -227,11 +227,12 @@ int main()
     library::Library titles;
     // The emulators' games: at start-up, and again when Settings asks (Scan
     // for emulators). The prefs hold the player's folders.
-    const auto scan_emulators = [&titles]()
+    const auto scan_emulators = [&titles](bool starting)
     {
         const orion::LibraryPrefs prefs = orion::load_prefs(titles.state_dir);
-        return library::add_emulator_games(titles, orion::game_folders(prefs),
-                                           orion::art_folder(prefs, titles.state_dir));
+        return library::add_emulator_games(
+            titles, orion::game_folders(prefs), orion::art_folder(prefs, titles.state_dir),
+            starting ? boot_step : std::function<void(const char *)>());
     };
     {
         library::ScanOptions scan = library::console_defaults();
@@ -243,6 +244,7 @@ int main()
         scan.report = &report;
         const std::int64_t scan_start = sys::monotonic_us();
         titles.titles = library::scan(scan);
+        boot_step("titles scanned");
         // ORION is found like any title, so its folder is known, then left
         // out of what it lists.
         if (known)
@@ -259,7 +261,7 @@ int main()
         titles.state_dir = "/data/orion";
         titles.themes_dir = std::string(kAssets) + "/themes";
         titles.offer_setup = true;
-        scan_emulators();
+        scan_emulators(true);
         const int icons = library::load_icons(titles, renderer.batch());
         char summary[128];
         std::snprintf(summary, sizeof(summary), "titles=%zu icons=%d in %lld ms",
@@ -405,7 +407,7 @@ int main()
                 if (title.is_rom() && title.texture != 0)
                     before.push_back(title);
             }
-            const int games = scan_emulators();
+            const int games = scan_emulators(false);
             // A game still there keeps its picture; the others' go.
             for (library::Title &title : titles.titles)
             {

@@ -106,13 +106,16 @@ TEST(Emulators, ListsWhatRetroArchsPlaylistsList)
       ]})json";
     EXPECT_EQ(library::read_retroarch_playlist(emulator, mixed, "Favourites.lpl", &roms), 2);
     EXPECT_EQ(library::read_retroarch_playlist(emulator, "not json", "x.lpl", &roms), 0);
-    // A file deleted from a folder that is there is left out.
-    const std::string here = std::string(HUI_SOURCE_DIR) + "/tests/fixtures";
+    // A file deleted from a folder that is there is left out; its neighbour,
+    // still there, stays (the folder is listed once for both).
+    const std::string here = std::string(HUI_SOURCE_DIR) + "/tests/fixtures/music";
     const std::string gone =
         R"json({"items": [{"path": ")json" + here +
-        R"json(/no-such-game.gba", "label": "Gone", "db_name": "gba.lpl"}]})json";
-    EXPECT_EQ(library::read_retroarch_playlist(emulator, gone, "gba.lpl", &roms), 0);
-    ASSERT_EQ(roms.size(), before + 4u);
+        R"json(/no-such-game.gba", "label": "Gone", "db_name": "gba.lpl"},
+        {"path": ")json" +
+        here + R"json(/game_net.ogg", "label": "Still Here", "db_name": "gba.lpl"}]})json";
+    EXPECT_EQ(library::read_retroarch_playlist(emulator, gone, "gba.lpl", &roms), 1);
+    ASSERT_EQ(roms.size(), before + 5u);
 
     const auto find = [&](const std::string &name) -> const library::Title *
     {
@@ -136,7 +139,7 @@ TEST(Emulators, ListsWhatRetroArchsPlaylistsList)
     EXPECT_EQ(find("Paper Moon")->system, "Nintendo - Nintendo DS");
     ASSERT_NE(find("Lantern"), nullptr);
     EXPECT_EQ(find("Lantern")->system, "Nintendo - Game Boy Advance");
-    EXPECT_EQ(emulator.apps.front().games, 4);
+    EXPECT_EQ(emulator.apps.front().games, 5);
     EXPECT_EQ(emulator.apps.front().folders.back(), "/mnt/usb0/roms/gba");
 }
 

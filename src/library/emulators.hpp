@@ -6,6 +6,7 @@
 
 #include "library/library.hpp"
 
+#include <functional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -76,9 +77,11 @@ int attach_emulator_covers(std::vector<Title> &roms, const std::string &pcsx2_di
 // The library's emulators and their games, (re)made: games found by an
 // earlier scan leave library.titles, scan_emulators runs over the rest, box
 // art is attached (attach_rom_art, art_dir) and the games are appended.
-// Returns how many there are.
+// Returns how many there are. step, when given, hears each stage as it
+// begins (the start-up's breadcrumbs).
 int add_emulator_games(Library &library, const std::vector<GameFolder> &folders,
-                       const std::string &art_dir);
+                       const std::string &art_dir,
+                       const std::function<void(const char *)> &step = {});
 // One of RetroArch's playlists (<root>/playlists/<name>, JSON): every game it
 // has scanned, wherever the files are (/mnt/usb0/roms/snes), so ORION lists
 // what RetroArch lists without being told the folder. The system comes from
