@@ -5,7 +5,8 @@ and emulated games in one library, with box art, favourites, tabs of your own
 and a galaxy glass look. Everything is driven with the controller, and
 everything can be changed in Settings.
 
-Title ID: `PPSA99061`.
+Title ID: `PPSA99061`. Questions, ideas and bug reports: the
+[ORION Discord](https://discord.gg/SS7N7ukzQv).
 
 ![ORION's library in Grid view](docs/screenshots/grid.jpg)
 
@@ -247,6 +248,10 @@ chose for it.
   tracks. Settings, Sound sets the volumes and skips a song.
 
 ## If something goes wrong
+
+Ask on the [ORION Discord](https://discord.gg/SS7N7ukzQv), or report a bug there in
+**#bug-reports** with your ORION version (Settings, About), what you did, what
+happened, and the log the list below names.
 
 - **A game does not start**: Settings, Emulators shows what ORION found. What
   happened at each start is in `/data/orion/launch.txt` and
