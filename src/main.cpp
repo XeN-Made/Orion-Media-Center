@@ -187,8 +187,9 @@ int main()
     // ORION's folders from before its files were made open to everyone are
     // opened up once: its own and any copy a player made of it
     // (/data/orion-backup), which FTP could otherwise not change or delete.
-    // Until it has all worked, it is tried again on the next start; the
-    // file says how it went.
+    // Until it has worked, it is tried again on the next start; what it is
+    // refused is not ORION's (the launch helper's files), and the file says
+    // how it went.
     if (std::string done; save::ensure_directory("/data/orion") &&
                           (!save::read_file("/data/orion/opened-up.txt", &done, 256) ||
                            done.rfind("done (3)", 0) != 0))
@@ -220,7 +221,7 @@ int main()
                       std::to_string(missed) + "\n";
         }
         save::write_atomic("/data/orion/opened-up.txt",
-                           std::string(changed > 0 && failed == 0 ? "done (3)" : "not yet") + ": " +
+                           std::string(changed > 0 ? "done (3)" : "not yet") + ": " +
                                std::to_string(changed) + " opened up for FTP, " +
                                std::to_string(failed) + " refused\n" + report);
         sys::log("[HUI] opened up %d files and folders for FTP, %d refused", changed, failed);
