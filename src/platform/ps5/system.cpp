@@ -317,6 +317,7 @@ struct Target
 {
     std::string *body = nullptr; // or
     int fd = -1;
+    const std::vector<std::string> *headers = nullptr; // for the first address only
     std::size_t limit = 0;
     std::size_t written = 0;
     bool over = false;
@@ -402,8 +403,19 @@ std::string fetch(std::string url, Target *target, long whole)
         // Signals and threads do not mix: worker threads call this.
         curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
         curl_easy_setopt(curl, CURLOPT_USERAGENT, "ORION-Media-Center/1");
+        // A key in a header goes to the address it was meant for, not on to
+        // another host a redirect names.
+        curl_slist *headers = nullptr;
+        if (hop == 0 && target->headers != nullptr)
+        {
+            for (const std::string &header : *target->headers)
+                headers = curl_slist_append(headers, header.c_str());
+            curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+        }
         art_trace(("perform " + url).c_str());
         const CURLcode code = curl_easy_perform(curl);
+        if (headers != nullptr)
+            curl_slist_free_all(headers);
         art_trace(("perform done: " + std::string(curl_easy_strerror(code))).c_str());
         long status = 0;
         curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status);
@@ -477,9 +489,16 @@ bool http_download(const std::string &url, const std::string &path, std::size_t 
 
 bool http_get(const std::string &url, std::size_t limit, std::string *body, std::string *error)
 {
+    return http_get(url, {}, limit, body, error);
+}
+
+bool http_get(const std::string &url, const std::vector<std::string> &headers, std::size_t limit,
+              std::string *body, std::string *error)
+{
     Target target;
     target.body = body;
     target.limit = limit;
+    target.headers = &headers;
     const std::string why = fetch(url, &target, 60L);
     if (!why.empty())
     {

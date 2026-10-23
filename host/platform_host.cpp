@@ -81,6 +81,13 @@ bool http_get(const std::string &url, std::size_t limit, std::string *body, std:
     return false;
 }
 
+bool http_get(const std::string &url, const std::vector<std::string> &headers, std::size_t limit,
+              std::string *body, std::string *error)
+{
+    (void)headers;
+    return http_get(url, limit, body, error);
+}
+
 bool http_download(const std::string &url, const std::string &path, std::size_t limit,
                    std::string *error)
 {

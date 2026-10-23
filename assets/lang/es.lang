@@ -186,7 +186,6 @@ author = ORION
 "{0} title" = "{0} título"
 "{0} titles" = "{0} títulos"
 
-
 "ORION cannot reach /data: update ShadowMountPlus, keep its backport_fakelib on and turn BackPork off" = "ORION no puede acceder a /data: actualiza ShadowMountPlus, deja backport_fakelib activado y desactiva BackPork"
 "ORION cannot reach /data (see ShadowMountPlus)" = "ORION no puede acceder a /data (revisa ShadowMountPlus)"
 
@@ -202,6 +201,22 @@ author = ORION
 "{0} has its own picture again" = "{0} vuelve a tener su propia imagen"
 "Choose picture…" = "Elegir imagen…"
 "Use its own picture" = "Usar su propia imagen"
+
+"Could not save the key: {0}" = "No se pudo guardar la clave: {0}"
+"SteamGridDB key saved" = "Clave de SteamGridDB guardada"
+"SteamGridDB key removed" = "Clave de SteamGridDB quitada"
+"Add your SteamGridDB key first: Settings, Box art" = "Primero añade tu clave de SteamGridDB: Ajustes, Carátulas"
+"Still looking: try again in a moment" = "Aún buscando: inténtalo en un momento"
+"Looking on SteamGridDB for {0}…" = "Buscando {0} en SteamGridDB…"
+"SteamGridDB has no covers for {0}" = "SteamGridDB no tiene portadas para {0}"
+"Downloading the cover…" = "Descargando la portada…"
+"Cover {0} of {1}  ·  Left and Right to look, Cross keeps it, Circle puts the old one back" = "Portada {0} de {1}  ·  Izquierda y Derecha para ver, Cruz la guarda, Círculo vuelve a la anterior"
+"Find other art…" = "Buscar otra portada…"
+"Your SteamGridDB API key; empty removes it" = "Tu clave de API de SteamGridDB; vacía la quita"
+"SteamGridDB key" = "Clave de SteamGridDB"
+"Set" = "Puesta"
+"Not set" = "Sin poner"
+"Free from steamgriddb.com (Preferences, API): covers no other source has, and Find other art on a title. Also read from /data/orion/keys.txt" = "Gratis en steamgriddb.com (Preferences, API): portadas que ninguna otra fuente tiene, y Buscar otra portada en un título. También se lee de /data/orion/keys.txt"
 
 # src/library/emulators.cpp
 "Every system its cores play" = "Todos los sistemas de sus núcleos"

@@ -77,6 +77,7 @@ enum : int
     kBlurredCovers,
     kBackgroundStrength,
     kArtNow,
+    kGridKey,
     kArtFolder,
     kAddRomFolder,
     kBackdropsInfo,
@@ -724,6 +725,11 @@ void SettingsPanel::build_art(const LibraryPrefs &prefs)
     form_.add_toggle(kArtAuto, tr("Find box art by itself"), prefs.auto_art).description =
         tr("When ORION starts, new games get covers from the internet");
     form_.add_action(kArtNow, tr("Find box art now")).description = art_status_;
+    ui::FormRow &grid = form_.add_action(kGridKey, tr("SteamGridDB key"));
+    grid.text = grid_key_ ? tr("Set") : tr("Not set");
+    grid.description =
+        tr("Free from steamgriddb.com (Preferences, API): covers no other source "
+           "has, and Find other art on a title. Also read from /data/orion/keys.txt");
     form_.add_value(kStateInfo, tr("Box art folder"), art_folder(prefs, state_dir_)).description =
         tr("Chosen under Storage");
 }
@@ -1204,6 +1210,8 @@ SettingsPanel::Change SettingsPanel::handle(const InputFrame &input, ui::Feedbac
             return Change::new_tab;
         if (id == kArtNow)
             return Change::fetch_art;
+        if (id == kGridKey)
+            return Change::type_grid_key;
         if (id == kAddRomFolder)
         {
             browse("", *look, *prefs);

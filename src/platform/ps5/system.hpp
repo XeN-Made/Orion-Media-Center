@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
+#include <vector>
 
 namespace hui::sys
 {
@@ -69,6 +70,10 @@ void art_trace(const char *step, bool reset = false);
 // otherwise, a page that is not 200 included. Blocking: call it from a
 // worker thread. On a PC it always says there is no network.
 bool http_get(const std::string &url, std::size_t limit, std::string *body, std::string *error);
+// The same with request headers ("Authorization: Bearer <key>"), sent to the
+// first address only: never on to wherever a redirect points.
+bool http_get(const std::string &url, const std::vector<std::string> &headers, std::size_t limit,
+              std::string *body, std::string *error);
 
 // The same for a large file: written to `path` as it arrives (through
 // <path>.part, renamed when complete), so it never sits in memory. ORION's

@@ -144,6 +144,46 @@ TEST(ArtFetcher, DownloadsWhatMatchesAndReportsTheRest)
     EXPECT_EQ(art.take_missing(), std::vector<std::string>{"rom-000000000002"});
 }
 
+TEST(ArtFetcher, AsksSteamGridDbForWhatTheOthersLack)
+{
+    const std::string dir = ::testing::TempDir() + "hui-art-grid";
+    std::remove((dir + "/art/Nintendo - Nintendo DS/Starfall (USA).png").c_str());
+    FakeServer server;
+    server.pages[kDs] = R"(<a href="Chrono%20Trigger%20%28USA%29.png">)";
+    server.pages["https://cdn.example/starfall.png"] = kPng;
+    std::vector<std::string> searched;
+    const orion::HttpGetWith grid = [&](const std::string &url, const std::vector<std::string> &,
+                                        std::size_t, std::string *body, std::string *)
+    {
+        searched.push_back(url);
+        *body = url.find("/search/") != std::string::npos
+                    ? R"({"success": true, "data": [{"id": 3}]})"
+                    : R"({"success": true, "data": [{"mime": "image/png",
+                          "url": "https://cdn.example/starfall.png"}]})";
+        return true;
+    };
+    orion::ArtFetcher art(server.get());
+    art.set_grid_source("k", grid);
+    ASSERT_TRUE(art.start({job("rom-000000000002", "Starfall (USA).nds", dir)}, dir + "/art.txt"));
+    art.wait();
+    EXPECT_EQ(art.progress().found, 1);
+    EXPECT_EQ(art.progress().missing, 0);
+    ASSERT_EQ(searched.size(), 2u);
+    EXPECT_NE(searched[0].find("/autocomplete/Starfall"), std::string::npos);
+    std::string bytes;
+    ASSERT_TRUE(save::read_file(dir + "/art/Nintendo - Nintendo DS/Starfall (USA).png", &bytes));
+    EXPECT_EQ(bytes, kPng);
+
+    // No key: SteamGridDB is not asked, and the game stays missing.
+    searched.clear();
+    art.set_grid_source("", grid);
+    ASSERT_TRUE(
+        art.start({job("rom-000000000004", "Comet Post (USA).nds", dir)}, dir + "/art.txt"));
+    art.wait();
+    EXPECT_EQ(art.progress().missing, 1);
+    EXPECT_TRUE(searched.empty());
+}
+
 TEST(ArtFetcher, StopsAskingWhenTheNetworkIsGone)
 {
     const std::string dir = ::testing::TempDir() + "hui-art-offline";

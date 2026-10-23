@@ -23,6 +23,7 @@
 #include "orion/backdrop_copies.hpp"
 #include "orion/languages.hpp"
 #include "orion/registered_titles.hpp"
+#include "orion/steamgriddb.hpp"
 #include "orion/look.hpp"
 #include "orion/playtime.hpp"
 #include "orion/prefs.hpp"
@@ -149,6 +150,7 @@ enum class Typing : std::uint8_t
     theme_name,   // from Settings > Save as new theme
     art_folder,   // from Settings > Box art > Your own folder
     rom_folder,   // from Settings > Storage > Add a ROM folder
+    grid_key,     // from Settings > Box art > SteamGridDB key
 };
 
 // Tags of the menu items.
@@ -169,6 +171,7 @@ enum : int
     kItemRename,
     kItemPicture,         // Choose picture…
     kItemOwnPicture,      // Use its own picture
+    kItemFindArt,         // Find other art… (SteamGridDB)
     kItemPickUp,          // the picture browser: up one folder
     kItemPickMore,        // its next page
     kItemPickLess,        // its page before
@@ -667,6 +670,8 @@ class Library final : public app::Concept
         take_update_result();
         tidy_update_folder();
         start_resume_watcher();
+        settings_.set_grid_key(
+            !orion::read_service_key(context_.library.state_dir, orion::kSteamGridDb).empty());
         rebuild_tabs(start);
         restyle();
         rebuild();
@@ -884,8 +889,11 @@ class Library final : public app::Concept
         }
         // One layer has the input: the keyboard, then a menu, then the setup
         // or Settings, then the library itself.
+        poll_preview(feedback);
         if (dialog_.is_open())
             update_dialog(input, dt, feedback);
+        else if (previewing())
+            update_preview(input, feedback);
         else if (typing_ != Typing::none)
             update_typing(input, feedback);
         else if (menu_.is_open())
@@ -1820,6 +1828,11 @@ class Library final : public app::Concept
         case orion::SettingsPanel::Change::art_folder:
             art_folder_changed();
             break;
+        case orion::SettingsPanel::Change::type_grid_key:
+            start_typing(Typing::grid_key,
+                         orion::read_service_key(context_.library.state_dir, orion::kSteamGridDb));
+            feedback.play(audio::Cue::modal_open);
+            break;
         case orion::SettingsPanel::Change::type_art_folder:
             start_typing(Typing::art_folder, orion::art_folder(prefs_, context_.library.state_dir));
             feedback.play(audio::Cue::modal_open);
@@ -1920,10 +1933,12 @@ class Library final : public app::Concept
 
     static std::size_t limit_of(Typing typing)
     {
-        return typing == Typing::search                                       ? kMaxQuery
-               : typing == Typing::art_folder || typing == Typing::rom_folder ? kMaxPath
-               : typing == Typing::rename_title                               ? orion::kMaxTitleName
-                                                                              : kMaxName;
+        return typing == Typing::search ? kMaxQuery
+               : typing == Typing::art_folder || typing == Typing::rom_folder ||
+                       typing == Typing::grid_key
+                   ? kMaxPath
+               : typing == Typing::rename_title ? orion::kMaxTitleName
+                                                : kMaxName;
     }
 
     std::string &buffer()
@@ -1974,6 +1989,22 @@ class Library final : public app::Concept
         if (typing == Typing::rename_title)
         {
             rename_title(feedback);
+            return;
+        }
+        if (typing == Typing::grid_key)
+        {
+            const std::string failed =
+                orion::write_service_key(context_.library.state_dir, orion::kSteamGridDb, name_);
+            const bool given =
+                !orion::read_service_key(context_.library.state_dir, orion::kSteamGridDb).empty();
+            settings_.set_grid_key(given);
+            settings_.refresh(look_, prefs_);
+            if (!failed.empty())
+                show_note(false, trf("Could not save the key: {0}", {failed}));
+            else
+                show_note(true,
+                          given ? tr("SteamGridDB key saved") : tr("SteamGridDB key removed"));
+            feedback.play(failed.empty() ? audio::Cue::saved : audio::Cue::error);
             return;
         }
         if (typing == Typing::rom_folder)
@@ -2050,6 +2081,173 @@ class Library final : public app::Concept
     // ---- menus ----
 
     // ---- the player's own picture for a title ----
+
+    // ---- Find other art: SteamGridDB's covers, looked through on the tile ----
+
+    bool previewing() const
+    {
+        return !preview_id_.empty() && !preview_files_.empty();
+    }
+
+    void find_other_art(app::Feedback &feedback)
+    {
+        const Title *title = find_title(menu_title_);
+        const std::string key =
+            orion::read_service_key(context_.library.state_dir, orion::kSteamGridDb);
+        std::string why;
+        if (title == nullptr)
+            return;
+        if (!sys::on_console())
+            why = tr("Pictures are downloaded on the console");
+        else if (key.empty())
+            why = tr("Add your SteamGridDB key first: Settings, Box art");
+        else if (picker_.busy() || !preview_id_.empty())
+            why = tr("Still looking: try again in a moment");
+        if (!why.empty())
+        {
+            show_note(false, why);
+            feedback.play(audio::Cue::error);
+            return;
+        }
+        const std::string name = title->own_name.empty() ? title->name : title->own_name;
+        preview_id_ = title->id;
+        preview_name_ = title->name;
+        preview_was_ = title->icon;
+        preview_files_.clear();
+        preview_index_ = 0;
+        picker_.search(key, name, context_.library.state_dir + "/art/picks", title->id);
+        show_note(true, trf("Looking on SteamGridDB for {0}…", {title->name}));
+        feedback.play(audio::Cue::select);
+    }
+
+    // The covers as they arrive; the first one shows on the tile at once.
+    void poll_preview(app::Feedback &feedback)
+    {
+        if (preview_id_.empty())
+            return;
+        for (auto &[index, path] : picker_.take_ready())
+        {
+            (void)index;
+            preview_files_.push_back(path);
+            if (preview_files_.size() == 1)
+                context_.new_icons.emplace_back(preview_id_, path);
+        }
+        if (!picker_.take_finished())
+        {
+            if (previewing())
+                keep_preview_note();
+            return;
+        }
+        if (keeping_)
+        {
+            // A cover kept (or its download failed): the preview ends.
+            const std::string kept = picker_.kept();
+            context_.new_icons.emplace_back(preview_id_, preview_was_);
+            if (!kept.empty())
+            {
+                context_.custom_art_changed = true;
+                show_note(true, trf("New picture for {0}", {preview_name_}));
+                feedback.play(audio::Cue::saved);
+            }
+            else
+            {
+                show_note(false, trf("Could not get box art: {0}", {picker_.error()}));
+                feedback.play(audio::Cue::error);
+            }
+            end_preview();
+            return;
+        }
+        if (preview_files_.empty())
+        {
+            show_note(false, picker_.error().empty()
+                                 ? trf("SteamGridDB has no covers for {0}", {preview_name_})
+                                 : trf("Could not get box art: {0}", {picker_.error()}));
+            feedback.play(audio::Cue::error);
+            end_preview();
+        }
+    }
+
+    void keep_preview_note()
+    {
+        launch_ok_ = true;
+        launch_message_ =
+            keeping_
+                ? tr("Downloading the cover…")
+                : trf("Cover {0} of {1}  ·  Left and Right to look, Cross keeps "
+                      "it, Circle puts the old one back",
+                      {std::to_string(preview_index_ + 1), std::to_string(preview_files_.size())});
+        launch_shown_ = 2.0f;
+    }
+
+    void update_preview(const InputFrame &input, app::Feedback &feedback)
+    {
+        if (keeping_)
+            return;
+        if (input.nav == Direction::left || input.nav == Direction::right)
+        {
+            const int step = input.nav == Direction::right ? 1 : -1;
+            const int count = static_cast<int>(preview_files_.size());
+            const int next = preview_index_ + step;
+            if (next < 0 || next >= count)
+            {
+                if (!input.nav_repeat)
+                    feedback.play(audio::Cue::error);
+                return;
+            }
+            preview_index_ = next;
+            context_.new_icons.emplace_back(preview_id_,
+                                            preview_files_[static_cast<std::size_t>(next)]);
+            feedback.play(audio::Cue::focus);
+            keep_preview_note();
+            return;
+        }
+        if (input.is_pressed(Action::confirm))
+        {
+            // The full cover, under the title's ID in the player's pictures.
+            const std::string folder = custom_art_folder();
+            save::ensure_directory(folder);
+            for (const char *old : {".png", ".jpg", ".jpeg"})
+                std::remove((folder + "/" + preview_id_ + old).c_str());
+            const std::string file = preview_files_[static_cast<std::size_t>(preview_index_)];
+            const std::size_t dash = file.rfind('-');
+            const std::size_t cover = static_cast<std::size_t>(std::atoi(file.c_str() + dash + 1));
+            if (picker_.keep(cover, folder + "/" + preview_id_))
+            {
+                keeping_ = true;
+                keep_preview_note();
+                feedback.play(audio::Cue::select);
+            }
+            return;
+        }
+        if (input.is_pressed(Action::back))
+        {
+            context_.new_icons.emplace_back(preview_id_, preview_was_);
+            end_preview();
+            feedback.play(audio::Cue::back);
+        }
+    }
+
+    void end_preview()
+    {
+        preview_id_.clear();
+        preview_files_.clear();
+        keeping_ = false;
+        launch_shown_ = std::min(launch_shown_, 4.0f);
+    }
+
+    // SteamGridDB for the box art downloader: the player's key, as it is now.
+    void arm_grid()
+    {
+        art_.set_grid_source(
+            orion::read_service_key(context_.library.state_dir, orion::kSteamGridDb), grid_http());
+    }
+
+    static orion::HttpGetWith grid_http()
+    {
+        return [](const std::string &url, const std::vector<std::string> &headers,
+                  std::size_t limit, std::string *body, std::string *error)
+        { return sys::http_get(url, headers, limit, body, error); };
+    }
 
     std::string custom_art_folder() const
     {
@@ -2233,6 +2431,10 @@ class Library final : public app::Concept
         ui::MenuItem picture = menu_item(tr("Choose picture…"));
         picture.tag = kItemPicture;
         items.push_back(picture);
+        ui::MenuItem other = menu_item(tr("Find other art…"));
+        other.tag = kItemFindArt;
+        other.shortcut = "SteamGridDB";
+        items.push_back(other);
         if (!title.own_icon.empty())
         {
             ui::MenuItem own = menu_item(tr("Use its own picture"));
@@ -2682,6 +2884,11 @@ class Library final : public app::Concept
             use_own_picture(feedback);
             return;
         }
+        if (tag == kItemFindArt)
+        {
+            find_other_art(feedback);
+            return;
+        }
         if (tag == kItemPickUp || tag == kItemPickMore || tag == kItemPickLess ||
             (tag >= kItemPickPlace && tag < kItemPickDir) ||
             (tag >= kItemPickDir && tag < kItemPickFile))
@@ -2740,6 +2947,8 @@ class Library final : public app::Concept
             }
             if (title->is_rom())
             {
+                if (!art_.running())
+                    arm_grid();
                 if (art_.running() ||
                     !art_.start({art_job(*title)}, context_.library.state_dir + "/art.txt"))
                 {
@@ -3013,6 +3222,7 @@ class Library final : public app::Concept
         }
         const std::string &state = context_.library.state_dir;
         sys::art_trace(("starting the art thread for " + std::to_string(count) + " games").c_str());
+        arm_grid();
         if (!art_.start(std::move(jobs), state + "/art.txt"))
             return;
         sys::art_trace("art thread started");
@@ -5011,6 +5221,7 @@ class Library final : public app::Concept
             : typing_ == Typing::theme_name   ? tr("Name the new theme")
             : typing_ == Typing::art_folder   ? tr("A folder under /data or /mnt")
             : typing_ == Typing::rom_folder   ? tr("A folder of games, like /mnt/usb0/roms")
+            : typing_ == Typing::grid_key     ? tr("Your SteamGridDB API key; empty removes it")
                                               : tr("Name the new tab");
         const bool empty = text.empty();
         ui::text(list, fonts.regular, empty ? placeholder.c_str() : text.c_str(), field.x + 28,
@@ -5112,6 +5323,15 @@ class Library final : public app::Concept
     // behind: Check now starts a new one (check_for_updates).
     std::unique_ptr<orion::UpdateCheck> updates_ = new_update_check();
     bool data_missing_ = false; // no /data in ORION's sandbox (ShadowMountPlus)
+    // Find other art: the title looked through, its picture before, the
+    // covers so far, the one shown, and whether the full one is coming.
+    orion::GridPicker picker_{grid_http()};
+    std::string preview_id_;
+    std::string preview_name_;
+    std::string preview_was_;
+    std::vector<std::string> preview_files_;
+    int preview_index_ = 0;
+    bool keeping_ = false;
     // Choose picture…: where the browser is (empty: the places), what is
     // there, and the page shown.
     std::string pick_dir_;

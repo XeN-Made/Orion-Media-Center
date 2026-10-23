@@ -77,6 +77,7 @@ class SettingsPanel
         fetch_art,       // "Find box art now" was chosen
         art_folder,      // the box art folder changed (prefs.art_dir)
         type_art_folder, // "Your own folder" was chosen: the screen asks for a path
+        type_grid_key,   // "SteamGridDB key" was chosen: the screen asks for it
         add_rom_folder,  // "Type a path" in the folder browser: the screen asks for one, for
                          // emulator_page()
         add_folder, // "Use this folder" in the folder browser: browse_result(), for emulator_page()
@@ -129,6 +130,11 @@ class SettingsPanel
     }
     // What the box art row says under itself: the last run, or this one.
     void set_art_status(std::string status);
+    // Whether the player has given a SteamGridDB key (orion/steamgriddb.hpp).
+    void set_grid_key(bool given)
+    {
+        grid_key_ = given;
+    }
     // ORION's folder as the launch helper sees it, and what its backdrops
     // folder holds (shown under Storage).
     void set_storage(std::string self_path, int backdrops)
@@ -302,8 +308,10 @@ class SettingsPanel
     std::string browse_path_;
     std::vector<std::string> browse_folders_;
     std::vector<std::pair<std::string, std::string>> places_;
-    int folder_page_ = -1;    // the game folder whose page is open (in prefs.rom_folders); -1: none
-    std::string scan_status_; // empty until a scan reports: what a scan finds
+    int folder_page_ = -1; // the game folder whose page is open (in prefs.rom_folders); -1: none
+    std::string scan_status_;
+    bool grid_key_ =
+        false; // a SteamGridDB key is in keys.txt // empty until a scan reports: what a scan finds
     std::string update_status_ = "Not checked yet";
     std::string update_ready_;
     std::string version_;

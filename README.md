@@ -264,6 +264,17 @@ you chose for it.
   small one.
 - Options on a title: **Download HD picture** (console games) or **Download
   box art again** (emulated games) fetches its picture afresh.
+- **Your own pictures**: Options on a title, **Choose picture…**, browses your
+  drives for a PNG or JPEG. Or drop one into `/data/orion/custom-art` named
+  after the game (`Chrono Trigger.png`) or its title ID (`PPSA01234.jpg`);
+  case and punctuation do not matter. **Use its own picture** puts the
+  original back.
+- **SteamGridDB**: with a key of your own (free: steamgriddb.com, your
+  profile, Preferences, API), games no other source has a cover for get one
+  from SteamGridDB, and Options on any title, **Find other art…**, shows up to
+  eight covers on the tile: Left and Right to look, Cross keeps one, Circle
+  puts the old one back. Enter the key in Settings, Box art, or put a line
+  `steamgriddb = <your key>` in `/data/orion/keys.txt`.
 - Background music: every `.ogg` in `/data/orion/music` joins ORION's own
   tracks. Settings, Sound sets the volumes and skips a song.
 

@@ -220,6 +220,29 @@ void ArtFetcher::run(std::vector<ArtJob> jobs, std::string log_path)
         }
         settle(job, &Progress::found, note, "");
     };
+    // The last source: SteamGridDB, by the game's name, when the player has
+    // a key. True when it had a cover (written and reported by keep).
+    const std::string grid_key = grid_key_;
+    const HttpGetWith grid_get = grid_get_;
+    const auto from_grid = [&](const ArtJob &job)
+    {
+        if (grid_key.empty() || !grid_get)
+            return false;
+        const std::size_t dot = job.rom_file.rfind('.');
+        const std::string name = job.name.empty() ? job.rom_file.substr(0, dot) : job.name;
+        std::vector<GridCover> covers;
+        std::string error;
+        std::string bytes;
+        if (!find_grid_covers(grid_get, grid_key, name, 1, &covers, &error) || covers.empty() ||
+            !get_(covers.front().url, kMaxPicture, &bytes, &error) || !is_picture(bytes))
+        {
+            append_line(log_path, job.system + "/" + job.rom_file + ": SteamGridDB: " +
+                                      (error.empty() ? std::string("no cover") : error));
+            return false;
+        }
+        keep(job, bytes, "SteamGridDB: " + covers.front().url);
+        return true;
+    };
     for (const ArtJob &job : jobs)
     {
         if (cancel_.load())
@@ -239,7 +262,8 @@ void ArtFetcher::run(std::vector<ArtJob> jobs, std::string log_path)
                 id = library::gametdb_id(switch_ids(job, log_path), job.name);
             if (id.empty())
             {
-                settle(job, &Progress::missing, "no GameTDB ID for \"" + job.name + "\"", "");
+                if (!from_grid(job))
+                    settle(job, &Progress::missing, "no GameTDB ID for \"" + job.name + "\"", "");
                 continue;
             }
             std::string bytes;
@@ -255,7 +279,8 @@ void ArtFetcher::run(std::vector<ArtJob> jobs, std::string log_path)
             }
             if (used.empty())
             {
-                settle(job, &Progress::missing, "GameTDB has no cover for " + id, "");
+                if (!from_grid(job))
+                    settle(job, &Progress::missing, "GameTDB has no cover for " + id, "");
                 continue;
             }
             failures_in_a_row = 0;
@@ -288,7 +313,8 @@ void ArtFetcher::run(std::vector<ArtJob> jobs, std::string log_path)
         const std::string picture = library::match_art(job.rom_file, indexes[job.system]);
         if (picture.empty())
         {
-            settle(job, &Progress::missing, "no picture", "");
+            if (!from_grid(job))
+                settle(job, &Progress::missing, "no picture", "");
             continue;
         }
         std::string bytes;
