@@ -210,12 +210,12 @@ int main()
         for (const std::string &root : roots)
         {
             struct stat info = {};
-            const int seen = ::lstat(root.c_str(), &info);
+            const int seen = ::stat(root.c_str(), &info);
             int missed = 0;
             const int set = save::open_up_tree(root, &missed);
             changed += set;
             failed += missed;
-            report += root + ": lstat " + std::to_string(seen) + " mode " +
+            report += root + ": stat " + std::to_string(seen) + " mode " +
                       std::to_string(info.st_mode) + ", set " + std::to_string(set) + ", refused " +
                       std::to_string(missed) + "\n";
         }

@@ -221,6 +221,18 @@ bool ensure_directory(const std::string &path)
     return ::stat(path.c_str(), &info) == 0 && S_ISDIR(info.st_mode);
 }
 
+namespace
+{
+
+// lstat where it works, so a link is seen as one; a console's app sandbox
+// fails it on /data (a test read -1 for /data/orion), and stat there.
+bool look(const std::string &path, struct stat *info)
+{
+    return ::lstat(path.c_str(), info) == 0 || ::stat(path.c_str(), info) == 0;
+}
+
+} // namespace
+
 int open_up_tree(const std::string &root, int *failed)
 {
     if (failed != nullptr)
@@ -244,7 +256,7 @@ int open_up_tree(const std::string &root, int *failed)
         struct stat info
         {
         };
-        if (::lstat(folder.c_str(), &info) != 0 || !S_ISDIR(info.st_mode))
+        if (!look(folder, &info) || !S_ISDIR(info.st_mode))
             continue;
         // Set whatever the mode reads as: inside a console's app sandbox a
         // mounted /data reports modes the disk does not have (a test read
@@ -264,7 +276,7 @@ int open_up_tree(const std::string &root, int *failed)
             struct stat file
             {
             };
-            if (::lstat(path.c_str(), &file) == 0 && S_ISREG(file.st_mode))
+            if (look(path, &file) && S_ISREG(file.st_mode))
                 open_up(path, (file.st_mode & 0111) != 0 ? 0777 : 0666, false);
         }
     }
