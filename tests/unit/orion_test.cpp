@@ -226,6 +226,19 @@ TEST(OrionPrefs, TitlesKeepThePlayersNames)
     EXPECT_EQ(back.title_names.size(), 1u);
 }
 
+TEST(OrionPrefs, AutobootAndRestModeAreOffUntilTurnedOn)
+{
+    const std::string dir = fresh_dir("orion-prefs-wake");
+    EXPECT_FALSE(orion::load_prefs(dir).autostart);
+    EXPECT_FALSE(orion::load_prefs(dir).reopen_after_rest);
+    orion::LibraryPrefs prefs;
+    prefs.reopen_after_rest = true;
+    ASSERT_TRUE(orion::save_prefs(dir, prefs));
+    const orion::LibraryPrefs back = orion::load_prefs(dir);
+    EXPECT_TRUE(back.reopen_after_rest);
+    EXPECT_FALSE(back.autostart);
+}
+
 TEST(OrionPrefs, RomFoldersAreKept)
 {
     const std::string dir = fresh_dir("orion-prefs-rom-folders");

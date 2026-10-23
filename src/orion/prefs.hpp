@@ -106,6 +106,7 @@ struct Placement
 //     "ask_player": true,
 //     "setup_done": true,
 //     "autostart": false,
+//     "reopen_after_rest": false,
 //     "every_version": false,
 //     "language": "es",
 //     "moved_leave_shelf": true,
@@ -158,6 +159,10 @@ struct LibraryPrefs
     // <state_dir>/autostart-off, which the payload honours. Off until the
     // player turns it on: opening by itself is a choice, not a default.
     bool autostart = false;
+    // ORION opens when the console wakes from rest mode on the home screen
+    // (payload/resume). On writes <state_dir>/reopen-after-rest, which the
+    // watcher looks for; off by default, like autostart.
+    bool reopen_after_rest = false;
     // Every file of a game RetroArch plays has a cover (bad dumps, hacks,
     // other regions); off, only the best of them (library::keep_best_versions).
     bool every_version = false;

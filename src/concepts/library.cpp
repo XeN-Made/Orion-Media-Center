@@ -101,6 +101,8 @@ constexpr std::size_t kMaxPath = 160; // bytes, as orion::valid_art_dir takes th
 // The launch helper shipped in the app folder, and the console's ELF loader.
 constexpr const char *kLauncherPath = "/app0/assets/payloads/orion-launcher.elf";
 constexpr int kLoaderPort = 9021;
+// The rest-mode watcher, which ORION sends itself (payload/resume).
+constexpr const char *kResumePath = "/app0/assets/payloads/orion-resume.elf";
 constexpr float kHoldToDelete = 1.5f; // seconds of Cross on Delete
 // The launch helper reads a request of 4 KiB; a game's path is one line of it.
 constexpr std::size_t kMaxRequestPath = 1024;
@@ -648,6 +650,7 @@ class Library final : public app::Concept
         take_remove_result();
         take_update_result();
         tidy_update_folder();
+        start_resume_watcher();
         retire_pending_ = sys::on_console() && old_orion() != nullptr;
         rebuild_tabs(start);
         restyle();
@@ -1235,6 +1238,35 @@ class Library final : public app::Concept
             std::remove(off.c_str());
         else
             save::write_atomic(off, "ORION's autostart is off (Settings, Library)\n");
+        // The rest-mode watcher the same way: the file says "on".
+        const std::string on = state + "/reopen-after-rest";
+        if (prefs_.reopen_after_rest)
+            save::write_atomic(on, "ORION opens after rest mode (Settings, Library)\n");
+        else
+            std::remove(on.c_str());
+    }
+
+    // The rest-mode watcher (payload/resume): sent while the setting is on,
+    // as ORION starts and when it is turned on. A second copy ends by itself.
+    // It opens the title in title.txt, which follows ORION's own title ID.
+    void start_resume_watcher() const
+    {
+        const std::string &state = context_.library.state_dir;
+        const std::string self = own_title_id();
+        if (!sys::on_console() || state.empty() || self.empty())
+            return;
+        save::write_atomic(state + "/title.txt", self + "\n");
+        if (!prefs_.reopen_after_rest)
+            return;
+        save_prefs(); // the "on" file, for a watcher that wakes before any change
+        std::string elf;
+        if (!save::read_file(kResumePath, &elf, 1u << 20) || elf.empty())
+            return;
+        const int error = sys::send_payload(elf, kLoaderPort);
+        orion::update_log(update_log_path(), error == 0 ? "orion: the rest-mode watcher is sent"
+                                                        : "orion: could not send the rest-mode "
+                                                          "watcher (errno " +
+                                                              std::to_string(error) + ")");
     }
 
     // ---- input ----
@@ -1756,6 +1788,8 @@ class Library final : public app::Concept
             orion::save_look(context_.library.state_dir, look_);
             break;
         case orion::SettingsPanel::Change::prefs:
+            if (prefs_.reopen_after_rest)
+                start_resume_watcher();
             tabs_changed();
             break;
         case orion::SettingsPanel::Change::new_tab:

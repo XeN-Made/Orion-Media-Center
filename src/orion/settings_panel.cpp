@@ -38,6 +38,7 @@ enum : int
     kGroupSystems,
     kAskPlayer,
     kAutostart,
+    kReopenAfterRest,
     kPayloadInfo,
     kPayloadFolder,
     kRunSetup,
@@ -489,6 +490,9 @@ void SettingsPanel::build_library(const LibraryPrefs &prefs)
         .description = tr("A title moved to your own tab leaves Games, Homebrew or Media");
     form_.add_toggle(kReturn, tr("Return to ORION after a game"), prefs.return_on_close)
         .description = tr("Close a game from the PS button menu and ORION opens again");
+    form_.add_toggle(kReopenAfterRest, tr("Open ORION after rest mode"), prefs.reopen_after_rest)
+        .description = tr("When the console wakes on the home screen, ORION opens; a game left "
+                          "running stays in front");
     form_.add_toggle(kAutostart, tr("Autoboot ORION after the jailbreak"), prefs.autostart)
         .description = tr("ORION opens on its own after each jailbreak, once the payload below is "
                           "in your autoloader");
@@ -1342,6 +1346,9 @@ SettingsPanel::Change SettingsPanel::handle(const InputFrame &input, ui::Feedbac
     }
     case kAutostart:
         prefs->autostart = form_.toggle_value(kAutostart);
+        return Change::prefs;
+    case kReopenAfterRest:
+        prefs->reopen_after_rest = form_.toggle_value(kReopenAfterRest);
         return Change::prefs;
     case kAskPlayer:
         prefs->ask_player = form_.toggle_value(kAskPlayer);

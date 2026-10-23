@@ -796,7 +796,8 @@ static void write_update_result(const char *stage, const char *target, int ok,
 
 // ---- @moved-from: ORION installed under a new title ID ----
 
-#define REGISTER_WAIT_S 120 // ShadowMountPlus registers a new folder in about ten seconds
+#define REGISTER_WAIT_S 300 // ShadowMountPlus lists a new folder once it has scanned it
+#define RESCAN_EVERY_S 30
 
 // A title's folder: under /data/homebrew or /mnt, named after the title.
 static int title_folder(const char *title, const char *folder)
@@ -822,18 +823,32 @@ static void carry_records(const char *from, const char *to)
                                       : "move: could not copy the play log");
 }
 
-// Waits for the system to list the new title (its /user/app folder).
+// Waits for the system to list the new title. ShadowMountPlus finds a new
+// folder on its own schedule, so it is asked to scan now, and again every
+// RESCAN_EVERY_S (it defers a scan while an app is starting or open).
 static int wait_for_registration(const char *title)
 {
-    char path[64];
-    snprintf(path, sizeof(path), "/user/app/%s/sce_sys/param.json", title);
+    char app[64];
+    char meta[64];
+    snprintf(app, sizeof(app), "/user/app/%s/sce_sys/param.json", title);
+    snprintf(meta, sizeof(meta), "/user/appmeta/%s/param.json", title);
+    static char body[4096];
     for (int waited = 0; waited < REGISTER_WAIT_S; ++waited)
     {
-        if (access(path, F_OK) == 0)
+        if (access(app, F_OK) == 0 || access(meta, F_OK) == 0)
         {
             say("move: %s is registered after %d s", title, waited);
             return 1;
         }
+        if (waited % RESCAN_EVERY_S == 0)
+        {
+            char error[160] = "";
+            const int asked = smp_call("/api/v1/scan", "{\"reset_attempts\": true}", body,
+                                       sizeof(body), error, sizeof(error));
+            say("move: asked ShadowMountPlus to scan: %s", asked ? "queued" : error);
+        }
+        if (waited == 20)
+            notify("ORION is waiting for the system to list its new title ID");
         sleep(1);
     }
     say("move: %s is not registered after %d s", title, REGISTER_WAIT_S);
@@ -1046,7 +1061,18 @@ int main(void)
         if (ok && moving)
         {
             carry_records(moved_folder, update_target);
-            if (!wait_for_registration(job.title))
+            if (wait_for_registration(job.title))
+            {
+                // The old ORION goes now, while nothing is open: ShadowMountPlus
+                // refuses to touch a title that is. (The new ORION also looks
+                // for it when it opens, in case this did not happen.)
+                char removed[256] = "";
+                say("move: removing the old ORION (%s)",
+                    remove_game(1, moved_from, "the old ORION", removed, sizeof(removed))
+                        ? "done"
+                        : removed);
+            }
+            else
             {
                 // The new ORION is in place but not listed yet: the old one
                 // opens instead, and the new tile appears when it is listed.

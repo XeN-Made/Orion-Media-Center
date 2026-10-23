@@ -260,6 +260,8 @@ author = ORION
 "USB drive" = "Unidade USB"
 
 # src/orion/settings_panel.cpp
+"Open ORION after rest mode" = "Abrir o ORION depois do modo de repouso"
+"When the console wakes on the home screen, ORION opens; a game left running stays in front" = "Se o console acordar na tela inicial, o ORION abre; um jogo deixado aberto continua na frente"
 "Finds {0}, and their games" = "Procura {0} e seus jogos"
 "A folder of discs (and the folders in it), under /data or /mnt" = "Uma pasta de discos (e as subpastas), dentro de /data ou /mnt"
 "A game more than one emulator plays asks the first time; Options, Play with changes it" = "Um jogo que vários emuladores rodam pergunta na primeira vez; Options, Jogar com muda"
