@@ -84,11 +84,17 @@ void RegisteredTitles::run(std::string state_dir, int port)
         // Folders without metadata (payload placeholders) are no titles.
         library::Title title;
         std::string text;
+        // Apps a payload installs as a link to its web page (Payload
+        // Manager, ShadowMount's own tile) have no appmeta: their param.json
+        // and icon are in /user/app/<ID>/sce_sys, so they are looked for there last.
+        const std::string own = "/user/app/" + app.name + "/sce_sys/";
         const bool known =
             (ftp.get("/user/appmeta/" + app.name + "/param.json", kMaxParam, &text) &&
              library::read_param_json(text, &title)) ||
             (ftp.get("/system_data/priv/appmeta/" + app.name + "/param.sfo", kMaxParam, &text) &&
-             library::read_param_sfo(text, &title));
+             library::read_param_sfo(text, &title)) ||
+            (ftp.get(own + "param.json", kMaxParam, &text) &&
+             library::read_param_json(text, &title));
         if (!known || title.id != app.name || title.name.empty())
             continue;
         lines[title.id] = library::registered_line(title);
@@ -96,7 +102,8 @@ void RegisteredTitles::run(std::string state_dir, int port)
         const std::string icon = icons + "/" + app.name + ".png";
         struct stat info = {};
         if (::stat(icon.c_str(), &info) != 0 &&
-            ftp.get("/user/appmeta/" + app.name + "/icon0.png", kMaxIcon, &text) &&
+            (ftp.get("/user/appmeta/" + app.name + "/icon0.png", kMaxIcon, &text) ||
+             ftp.get(own + "icon0.png", kMaxIcon, &text)) &&
             save::write_atomic(icon, text).empty())
             ++result.icons;
     }
