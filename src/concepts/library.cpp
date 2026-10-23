@@ -779,9 +779,26 @@ class Library final : public app::Concept
     // Titles with no home-screen picture in their own folder get the
     // system's, fetched through the console's FTP server (orion/backdrop_copies.hpp).
     // Each title is asked about once (<ID>.png or <ID>.none).
+    // "The system has none" is not for ever: a game just installed gets its
+    // pictures a while later (a console showed two games marked so, their
+    // pic0.png there the next day). An answer this old is asked again.
+    static constexpr std::time_t kNoneFor = 12 * 60 * 60;
+
+    // Whether <file>.none says "none" still: there, and younger than kNoneFor.
+    static bool still_none(const std::string &file)
+    {
+        struct stat info = {};
+        if (::stat(file.c_str(), &info) != 0)
+            return false;
+        if (std::time(nullptr) - info.st_mtime < kNoneFor)
+            return true;
+        std::remove(file.c_str());
+        return false;
+    }
+
     void request_backdrops()
     {
-        if (context_.library.state_dir.empty())
+        if (context_.library.state_dir.empty() || backdrop_copies_.running())
             return;
         const std::string folder = backdrop_folder();
         std::vector<std::string> ids;
@@ -797,7 +814,7 @@ class Library final : public app::Concept
                  exists(title.path + "/sce_sys/pic1.png")))
                 continue;
             if (exists(folder + "/" + title.id + ".png") ||
-                exists(folder + "/" + title.id + ".none"))
+                still_none(folder + "/" + title.id + ".none"))
                 continue;
             ids.push_back(title.id);
         }
@@ -1695,6 +1712,9 @@ class Library final : public app::Concept
         restyle();
         rebuild();
         settings_.set_tabs(every_tab());
+        // Titles that joined (installed while ORION ran) get their pictures.
+        if (prefs_.game_backgrounds && sys::on_console())
+            request_backdrops();
     }
 
     // After the tabs changed: the tab bar, the covers and Settings follow.
@@ -2420,7 +2440,7 @@ class Library final : public app::Concept
                 path = folder + "/" + title.id + ".at9";
             else if (exists(title.path + "/sce_sys/snd0.at9"))
                 path = title.path + "/sce_sys/snd0.at9";
-            else if (!exists(folder + "/" + title.id + ".none"))
+            else if (!still_none(folder + "/" + title.id + ".none"))
             {
                 // Asked of the system once; the answer comes on a later frame.
                 if (sys::on_console() && !sound_copies_.running())
