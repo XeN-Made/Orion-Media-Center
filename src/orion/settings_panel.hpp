@@ -285,6 +285,8 @@ class SettingsPanel
     std::string current_tab_; // the library's tab behind Settings
     const ThemeLibrary *themes_ = nullptr;
     std::vector<LanguageChoice> languages_;
+    std::string on_word_; // the switches' On and Off (form_.style holds pointers)
+    std::string off_word_;
     const library::Emulator *emulator_ = nullptr;
     std::vector<TabEntry> tabs_;
     std::string tab_id_;
@@ -300,9 +302,8 @@ class SettingsPanel
     std::string browse_path_;
     std::vector<std::string> browse_folders_;
     std::vector<std::pair<std::string, std::string>> places_;
-    int folder_page_ = -1; // the game folder whose page is open (in prefs.rom_folders); -1: none
-    std::string scan_status_ = "Finds RetroArch, Porpoise, PS5SX2, PSwanStation, ProsperoEden and "
-                               "PS5-ECAM, and their games";
+    int folder_page_ = -1;    // the game folder whose page is open (in prefs.rom_folders); -1: none
+    std::string scan_status_; // empty until a scan reports: what a scan finds
     std::string update_status_ = "Not checked yet";
     std::string update_ready_;
     std::string version_;

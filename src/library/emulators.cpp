@@ -4,6 +4,7 @@
 
 #include "library/emulators.hpp"
 
+#include "core/i18n.hpp"
 #include "core/save_file.hpp"
 #include "library/art_match.hpp"
 #include "library/json.hpp"
@@ -573,12 +574,12 @@ namespace
 {
 
 constexpr KnownEmulator kKnownEmulators[] = {
-    {"retroarch", "RetroArch", "Every system its cores play"},
-    {"porpoise", "Porpoise", "GameCube, Wii"},
-    {"ps5sx2", "PS5SX2", "PS2"},
-    {"psswanstation", "PSwanStation", "PS1"},
-    {"eden", "ProsperoEden", "Switch"},
-    {"ecam", "PS5-ECAM", "Wii U, 3DS, DS, Switch"},
+    {"retroarch", "RetroArch", i18n::marked("Every system its cores play")},
+    {"porpoise", "Porpoise", i18n::marked("GameCube, Wii")},
+    {"ps5sx2", "PS5SX2", i18n::marked("PS2")},
+    {"psswanstation", "PSwanStation", i18n::marked("PS1")},
+    {"eden", "ProsperoEden", i18n::marked("Switch")},
+    {"ecam", "PS5-ECAM", i18n::marked("Wii U, 3DS, DS, Switch")},
 };
 constexpr const char *kPs1 = "Sony - PlayStation";
 constexpr const char *kGameCube = "Nintendo - GameCube";

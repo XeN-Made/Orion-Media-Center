@@ -4,6 +4,7 @@
 
 #include "orion/setup_panel.hpp"
 
+#include "core/i18n.hpp"
 #include "library/emulators.hpp"
 #include "ui/glyphs.hpp"
 
@@ -11,6 +12,9 @@
 
 namespace hui::orion
 {
+
+using i18n::tr;
+using i18n::trf;
 
 namespace
 {
@@ -38,8 +42,10 @@ enum : int
     kEmulatorRow = 100, // + the emulator's index, or a missing one's past them
 };
 
-constexpr const char *kStepNames[] = {"Welcome", "Look",     "Emulators", "Box art",
-                                      "Library", "Autoboot", "Done"};
+constexpr const char *kStepNames[] = {i18n::marked("Welcome"),   i18n::marked("Look"),
+                                      i18n::marked("Emulators"), i18n::marked("Box art"),
+                                      i18n::marked("Library"),   i18n::marked("Autoboot"),
+                                      i18n::marked("Done")};
 
 int sort_index(const std::string &key)
 {
@@ -62,7 +68,7 @@ SetupPanel::SetupPanel()
     sheet_.style.scrim = 0.35f;
     sheet_.style.title_size = 40.0f;
     sheet_.style.handle = false;
-    sheet_.set_title("Set up ORION");
+    sheet_.set_title(tr("Set up ORION"));
     sheet_.content = [this](ui::Canvas &canvas, const gfx::Rect &, float opacity)
     { draw_content(canvas, opacity); };
 
@@ -140,8 +146,19 @@ void SetupPanel::layout()
 
 void SetupPanel::build(const Look &look, const LibraryPrefs &prefs)
 {
+    // In the language chosen now: the title and the steps' names too.
+    sheet_.set_title(tr("Set up ORION"));
+    on_word_ = tr("On");
+    off_word_ = tr("Off");
+    form_.style.on_text = on_word_.c_str();
+    form_.style.off_text = off_word_.c_str();
+    std::vector<ui::WizardStep> steps;
+    for (const char *name : kStepNames)
+        steps.push_back({tr(name)});
+    steps_.set_steps(std::move(steps));
+    steps_.set_step(static_cast<int>(step_), true);
     form_.clear();
-    const auto next = [&](const char *label, const std::string &description)
+    const auto next = [&](const std::string &label, const std::string &description)
     {
         ui::FormRow &row = form_.add_action(kNext, label);
         row.chevron = true;
@@ -151,7 +168,7 @@ void SetupPanel::build(const Look &look, const LibraryPrefs &prefs)
     {
     case Step::welcome:
     {
-        form_.add_header("Welcome to ORION Media Center");
+        form_.add_header(tr("Welcome to ORION Media Center"));
         // The language first: everything after it reads in it.
         if (!languages_.empty())
         {
@@ -163,10 +180,10 @@ void SetupPanel::build(const Look &look, const LibraryPrefs &prefs)
                 if (languages_[i].code == prefs.language)
                     chosen = static_cast<int>(i);
             }
-            form_.add_choice(kLanguage, "Language", std::move(names), chosen).description =
-                "Automatic follows the console's language";
+            form_.add_choice(kLanguage, tr("Language"), std::move(names), chosen).description =
+                tr("Automatic follows the console's language");
         }
-        next("Get started", "A few choices, all of them in Settings later");
+        next(tr("Get started"), tr("A few choices, all of them in Settings later"));
         int games = 0;
         std::string emulators;
         for (std::size_t i = 0; emulator_ != nullptr && i < emulator_->apps.size(); ++i)
@@ -174,18 +191,19 @@ void SetupPanel::build(const Look &look, const LibraryPrefs &prefs)
             games += emulator_->apps[i].games;
             emulators += (i == 0 ? "" : ", ") + emulator_->apps[i].name;
         }
-        form_.add_value(kInfo, "On this console", std::to_string(titles_) + " titles");
-        form_.add_value(kInfoEmulators, "Emulators",
-                        emulators.empty() ? std::string("None yet")
-                                          : emulators + "  ·  " + std::to_string(games) +
-                                                (games == 1 ? " game" : " games"));
-        form_.add_action(kSkip, "Skip setup").description =
-            "Use ORION as it is; Settings (R3) has everything";
+        form_.add_value(kInfo, tr("On this console"),
+                        i18n::plural(titles_, "{0} title", "{0} titles"));
+        form_.add_value(kInfoEmulators, tr("Emulators"),
+                        emulators.empty()
+                            ? tr("None yet")
+                            : emulators + "  ·  " + i18n::plural(games, "{0} game", "{0} games"));
+        form_.add_action(kSkip, tr("Skip setup")).description =
+            tr("Use ORION as it is; Settings (R3) has everything");
         break;
     }
     case Step::look:
     {
-        form_.add_header("Look");
+        form_.add_header(tr("Look"));
         std::vector<std::string> names;
         int base = 0;
         for (std::size_t i = 0; themes_ != nullptr && i < themes_->size(); ++i)
@@ -195,93 +213,101 @@ void SetupPanel::build(const Look &look, const LibraryPrefs &prefs)
                 base = static_cast<int>(i);
         }
         if (names.empty())
-            names.emplace_back("ORION");
-        form_.add_choice(kBase, "Theme", std::move(names), base).description =
-            "ORION's galaxy glass, or another; the screen changes as you choose";
-        form_.add_toggle(kGameBackgrounds, "Game backgrounds", prefs.game_backgrounds).description =
-            "The focused game's picture behind the covers, as the home screen shows it";
-        next("Continue", "Colours, glass and more are in Settings, Appearance");
+            names.emplace_back("ORION"); // a name
+        form_.add_choice(kBase, tr("Theme"), std::move(names), base).description =
+            tr("ORION's galaxy glass, or another; the screen changes as you choose");
+        form_.add_toggle(kGameBackgrounds, tr("Game backgrounds"), prefs.game_backgrounds)
+            .description =
+            tr("The focused game's picture behind the covers, as the home screen shows it");
+        next(tr("Continue"), tr("Colours, glass and more are in Settings, Appearance"));
         break;
     }
     case Step::emulators:
     {
-        form_.add_header("Emulators");
+        form_.add_header(tr("Emulators"));
         int row = 0;
         for (std::size_t i = 0; emulator_ != nullptr && i < emulator_->apps.size(); ++i)
         {
             const library::EmulatorApp &app = emulator_->apps[i];
             form_
                 .add_value(kEmulatorRow + row++, app.name,
-                           std::to_string(app.games) + (app.games == 1 ? " game" : " games"))
-                .description = app.starts_games ? "ORION starts its games"
-                                                : "Its games open it; you pick the game there";
+                           i18n::plural(app.games, "{0} game", "{0} games"))
+                .description = app.starts_games ? tr("ORION starts its games")
+                                                : tr("Its games open it; you pick the game there");
         }
         for (const library::KnownEmulator &known : library::known_emulators())
         {
             if (emulator_ != nullptr && emulator_->app(known.key) != nullptr)
                 continue;
-            form_.add_value(kEmulatorRow + row++, known.name, "Not installed").description =
-                std::string(known.plays) + ": install it, then scan";
+            form_.add_value(kEmulatorRow + row++, known.name, tr("Not installed")).description =
+                trf("{0}: install it, then scan", {tr(known.plays)});
         }
-        form_.add_action(kScan, "Scan for emulators").description = scan_status_;
-        form_.add_toggle(kGroup, "Group emulator tabs", prefs.group_systems).description =
-            "One Emulators tab with a row of systems under it (L2 and R2), or a tab each";
-        next("Continue", "Game folders of your own: Settings, Emulators");
+        form_.add_action(kScan, tr("Scan for emulators")).description =
+            scan_status_.empty()
+                ? trf("Finds {0}, and their games",
+                      {"RetroArch, Porpoise, PS5SX2, PSwanStation, ProsperoEden, PS5-ECAM"})
+                : scan_status_;
+        form_.add_toggle(kGroup, tr("Group emulator tabs"), prefs.group_systems).description =
+            tr("One Emulators tab with a row of systems under it (L2 and R2), or a tab each");
+        next(tr("Continue"), tr("Game folders of your own: Settings, Emulators"));
         break;
     }
     case Step::art:
     {
-        form_.add_header("Box art");
-        form_.add_toggle(kArtAuto, "Find box art by itself", prefs.auto_art).description =
-            "Games without a cover get one from the internet while ORION runs";
+        form_.add_header(tr("Box art"));
+        form_.add_toggle(kArtAuto, tr("Find box art by itself"), prefs.auto_art).description =
+            tr("Games without a cover get one from the internet while ORION runs");
         const int place = art_place(prefs.art_dir);
-        std::vector<std::string> places(kArtPlaceNames, kArtPlaceNames + kArtPlaceCount);
+        std::vector<std::string> places =
+            i18n::tr_range(kArtPlaceNames, kArtPlaceNames + kArtPlaceCount);
         if (place >= kArtPlaceCount)
-            places.push_back("Your own folder");
-        form_.add_choice(kArtFolder, "Box art folder", std::move(places), place).description =
-            "Where covers go: " + art_folder(prefs, state_dir_);
-        next("Continue", "Find box art now and more: Settings, Box art");
+            places.push_back(tr("Your own folder"));
+        form_.add_choice(kArtFolder, tr("Box art folder"), std::move(places), place).description =
+            trf("Where covers go: {0}", {art_folder(prefs, state_dir_)});
+        next(tr("Continue"), tr("Find box art now and more: Settings, Box art"));
         break;
     }
     case Step::library:
     {
-        form_.add_header("Library");
-        form_.add_toggle(kReturn, "Return to ORION after a game", prefs.return_on_close)
-            .description = "Close a game from the PS button menu and ORION opens again";
-        form_.add_toggle(kReopen, "Reopen on last tab", prefs.reopen_last_tab).description =
-            "ORION starts on the tab you left it on";
+        form_.add_header(tr("Library"));
+        form_.add_toggle(kReturn, tr("Return to ORION after a game"), prefs.return_on_close)
+            .description = tr("Close a game from the PS button menu and ORION opens again");
+        form_.add_toggle(kReopen, tr("Reopen on last tab"), prefs.reopen_last_tab).description =
+            tr("ORION starts on the tab you left it on");
         form_
-            .add_choice(kSort, "Sort by", {kSortNames, kSortNames + kSortCount},
+            .add_choice(kSort, tr("Sort by"), i18n::tr_range(kSortNames, kSortNames + kSortCount),
                         sort_index(prefs.sort))
-            .description = "Every tab can have its own: Up from the first row of covers";
-        next("Continue", "Tabs of your own, themes per tab: Settings, Tabs");
+            .description = tr("Every tab can have its own: Up from the first row of covers");
+        next(tr("Continue"), tr("Tabs of your own, themes per tab: Settings, Tabs"));
         break;
     }
     case Step::autostart:
     {
-        form_.add_header("Autoboot");
+        form_.add_header(tr("Autoboot"));
         // A row that only shows a value never shows its description: what to
         // do goes on the toggle, the file's place on a row of its own.
-        form_.add_toggle(kAutostart, "Autoboot ORION after the jailbreak", prefs.autostart)
-            .description = "ORION opens on its own after each jailbreak, once the payload below is "
-                           "in your autoloader";
+        form_.add_toggle(kAutostart, tr("Autoboot ORION after the jailbreak"), prefs.autostart)
+            .description = tr("ORION opens on its own after each jailbreak, once the payload below "
+                              "is in your autoloader");
         const std::size_t slash = payload_.rfind('/');
-        form_.add_value(kPayload, "Autoboot payload", payload_.substr(slash + 1));
-        form_.add_value(kPayloadFolder, "In the folder", payload_.substr(0, slash));
-        next("Continue",
-             "Turn it off here or in Settings, Library, without touching the autoloader");
+        form_.add_value(kPayload, tr("Autoboot payload"), payload_.substr(slash + 1));
+        form_.add_value(kPayloadFolder, tr("In the folder"), payload_.substr(0, slash));
+        next(tr("Continue"),
+             tr("Turn it off here or in Settings, Library, without touching the autoloader"));
         break;
     }
     case Step::done:
     {
-        form_.add_header("You're set");
-        next("Start using ORION", "Settings changes any of this later");
-        form_.add_value(kTip, "Settings", "R3").description = "Or Options on an empty tab";
-        form_.add_value(kTip + 1, "Search", "Triangle").description = "Type part of a name";
-        form_.add_value(kTip + 2, "Sort a tab", "Up").description =
-            "From the first row of covers, then Cross";
-        form_.add_value(kTip + 3, "Tabs and systems", "L1 R1, L2 R2").description =
-            "The shelves, and the systems under Emulators";
+        form_.add_header(tr("You're set"));
+        next(tr("Start using ORION"), tr("Settings changes any of this later"));
+        form_.add_value(kTip, tr("Settings"), tr("R3")).description =
+            tr("Or Options on an empty tab");
+        form_.add_value(kTip + 1, tr("Search"), tr("Triangle")).description =
+            tr("Type part of a name");
+        form_.add_value(kTip + 2, tr("Sort a tab"), tr("Up")).description =
+            tr("From the first row of covers, then Cross");
+        form_.add_value(kTip + 3, tr("Tabs and systems"), tr("L1 R1, L2 R2")).description =
+            tr("The shelves, and the systems under Emulators");
         break;
     }
     }
@@ -399,9 +425,12 @@ void SetupPanel::draw_content(ui::Canvas &canvas, float opacity) const
     glyphs.edge = theme.text.with_alpha(0.0f);
     glyphs.ink = theme.text;
     glyphs.label = theme.text_muted;
+    // Hints hold pointers: their words live until the hints are drawn.
+    const std::string select = tr("Select");
+    const std::string previous = tr("Previous step");
     const ui::Hint hints[] = {
-        {ui::Button::cross, "Select"},
-        {ui::Button::circle, "Previous step"},
+        {ui::Button::cross, select.c_str()},
+        {ui::Button::circle, previous.c_str()},
     };
     ui::HintLayout layout;
     layout.size = 38.0f;

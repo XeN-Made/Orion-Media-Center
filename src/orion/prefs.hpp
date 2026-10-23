@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include "core/i18n.hpp"
+
 #include "library/emulators.hpp"
 
 #include <cstdint>
@@ -22,7 +24,9 @@ inline constexpr int kSortCount = 7;
 inline constexpr const char *kSortKeys[kSortCount] = {
     "name", "name_reversed", "recent", "platform", "tag", "played", "most_played"};
 inline constexpr const char *kSortNames[kSortCount] = {
-    "Name A–Z", "Name Z–A", "Recently added", "Platform", "Tag", "Recently played", "Most played"};
+    i18n::marked("Name A–Z"),   i18n::marked("Name Z–A"), i18n::marked("Recently added"),
+    i18n::marked("Platform"),   i18n::marked("Tag"),      i18n::marked("Recently played"),
+    i18n::marked("Most played")};
 
 // A shelf the player made. The id is stable across renames; the name is shown.
 struct CustomTab
@@ -79,7 +83,8 @@ struct TabPrefs
 // with their system's band across the top, or a list of rows.
 inline constexpr int kViewCount = 3;
 inline constexpr const char *kViewKeys[kViewCount] = {"grid", "cases", "list"};
-inline constexpr const char *kViewNames[kViewCount] = {"Grid", "Cases", "List"};
+inline constexpr const char *kViewNames[kViewCount] = {i18n::marked("Grid"), i18n::marked("Cases"),
+                                                       i18n::marked("List")};
 
 // Where a title was moved to.
 struct Placement
@@ -243,7 +248,8 @@ bool valid_art_dir(std::string_view path);
 // The places box art can live, as Settings and the setup offer them: ORION's
 // folder (art_dir empty), a USB drive, the extended storage.
 constexpr int kArtPlaceCount = 3;
-constexpr const char *kArtPlaceNames[] = {"ORION's folder", "USB drive", "Extended storage"};
+constexpr const char *kArtPlaceNames[] = {i18n::marked("ORION's folder"), i18n::marked("USB drive"),
+                                          i18n::marked("Extended storage")};
 constexpr const char *kArtPlacePaths[] = {"", "/mnt/usb0/ORION/art", "/mnt/ext0/ORION/art"};
 // Which of them art_dir is, or kArtPlaceCount for a folder of the player's.
 int art_place(const std::string &art_dir);

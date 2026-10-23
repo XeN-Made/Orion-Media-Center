@@ -4,6 +4,7 @@
 
 #include "orion/playtime.hpp"
 
+#include "core/i18n.hpp"
 #include "library/library.hpp"
 
 #include <algorithm>
@@ -57,31 +58,33 @@ PlayLog read_play_log(std::string_view text)
 std::string play_time_text(std::int64_t seconds)
 {
     if (seconds < 60)
-        return "Under a minute";
+        return i18n::tr("Under a minute");
     const std::int64_t minutes = seconds / 60;
     if (minutes < 60)
-        return std::to_string(minutes) + " m";
+        return i18n::trf("{0} m", {std::to_string(minutes)});
     const std::int64_t hours = minutes / 60;
     if (hours >= 100)
-        return std::to_string(hours) + " h";
+        return i18n::trf("{0} h", {std::to_string(hours)});
     const std::int64_t rest = minutes % 60;
-    return std::to_string(hours) + " h" + (rest > 0 ? " " + std::to_string(rest) + " m" : "");
+    return rest > 0 ? i18n::trf("{0} h {1} m", {std::to_string(hours), std::to_string(rest)})
+                    : i18n::trf("{0} h", {std::to_string(hours)});
 }
 
 std::string ago_text(std::int64_t then, std::int64_t now)
 {
     const std::int64_t days = std::max<std::int64_t>(0, now - then) / 86400;
     if (days == 0)
-        return "today";
+        return i18n::tr("today");
     if (days == 1)
-        return "yesterday";
+        return i18n::tr("yesterday");
     if (days < 14)
-        return std::to_string(days) + " days ago";
+        return i18n::trf("{0} days ago", {std::to_string(days)});
     if (days < 60)
-        return std::to_string(days / 7) + " weeks ago";
+        return i18n::trf("{0} weeks ago", {std::to_string(days / 7)});
     if (days < 365)
-        return std::to_string(days / 30) + " months ago";
-    return days < 730 ? "a year ago" : std::to_string(days / 365) + " years ago";
+        return i18n::trf("{0} months ago", {std::to_string(days / 30)});
+    return days < 730 ? i18n::tr("a year ago")
+                      : i18n::trf("{0} years ago", {std::to_string(days / 365)});
 }
 
 } // namespace hui::orion

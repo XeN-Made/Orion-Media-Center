@@ -4,6 +4,7 @@
 
 #include "orion/settings_panel.hpp"
 
+#include "core/i18n.hpp"
 #include "core/save_file.hpp"
 #include "gfx/draw_list.hpp"
 #include "library/emulators.hpp"
@@ -18,6 +19,9 @@
 
 namespace hui::orion
 {
+
+using i18n::tr;
+using i18n::trf;
 
 namespace
 {
@@ -122,32 +126,33 @@ std::string folder_key(const RomFolder &folder)
 
 // Where box art can live (prefs.hpp), or a folder the player types.
 constexpr const char *kArtPlaces[] = {kArtPlaceNames[0], kArtPlaceNames[1], kArtPlaceNames[2],
-                                      "Your own folder"};
+                                      i18n::marked("Your own folder")};
 constexpr const char *const *kArtPaths = kArtPlacePaths;
 
-constexpr const char *kCoverNames[] = {"Fit the pictures", "Square", "Portrait (5:7)",
-                                       "Landscape (7:5)"};
+constexpr const char *kCoverNames[] = {i18n::marked("Fit the pictures"), i18n::marked("Square"),
+                                       i18n::marked("Portrait (5:7)"),
+                                       i18n::marked("Landscape (7:5)")};
 
 const char *section_name(SettingsPanel::Section section)
 {
     switch (section)
     {
     case SettingsPanel::Section::library:
-        return "Library";
+        return i18n::marked("Library");
     case SettingsPanel::Section::tabs:
-        return "Tabs";
+        return i18n::marked("Tabs");
     case SettingsPanel::Section::emulators:
-        return "Emulators";
+        return i18n::marked("Emulators");
     case SettingsPanel::Section::art:
-        return "Box art";
+        return i18n::marked("Box art");
     case SettingsPanel::Section::storage:
-        return "Storage";
+        return i18n::marked("Storage");
     case SettingsPanel::Section::sound:
-        return "Sound";
+        return i18n::marked("Sound");
     case SettingsPanel::Section::about:
-        return "About";
+        return i18n::marked("About");
     default:
-        return "Appearance";
+        return i18n::marked("Appearance");
     }
 }
 
@@ -188,9 +193,9 @@ std::vector<std::string> swatch_names(std::span<const Swatch> swatches, bool cus
 {
     std::vector<std::string> names;
     for (const Swatch &swatch : swatches)
-        names.emplace_back(swatch.name);
+        names.push_back(tr(swatch.name));
     if (custom)
-        names.emplace_back("Custom");
+        names.push_back(tr("Custom"));
     return names;
 }
 
@@ -198,9 +203,9 @@ void add_swatches(ui::Form &form, int id, const char *label, std::span<const Swa
                   Color first, Color second, bool pair, const char *description)
 {
     const int index = swatch_index(swatches, first, second, pair);
-    form.add_choice(id, label, swatch_names(swatches, index < 0),
+    form.add_choice(id, tr(label), swatch_names(swatches, index < 0),
                     index < 0 ? static_cast<int>(swatches.size()) : index)
-        .description = description;
+        .description = tr(description);
 }
 
 // The swatch a choice row points at, or nullptr for "Custom".
@@ -226,7 +231,7 @@ SettingsPanel::SettingsPanel()
     sheet_.style.title_size = 40.0f;
     sheet_.style.handle = false; // nothing to drag: it fills the screen
     width_.snap(gfx::kVirtualWidth);
-    sheet_.set_title("Settings");
+    sheet_.set_title(tr("Settings"));
     sheet_.content = [this](ui::Canvas &canvas, const gfx::Rect &, float opacity)
     { draw_content(canvas, opacity); };
 
@@ -313,7 +318,7 @@ void SettingsPanel::build_nav()
     for (Section section : sections_)
     {
         ui::NavEntry entry;
-        entry.label = section_name(section);
+        entry.label = tr(section_name(section));
         entries.push_back(std::move(entry));
     }
     nav_.set_entries(std::move(entries));
@@ -396,6 +401,12 @@ void SettingsPanel::leave_rows()
 
 void SettingsPanel::build(const Look &look, const LibraryPrefs &prefs)
 {
+    // In the language chosen now; the form keeps pointers to the words.
+    sheet_.set_title(tr("Settings"));
+    on_word_ = tr("On");
+    off_word_ = tr("Off");
+    form_.style.on_text = on_word_.c_str();
+    form_.style.off_text = off_word_.c_str();
     form_.clear();
     switch (section_)
     {
@@ -447,7 +458,7 @@ void SettingsPanel::build(const Look &look, const LibraryPrefs &prefs)
 
 void SettingsPanel::build_library(const LibraryPrefs &prefs)
 {
-    form_.add_header("Library");
+    form_.add_header(tr("Library"));
     // The language first: everything after it reads in it.
     if (!languages_.empty())
     {
@@ -459,60 +470,63 @@ void SettingsPanel::build_library(const LibraryPrefs &prefs)
             if (languages_[i].code == prefs.language)
                 chosen = static_cast<int>(i);
         }
-        form_.add_choice(kLanguage, "Language", std::move(names), chosen).description =
-            "Automatic follows the console's language";
+        form_.add_choice(kLanguage, tr("Language"), std::move(names), chosen).description =
+            tr("Automatic follows the console's language");
     }
     form_
-        .add_choice(kSort, "Sort by", {kSortNames, kSortNames + kSortCount}, sort_index(prefs.sort))
-        .description = "The order of the covers, on every tab without an order of its own";
-    form_.add_choice(kView, "View", {kViewNames, kViewNames + kViewCount}, view_index(prefs.view))
-        .description = "Grid of covers, big cases three to a screen, or a list";
-    form_.add_toggle(kReopen, "Reopen on last tab", prefs.reopen_last_tab).description =
-        "ORION starts on the tab you left it on";
-    form_.add_toggle(kContinueRow, "Continue playing", prefs.continue_row).description =
-        "A row of what you played last over the All tab's covers";
-    form_.add_toggle(kLeaveShelf, "Moved titles leave shelf", prefs.moved_leave_shelf).description =
-        "A title moved to your own tab leaves Games, Homebrew or Media";
-    form_.add_toggle(kReturn, "Return to ORION after a game", prefs.return_on_close).description =
-        "Close a game from the PS button menu and ORION opens again";
-    form_.add_toggle(kAutostart, "Autoboot ORION after the jailbreak", prefs.autostart)
-        .description =
-        "ORION opens on its own after each jailbreak, once the payload below is in your autoloader";
+        .add_choice(kSort, tr("Sort by"), i18n::tr_range(kSortNames, kSortNames + kSortCount),
+                    sort_index(prefs.sort))
+        .description = tr("The order of the covers, on every tab without an order of its own");
+    form_
+        .add_choice(kView, tr("View"), i18n::tr_range(kViewNames, kViewNames + kViewCount),
+                    view_index(prefs.view))
+        .description = tr("Grid of covers, big cases three to a screen, or a list");
+    form_.add_toggle(kReopen, tr("Reopen on last tab"), prefs.reopen_last_tab).description =
+        tr("ORION starts on the tab you left it on");
+    form_.add_toggle(kContinueRow, tr("Continue playing"), prefs.continue_row).description =
+        tr("A row of what you played last over the All tab's covers");
+    form_.add_toggle(kLeaveShelf, tr("Moved titles leave shelf"), prefs.moved_leave_shelf)
+        .description = tr("A title moved to your own tab leaves Games, Homebrew or Media");
+    form_.add_toggle(kReturn, tr("Return to ORION after a game"), prefs.return_on_close)
+        .description = tr("Close a game from the PS button menu and ORION opens again");
+    form_.add_toggle(kAutostart, tr("Autoboot ORION after the jailbreak"), prefs.autostart)
+        .description = tr("ORION opens on its own after each jailbreak, once the payload below is "
+                          "in your autoloader");
     const std::size_t slash = payload_.rfind('/');
-    form_.add_value(kPayloadInfo, "Autoboot payload", payload_.substr(slash + 1));
-    form_.add_value(kPayloadFolder, "In the folder", payload_.substr(0, slash));
-    ui::FormRow &setup = form_.add_action(kRunSetup, "Run setup again");
+    form_.add_value(kPayloadInfo, tr("Autoboot payload"), payload_.substr(slash + 1));
+    form_.add_value(kPayloadFolder, tr("In the folder"), payload_.substr(0, slash));
+    ui::FormRow &setup = form_.add_action(kRunSetup, tr("Run setup again"));
     setup.chevron = true;
-    setup.description = "The first-run steps: look, emulators, box art, autostart";
+    setup.description = tr("The first-run steps: look, emulators, box art, autostart");
 }
 
 void SettingsPanel::build_about(const LibraryPrefs &prefs)
 {
-    form_.add_header("ORION Media Center");
-    form_.add_value(kAboutVersion, "Version", version_.empty() ? "Unknown" : version_);
-    form_.add_value(kAboutTitle, "Title ID", "PPSA99061");
-    form_.add_value(kAboutReleases, "Releases", kReleasesPage);
-    form_.add_header("Updates");
+    form_.add_header(tr("ORION Media Center"));
+    form_.add_value(kAboutVersion, tr("Version"), version_.empty() ? tr("Unknown") : version_);
+    form_.add_value(kAboutTitle, tr("Title ID"), "PPSA99061");
+    form_.add_value(kAboutReleases, tr("Releases"), kReleasesPage);
+    form_.add_header(tr("Updates"));
     if (!update_ready_.empty())
-        form_.add_action(kInstallUpdate, "Install ORION " + update_ready_).description =
-            "ORION closes, updates itself and opens again";
-    form_.add_action(kUpdateNow, "Check now").description = update_status_;
-    form_.add_toggle(kCheckUpdates, "Check for updates", prefs.check_updates).description =
-        "Each time ORION opens, it asks GitHub whether a newer ORION is out";
-    form_.add_toggle(kAutoUpdate, "Download updates by themselves", prefs.auto_update).description =
-        "A newer ORION is made ready in the background; ORION asks before it "
-        "installs it";
-    form_.add_value(kAboutLog, "Update log", "/data/orion/update/log.txt");
+        form_.add_action(kInstallUpdate, trf("Install ORION {0}", {update_ready_})).description =
+            tr("ORION closes, updates itself and opens again");
+    form_.add_action(kUpdateNow, tr("Check now")).description = update_status_;
+    form_.add_toggle(kCheckUpdates, tr("Check for updates"), prefs.check_updates).description =
+        tr("Each time ORION opens, it asks GitHub whether a newer ORION is out");
+    form_.add_toggle(kAutoUpdate, tr("Download updates by themselves"), prefs.auto_update)
+        .description = tr("A newer ORION is made ready in the background; ORION asks before it "
+                          "installs it");
+    form_.add_value(kAboutLog, tr("Update log"), "/data/orion/update/log.txt");
 }
 
 void SettingsPanel::build_tabs(const LibraryPrefs &prefs)
 {
-    form_.add_header("Tabs");
-    ui::FormRow &add = form_.add_action(kNewTab, "New tab");
+    form_.add_header(tr("Tabs"));
+    ui::FormRow &add = form_.add_action(kNewTab, tr("New tab"));
     add.chevron = true;
-    add.description = "A shelf of your own: move any game into it from its menu";
-    form_.add_toggle(kGroupSystems, "Group emulator tabs", prefs.group_systems).description =
-        "One Emulators tab, with a row for each system under it: L2 and R2 change system";
+    add.description = tr("A shelf of your own: move any game into it from its menu");
+    form_.add_toggle(kGroupSystems, tr("Group emulator tabs"), prefs.group_systems).description =
+        tr("One Emulators tab, with a row for each system under it: L2 and R2 change system");
     for (std::size_t i = 0; i < tabs_.size(); ++i)
     {
         const TabEntry &tab = tabs_[i];
@@ -522,18 +536,18 @@ void SettingsPanel::build_tabs(const LibraryPrefs &prefs)
         std::vector<std::string> notes;
         const library::System *system = system_of(tab.key);
         if (system != nullptr ? !prefs.system_enabled(system->name) : prefs.tab_hidden(tab.key))
-            notes.emplace_back("Hidden");
+            notes.push_back(tr("Hidden"));
         const std::string theme = prefs.tab_theme(tab.key);
         if (const ThemeFile *file =
                 theme.empty() || themes_ == nullptr ? nullptr : themes_->find(theme))
             notes.push_back(file->name);
         if (prefs.tab_cover(tab.key) != CoverShape::automatic)
-            notes.emplace_back(kCoverNames[static_cast<int>(prefs.tab_cover(tab.key))]);
+            notes.push_back(tr(kCoverNames[static_cast<int>(prefs.tab_cover(tab.key))]));
         if (!prefs.tab_sort(tab.key).empty())
-            notes.emplace_back(kSortNames[sort_index(prefs.tab_sort(tab.key))]);
+            notes.push_back(tr(kSortNames[sort_index(prefs.tab_sort(tab.key))]));
         for (std::size_t n = 0; n < notes.size(); ++n)
             row.text += (n == 0 ? "" : ", ") + notes[n];
-        row.description = "Theme, covers, sort and whether it shows";
+        row.description = tr("Theme, covers, sort and whether it shows");
     }
 }
 
@@ -546,17 +560,17 @@ void SettingsPanel::build_tab_page(const LibraryPrefs &prefs)
         build_tabs(prefs);
         return;
     }
-    form_.add_header("Tabs  ·  " + tab->name);
+    form_.add_header(tr("Tabs") + "  ·  " + tab->name);
     const library::System *system = system_of(page_);
     if (page_ != "all")
     {
         const bool shown =
             system != nullptr ? prefs.system_enabled(system->name) : !prefs.tab_hidden(page_);
-        form_.add_toggle(kPageShow, "Show this tab", shown).description =
-            system != nullptr ? "Off hides the tab and its games everywhere"
-                              : "Off takes it off the tab bar; nothing is deleted";
+        form_.add_toggle(kPageShow, tr("Show this tab"), shown).description =
+            system != nullptr ? tr("Off hides the tab and its games everywhere")
+                              : tr("Off takes it off the tab bar; nothing is deleted");
     }
-    std::vector<std::string> themes = {"Main theme"};
+    std::vector<std::string> themes = {tr("Main theme")};
     int theme = 0;
     const std::string chosen = prefs.tab_theme(page_);
     std::vector<std::string> names = theme_names();
@@ -566,25 +580,30 @@ void SettingsPanel::build_tab_page(const LibraryPrefs &prefs)
         if (themes_ != nullptr && themes_->at(i).id == chosen)
             theme = static_cast<int>(i) + 1;
     }
-    form_.add_choice(kPageTheme, "Theme", std::move(themes), theme).description =
-        "This tab can wear a theme of its own";
+    form_.add_choice(kPageTheme, tr("Theme"), std::move(themes), theme).description =
+        tr("This tab can wear a theme of its own");
     form_
-        .add_choice(kPageCover, "Cover shape", {kCoverNames, kCoverNames + 4},
+        .add_choice(kPageCover, tr("Cover shape"), i18n::tr_range(kCoverNames, kCoverNames + 4),
                     static_cast<int>(prefs.tab_cover(page_)))
-        .description = "Square for console icons; the box's own shape for box art";
-    std::vector<std::string> sorts = {std::string("Default (") +
-                                      kSortNames[sort_index(prefs.sort)] + ")"};
-    sorts.insert(sorts.end(), kSortNames, kSortNames + kSortCount);
+        .description = tr("Square for console icons; the box's own shape for box art");
+    std::vector<std::string> sorts = {
+        trf("Default ({0})", {tr(kSortNames[sort_index(prefs.sort)])})};
+    for (const std::string &name : i18n::tr_range(kSortNames, kSortNames + kSortCount))
+        sorts.push_back(name);
     const std::string sort = prefs.tab_sort(page_);
     form_
-        .add_choice(kPageSort, "Sort by", std::move(sorts), sort.empty() ? 0 : sort_index(sort) + 1)
-        .description = "The order of the covers on this tab";
-    std::vector<std::string> views = {std::string("Default (") +
-                                      kViewNames[view_index(prefs.view)] + ")"};
-    views.insert(views.end(), kViewNames, kViewNames + kViewCount);
+        .add_choice(kPageSort, tr("Sort by"), std::move(sorts),
+                    sort.empty() ? 0 : sort_index(sort) + 1)
+        .description = tr("The order of the covers on this tab");
+    std::vector<std::string> views = {
+        trf("Default ({0})", {tr(kViewNames[view_index(prefs.view)])})};
+    for (const std::string &name : i18n::tr_range(kViewNames, kViewNames + kViewCount))
+        views.push_back(name);
     const std::string view = prefs.tab_view(page_);
-    form_.add_choice(kPageView, "View", std::move(views), view.empty() ? 0 : view_index(view) + 1)
-        .description = "Grid, Cases or List on this tab";
+    form_
+        .add_choice(kPageView, tr("View"), std::move(views),
+                    view.empty() ? 0 : view_index(view) + 1)
+        .description = tr("Grid, Cases or List on this tab");
     if (system != nullptr && emulator_ != nullptr && system->cores.size() >= 2)
     {
         std::vector<std::string> cores;
@@ -601,18 +620,18 @@ void SettingsPanel::build_tab_page(const LibraryPrefs &prefs)
             if (system->cores[c] == prefs.system_core(system->name))
                 core = static_cast<int>(c);
         }
-        form_.add_choice(kPageCore, "Core", std::move(cores), core).description =
-            "The RetroArch core these games start with";
+        form_.add_choice(kPageCore, tr("Core"), std::move(cores), core).description =
+            tr("The RetroArch core these games start with");
     }
     if (page_.rfind("tab:", 0) == 0)
     {
-        ui::FormRow &rename = form_.add_action(kPageRename, "Rename");
+        ui::FormRow &rename = form_.add_action(kPageRename, tr("Rename"));
         rename.chevron = true;
-        form_.add_action(kPageLeft, "Move left").description = "Earlier on the tab bar";
-        form_.add_action(kPageRight, "Move right").description = "Later on the tab bar";
-        ui::FormRow &remove = form_.add_action(kPageDelete, "Delete tab");
+        form_.add_action(kPageLeft, tr("Move left")).description = tr("Earlier on the tab bar");
+        form_.add_action(kPageRight, tr("Move right")).description = tr("Later on the tab bar");
+        ui::FormRow &remove = form_.add_action(kPageDelete, tr("Delete tab"));
         remove.danger = true;
-        remove.description = "Its games go back to their shelves";
+        remove.description = tr("Its games go back to their shelves");
     }
 }
 
@@ -624,50 +643,54 @@ const library::EmulatorApp *SettingsPanel::page_app() const
 
 void SettingsPanel::build_emulators(const LibraryPrefs &prefs)
 {
-    form_.add_header("Emulators");
-    form_.add_action(kScanEmulators, "Scan for emulators").description = scan_status_;
+    form_.add_header(tr("Emulators"));
+    form_.add_action(kScanEmulators, tr("Scan for emulators")).description =
+        scan_status_.empty()
+            ? trf("Finds {0}, and their games",
+                  {"RetroArch, Porpoise, PS5SX2, PSwanStation, ProsperoEden, PS5-ECAM"})
+            : scan_status_;
     for (std::size_t i = 0; emulator_ != nullptr && i < emulator_->apps.size(); ++i)
     {
         const library::EmulatorApp &app = emulator_->apps[i];
         ui::FormRow &row = form_.add_action(kEmulatorRow + static_cast<int>(i), app.name);
         row.chevron = true;
-        row.text = std::to_string(app.games) + (app.games == 1 ? " game" : " games");
+        row.text = i18n::plural(app.games, "{0} game", "{0} games");
         std::string plays;
         for (const library::KnownEmulator &known : library::known_emulators())
         {
             if (app.key == known.key)
-                plays = known.plays;
+                plays = tr(known.plays);
         }
-        row.description =
-            plays + (app.starts_games ? ". ORION starts its games"
-                                      : ". Its games open it; you pick the game there");
+        row.description = app.starts_games
+                              ? trf("{0}. ORION starts its games", {plays})
+                              : trf("{0}. Its games open it; you pick the game there", {plays});
     }
     int missing = 0;
     for (const library::KnownEmulator &known : library::known_emulators())
     {
         if (emulator_ != nullptr && emulator_->app(known.key) != nullptr)
             continue;
-        form_.add_value(kMissingRow + missing++, known.name, "Not installed").description =
-            std::string(known.plays) + ". Install it, then scan";
+        form_.add_value(kMissingRow + missing++, known.name, tr("Not installed")).description =
+            trf("{0}. Install it, then scan", {tr(known.plays)});
     }
 
-    form_.add_toggle(kAskPlayer, "Ask which emulator to use", prefs.ask_player).description =
-        "A game more than one emulator plays asks the first time; Options, Play with changes it";
-    form_.add_toggle(kEveryVersion, "Every version of a game", prefs.every_version).description =
-        "Bad dumps, hacks, translations and other regions as covers of their own; off shows "
-        "the best one";
+    form_.add_toggle(kAskPlayer, tr("Ask which emulator to use"), prefs.ask_player)
+        .description = tr(
+        "A game more than one emulator plays asks the first time; Options, Play with changes it");
+    form_.add_toggle(kEveryVersion, tr("Every version of a game"), prefs.every_version)
+        .description = tr("Bad dumps, hacks, translations and other regions as covers of their "
+                          "own; off shows the best one");
     if (emulator_ == nullptr || emulator_->systems.empty())
         return;
-    form_.add_header("Systems");
+    form_.add_header(tr("Systems"));
     for (std::size_t i = 0; i < emulator_->systems.size(); ++i)
     {
         const library::System &system = emulator_->systems[i];
-        const std::string games =
-            std::to_string(system.games) + (system.games == 1 ? " game" : " games");
+        const std::string games = i18n::plural(system.games, "{0} game", "{0} games");
         form_
             .add_toggle(kSystemRow + static_cast<int>(i), system.short_name + "  (" + games + ")",
                         prefs.system_enabled(system.name))
-            .description = system.name + ": on shows its tab";
+            .description = trf("{0}: on shows its tab", {system.name});
         if (system.cores.size() < 2)
             continue;
         std::vector<std::string> names;
@@ -685,37 +708,37 @@ void SettingsPanel::build_emulators(const LibraryPrefs &prefs)
                 chosen = static_cast<int>(c);
         }
         form_
-            .add_choice(kCoreRow + static_cast<int>(i), system.short_name + " core",
+            .add_choice(kCoreRow + static_cast<int>(i), trf("{0} core", {system.short_name}),
                         std::move(names), chosen)
-            .description = "The RetroArch core " + system.short_name + " games start with";
+            .description = trf("The RetroArch core {0} games start with", {system.short_name});
     }
 }
 
 void SettingsPanel::build_art(const LibraryPrefs &prefs)
 {
-    form_.add_header("Box art");
-    form_.add_toggle(kArtAuto, "Find box art by itself", prefs.auto_art).description =
-        "When ORION starts, new games get covers from the internet";
-    form_.add_action(kArtNow, "Find box art now").description = art_status_;
-    form_.add_value(kStateInfo, "Box art folder", art_folder(prefs, state_dir_)).description =
-        "Chosen under Storage";
+    form_.add_header(tr("Box art"));
+    form_.add_toggle(kArtAuto, tr("Find box art by itself"), prefs.auto_art).description =
+        tr("When ORION starts, new games get covers from the internet");
+    form_.add_action(kArtNow, tr("Find box art now")).description = art_status_;
+    form_.add_value(kStateInfo, tr("Box art folder"), art_folder(prefs, state_dir_)).description =
+        tr("Chosen under Storage");
 }
 
 void SettingsPanel::build_emulator_page(const library::EmulatorApp &app, const LibraryPrefs &prefs)
 {
-    form_.add_header("Emulators  ·  " + app.name);
-    form_.add_value(kAppInfo, "App", app.title_id).description = app.root;
-    form_.add_value(kAppStarts, "Games", std::to_string(app.games)).description =
-        app.starts_games ? "Cross on a game starts it in " + app.name
-                         : "Cross on a game opens " + app.name + "; pick the game there";
+    form_.add_header(tr("Emulators") + "  ·  " + app.name);
+    form_.add_value(kAppInfo, tr("App"), app.title_id).description = app.root;
+    form_.add_value(kAppStarts, tr("Games"), std::to_string(app.games)).description =
+        app.starts_games ? trf("Cross on a game starts it in {0}", {app.name})
+                         : trf("Cross on a game opens {0}; pick the game there", {app.name});
 
-    form_.add_header("Game folders");
-    ui::FormRow &add = form_.add_action(kAddRomFolder, "Add a game folder");
+    form_.add_header(tr("Game folders"));
+    ui::FormRow &add = form_.add_action(kAddRomFolder, tr("Add a game folder"));
     add.chevron = true;
-    add.description = app.key == "retroarch"
-                          ? "A system's folder (roms/gba) or a folder of them (roms), under /data "
-                            "or /mnt"
-                          : "A folder of discs (and the folders in it), under /data or /mnt";
+    add.description =
+        app.key == "retroarch"
+            ? tr("A system's folder (roms/gba) or a folder of them (roms), under /data or /mnt")
+            : tr("A folder of discs (and the folders in it), under /data or /mnt");
     for (std::size_t i = 0; i < prefs.rom_folders.size(); ++i)
     {
         const RomFolder &folder = prefs.rom_folders[i];
@@ -723,15 +746,16 @@ void SettingsPanel::build_emulator_page(const library::EmulatorApp &app, const L
             continue;
         ui::FormRow &row = form_.add_action(kRomFolderRow + static_cast<int>(i), folder.path);
         row.chevron = true;
-        row.text = folder.system.empty() ? "Auto" : library::short_system_name(folder.system);
-        row.description = "Yours: its games join their systems' tabs";
+        row.text = folder.system.empty() ? tr("Auto") : library::short_system_name(folder.system);
+        row.description = tr("Yours: its games join their systems' tabs");
     }
     for (std::size_t i = 0; i < app.folders.size(); ++i)
-        form_.add_value(kOwnFolderRow + static_cast<int>(i), app.folders[i], "Built in")
-            .description = app.key == "retroarch"
-                               ? "RetroArch's content, or a folder its playlists list games "
-                                 "from: ORION lists them too"
-                               : "Where " + app.name + " looks by itself; ORION looks there too";
+        form_.add_value(kOwnFolderRow + static_cast<int>(i), app.folders[i], tr("Built in"))
+            .description =
+            app.key == "retroarch"
+                ? tr("RetroArch's content, or a folder its playlists list games from: ORION lists "
+                     "them too")
+                : trf("Where {0} looks by itself; ORION looks there too", {app.name});
 }
 
 void SettingsPanel::browse(std::string path, const Look &look, const LibraryPrefs &prefs)
@@ -781,10 +805,10 @@ void SettingsPanel::browse_up(const Look &look, const LibraryPrefs &prefs)
 void SettingsPanel::build_browser()
 {
     const library::EmulatorApp *app = page_app();
-    const std::string name = app != nullptr ? app->name : std::string("the emulator");
+    const std::string name = app != nullptr ? app->name : tr("the emulator");
     if (browse_path_.empty())
     {
-        form_.add_header("Add a game folder  ·  " + name);
+        form_.add_header(tr("Add a game folder") + "  ·  " + name);
         int shown = 0;
         for (std::size_t i = 0; i < places_.size(); ++i)
         {
@@ -794,88 +818,94 @@ void SettingsPanel::build_browser()
             ui::FormRow &row = form_.add_action(kBrowseRow + static_cast<int>(i), places_[i].first);
             row.chevron = true;
             row.text = places_[i].second;
-            row.description = "Open it and pick the folder your games are in";
+            row.description = tr("Open it and pick the folder your games are in");
             ++shown;
         }
         if (shown == 0)
-            form_.add_value(kBrowseUp, "No drive found", "Plug one in, or type a path");
+            form_.add_value(kBrowseUp, tr("No drive found"), tr("Plug one in, or type a path"));
     }
     else
     {
-        form_.add_header("Add a game folder  ·  " + browse_path_);
-        form_.add_action(kBrowseUse, "Use this folder").description =
-            "Its games join " + name + "'s; the folders in it are looked in too";
-        ui::FormRow &up = form_.add_action(kBrowseUp, "Up one folder");
-        up.description = "Circle does the same";
+        form_.add_header(tr("Add a game folder") + "  ·  " + browse_path_);
+        form_.add_action(kBrowseUse, tr("Use this folder")).description =
+            trf("Its games join {0}'s; the folders in it are looked in too", {name});
+        ui::FormRow &up = form_.add_action(kBrowseUp, tr("Up one folder"));
+        up.description = tr("Circle does the same");
         for (std::size_t i = 0; i < browse_folders_.size(); ++i)
         {
             ui::FormRow &row =
                 form_.add_action(kBrowseRow + static_cast<int>(i), browse_folders_[i]);
             row.chevron = true;
-            row.description = "Open it";
+            row.description = tr("Open it");
         }
         if (browse_folders_.empty())
-            form_.add_value(kBrowseRow, "No folders in here", "");
+            form_.add_value(kBrowseRow, tr("No folders in here"), "");
     }
-    form_.add_action(kBrowseType, "Type a path instead").description =
-        "Any folder under /data or /mnt, with the keyboard";
+    form_.add_action(kBrowseType, tr("Type a path instead")).description =
+        tr("Any folder under /data or /mnt, with the keyboard");
 }
 
 void SettingsPanel::build_sound()
 {
-    form_.add_header("Sound");
+    form_.add_header(tr("Sound"));
     if (app_settings_ == nullptr)
         return;
     // 0..10, 0 said as Off.
-    std::vector<std::string> levels = {"Off"};
+    std::vector<std::string> levels = {tr("Off")};
     for (int i = 1; i <= 10; ++i)
         levels.push_back(std::to_string(i));
-    form_.add_choice(kMusicVolume, "Music", levels, std::clamp(app_settings_->music_volume, 0, 10))
-        .description = "The songs behind ORION; Off stops them";
     form_
-        .add_choice(kSfxVolume, "Sound effects", levels,
+        .add_choice(kMusicVolume, tr("Music"), levels,
+                    std::clamp(app_settings_->music_volume, 0, 10))
+        .description = tr("The songs behind ORION; Off stops them");
+    form_
+        .add_choice(kSfxVolume, tr("Sound effects"), levels,
                     std::clamp(app_settings_->sfx_volume, 0, 10))
-        .description = "Launching, saving, refusing";
-    form_.add_choice(kUiVolume, "Menu sounds", levels, std::clamp(app_settings_->ui_volume, 0, 10))
-        .description = "Moving the focus, opening and closing";
-    form_.add_value(kNowPlaying, "Now playing",
-                    app_settings_->music_volume == 0 ? std::string("Music is off")
-                    : now_playing_.empty()           ? std::string("Between songs")
+        .description = tr("Launching, saving, refusing");
+    form_
+        .add_choice(kUiVolume, tr("Menu sounds"), levels,
+                    std::clamp(app_settings_->ui_volume, 0, 10))
+        .description = tr("Moving the focus, opening and closing");
+    form_.add_value(kNowPlaying, tr("Now playing"),
+                    app_settings_->music_volume == 0 ? tr("Music is off")
+                    : now_playing_.empty()           ? tr("Between songs")
                                                      : now_playing_);
-    form_.add_action(kNextSong, "Next song").description =
-        "Your own songs join when ORION starts: .ogg files, 48 kHz, in the folder below";
-    form_.add_value(kMusicFolder, "Your music", "/data/orion/music");
+    form_.add_action(kNextSong, tr("Next song")).description =
+        tr("Your own songs join when ORION starts: .ogg files, 48 kHz, in the folder below");
+    form_.add_value(kMusicFolder, tr("Your music"), "/data/orion/music");
 }
 
 void SettingsPanel::build_storage(const LibraryPrefs &prefs)
 {
-    form_.add_header("Folders");
+    form_.add_header(tr("Folders"));
     form_
-        .add_choice(kArtFolder, "Box art folder", {kArtPlaces, kArtPlaces + 4},
+        .add_choice(kArtFolder, tr("Box art folder"), i18n::tr_range(kArtPlaces, kArtPlaces + 4),
                     art_place(prefs.art_dir))
-        .description = "Looked in first, and where downloads go: " + art_folder(prefs, state_dir_) +
-                       ". Moving it copies what is there";
+        .description =
+        trf("Looked in first, and where downloads go: {0}. Moving it copies what is there",
+            {art_folder(prefs, state_dir_)});
     const std::string backdrops = state_dir_ + "/backdrops";
     form_
-        .add_value(kBackdropsInfo, "Game background copies",
-                   std::to_string(backdrops_) + (backdrops_ == 1 ? " picture" : " pictures"))
-        .description = backdrops + ": the console's pictures for games that ship none, "
-                                   "through the FTP server on port 2121";
-    form_.add_action(kBackdropsAgain, "Copy them again").description =
-        "Asks the FTP server for every missing picture once more";
-    form_.add_value(kThemesInfo, "Your themes", state_dir_ + "/themes").description =
-        "Theme files you save, and ones you add by hand";
-    form_.add_value(kStateInfo + 100, "Settings and play records", state_dir_).description =
-        "library.json, theme.json and the launch logs; the launch helper looks for them here";
+        .add_value(kBackdropsInfo, tr("Game background copies"),
+                   i18n::plural(backdrops_, "{0} picture", "{0} pictures"))
+        .description = trf(
+        "{0}: the console's pictures for games that ship none, through the FTP server on port 2121",
+        {backdrops});
+    form_.add_action(kBackdropsAgain, tr("Copy them again")).description =
+        tr("Asks the FTP server for every missing picture once more");
+    form_.add_value(kThemesInfo, tr("Your themes"), state_dir_ + "/themes").description =
+        tr("Theme files you save, and ones you add by hand");
+    form_.add_value(kStateInfo + 100, tr("Settings and play records"), state_dir_).description =
+        tr("library.json, theme.json and the launch logs; the launch helper looks for them here");
 }
 
 void SettingsPanel::build_folder_page(const LibraryPrefs &prefs)
 {
     const RomFolder &folder = prefs.rom_folders[static_cast<std::size_t>(folder_page_)];
-    form_.add_header("Game folders  \u00b7  " + folder.path);
+    form_.add_header(tr("Game folders") + "  ·  " + folder.path);
     std::vector<std::string> names = {folder_key(folder) == "retroarch"
-                                          ? "Auto (from the folder's name)"
-                                          : "Auto (from each disc)"};
+                                          ? tr("Auto (from the folder's name)")
+                                          : tr("Auto (from each disc)")};
     int chosen = 0;
     if (emulator_ != nullptr)
     {
@@ -888,11 +918,11 @@ void SettingsPanel::build_folder_page(const LibraryPrefs &prefs)
                 chosen = static_cast<int>(i) + 1;
         }
     }
-    form_.add_choice(kFolderSystem, "System", std::move(names), chosen).description =
-        "Auto reads gba, nds, ps2... from the folder's name, or from the folders inside it";
-    ui::FormRow &remove = form_.add_action(kFolderRemove, "Remove this folder");
+    form_.add_choice(kFolderSystem, tr("System"), std::move(names), chosen).description =
+        tr("Auto reads gba, nds, ps2... from the folder's name, or from the folders inside it");
+    ui::FormRow &remove = form_.add_action(kFolderRemove, tr("Remove this folder"));
     remove.danger = true;
-    remove.description = "ORION stops listing its games; nothing on the drive is touched";
+    remove.description = tr("ORION stops listing its games; nothing on the drive is touched");
 }
 
 SettingsPanel::Change SettingsPanel::edit_folder_page(int id, LibraryPrefs *prefs)
@@ -927,14 +957,14 @@ std::vector<std::string> SettingsPanel::theme_names() const
     {
         const ThemeFile &file = themes_->at(i);
         // The player's own themes say so.
-        names.push_back(file.user ? file.name + " (yours)" : file.name);
+        names.push_back(file.user ? trf("{0} (yours)", {file.name}) : file.name);
     }
     return names;
 }
 
 void SettingsPanel::build_appearance(const Look &look, const LibraryPrefs &prefs)
 {
-    form_.add_header("Appearance");
+    form_.add_header(tr("Appearance"));
     std::vector<std::string> style_names = theme_names();
     int base = 0;
     for (std::size_t i = 0; themes_ != nullptr && i < themes_->size(); ++i)
@@ -948,7 +978,7 @@ void SettingsPanel::build_appearance(const Look &look, const LibraryPrefs &prefs
     // the preview shows it, as well as on its page under Tabs.
     if (const TabEntry *tab = tab_entry(current_tab_))
     {
-        std::vector<std::string> themes = {"Same as every tab"};
+        std::vector<std::string> themes = {tr("Same as every tab")};
         int theme = 0;
         const std::string chosen = prefs.tab_theme(current_tab_);
         const std::vector<std::string> names = theme_names();
@@ -958,69 +988,70 @@ void SettingsPanel::build_appearance(const Look &look, const LibraryPrefs &prefs
             if (themes_ != nullptr && themes_->at(i).id == chosen)
                 theme = static_cast<int>(i) + 1;
         }
-        form_.add_choice(kTabTheme, "Theme for " + tab->name, std::move(themes), theme)
-            .description = theme == 0 ? "Only this tab; it now wears the theme below"
-                                      : "Only this tab; the rows below are every other tab's";
+        form_.add_choice(kTabTheme, trf("Theme for {0}", {tab->name}), std::move(themes), theme)
+            .description = theme == 0 ? tr("Only this tab; it now wears the theme below")
+                                      : tr("Only this tab; the rows below are every other tab's");
     }
-    form_.add_choice(kBase, "Theme for every tab", std::move(style_names), base).description =
-        "Built in, or a theme file of yours; everything below adjusts it";
+    form_.add_choice(kBase, tr("Theme for every tab"), std::move(style_names), base).description =
+        tr("Built in, or a theme file of yours; everything below adjusts it");
     std::vector<std::string> background_names;
     int background = 0;
     for (std::size_t i = 0; i < backgrounds().size(); ++i)
     {
-        background_names.emplace_back(backgrounds()[i].name);
+        background_names.push_back(tr(backgrounds()[i].name));
         if (backgrounds()[i].mode == look.background)
             background = static_cast<int>(i);
     }
-    form_.add_choice(kBackground, "Background", std::move(background_names), background)
-        .description = "What moves behind the glass";
-    add_swatches(form_, kSky, "Sky", skies(), look.sky_top, look.sky_bottom, true,
-                 "The colour of empty space");
-    add_swatches(form_, kNebula, "Nebula", nebulas(), look.nebula, look.nebula_far, true,
-                 "The glow in the sky, and the clouds that drift through it");
-    form_.add_slider(kClouds, "Clouds", look.clouds * 100.0f, 0.0f, 200.0f, 10.0f).unit = " %";
-    form_.add_toggle(kMotion, "Motion", look.motion).description =
-        "The sky drifts slowly; off holds it still";
-    add_swatches(form_, kGlass, "Glass tint", glasses(), look.glass, look.glass, false,
-                 "The colour frosted panels are tinted with");
-    form_.add_slider(kOpacity, "Glass opacity", look.glass.a * 100.0f, 0.0f, 100.0f, 5.0f).unit =
-        " %";
-    add_swatches(form_, kHighlight, "Highlight", highlights(), look.highlight, look.highlight,
-                 false, "The selected tab and the focused key");
-    add_swatches(form_, kAccent, "Accent", accents(), look.accent, look.accent, false,
-                 "Labels, counts and the text cursor");
-    form_.add_slider(kCorners, "Cover corners", look.corners, 0.0f, 40.0f, 2.0f).unit = " px";
+    form_.add_choice(kBackground, tr("Background"), std::move(background_names), background)
+        .description = tr("What moves behind the glass");
+    add_swatches(form_, kSky, i18n::marked("Sky"), skies(), look.sky_top, look.sky_bottom, true,
+                 i18n::marked("The colour of empty space"));
+    add_swatches(form_, kNebula, i18n::marked("Nebula"), nebulas(), look.nebula, look.nebula_far,
+                 true, i18n::marked("The glow in the sky, and the clouds that drift through it"));
+    form_.add_slider(kClouds, tr("Clouds"), look.clouds * 100.0f, 0.0f, 200.0f, 10.0f).unit = " %";
+    form_.add_toggle(kMotion, tr("Motion"), look.motion).description =
+        tr("The sky drifts slowly; off holds it still");
+    add_swatches(form_, kGlass, i18n::marked("Glass tint"), glasses(), look.glass, look.glass,
+                 false, i18n::marked("The colour frosted panels are tinted with"));
+    form_.add_slider(kOpacity, tr("Glass opacity"), look.glass.a * 100.0f, 0.0f, 100.0f, 5.0f)
+        .unit = " %";
+    add_swatches(form_, kHighlight, i18n::marked("Highlight"), highlights(), look.highlight,
+                 look.highlight, false, i18n::marked("The selected tab and the focused key"));
+    add_swatches(form_, kAccent, i18n::marked("Accent"), accents(), look.accent, look.accent, false,
+                 i18n::marked("Labels, counts and the text cursor"));
+    form_.add_slider(kCorners, tr("Cover corners"), look.corners, 0.0f, 40.0f, 2.0f).unit = " px";
     form_
-        .add_choice(kTabBar, "Tab bar", {"Plain", "Pills"},
+        .add_choice(kTabBar, tr("Tab bar"), {tr("Plain"), tr("Pills")},
                     look.chrome.tabs == TabStyle::plain ? 0 : 1)
-        .description = "Plain text like the home screen, or pills on a frosted track";
+        .description = tr("Plain text like the home screen, or pills on a frosted track");
     form_
-        .add_choice(kFocusRing, "Focus ring", {"Aurora", "Theme"},
+        .add_choice(kFocusRing, tr("Focus ring"), {tr("Aurora"), tr("Theme")},
                     look.chrome.focus == FocusRing::aurora ? 0 : 1)
-        .description = "A ring that drifts through the colours, or the theme's own";
+        .description = tr("A ring that drifts through the colours, or the theme's own");
     form_
-        .add_choice(kBars, "Bottom bars", {"None", "Outline", "Glass"},
+        .add_choice(kBars, tr("Bottom bars"), {tr("None"), tr("Outline"), tr("Glass")},
                     look.chrome.plates == Plates::none      ? 0
                     : look.chrome.plates == Plates::outline ? 1
                                                             : 2)
-        .description = "Behind the title details and button hints: nothing, a rim, or glass";
-    form_.add_toggle(kBadges, "Category banners", look.chrome.badges).description =
-        "GAME, HOMEBREW, MEDIA or PS4 on each cover";
-    form_.add_toggle(kRim, "Cover rim", look.chrome.cover_rim).description =
-        "A hairline of light around each cover";
-    form_.add_toggle(kGameBackgrounds, "Game backgrounds", prefs.game_backgrounds).description =
-        "The focused game's home-screen picture fades in behind the library; off keeps the sky";
-    form_.add_toggle(kBlurredCovers, "Blurred covers", prefs.blurred_covers).description =
-        "For games with no picture of their own: their cover, blurred. Off keeps the sky for them";
+        .description = tr("Behind the title details and button hints: nothing, a rim, or glass");
+    form_.add_toggle(kBadges, tr("Category banners"), look.chrome.badges).description =
+        tr("GAME, HOMEBREW, MEDIA or PS4 on each cover");
+    form_.add_toggle(kRim, tr("Cover rim"), look.chrome.cover_rim).description =
+        tr("A hairline of light around each cover");
+    form_.add_toggle(kGameBackgrounds, tr("Game backgrounds"), prefs.game_backgrounds).description =
+        tr("The focused game's home-screen picture fades in behind the library; off keeps the sky");
+    form_.add_toggle(kBlurredCovers, tr("Blurred covers"), prefs.blurred_covers).description = tr(
+        "For games with no picture of their own: their cover, blurred. Off keeps the sky for them");
     form_
-        .add_slider(kBackgroundStrength, "Background strength", prefs.background_strength * 100.0f,
-                    20.0f, 100.0f, 10.0f)
+        .add_slider(kBackgroundStrength, tr("Background strength"),
+                    prefs.background_strength * 100.0f, 20.0f, 100.0f, 10.0f)
         .unit = " %";
-    ui::FormRow &save = form_.add_action(kSaveTheme, "Save as new theme");
-    save.description = "Keeps this look as a theme file in /data/orion/themes, to reuse or share";
+    ui::FormRow &save = form_.add_action(kSaveTheme, tr("Save as new theme"));
+    save.description =
+        tr("Keeps this look as a theme file in /data/orion/themes, to reuse or share");
     save.chevron = true;
-    form_.add_action(kRestore, "Restore the ORION look").description =
-        "Back to the galaxy glass ORION starts with";
+    form_.add_action(kRestore, tr("Restore the ORION look")).description =
+        tr("Back to the galaxy glass ORION starts with");
 }
 
 void SettingsPanel::set_art_status(std::string status)
@@ -1354,7 +1385,8 @@ SettingsPanel::Change SettingsPanel::handle(const InputFrame &input, ui::Feedbac
         prefs->art_dir = kArtPaths[std::max(place, 0)];
         if (ui::FormRow *row = form_.row(kArtFolder))
             row->description =
-                "Looked in first, and where downloads go: " + art_folder(*prefs, state_dir_);
+                trf("Looked in first, and where downloads go: {0}. Moving it copies what is there",
+                    {art_folder(*prefs, state_dir_)});
         return Change::art_folder;
     }
     default:
@@ -1562,10 +1594,14 @@ void SettingsPanel::draw_content(ui::Canvas &canvas, float opacity) const
     glyphs.edge = theme.text.with_alpha(0.0f);
     glyphs.ink = theme.text;
     glyphs.label = theme.text_muted;
+    // Hints hold pointers: their words live until the hints are drawn.
+    const std::string sections = tr("Sections");
+    const std::string select = tr("Select");
+    const std::string back = in_rows_ ? tr("Back") : tr("Close");
     const ui::Hint hints[] = {
-        {ui::Button::l1, "Sections", ui::Button::r1},
-        {ui::Button::cross, "Select"},
-        {ui::Button::circle, in_rows_ ? "Back" : "Close"},
+        {ui::Button::l1, sections.c_str(), ui::Button::r1},
+        {ui::Button::cross, select.c_str()},
+        {ui::Button::circle, back.c_str()},
     };
     ui::HintLayout layout;
     layout.size = 38.0f;

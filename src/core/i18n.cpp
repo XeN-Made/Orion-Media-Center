@@ -163,4 +163,18 @@ std::string trf(std::string_view english, std::initializer_list<std::string_view
     return fill(tr(english), args);
 }
 
+std::string plural(long long count, std::string_view one, std::string_view many)
+{
+    const std::string number = std::to_string(count);
+    return trf(count == 1 ? one : many, {number});
+}
+
+std::vector<std::string> tr_range(const char *const *first, const char *const *last)
+{
+    std::vector<std::string> out;
+    for (; first != last; ++first)
+        out.push_back(tr(*first));
+    return out;
+}
+
 } // namespace hui::i18n

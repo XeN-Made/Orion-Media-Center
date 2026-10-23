@@ -4,6 +4,8 @@
 
 #include "orion/look.hpp"
 
+#include "core/i18n.hpp"
+
 #include "core/save_file.hpp"
 #include "library/json.hpp"
 
@@ -22,39 +24,49 @@ using gfx::BackdropMode;
 using gfx::Color;
 
 constexpr Background kBackgrounds[] = {
-    {"galaxy", "Galaxy", BackdropMode::stars},
-    {"aurora", "Aurora", BackdropMode::aurora},
-    {"waves", "Waves", BackdropMode::waves},
-    {"bokeh", "Bokeh", BackdropMode::bokeh},
-    {"gradient", "Gradient", BackdropMode::gradient},
-    {"synthwave", "Synthwave", BackdropMode::grid},
-    {"dots", "Dots", BackdropMode::dots},
-    {"vista", "Vista", BackdropMode::vista},
-    {"paper", "Paper", BackdropMode::paper},
-    {"phosphor", "Phosphor", BackdropMode::phosphor},
+    {"galaxy", i18n::marked("Galaxy"), BackdropMode::stars},
+    {"aurora", i18n::marked("Aurora"), BackdropMode::aurora},
+    {"waves", i18n::marked("Waves"), BackdropMode::waves},
+    {"bokeh", i18n::marked("Bokeh"), BackdropMode::bokeh},
+    {"gradient", i18n::marked("Gradient"), BackdropMode::gradient},
+    {"synthwave", i18n::marked("Synthwave"), BackdropMode::grid},
+    {"dots", i18n::marked("Dots"), BackdropMode::dots},
+    {"vista", i18n::marked("Vista"), BackdropMode::vista},
+    {"paper", i18n::marked("Paper"), BackdropMode::paper},
+    {"phosphor", i18n::marked("Phosphor"), BackdropMode::phosphor},
 };
 
 constexpr Swatch kSkies[] = {
-    {"Deep space", 0x000000, 0x02040b}, {"Midnight", 0x02040f, 0x0a1430},
-    {"Ink", 0x050505, 0x111114},        {"Teal night", 0x000a0c, 0x042026},
-    {"Plum", 0x07020c, 0x180a26},       {"Ember", 0x0a0302, 0x1e0a06},
+    {i18n::marked("Deep space"), 0x000000, 0x02040b},
+    {i18n::marked("Midnight"), 0x02040f, 0x0a1430},
+    {i18n::marked("Ink"), 0x050505, 0x111114},
+    {i18n::marked("Teal night"), 0x000a0c, 0x042026},
+    {i18n::marked("Plum"), 0x07020c, 0x180a26},
+    {i18n::marked("Ember"), 0x0a0302, 0x1e0a06},
 };
 constexpr Swatch kNebulas[] = {
-    {"Blue and teal", 0x16285e, 0x0a4a66}, {"Faint", 0x0a1026, 0x061a24},
-    {"Violet", 0x34208c, 0x0c5a80},        {"Rose", 0x5a1846, 0x2a1250},
-    {"Emerald", 0x0c4a3a, 0x0a3a5a},       {"Ember", 0x5a2a0a, 0x4a0a1a},
+    {i18n::marked("Blue and teal"), 0x16285e, 0x0a4a66},
+    {i18n::marked("Faint"), 0x0a1026, 0x061a24},
+    {i18n::marked("Violet"), 0x34208c, 0x0c5a80},
+    {i18n::marked("Rose"), 0x5a1846, 0x2a1250},
+    {i18n::marked("Emerald"), 0x0c4a3a, 0x0a3a5a},
+    {i18n::marked("Ember"), 0x5a2a0a, 0x4a0a1a},
 };
 constexpr Swatch kGlasses[] = {
-    {"Smoke", 0x0d1024, 0},    {"Clear", 0xffffff, 0}, {"Midnight", 0x060818, 0},
-    {"Charcoal", 0x111111, 0}, {"Frost", 0xdfe8ff, 0},
+    {i18n::marked("Smoke"), 0x0d1024, 0},    {i18n::marked("Clear"), 0xffffff, 0},
+    {i18n::marked("Midnight"), 0x060818, 0}, {i18n::marked("Charcoal"), 0x111111, 0},
+    {i18n::marked("Frost"), 0xdfe8ff, 0},
 };
 constexpr Swatch kHighlights[] = {
-    {"Lavender", 0xa9b8ff, 0}, {"Ice", 0x8fe3ff, 0},  {"White", 0xffffff, 0},
-    {"Teal", 0x3fe0c5, 0},     {"Gold", 0xffc94a, 0}, {"Rose", 0xff7aa8, 0},
+    {i18n::marked("Lavender"), 0xa9b8ff, 0}, {i18n::marked("Ice"), 0x8fe3ff, 0},
+    {i18n::marked("White"), 0xffffff, 0},    {i18n::marked("Teal"), 0x3fe0c5, 0},
+    {i18n::marked("Gold"), 0xffc94a, 0},     {i18n::marked("Rose"), 0xff7aa8, 0},
 };
 constexpr Swatch kAccents[] = {
-    {"Ice", 0x8fe3ff, 0},  {"Teal", 0x3fe0c5, 0}, {"Lavender", 0xa9b8ff, 0}, {"Gold", 0xffc94a, 0},
-    {"Rose", 0xff7aa8, 0}, {"Lime", 0xb6f36a, 0}, {"White", 0xffffff, 0},
+    {i18n::marked("Ice"), 0x8fe3ff, 0},      {i18n::marked("Teal"), 0x3fe0c5, 0},
+    {i18n::marked("Lavender"), 0xa9b8ff, 0}, {i18n::marked("Gold"), 0xffc94a, 0},
+    {i18n::marked("Rose"), 0xff7aa8, 0},     {i18n::marked("Lime"), 0xb6f36a, 0},
+    {i18n::marked("White"), 0xffffff, 0},
 };
 
 std::string file_of(const std::string &state_dir)

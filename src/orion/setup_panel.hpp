@@ -144,10 +144,11 @@ class SetupPanel
     Step step_ = Step::welcome;
     const ThemeLibrary *themes_ = nullptr;
     std::vector<LanguageChoice> languages_;
+    std::string on_word_; // the switches' On and Off (form_.style holds pointers)
+    std::string off_word_;
     const library::Emulator *emulator_ = nullptr;
     int titles_ = 0;
-    std::string scan_status_ = "Finds RetroArch, Porpoise, PS5SX2, PSwanStation, ProsperoEden and "
-                               "PS5-ECAM, and their games";
+    std::string scan_status_; // empty until a scan reports: what a scan finds
     std::string payload_ = "/data/homebrew/PPSA99061/assets/payloads/orion-autostart.elf";
     std::string state_dir_ = "/data/orion";
 };

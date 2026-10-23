@@ -52,7 +52,9 @@ most played.
 
 **Made for the controller**
 - Every setting in one place, Settings (R3), with a first-run setup that
-  walks through the look, emulators, box art and autoboot.
+  walks through the language, the look, emulators, box art and autoboot.
+- In English, Spanish or Portuguese (Brazil), following the console's language
+  or the one you pick; other languages can be added as files.
 - Themes and a look of your own: colours, the galaxy sky, glass, corners,
   focus ring, per tab if you like.
 - Background music (add your own `.ogg` files) and sound effects.
@@ -206,6 +208,11 @@ within 30 minutes. Every step it took is written to
 - **Themes of your own**: a `.theme` text file in `/data/orion/themes/`;
   [docs/ORION_THEMES.md](docs/ORION_THEMES.md) has every key and
   [template.theme](docs/themes/template.theme) to start from.
+- **Language**: Settings, Library, Language (or the first step of the setup).
+  *Automatic* follows the console. To add or correct a language, copy
+  [template.lang](docs/lang/template.lang) to `/data/orion/lang/<code>.lang`,
+  fill in the translations and open ORION again; a file there replaces ORION's
+  own of the same code, and text left empty shows in English.
 - **Removing a title**: Options, Remove. *Remove from home screen* takes it off
   the home screen and keeps its files; *Delete* erases its files (hold Cross
   to confirm). ORION closes while ShadowMountPlus does it, then opens again.

@@ -62,6 +62,9 @@
 namespace hui::concepts
 {
 
+using i18n::tr;
+using i18n::trf;
+
 namespace
 {
 
@@ -113,8 +116,11 @@ struct Shelf
     const char *name;
 };
 constexpr Shelf kShelves[] = {
-    {"all", "All"},     {"games", "Games"},           {"homebrew", "Homebrew"},
-    {"media", "Media"}, {"favourites", "Favourites"},
+    {"all", i18n::marked("All")},
+    {"games", i18n::marked("Games")},
+    {"homebrew", i18n::marked("Homebrew")},
+    {"media", i18n::marked("Media")},
+    {"favourites", i18n::marked("Favourites")},
 };
 
 // In the order of orion::kSortKeys.
@@ -413,13 +419,13 @@ std::string monogram(const std::string &name)
 std::string describe(const Title &title, const std::string &emulator)
 {
     if (title.is_rom())
-        return library::short_system_name(title.system) + "  \xc2\xb7  " + emulator;
+        return library::short_system_name(title.system) + "  ·  " + emulator;
     std::string text = library::platform_name(title.platform);
     if (!text.empty())
-        text += "  \xc2\xb7  ";
-    text += title.source == library::Source::image       ? "Image"
-            : title.source == library::Source::installed ? "Installed"
-                                                         : "Folder";
+        text += "  ·  ";
+    text += title.source == library::Source::image       ? tr("Image")
+            : title.source == library::Source::installed ? tr("Installed")
+                                                         : tr("Folder");
     return text;
 }
 
@@ -428,11 +434,11 @@ const char *shelf_name(library::Shelf shelf)
     switch (shelf)
     {
     case library::Shelf::games:
-        return "Game";
+        return i18n::marked("Game");
     case library::Shelf::homebrew:
-        return "Homebrew";
+        return i18n::marked("Homebrew");
     case library::Shelf::media:
-        return "Media";
+        return i18n::marked("Media");
     }
     return "";
 }
@@ -559,7 +565,7 @@ class Library final : public app::Concept
             {kMargin, kGridTop, gfx::kVirtualWidth - 2.0f * kMargin, kGridBottom - kGridTop});
 
         // Continue playing: small covers in a row, the name under each.
-        continue_.title = "Continue playing";
+        continue_.title = tr("Continue playing");
         continue_.style.title_size = 20.0f;
         continue_.style.title_gap = 10.0f;
         continue_.style.counter = false;
@@ -624,16 +630,7 @@ class Library final : public app::Concept
             titles().begin(), titles().end(), [](const Title &t) { return !t.is_rom(); })));
         setup_.set_autostart_payload(autostart_payload());
         // Where the folder browser starts; the ones not plugged in are left out.
-        std::vector<std::pair<std::string, std::string>> places;
-        for (int i = 0; i < 8; ++i)
-            places.emplace_back("USB drive " + std::to_string(i + 1),
-                                "/mnt/usb" + std::to_string(i));
-        places.emplace_back("Extended storage", "/mnt/ext0");
-        places.emplace_back("Extended storage 2", "/mnt/ext1");
-        places.emplace_back("The console's storage", "/data");
-        if (!sys::on_console())
-            places.emplace_back("This folder (PC preview)", ".");
-        settings_.set_browse_places(std::move(places));
+        set_browse_places();
         settings_.set_app_settings(context_.settings);
         settings_.set_autostart_payload(autostart_payload());
         // A console that has not been set up yet starts on the setup.
@@ -1247,24 +1244,24 @@ class Library final : public app::Concept
         std::string status;
         float progress = -1.0f;
         if (context_.rescan_requested)
-            status = "Looking for emulators and their games…";
+            status = tr("Looking for emulators and their games…");
         else if (art_.running())
         {
             const orion::ArtFetcher::Progress now = art_.progress();
-            status = "Downloading box art  ·  " + std::to_string(now.done) + " of " +
-                     std::to_string(now.total);
+            status = trf("Downloading box art  ·  {0} of {1}",
+                         {std::to_string(now.done), std::to_string(now.total)});
             if (now.total > 0)
                 progress = static_cast<float>(now.done) / static_cast<float>(now.total);
         }
         else if (backdrop_copies_.running())
-            status = "Copying game backgrounds…";
+            status = tr("Copying game backgrounds…");
         else if (icon_copies_.running())
-            status = "Copying HD pictures…";
+            status = tr("Copying HD pictures…");
         else if (updating())
         {
             const orion::Release release = installer_.release();
             if (installer_.state() == orion::UpdateInstaller::State::unpacking)
-                status = "Checking and unpacking ORION " + release.version + "…";
+                status = trf("Checking and unpacking ORION {0}…", {release.version});
             else
             {
                 // The file as it grows, against the size GitHub lists.
@@ -1272,10 +1269,13 @@ class Library final : public app::Concept
                 const std::size_t done = ::stat(installer_.download_path().c_str(), &part) == 0
                                              ? static_cast<std::size_t>(part.st_size)
                                              : 0;
-                status = "Downloading ORION " + release.version + "  ·  " + megabytes(done);
+                status =
+                    release.zip_size > 0
+                        ? trf("Downloading ORION {0}  ·  {1} of {2}",
+                              {release.version, megabytes(done), megabytes(release.zip_size)})
+                        : trf("Downloading ORION {0}  ·  {1}", {release.version, megabytes(done)});
                 if (release.zip_size > 0)
                 {
-                    status += " of " + megabytes(release.zip_size);
                     progress = static_cast<float>(done) / static_cast<float>(release.zip_size);
                 }
             }
@@ -1293,27 +1293,47 @@ class Library final : public app::Concept
         status_shown_.update(dt, context_.settings.reduced_motion ? 60.0f : 6.0f);
     }
 
+    // A header picker wide enough for its longest choice, never narrower than
+    // the English layout. Measured in the semibold face with room to spare,
+    // since a theme may label in a wider one.
+    float picker_width(const std::vector<ui::SelectOption> &options, float least) const
+    {
+        const gfx::Font *font = context_.fonts.semibold.font;
+        if (font == nullptr)
+            return least;
+        float widest = 0.0f;
+        for (const ui::SelectOption &option : options)
+            widest = std::max(widest, font->measure(option.label, sort_.style.value_size));
+        const float chrome = 2.0f * sort_.style.padding + 2.0f * sort_.style.chevron_size + 24.0f;
+        return std::clamp(widest * 1.1f + chrome, least, least * 1.6f);
+    }
+
     // The sort picker's choices for the active tab: the library's order,
     // then each order of its own.
     void sync_sort()
     {
         std::vector<ui::SelectOption> options;
-        options.emplace_back(std::string("Default (") +
-                             orion::kSortNames[static_cast<int>(sort_of(prefs_.sort))] + ")");
+        options.emplace_back(
+            trf("Default ({0})", {tr(orion::kSortNames[static_cast<int>(sort_of(prefs_.sort))])}));
         for (int i = 0; i < orion::kSortCount; ++i)
-            options.emplace_back(orion::kSortNames[i]);
+            options.emplace_back(tr(orion::kSortNames[i]));
+        const float sort_width = picker_width(options, kSortWidth);
         if (!sort_.is_open())
             sort_.set_options(std::move(options));
         const std::string own = prefs_.tab_sort(active_key());
         sort_.set_index(own.empty() ? 0 : static_cast<int>(sort_of(own)) + 1);
         // The view picker the same way: the Library's view, then each.
         std::vector<ui::SelectOption> views;
-        views.emplace_back(std::string("Default (") +
-                           orion::kViewNames[static_cast<int>(view_of(prefs_.view))] + ")");
+        views.emplace_back(
+            trf("Default ({0})", {tr(orion::kViewNames[static_cast<int>(view_of(prefs_.view))])}));
         for (int i = 0; i < orion::kViewCount; ++i)
-            views.emplace_back(orion::kViewNames[i]);
+            views.emplace_back(tr(orion::kViewNames[i]));
+        const float view_width = picker_width(views, kViewWidth);
         if (!view_pick_.is_open())
             view_pick_.set_options(std::move(views));
+        // Both stay right-aligned; a language with longer words widens them.
+        sort_.set_bounds({gfx::kVirtualWidth - kMargin - sort_width, 132.0f, sort_width, 50.0f});
+        view_pick_.set_bounds({sort_.bounds().x - 16.0f - view_width, 132.0f, view_width, 50.0f});
         const std::string own_view = prefs_.tab_view(active_key());
         view_pick_.set_index(own_view.empty() ? 0 : static_cast<int>(view_of(own_view)) + 1);
     }
@@ -1519,7 +1539,7 @@ class Library final : public app::Concept
     {
         std::vector<orion::TabEntry> tabs;
         for (const Shelf &shelf : kShelves)
-            tabs.push_back({shelf.key, shelf.name});
+            tabs.push_back({shelf.key, tr(shelf.name)});
         for (const library::System &system : context_.library.emulator.systems)
             tabs.push_back({"sys:" + system.name, system.short_name});
         for (const orion::CustomTab &tab : prefs_.tabs)
@@ -1533,10 +1553,10 @@ class Library final : public app::Concept
     {
         context_.rescan_requested = true;
         scan_asked_ = true;
-        settings_.set_scan_status("Looking for emulators and their games…");
+        settings_.set_scan_status(tr("Looking for emulators and their games…"));
         if (settings_.is_open())
             settings_.refresh(look_, prefs_);
-        setup_.set_scan_status("Looking for emulators and their games…");
+        setup_.set_scan_status(tr("Looking for emulators and their games…"));
         if (setup_.is_open())
             setup_.refresh(look_, prefs_);
         feedback.play(audio::Cue::select);
@@ -1548,9 +1568,10 @@ class Library final : public app::Concept
         int games = 0;
         for (const library::EmulatorApp &app : emulator.apps)
             games += app.games;
-        const std::string found = "Found " + std::to_string(emulator.apps.size()) +
-                                  (emulator.apps.size() == 1 ? " emulator, " : " emulators, ") +
-                                  std::to_string(games) + (games == 1 ? " game" : " games");
+        const std::string found =
+            trf("Found {0}, {1}", {i18n::plural(static_cast<long long>(emulator.apps.size()),
+                                                "{0} emulator", "{0} emulators"),
+                                   i18n::plural(games, "{0} game", "{0} games")});
         settings_.set_scan_status(found);
         setup_.set_scan_status(found);
         rebuild_tabs(active_key());
@@ -1631,10 +1652,36 @@ class Library final : public app::Concept
         setup_.set_languages(choices);
         keys_.style.space_label = i18n::tr("Space");
         keys_.style.done_label = i18n::tr("Done");
+        // The hint bar holds pointers: its words live in hint_words_.
+        hint_words_ = {tr("System"), tr("Shelf"), tr("Launch"),  tr("Favourite"),
+                       tr("Search"), tr("More"),  tr("Settings")};
+        hints_ = {ui::Hint{ui::Button::l2, hint_words_[0].c_str(), ui::Button::r2},
+                  ui::Hint{ui::Button::l1, hint_words_[1].c_str(), ui::Button::r1},
+                  ui::Hint{ui::Button::cross, hint_words_[2].c_str()},
+                  ui::Hint{ui::Button::square, hint_words_[3].c_str()},
+                  ui::Hint{ui::Button::triangle, hint_words_[4].c_str()},
+                  ui::Hint{ui::Button::options, hint_words_[5].c_str()},
+                  ui::Hint{ui::Button::right_stick, hint_words_[6].c_str()}};
+    }
+
+    // Where the folder browser starts; the ones not plugged in are left out.
+    void set_browse_places()
+    {
+        std::vector<std::pair<std::string, std::string>> places;
+        for (int i = 0; i < 8; ++i)
+            places.emplace_back(trf("USB drive {0}", {std::to_string(i + 1)}),
+                                "/mnt/usb" + std::to_string(i));
+        places.emplace_back(tr("Extended storage"), "/mnt/ext0");
+        places.emplace_back(trf("Extended storage {0}", {"2"}), "/mnt/ext1");
+        places.emplace_back(tr("The console's storage"), "/data");
+        if (!sys::on_console())
+            places.emplace_back(tr("This folder (PC preview)"), ".");
+        settings_.set_browse_places(std::move(places));
     }
 
     void language_changed(app::Feedback &feedback)
     {
+        set_browse_places();
         save_prefs();
         use_language();
         settings_.set_tabs(every_tab());
@@ -1737,7 +1784,7 @@ class Library final : public app::Concept
             const std::string path = settings_.browse_result();
             if (!orion::valid_art_dir(path))
             {
-                show_note(false, "A game folder goes under /data or /mnt: " + path);
+                show_note(false, trf("A game folder goes under /data or /mnt: {0}", {path}));
                 feedback.play(audio::Cue::error);
                 break;
             }
@@ -1747,7 +1794,7 @@ class Library final : public app::Concept
                 prefs_.rom_folders.push_back({path, "", settings_.emulator_page()});
             save_prefs();
             scan_emulators(feedback);
-            show_note(true, "Added " + path + ": looking for its games");
+            show_note(true, trf("Added {0}: looking for its games", {path}));
             break;
         }
         case orion::SettingsPanel::Change::folders:
@@ -1788,8 +1835,8 @@ class Library final : public app::Concept
             request_backdrops();
             settings_.set_storage(context_.library.self_path, 0);
             settings_.refresh(look_, prefs_);
-            show_note(true,
-                      "Copying the game backgrounds again (" + std::to_string(gone) + " cleared)");
+            show_note(true, trf("Copying the game backgrounds again ({0} cleared)",
+                                {std::to_string(gone)}));
             feedback.play(audio::Cue::select);
             break;
         }
@@ -1879,7 +1926,7 @@ class Library final : public app::Concept
             if (!orion::valid_art_dir(name_) || ::stat(name_.c_str(), &info) != 0 ||
                 !S_ISDIR(info.st_mode))
             {
-                show_note(false, "No folder at " + name_ + " (it goes under /data or /mnt)");
+                show_note(false, trf("No folder at {0} (it goes under /data or /mnt)", {name_}));
                 feedback.play(audio::Cue::error);
                 return;
             }
@@ -1887,15 +1934,16 @@ class Library final : public app::Concept
                 prefs_.rom_folders.push_back({name_, "", folder_emulator_});
             save_prefs();
             scan_emulators(feedback);
-            show_note(true, "Added " + name_ + ": looking for its games");
+            show_note(true, trf("Added {0}: looking for its games", {name_}));
             return;
         }
         if (typing == Typing::art_folder)
         {
             if (!orion::valid_art_dir(name_))
             {
-                show_note(false,
-                          "A box art folder goes under /data or /mnt, like /mnt/usb0/ORION/art");
+                show_note(
+                    false,
+                    tr("A box art folder goes under /data or /mnt, like /mnt/usb0/ORION/art"));
                 feedback.play(audio::Cue::error);
                 settings_.refresh(look_, prefs_); // the row goes back to where it was
                 return;
@@ -1938,8 +1986,8 @@ class Library final : public app::Concept
         prefs_.set_title_name(title->id, name);
         save_prefs();
         context_.new_names.emplace_back(title->id, name);
-        show_note(true, name.empty() ? title->id + " has its own name again: " + own
-                                     : "Renamed to " + name);
+        show_note(true, name.empty() ? trf("{0} has its own name again: {1}", {title->id, own})
+                                     : trf("Renamed to {0}", {name}));
         feedback.play(audio::Cue::saved);
     }
 
@@ -1952,31 +2000,31 @@ class Library final : public app::Concept
         const orion::CustomTab *placed = prefs_.placement(title.id);
 
         std::vector<ui::MenuItem> items;
-        ui::MenuItem launch = menu_item("Launch");
+        ui::MenuItem launch = menu_item(tr("Launch"));
         launch.tag = kItemLaunch;
         launch.disabled = launch_pending_ > 0.0f;
         items.push_back(launch);
         ui::MenuItem gap;
         gap.separator = true;
         items.push_back(gap);
-        ui::MenuItem favourite =
-            menu_item(favourite_of(title.id) ? "Remove from Favourites" : "Add to Favourites");
-        favourite.shortcut = "Square";
+        ui::MenuItem favourite = menu_item(favourite_of(title.id) ? tr("Remove from Favourites")
+                                                                  : tr("Add to Favourites"));
+        favourite.shortcut = tr("Square");
         favourite.tag = kItemFavourite;
         items.push_back(favourite);
         // A game more than one emulator plays: which one, for this game.
         if (library::players_for(context_.library.emulator, title).size() >= 2)
         {
-            ui::MenuItem with = menu_item("Play with…");
+            ui::MenuItem with = menu_item(tr("Play with…"));
             with.shortcut = player_label(title);
             with.tag = kItemPlayWith;
             items.push_back(with);
         }
         const bool hidden = prefs_.title_hidden(title.id);
-        ui::MenuItem hide = menu_item(hidden ? "Show this title" : "Hide this title");
+        ui::MenuItem hide = menu_item(hidden ? tr("Show this title") : tr("Hide this title"));
         hide.tag = kItemHide;
         items.push_back(hide);
-        ui::MenuItem rename = menu_item("Rename…");
+        ui::MenuItem rename = menu_item(tr("Rename…"));
         rename.tag = kItemRename;
         items.push_back(rename);
         // A sharper picture: the home screen's for a console title shown from
@@ -1984,8 +2032,8 @@ class Library final : public app::Concept
         if (title.is_rom() || title.icon.find("/icon-cache/") != std::string::npos ||
             title.icon.find("/icons/") != std::string::npos)
         {
-            ui::MenuItem art =
-                menu_item(title.is_rom() ? "Download box art again" : "Download HD picture");
+            ui::MenuItem art = menu_item(title.is_rom() ? tr("Download box art again")
+                                                        : tr("Download HD picture"));
             art.tag = kItemHdArt;
             items.push_back(art);
         }
@@ -1995,18 +2043,18 @@ class Library final : public app::Concept
         for (std::size_t i = 0; i < prefs_.tabs.size(); ++i)
         {
             const bool here = placed != nullptr && placed->id == prefs_.tabs[i].id;
-            ui::MenuItem move = menu_item("Move to " + prefs_.tabs[i].name);
+            ui::MenuItem move = menu_item(trf("Move to {0}", {prefs_.tabs[i].name}));
             move.tag = kItemMove + static_cast<int>(i);
             move.disabled = here;
-            move.shortcut = here ? "Here" : "";
+            move.shortcut = here ? tr("Here") : "";
             items.push_back(move);
         }
-        ui::MenuItem fresh = menu_item("Move to a new tab…");
+        ui::MenuItem fresh = menu_item(tr("Move to a new tab…"));
         fresh.tag = kItemNewTab;
         items.push_back(fresh);
         if (placed != nullptr)
         {
-            ui::MenuItem unplace = menu_item("Remove from " + placed->name);
+            ui::MenuItem unplace = menu_item(trf("Remove from {0}", {placed->name}));
             unplace.tag = kItemUnplace;
             unplace.danger = true;
             items.push_back(unplace);
@@ -2018,13 +2066,13 @@ class Library final : public app::Concept
         items.push_back(rule);
         if (removable(title))
         {
-            ui::MenuItem remove = menu_item("Remove…");
+            ui::MenuItem remove = menu_item(tr("Remove…"));
             remove.tag = kItemRemove;
             remove.danger = true;
             items.push_back(remove);
         }
-        ui::MenuItem close = menu_item("Close ORION");
-        close.shortcut = "Hold Circle";
+        ui::MenuItem close = menu_item(tr("Close ORION"));
+        close.shortcut = tr("Hold Circle");
         close.tag = kItemClose;
         items.push_back(close);
         menu_.set_items(std::move(items));
@@ -2059,17 +2107,17 @@ class Library final : public app::Concept
         std::vector<ui::MenuItem> items;
         if (title->is_rom())
         {
-            ui::MenuItem erase = menu_item("Delete the game file…");
+            ui::MenuItem erase = menu_item(tr("Delete the game file…"));
             erase.tag = kItemRemoveRom;
             erase.danger = true;
             items.push_back(erase);
         }
         else
         {
-            ui::MenuItem home = menu_item("Remove from home screen…");
+            ui::MenuItem home = menu_item(tr("Remove from home screen…"));
             home.tag = kItemRemoveHome;
             items.push_back(home);
-            ui::MenuItem erase = menu_item("Delete from the console…");
+            ui::MenuItem erase = menu_item(tr("Delete from the console…"));
             erase.tag = kItemRemoveErase;
             erase.danger = true;
             items.push_back(erase);
@@ -2092,22 +2140,24 @@ class Library final : public app::Concept
         if (kind == kItemRemoveHome)
         {
             content.icon = ui::StatusKind::warning;
-            content.title = "Remove " + title->name + " from the home screen?";
-            content.body = "Its files stay where they are:\n" + title->path +
-                           "\nORION moves it to the Hidden tab.";
-            content.buttons = {{"Cancel"}, {"Remove", ui::ButtonKind::primary, false}};
+            content.title = trf("Remove {0} from the home screen?", {title->name});
+            content.body =
+                trf("Its files stay where they are:\n{0}\nORION moves it to the Hidden tab.",
+                    {title->path});
+            content.buttons = {{tr("Cancel")}, {tr("Remove"), ui::ButtonKind::primary, false}};
         }
         else
         {
             content.icon = ui::StatusKind::danger;
-            content.title = "Delete " + title->name + "?";
+            content.title = trf("Delete {0}?", {title->name});
             content.body =
-                (kind == kItemRemoveRom ? std::string("Its game file is erased for good:")
-                                        : std::string("Its files are erased for good:")) +
-                "\n" + title->path +
-                (kind == kItemRemoveRom ? "" : "\nIt leaves the home screen too.") +
-                "\nThis cannot be undone.";
-            content.buttons = {{"Cancel"}, {delete_label(0.0f), ui::ButtonKind::primary, true}};
+                kind == kItemRemoveRom
+                    ? trf("Its game file is erased for good:\n{0}\nThis cannot be undone.",
+                          {title->path})
+                    : trf("Its files are erased for good:\n{0}\nIt leaves the home screen "
+                          "too.\nThis cannot be undone.",
+                          {title->path});
+            content.buttons = {{tr("Cancel")}, {delete_label(0.0f), ui::ButtonKind::primary, true}};
         }
         content.default_button = 0;
         dialog_.open(std::move(content), feedback);
@@ -2116,9 +2166,9 @@ class Library final : public app::Concept
     static std::string delete_label(float held)
     {
         if (held <= 0.0f)
-            return "Hold Cross to delete"; // the fonts have no ✕
-        return "Keep holding… " + std::to_string(static_cast<int>(held / kHoldToDelete * 100.0f)) +
-               "%";
+            return tr("Hold Cross to delete"); // the fonts have no ✕
+        return trf("Keep holding… {0}%",
+                   {std::to_string(static_cast<int>(held / kHoldToDelete * 100.0f))});
     }
 
     void update_dialog(const InputFrame &input, float dt, app::Feedback &feedback)
@@ -2182,13 +2232,13 @@ class Library final : public app::Concept
                 std::remove(title->path.c_str()) != 0)
             {
                 show_note(false,
-                          "Could not delete " + title->path + " (" + std::strerror(errno) + ")");
+                          trf("Could not delete {0} ({1})", {title->path, std::strerror(errno)}));
                 feedback.play(audio::Cue::error);
                 return;
             }
             removed_ids_.insert(title->id);
             tabs_changed();
-            show_note(true, "Deleted " + title->name);
+            show_note(true, trf("Deleted {0}", {title->name}));
             feedback.play(audio::Cue::erase);
             return;
         }
@@ -2200,9 +2250,9 @@ class Library final : public app::Concept
         const std::string &self_path = context_.library.self_path;
         std::string why;
         if (!sys::on_console())
-            why = "not on a console";
+            why = tr("not on a console");
         else if (self.empty() || self_path.empty())
-            why = "ORION does not know its own folder";
+            why = tr("ORION does not know its own folder");
         else
         {
             const std::string request = self + "\n@remove " +
@@ -2214,15 +2264,19 @@ class Library final : public app::Concept
         }
         if (!why.empty())
         {
-            show_note(false, why == "not on a console"
-                                 ? std::string("Removing works on the console only")
-                                 : "Could not remove " + title->name + ": " + why);
+            show_note(false, why == tr("not on a console")
+                                 ? tr("Removing works on the console only")
+                                 : trf("Could not remove {0}: {1}", {title->name, why}));
             feedback.play(audio::Cue::error);
             return;
         }
         launch_ok_ = true;
-        launch_message_ = (remove_kind_ == kItemRemoveHome ? "Removing " : "Deleting ") +
-                          title->name + ": ORION closes now and opens again when it is done";
+        launch_message_ =
+            remove_kind_ == kItemRemoveHome
+                ? trf("Removing {0}: ORION closes now and opens again when it is done",
+                      {title->name})
+                : trf("Deleting {0}: ORION closes now and opens again when it is done",
+                      {title->name});
         launch_shown_ = 6.0f;
         launch_exit_ = 1.6f; // a moment longer: there is more to read
         launch_pending_ = 30.0f;
@@ -2257,19 +2311,19 @@ class Library final : public app::Concept
         const std::string name = title != nullptr ? title->name : id;
         if (!ok)
         {
-            show_note(false, "Could not remove " + name + ": " + message);
+            show_note(false, trf("Could not remove {0}: {1}", {name, message}));
             return;
         }
         if (kind == "home")
         {
             prefs_.set_title_hidden(id, true);
             save_prefs();
-            show_note(true, name + " left the home screen; it is on the Hidden tab");
+            show_note(true, trf("{0} left the home screen; it is on the Hidden tab", {name}));
         }
         else
         {
             removed_ids_.insert(id);
-            show_note(true, "Deleted " + name);
+            show_note(true, trf("Deleted {0}", {name}));
         }
     }
 
@@ -2306,8 +2360,9 @@ class Library final : public app::Concept
             }
             menu_.set_items(std::move(items));
             menu_.open(grid_.cell_rect(grid_.focus()), feedback);
-            show_note(true, "Which emulator for " + title->name +
-                                "? ORION remembers; Options, Play with… changes it");
+            show_note(true,
+                      trf("Which emulator for {0}? ORION remembers; Options, Play with… changes it",
+                          {title->name}));
             return;
         }
         // The default, as it would be without a choice.
@@ -2318,9 +2373,9 @@ class Library final : public app::Concept
                 usual = app->key == "retroarch" ? "RetroArch · " + core_name(core_for(*title))
                                                 : app->name;
         }
-        ui::MenuItem standard = menu_item("Default (" + usual + ")");
+        ui::MenuItem standard = menu_item(trf("Default ({0})", {usual}));
         standard.tag = kItemPlayer;
-        standard.shortcut = chosen.empty() ? "Now" : "";
+        standard.shortcut = chosen.empty() ? tr("Now") : "";
         items.push_back(standard);
         ui::MenuItem line;
         line.separator = true;
@@ -2331,7 +2386,7 @@ class Library final : public app::Concept
         {
             ui::MenuItem item = menu_item(players[i].label);
             item.tag = kItemPlayer + 1 + static_cast<int>(i);
-            item.shortcut = players[i].key == chosen ? "Now" : "";
+            item.shortcut = players[i].key == chosen ? tr("Now") : "";
             items.push_back(item);
         }
         menu_.set_items(std::move(items));
@@ -2399,7 +2454,7 @@ class Library final : public app::Concept
                 launch(title->id, feedback);
                 return;
             }
-            show_note(true, title->name + " plays with " + player_label(*title));
+            show_note(true, trf("{0} plays with {1}", {title->name, player_label(*title)}));
             feedback.play(audio::Cue::select);
             return;
         }
@@ -2419,7 +2474,7 @@ class Library final : public app::Concept
                 return;
             if (!sys::on_console())
             {
-                show_note(false, "Pictures are downloaded on the console");
+                show_note(false, tr("Pictures are downloaded on the console"));
                 feedback.play(audio::Cue::error);
                 return;
             }
@@ -2428,12 +2483,12 @@ class Library final : public app::Concept
                 if (art_.running() ||
                     !art_.start({art_job(*title)}, context_.library.state_dir + "/art.txt"))
                 {
-                    show_note(false, "Box art is downloading; try again when it is done");
+                    show_note(false, tr("Box art is downloading; try again when it is done"));
                     feedback.play(audio::Cue::error);
                     return;
                 }
                 art_manual_ = true;
-                show_note(true, "Looking for box art for " + title->name + "\u2026");
+                show_note(true, trf("Looking for box art for {0}…", {title->name}));
             }
             else
             {
@@ -2442,11 +2497,11 @@ class Library final : public app::Concept
                 std::remove((folder + "/" + title->id + ".none").c_str());
                 if (!start_icon_copies({title->id}))
                 {
-                    show_note(false, "Pictures are being copied; try again in a moment");
+                    show_note(false, tr("Pictures are being copied; try again in a moment"));
                     feedback.play(audio::Cue::error);
                     return;
                 }
-                show_note(true, "Copying the home screen's picture of " + title->name + "\u2026");
+                show_note(true, trf("Copying the home screen's picture of {0}…", {title->name}));
             }
             feedback.play(audio::Cue::select);
             return;
@@ -2462,8 +2517,8 @@ class Library final : public app::Concept
                 return;
             }
             tabs_changed();
-            show_note(true, hide ? name + " is hidden: it is on the Hidden tab, at the end"
-                                 : name + " is back on its shelves");
+            show_note(true, hide ? trf("{0} is hidden: it is on the Hidden tab, at the end", {name})
+                                 : trf("{0} is back on its shelves", {name}));
             feedback.play(audio::Cue::select);
             return;
         }
@@ -2562,22 +2617,22 @@ class Library final : public app::Concept
         if (!self_path.empty())
             request += "@record " + title->id + "\t" + self_path + "/play-log.txt\n";
         if (title->is_rom() && app == nullptr)
-            why = "the emulator for it is not installed (Settings, Emulators: Scan)";
+            why = tr("the emulator for it is not installed (Settings, Emulators: Scan)");
         else if (retroarch && core.empty())
-            why = "no core plays " + library::short_system_name(title->system);
+            why = trf("no core plays {0}", {library::short_system_name(title->system)});
         else if (!sys::on_console())
-            why = "not on a console";
+            why = tr("not on a console");
         else if (retroarch && player.rom.size() > library::kRetroArchArgMax)
-            why = "its path is longer than RetroArch reads";
+            why = tr("its path is longer than RetroArch reads");
         else if (title->is_rom() && player.rom.size() > kMaxRequestPath)
-            why = "its path is too long";
+            why = tr("its path is too long");
         else if (retroarch &&
                  !write_shared(staged_args, library::retroarch_args(core, player.rom, token)))
-            why = "could not write " + staged_args;
+            why = trf("could not write {0}", {staged_args});
         else if (retroarch && !write_shared(staged_test_run, "ORION " + token + "\n"))
-            why = "could not write " + staged_test_run;
+            why = trf("could not write {0}", {staged_test_run});
         else if (ps5sx2 && !write_shared(staged_note, library::ps5sx2_launch_note(player.rom)))
-            why = "could not write " + staged_note;
+            why = trf("could not write {0}", {staged_note});
         else
         {
             why = send_helper(request);
@@ -2589,8 +2644,8 @@ class Library final : public app::Concept
             log_launch(*title, "sent the helper to 127.0.0.1:" + std::to_string(kLoaderPort) +
                                    "; closing ORION");
             launch_message_ = app != nullptr && !app->starts_games
-                                  ? "Opening " + app->name + ": choose " + title->name + " there"
-                                  : "Starting " + title->name + "\u2026";
+                                  ? trf("Opening {0}: choose {1} there", {app->name, title->name})
+                                  : trf("Starting {0}…", {title->name});
             // Long enough to read the card, then ORION gets out of the way.
             launch_exit_ = 0.9f;
             launch_pending_ = 30.0f;
@@ -2599,9 +2654,9 @@ class Library final : public app::Concept
         {
             log_launch(*title, "not launched: " + why);
             std::remove((dir + "/launch-request.txt").c_str());
-            launch_message_ = why == "not on a console"
-                                  ? std::string("Launching works on the console only")
-                                  : "Could not start " + title->name + ": " + why;
+            launch_message_ = why == tr("not on a console")
+                                  ? tr("Launching works on the console only")
+                                  : trf("Could not start {0}: {1}", {title->name, why});
         }
         launch_shown_ = 6.0f;
         feedback.play(launch_ok_ ? audio::Cue::launch : audio::Cue::error);
@@ -2615,20 +2670,18 @@ class Library final : public app::Concept
         const std::string &dir = context_.library.state_dir;
         std::string elf;
         if (dir.empty() || !save::write_atomic(dir + "/launch-request.txt", request).empty())
-            return "could not write the launch request";
+            return tr("could not write the launch request");
         if (!save::read_file(kLauncherPath, &elf, 4u << 20) || elf.empty())
-            return std::string("the launch helper is missing (") + kLauncherPath + ")";
+            return trf("the launch helper is missing ({0})", {kLauncherPath});
         const int error = sys::send_payload(elf, kLoaderPort);
         if (error == 0)
             return "";
         std::remove((dir + "/launch-request.txt").c_str());
         if (error == sys::kLaunchUnsupported)
-            return "not on a console";
-        return "the ELF loader did not answer (errno " + std::to_string(error) + ")";
+            return tr("not on a console");
+        return trf("the ELF loader did not answer (errno {0})", {std::to_string(error)});
     }
 
-    // Games for an emulator that have no box art yet. Without retry, games a
-    // run already found nothing for are left alone (art/tried.txt).
     // What the box art downloader needs for one game: where it goes, and
     // what it is found by (its file, its name, its GameTDB ID).
     orion::ArtJob art_job(const Title &title) const
@@ -2662,6 +2715,8 @@ class Library final : public app::Concept
                                            : file.substr(before + 1, slash - before - 1);
     }
 
+    // Games for an emulator that have no box art yet. Without retry, games a
+    // run already found nothing for are left alone (art/tried.txt).
     std::vector<orion::ArtJob> art_jobs(bool retry) const
     {
         const std::string &state = context_.library.state_dir;
@@ -2691,7 +2746,7 @@ class Library final : public app::Concept
         if (count == 0)
         {
             if (manual)
-                show_note(true, "Every game already has its box art");
+                show_note(true, tr("Every game already has its box art"));
             return;
         }
         const std::string &state = context_.library.state_dir;
@@ -2700,10 +2755,11 @@ class Library final : public app::Concept
             return;
         sys::art_trace("art thread started");
         art_manual_ = manual;
-        const std::string games = std::to_string(count) + (count == 1 ? " game" : " games");
-        settings_.set_art_status("Looking for box art for " + games + "\u2026");
+        const std::string games =
+            i18n::plural(static_cast<long long>(count), "{0} game", "{0} games");
+        settings_.set_art_status(trf("Looking for box art for {0}…", {games}));
         if (manual)
-            show_note(true, "Looking for box art for " + games + "\u2026");
+            show_note(true, trf("Looking for box art for {0}…", {games}));
     }
 
     // Games' box art is uploaded only once it is about to be seen
@@ -2753,26 +2809,25 @@ class Library final : public app::Concept
         if (art_.running())
         {
             const orion::ArtFetcher::Progress now = art_.progress();
-            settings_.set_art_status("Found " + std::to_string(now.found) + " of " +
-                                     std::to_string(now.total) + " so far\u2026");
+            settings_.set_art_status(trf("Found {0} of {1} so far…",
+                                         {std::to_string(now.found), std::to_string(now.total)}));
         }
         if (!art_.take_finished())
             return;
         const orion::ArtFetcher::Progress done = art_.progress();
         remember_tried(art_.take_missing());
         std::string summary =
-            "Found " + std::to_string(done.found) + " of " + std::to_string(done.total);
+            trf("Found {0} of {1}", {std::to_string(done.found), std::to_string(done.total)});
         if (done.missing > 0)
-            summary += ", none for " + std::to_string(done.missing);
+            summary += trf(", none for {0}", {std::to_string(done.missing)});
         if (done.failed > 0)
-            summary += ", " + std::to_string(done.failed) + " failed (" + done.error + ")";
-        settings_.set_art_status("Last run: " + summary);
+            summary += trf(", {0} failed ({1})", {std::to_string(done.failed), done.error});
+        settings_.set_art_status(trf("Last run: {0}", {summary}));
         if (done.found == 0 && done.failed > 0)
-            show_note(false, "Could not get box art: " + done.error);
+            show_note(false, trf("Could not get box art: {0}", {done.error}));
         else if (art_manual_ || done.found > 0)
-            show_note(true, done.found == 1
-                                ? std::string("Found box art for 1 game")
-                                : "Found box art for " + std::to_string(done.found) + " games");
+            show_note(true, i18n::plural(done.found, "Found box art for {0} game",
+                                         "Found box art for {0} games"));
         else
             return;
         feedback.play(done.found > 0 ? audio::Cue::saved : audio::Cue::error);
@@ -2825,8 +2880,11 @@ class Library final : public app::Concept
         }
         if (found > 0)
             art_sweep_ = 2;
-        show_note(true, "Box art folder: " + orion::art_folder(prefs_, context_.library.state_dir) +
-                            (found > 0 ? "  (" + std::to_string(found) + " found)" : ""));
+        show_note(true, found > 0 ? trf("Box art folder: {0}  ({1} found)",
+                                        {orion::art_folder(prefs_, context_.library.state_dir),
+                                         std::to_string(found)})
+                                  : trf("Box art folder: {0}",
+                                        {orion::art_folder(prefs_, context_.library.state_dir)}));
     }
 
     // The covers on screen take the textures the shell has uploaded since.
@@ -2888,9 +2946,8 @@ class Library final : public app::Concept
         if (context_.version.empty() || !sys::on_console())
         {
             settings_.set_update_status(
-                "ORION " +
-                (context_.version.empty() ? std::string("(no version)") : context_.version) +
-                ": checking works on the console only");
+                trf("ORION {0}: checking works on the console only",
+                    {context_.version.empty() ? tr("(no version)") : context_.version}));
             settings_.refresh(look_, prefs_);
             return;
         }
@@ -2900,8 +2957,8 @@ class Library final : public app::Concept
             const int waited = static_cast<int>(clock_ - check_started_);
             if (waited < 20)
             {
-                settings_.set_update_status("ORION " + context_.version + ": still checking (" +
-                                            std::to_string(waited) + " s)");
+                settings_.set_update_status(trf("ORION {0}: still checking ({1} s)",
+                                                {context_.version, std::to_string(waited)}));
                 settings_.refresh(look_, prefs_);
                 return;
             }
@@ -2917,7 +2974,7 @@ class Library final : public app::Concept
             return;
         check_started_ = clock_;
         manual_update_check_ = asked;
-        settings_.set_update_status("ORION " + context_.version + ": checking…");
+        settings_.set_update_status(trf("ORION {0}: checking…", {context_.version}));
         settings_.refresh(look_, prefs_);
     }
 
@@ -2931,15 +2988,15 @@ class Library final : public app::Concept
         if (!updates_->take_finished())
             return;
         const orion::Release latest = updates_->latest();
-        std::string status = "ORION " + context_.version;
+        std::string status;
         switch (updates_->state())
         {
         case orion::UpdateCheck::State::available:
-            status += ". ORION " + latest.version + " is out";
+            status = trf("ORION {0}. ORION {1} is out", {context_.version, latest.version});
             if (!manual_update_check_ && failed_update().first == latest.version)
             {
-                status += ". It could not be installed (" + failed_update().second +
-                          "): Check now tries again";
+                status += trf(". It could not be installed ({0}): Check now tries again",
+                              {failed_update().second});
                 orion::update_log(update_log_path(),
                                   "orion: " + latest.version + " failed before; not by itself");
             }
@@ -2947,21 +3004,21 @@ class Library final : public app::Concept
             {
                 orion::update_log(update_log_path(), "orion: downloading " + latest.version);
                 download_update(latest);
-                status += ": downloading it…";
+                status += tr(": downloading it…");
             }
             else
                 show_note(true,
-                          "ORION " + latest.version + " is out: Settings, Library, Check now");
+                          trf("ORION {0} is out: Settings, Library, Check now", {latest.version}));
             break;
         case orion::UpdateCheck::State::up_to_date:
-            status += " is the newest";
+            status = trf("ORION {0} is the newest", {context_.version});
             if (manual_update_check_)
-                show_note(true, "ORION " + context_.version + " is the newest");
+                show_note(true, status);
             break;
         default:
-            status += ". Could not check: " + updates_->error();
+            status = trf("ORION {0}. Could not check: {1}", {context_.version, updates_->error()});
             if (manual_update_check_)
-                show_note(false, "Could not check for updates: " + updates_->error());
+                show_note(false, trf("Could not check for updates: {0}", {updates_->error()}));
             break;
         }
         settings_.set_update_status(std::move(status));
@@ -2986,9 +3043,11 @@ class Library final : public app::Concept
         // It is big: say so, so nobody closes ORION halfway; a system
         // notification too, which shows over Settings and anything else.
         const std::string note =
-            "Downloading ORION " + release.version +
-            (release.zip_size > 0 ? " (" + megabytes(release.zip_size) + ")" : "") +
-            ". Keep ORION open; it asks before it installs.";
+            release.zip_size > 0
+                ? trf("Downloading ORION {0} ({1}). Keep ORION open; it asks before it installs.",
+                      {release.version, megabytes(release.zip_size)})
+                : trf("Downloading ORION {0}. Keep ORION open; it asks before it installs.",
+                      {release.version});
         show_note(true, note);
         sys::notify(note);
     }
@@ -3001,18 +3060,18 @@ class Library final : public app::Concept
         if (installer_.state() == orion::UpdateInstaller::State::ready)
         {
             settings_.set_update_ready(release.version);
-            settings_.set_update_status("ORION " + context_.version + ". ORION " + release.version +
-                                        " is ready to install");
+            settings_.set_update_status(trf("ORION {0}. ORION {1} is ready to install",
+                                            {context_.version, release.version}));
             settings_.refresh(look_, prefs_);
             update_waiting_ = true; // asked as soon as nothing else is open
-            sys::notify("ORION " + release.version + " is ready to install");
+            sys::notify(trf("ORION {0} is ready to install", {release.version}));
             return;
         }
-        settings_.set_update_status("ORION " + context_.version +
-                                    ". The update could not be made ready: " + installer_.error());
+        settings_.set_update_status(trf("ORION {0}. The update could not be made ready: {1}",
+                                        {context_.version, installer_.error()}));
         settings_.refresh(look_, prefs_);
-        show_note(false,
-                  "ORION " + release.version + " could not be downloaded: " + installer_.error());
+        show_note(false, trf("ORION {0} could not be downloaded: {1}",
+                             {release.version, installer_.error()}));
     }
 
     // Asked once, over the library: now, or later from Settings.
@@ -3022,11 +3081,11 @@ class Library final : public app::Concept
         const orion::Release release = installer_.release();
         ui::DialogContent content;
         content.icon = ui::StatusKind::info;
-        content.title = "ORION " + release.version + " is ready";
-        content.body = "You have ORION " + context_.version +
-                       ". ORION closes, updates itself and opens again;\n"
-                       "your settings, favourites and box art stay.";
-        content.buttons = {{"Later"}, {"Update now", ui::ButtonKind::primary, false}};
+        content.title = trf("ORION {0} is ready", {release.version});
+        content.body = trf("You have ORION {0}. ORION closes, updates itself and opens "
+                           "again;\nyour settings, favourites and box art stay.",
+                           {context_.version});
+        content.buttons = {{tr("Later")}, {tr("Update now"), ui::ButtonKind::primary, false}};
         content.default_button = 1;
         dialog_update_ = true;
         dialog_.open(std::move(content), feedback);
@@ -3043,11 +3102,11 @@ class Library final : public app::Concept
         const std::string update = context_.library.state_dir + "/update";
         std::string why;
         if (!sys::on_console())
-            why = "not on a console";
+            why = tr("not on a console");
         else if (installer_.state() != orion::UpdateInstaller::State::ready)
-            why = "no update is ready";
+            why = tr("no update is ready");
         else if (self.empty() || self_path.empty())
-            why = "ORION does not know its own folder";
+            why = tr("ORION does not know its own folder");
         else
         {
             std::remove((self_path + "/update-result.txt").c_str());
@@ -3060,15 +3119,15 @@ class Library final : public app::Concept
         }
         if (!why.empty())
         {
-            show_note(false, why == "not on a console"
-                                 ? std::string("Updating works on the console only")
-                                 : "Could not update ORION: " + why);
+            show_note(false, why == tr("not on a console")
+                                 ? tr("Updating works on the console only")
+                                 : trf("Could not update ORION: {0}", {why}));
             feedback.play(audio::Cue::error);
             return;
         }
         launch_ok_ = true;
-        launch_message_ =
-            "Updating to ORION " + installer_.release().version + ": ORION opens again when done";
+        launch_message_ = trf("Updating to ORION {0}: ORION opens again when done",
+                              {installer_.release().version});
         launch_shown_ = 6.0f;
         launch_exit_ = 1.6f;
         launch_pending_ = 30.0f;
@@ -3100,12 +3159,12 @@ class Library final : public app::Concept
                              : "helper: could not install " + version + ": " + why);
         if (ok)
         {
-            show_note(true, "ORION is updated to " + version);
+            show_note(true, trf("ORION is updated to {0}", {version}));
             std::remove((update + "/failed.txt").c_str());
             tidy_update_folder();
             return;
         }
-        show_note(false, "ORION could not update to " + version + ": " + why);
+        show_note(false, trf("ORION could not update to {0}: {1}", {version, why}));
         // Not fetched again by itself, or it would ask on every start: Check
         // now (Settings, About) tries again.
         save::write_atomic(update + "/failed.txt", version + "\t" + why + "\n");
@@ -3415,7 +3474,7 @@ class Library final : public app::Concept
     std::string emulator_name(const Title &title) const
     {
         const library::Player player = player_of(title);
-        return player.app != nullptr ? player.app->name : std::string("not installed");
+        return player.app != nullptr ? player.app->name : tr("not installed");
     }
 
     std::string core_name(const std::string &file) const
@@ -3425,7 +3484,7 @@ class Library final : public app::Concept
             if (core.file == file)
                 return core.name;
         }
-        return file.empty() ? std::string("no core") : file;
+        return file.empty() ? tr("no core") : file;
     }
 
     void log_launch(const Title &title, const std::string &what) const
@@ -3450,7 +3509,7 @@ class Library final : public app::Concept
     void save_theme(app::Feedback &feedback)
     {
         orion::ThemeFile file = orion::theme_of(look_, themes_);
-        const std::string name = name_.empty() ? std::string("My theme") : name_;
+        const std::string name = name_.empty() ? tr("My theme") : name_;
         std::string id = orion::theme_id_from_name(name);
         if (id.empty())
             id = "my-theme";
@@ -3461,8 +3520,8 @@ class Library final : public app::Concept
         file.id = id;
         file.name = name;
         file.author = "";
-        file.description =
-            "Made in ORION from " + std::string(file.family.empty() ? "a theme" : file.family);
+        file.description = file.family.empty() ? tr("Made in ORION from a theme")
+                                               : trf("Made in ORION from {0}", {file.family});
         std::string error;
         if (themes_.save_user_theme(std::move(file), &error))
         {
@@ -3470,13 +3529,13 @@ class Library final : public app::Concept
             orion::save_look(context_.library.state_dir, look_);
             restyle();
             launch_ok_ = true;
-            launch_message_ = "Saved the theme \u201c" + name + "\u201d";
+            launch_message_ = trf("Saved the theme “{0}”", {name});
             feedback.play(audio::Cue::saved);
         }
         else
         {
             launch_ok_ = false;
-            launch_message_ = "Could not save the theme: " + error;
+            launch_message_ = trf("Could not save the theme: {0}", {error});
             feedback.play(audio::Cue::error);
         }
         launch_shown_ = 4.0f;
@@ -3634,7 +3693,7 @@ class Library final : public app::Concept
         for (const Shelf &shelf : kShelves)
         {
             if (!prefs_.tab_hidden(shelf.key))
-                add(shelf.key, shelf.name);
+                add(shelf.key, tr(shelf.name));
         }
         // The systems: a tab each, or one Emulators tab with a row of them.
         sub_keys_.clear();
@@ -3651,7 +3710,7 @@ class Library final : public app::Concept
         }
         const bool grouped = prefs_.group_systems && !sub_keys_.empty();
         if (grouped)
-            add(kEmulatorsTab, "Emulators");
+            add(kEmulatorsTab, tr("Emulators"));
         else
         {
             for (std::size_t i = 0; i < sub_keys_.size(); ++i)
@@ -3667,7 +3726,7 @@ class Library final : public app::Concept
         // Hidden, last, while something is hidden.
         if (std::any_of(titles().begin(), titles().end(),
                         [&](const Title &t) { return prefs_.title_hidden(t.id); }))
-            add(kHiddenTab, "Hidden");
+            add(kHiddenTab, tr("Hidden"));
         tabs_.set_tabs(std::move(tabs));
         subtabs_.set_tabs(std::move(systems));
         // A system asked for while grouped is the Emulators tab and its row.
@@ -3813,12 +3872,12 @@ class Library final : public app::Concept
     std::pair<int, std::string> tag_of(const Title &title) const
     {
         if (title.is_rom())
-            return {0, "Games"};
+            return {0, tr("Games")};
         if (library::shelf_of(title) == library::Shelf::media)
-            return {2, "Media"};
+            return {2, tr("Media")};
         if (library::shelf_of(title) == library::Shelf::homebrew)
-            return {1, "Homebrew"};
-        return {0, "Games"};
+            return {1, tr("Homebrew")};
+        return {0, tr("Games")};
     }
 
     // A title's cover, for the grid and the Continue playing row; index is
@@ -3943,12 +4002,13 @@ class Library final : public app::Concept
         list.ring(kMargin + 11.0f, 99.0f, 11.0f, 2.0f, theme_.accent.with_alpha(0.85f));
         list.circle(kMargin + 11.0f + std::cos(orbit) * 11.0f, 99.0f + std::sin(orbit) * 11.0f,
                     3.5f, Color::rgb(0xffffff));
-        ui::text(list, fonts.semibold, "ORION MEDIA CENTER", kMargin + 36.0f, 105, 17,
+        ui::text(list, fonts.semibold, tr("ORION MEDIA CENTER").c_str(), kMargin + 36.0f, 105, 17,
                  theme_.accent, gfx::Align::left, 4.0f);
-        ui::text(list, fonts.display, "Library", kMargin, 172, 62, paint.page_text());
+        ui::text(list, fonts.display, tr("Library").c_str(), kMargin, 172, 62, paint.page_text());
         // The count, then the sort picker (drawn with the components).
         const std::size_t count = view_.size();
-        const std::string summary = std::to_string(count) + (count == 1 ? " title" : " titles");
+        const std::string summary =
+            i18n::plural(static_cast<long long>(count), "{0} title", "{0} titles");
         ui::text(list, fonts.regular, summary.c_str(), view_pick_.bounds().x - 22.0f, 165, 24,
                  paint.page_text_muted(), gfx::Align::right);
         draw_status(list, paint);
@@ -4035,7 +4095,7 @@ class Library final : public app::Concept
             ui::draw_button(list, fonts, glyphs(), ui::Button::circle, right - w, y - 9, 30);
             x -= w + 12.0f;
         }
-        const std::string label = "\xe2\x80\x9c" + query_ + "\xe2\x80\x9d";
+        const std::string label = "“" + query_ + "”";
         ui::text(list, fonts.semibold, label.c_str(), x, y, 22, paint.page_text(),
                  gfx::Align::right);
     }
@@ -4044,33 +4104,33 @@ class Library final : public app::Concept
     void draw_banner(ui::Canvas &canvas, const Rect &art, const Title &title) const
     {
         std::string system;
-        const char *label = "GAME";
+        std::string label = tr("GAME");
         Color colour = Color::rgb(0x8fe3ff);
         if (title.is_rom())
         {
             system = library::short_system_name(title.system);
             for (char &c : system)
                 c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
-            label = system.c_str();
+            label = system;
             colour = Color::rgb(0xcdb6ff);
         }
         else if (title.platform == library::Platform::ps4)
             label = "PS4", colour = Color::rgb(0x8fb0ff);
         else if (library::shelf_of(title) == library::Shelf::media)
-            label = "MEDIA", colour = Color::rgb(0xffc94a);
+            label = tr("MEDIA"), colour = Color::rgb(0xffc94a);
         else if (library::shelf_of(title) == library::Shelf::homebrew)
-            label = "HOMEBREW", colour = Color::rgb(0x86efb4);
+            label = tr("HOMEBREW"), colour = Color::rgb(0x86efb4);
         const ui::FontRef &font = canvas.fonts.semibold;
         constexpr float kSize = 14.0f;
         constexpr float kTracking = 1.6f;
-        const float width = font.font->measure(label, kSize) +
-                            kTracking * static_cast<float>(std::strlen(label)) + 20.0f;
+        const float width =
+            font.font->measure(label, kSize) + kTracking * static_cast<float>(label.size()) + 20.0f;
         const Rect pill{art.x + art.w - width - 10.0f, art.y + 10.0f, width, 26.0f};
         canvas.list.shadow({pill.x, pill.y + 3.0f, pill.w, pill.h}, 13.0f, 10.0f,
                            Color::rgb(0x000000, 0.35f));
         canvas.list.rounded_rect(pill, 13.0f, colour);
-        ui::text(canvas.list, font, label, pill.cx(), pill.y + 18.5f, kSize, Color::rgb(0x08101c),
-                 gfx::Align::center, kTracking);
+        ui::text(canvas.list, font, label.c_str(), pill.cx(), pill.y + 18.5f, kSize,
+                 Color::rgb(0x08101c), gfx::Align::center, kTracking);
     }
 
     // The focused cover's ring: light whose colour drifts slowly through the
@@ -4102,9 +4162,10 @@ class Library final : public app::Concept
     CaseBand case_band(const Title &title) const
     {
         if (library::shelf_of(title) == library::Shelf::homebrew)
-            return {Color::rgb(0x161a3d), Color::rgb(0x0b0e20), theme_.accent, "HOMEBREW", true};
+            return {Color::rgb(0x161a3d), Color::rgb(0x0b0e20), theme_.accent, tr("HOMEBREW"),
+                    true};
         if (library::shelf_of(title) == library::Shelf::media)
-            return {Color::rgb(0x202228), Color::rgb(0xffc94a), Color::rgb(0x1a1204), "MEDIA"};
+            return {Color::rgb(0x202228), Color::rgb(0xffc94a), Color::rgb(0x1a1204), tr("MEDIA")};
         if (title.platform == library::Platform::ps4)
             return {Color::rgb(0x1c4fb5), Color::rgb(0x0a3d91), Color::rgb(0xffffff), "PS4"};
         if (!title.is_rom())
@@ -4281,23 +4342,24 @@ class Library final : public app::Concept
         const gfx::Font &font = *fonts.semibold.font;
         if (font.measure(name, 24.0f) > room)
         {
-            while (!name.empty() && font.measure(name + "\xe2\x80\xa6", 24.0f) > room)
+            while (!name.empty() && font.measure(name + "…", 24.0f) > room)
             {
                 std::size_t at = name.size() - 1;
                 while (at > 0 && (static_cast<unsigned char>(name[at]) & 0xC0) == 0x80)
                     --at;
                 name.erase(at);
             }
-            name += "\xe2\x80\xa6";
+            name += "…";
         }
         ui::text(list, fonts.semibold, name.c_str(), x, cell.y + 40.0f, 24.0f, theme_.text);
         std::string line = item.subtitle;
         const orion::PlayRecord &record = played(title);
         if (record.sessions > 0)
-            line += "   \xc2\xb7   Played " + orion::play_time_text(record.seconds) + ", " +
-                    orion::ago_text(record.last, std::time(nullptr));
+            line += "   ·   " +
+                    trf("Played {0}, {1}", {orion::play_time_text(record.seconds),
+                                            orion::ago_text(record.last, std::time(nullptr))});
         if (favourite_of(title.id))
-            line += "   \xc2\xb7   Favourite";
+            line += "   ·   " + tr("Favourite");
         ui::text(list, fonts.regular, line.c_str(), x, cell.y + 70.0f, 18.0f, theme_.text_muted);
     }
 
@@ -4395,27 +4457,27 @@ class Library final : public app::Concept
         std::string line = title.id;
         const library::Player player = title.is_rom() ? player_of(title) : library::Player();
         if (player.app != nullptr && player.app->key == "retroarch")
-            line = library::short_system_name(title.system) + "   RetroArch, " +
-                   core_name(player.core);
+            line = library::short_system_name(title.system) + "   " +
+                   trf("RetroArch, {0}", {core_name(player.core)});
         else if (title.is_rom())
             line = library::short_system_name(title.system) + "   " + emulator_name(title);
         else
         {
             if (!title.version.empty())
                 line += "   v" + title.version;
-            line += "   " + std::string(shelf_name(library::shelf_of(title)));
+            line += "   " + tr(shelf_name(library::shelf_of(title)));
         }
         // What it is goes on the first line, its history on a second: one
         // line beside the buttons left too little room for both.
         std::string history;
         const auto add = [&](const std::string &part)
-        { history += (history.empty() ? "" : "   \xc2\xb7   ") + part; };
+        { history += (history.empty() ? "" : "   ·   ") + part; };
         const orion::PlayRecord &record = played(title);
         if (record.sessions > 0)
-            add("Played " + orion::play_time_text(record.seconds) + ", " +
-                orion::ago_text(record.last, std::time(nullptr)));
+            add(trf("Played {0}, {1}", {orion::play_time_text(record.seconds),
+                                        orion::ago_text(record.last, std::time(nullptr))}));
         if (favourite_of(title.id))
-            add("Favourite");
+            add(tr("Favourite"));
         if (const orion::CustomTab *placed = prefs_.placement(title.id))
             add(placed->name);
         // Never under the buttons: what does not fit ends in "…".
@@ -4426,7 +4488,7 @@ class Library final : public app::Concept
         {
             if (font.measure(text, size) <= room)
                 return text;
-            const std::string dots = "\xe2\x80\xa6";
+            const std::string dots = "…";
             while (!text.empty() && font.measure(text + dots, size) > room)
             {
                 // Back off one UTF-8 character: to the byte its last one starts at.
@@ -4436,7 +4498,7 @@ class Library final : public app::Concept
                 text.erase(at);
             }
             // No separator left dangling before the dots.
-            while (text.ends_with(" ") || text.ends_with("\xc2\xb7"))
+            while (text.ends_with(" ") || text.ends_with("·"))
                 text.resize(text.size() - (text.back() == ' ' ? 1 : 2));
             return text + dots;
         };
@@ -4464,31 +4526,31 @@ class Library final : public app::Concept
         const ui::Fonts &fonts = context_.fonts;
         const float cx = gfx::kVirtualWidth * 0.5f;
         const std::string key = active_key();
-        std::string title = "No titles yet";
-        std::string first = "ORION shows what ShadowMountPlus can mount from /data/homebrew,";
-        std::string second = "/mnt/ext0/homebrew and USB drives.";
+        std::string title = tr("No titles yet");
+        std::string first = tr("ORION shows what ShadowMountPlus can mount from /data/homebrew,");
+        std::string second = tr("/mnt/ext0/homebrew and USB drives.");
         if (!titles().empty() && !query_.empty())
         {
-            title = "Nothing matches \xe2\x80\x9c" + query_ + "\xe2\x80\x9d";
-            first = "Try fewer letters, or press Circle to clear the search.";
+            title = trf("Nothing matches “{0}”", {query_});
+            first = tr("Try fewer letters, or press Circle to clear the search.");
             second.clear();
         }
         else if (!titles().empty() && key == "favourites")
         {
-            title = "No favourites yet";
-            first = "Press Square on any title to star it.";
-            second = "Starred titles collect here and keep their star.";
+            title = tr("No favourites yet");
+            first = tr("Press Square on any title to star it.");
+            second = tr("Starred titles collect here and keep their star.");
         }
         else if (!titles().empty() && key.rfind("tab:", 0) == 0)
         {
-            title = "Nothing here yet";
-            first = "Press Cross on any title and choose where to move it.";
-            second = "Titles you move here stay here.";
+            title = tr("Nothing here yet");
+            first = tr("Press Cross on any title and choose where to move it.");
+            second = tr("Titles you move here stay here.");
         }
         else if (!titles().empty())
         {
-            title = "Nothing on this shelf";
-            first = "Press L1 or R1 to look at another one.";
+            title = tr("Nothing on this shelf");
+            first = tr("Press L1 or R1 to look at another one.");
             second.clear();
         }
         ui::text(list, fonts.display, title.c_str(), cx, 560, 46, paint.page_text(),
@@ -4510,17 +4572,8 @@ class Library final : public app::Concept
     };
     HintRow hint_row() const
     {
-        static constexpr ui::Hint kHints[] = {
-            {ui::Button::l2, "System", ui::Button::r2},
-            {ui::Button::l1, "Shelf", ui::Button::r1},
-            {ui::Button::cross, "Launch"},
-            {ui::Button::square, "Favourite"},
-            {ui::Button::triangle, "Search"},
-            {ui::Button::options, "More"},
-            {ui::Button::right_stick, "Settings"},
-        };
         const bool systems = on_emulators_tab();
-        HintRow row{systems ? kHints : kHints + 1, systems ? 7 : 6, {}, 0.0f};
+        HintRow row{systems ? hints_.data() : hints_.data() + 1, systems ? 7 : 6, {}, 0.0f};
         row.layout.size = systems ? 36.0f : 38.0f;
         row.layout.text_size = systems ? 20.0f : 21.0f;
         row.layout.cy = 1010.0f;
@@ -4560,7 +4613,8 @@ class Library final : public app::Concept
         const float progress =
             std::clamp((hold_back_ - kShowAfter) / (kHoldToExit - kShowAfter), 0.0f, 1.0f);
         const ui::Fonts &fonts = context_.fonts;
-        const char *label = "Keep holding to close ORION";
+        const std::string words = tr("Keep holding to close ORION");
+        const char *label = words.c_str();
         const float width = fonts.semibold.font->measure(label, 22.0f) + 110.0f;
         const Rect r{gfx::kVirtualWidth - kMargin - width, 72.0f, width, 64.0f};
         list.push_opacity(std::min(1.0f, (hold_back_ - kShowAfter) * 6.0f));
@@ -4674,16 +4728,16 @@ class Library final : public app::Concept
         const ui::Fonts &fonts = context_.fonts;
         const bool search = typing_ == Typing::search || typing_ == Typing::none;
         const std::string &text = search ? query_ : name_;
-        const char *placeholder =
-            search                            ? "Search titles or IDs"
-            : typing_ == Typing::rename_tab   ? "Rename the tab"
-            : typing_ == Typing::rename_title ? "A new name; empty gives it its own back"
-            : typing_ == Typing::theme_name   ? "Name the new theme"
-            : typing_ == Typing::art_folder   ? "A folder under /data or /mnt"
-            : typing_ == Typing::rom_folder   ? "A folder of games, like /mnt/usb0/roms"
-                                              : "Name the new tab";
+        const std::string placeholder =
+            search                            ? tr("Search titles or IDs")
+            : typing_ == Typing::rename_tab   ? tr("Rename the tab")
+            : typing_ == Typing::rename_title ? tr("A new name; empty gives it its own back")
+            : typing_ == Typing::theme_name   ? tr("Name the new theme")
+            : typing_ == Typing::art_folder   ? tr("A folder under /data or /mnt")
+            : typing_ == Typing::rom_folder   ? tr("A folder of games, like /mnt/usb0/roms")
+                                              : tr("Name the new tab");
         const bool empty = text.empty();
-        ui::text(list, fonts.regular, empty ? placeholder : text.c_str(), field.x + 28,
+        ui::text(list, fonts.regular, empty ? placeholder.c_str() : text.c_str(), field.x + 28,
                  field.y + 37, 25, empty ? Color::rgb(0xffffff, 0.66f) : Color::rgb(0xffffff));
         if (!empty || std::fmod(clock_, 1.0f) < 0.5f)
         {
@@ -4699,6 +4753,8 @@ class Library final : public app::Concept
     app::Context &context_;
     orion::ThemeLibrary themes_; // before the look, which is read through it
     orion::LanguageLibrary languages_;
+    std::array<std::string, 7> hint_words_; // the hint bar's words (use_language)
+    std::array<ui::Hint, 7> hints_{};
     orion::Look look_;  // the main look, as Settings edits it
     orion::Look shown_; // what the active tab wears (its own theme, or look_)
     orion::LibraryPrefs prefs_;

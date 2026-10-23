@@ -8,6 +8,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <vector>
 
 namespace hui::i18n
 {
@@ -55,5 +56,10 @@ std::string tr(std::string_view english);
 std::string trf(std::string_view english, std::initializer_list<std::string_view> args);
 // Fills {0}, {1}... of text with args; what is past the last arg stays.
 std::string fill(std::string_view text, std::initializer_list<std::string_view> args);
+// A count with its noun: plural(3, "{0} game", "{0} games") is "3 games",
+// each form translated on its own.
+std::string plural(long long count, std::string_view one, std::string_view many);
+// A table of marked texts, translated: the options of a choice.
+std::vector<std::string> tr_range(const char *const *first, const char *const *last);
 
 } // namespace hui::i18n
