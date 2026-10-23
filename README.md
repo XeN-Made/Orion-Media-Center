@@ -188,7 +188,7 @@ within 30 minutes. Every step it took is written to
 | Cross | Start the title |
 | Square | Favourite (a star; Favourites collects them) |
 | Triangle | Search |
-| Options | The title's menu: move to a tab, play with another emulator, hide, remove |
+| Options | The title's menu: rename, move to a tab, play with another emulator, hide, remove |
 | R3 | Settings |
 | L1 / R1 | Change tab |
 | L2 / R2 | Change system, on the Emulators tab |
@@ -202,6 +202,7 @@ within 30 minutes. Every step it took is written to
   own.
 - **Continue playing**: the titles you played last, over the All tab.
 - **Tabs of your own**, a theme per tab, hidden titles: Settings, Tabs.
+- **Renaming a title**: Options, Rename. Clear the name to give it its own back.
 - **Themes of your own**: a `.theme` text file in `/data/orion/themes/`;
   [docs/ORION_THEMES.md](docs/ORION_THEMES.md) has every key and
   [template.theme](docs/themes/template.theme) to start from.

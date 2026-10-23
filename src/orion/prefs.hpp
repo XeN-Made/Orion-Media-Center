@@ -114,6 +114,7 @@ struct Placement
 //     "placements": {"PPSA01234": "t1"},
 //     "hidden_titles": ["CUSA00001", "rom-0123456789ab"],
 //     "game_players": {"rom-0123456789ab": "retroarch:snes9x_libretro.so"},
+//     "title_names": {"CUSA00001": "My name for it"},
 //     "systems": {"Nintendo - Game Boy Advance": {"enabled": true, "core": "mgba_libretro.so"}},
 //     "tab_settings": {"sys:Nintendo - Sony - PlayStation 2": {"theme": "sunset-nebula",
 //                      "cover": "portrait", "sort": "recent", "view": "cases",
@@ -124,6 +125,9 @@ struct Placement
 //   }
 //
 // Unknown keys are ignored, so the file can be edited by hand.
+// The longest name a title can be given, in bytes.
+inline constexpr std::size_t kMaxTitleName = 64;
+
 struct LibraryPrefs
 {
     std::vector<CustomTab> tabs;
@@ -222,6 +226,11 @@ struct LibraryPrefs
     bool title_hidden(const std::string &id) const;
     // False for an id that is not an item id, or when too many are hidden.
     bool set_title_hidden(const std::string &id, bool hidden);
+    // The player's own names for titles, by item id (Options, Rename).
+    std::vector<std::pair<std::string, std::string>> title_names;
+    std::string title_name(const std::string &id) const;
+    // An empty name gives the title its own back.
+    void set_title_name(const std::string &id, const std::string &name);
 };
 
 // A folder box art may live in: absolute, under /data/ or /mnt/, no "..",

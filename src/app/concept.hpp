@@ -91,6 +91,9 @@ struct Context
     // (orion/registered_titles.hpp) sets this; the app merges them between
     // frames and bumps library.generation.
     bool registered_changed = false;
+    // Titles the player renamed (id, name; empty: its own again): the app
+    // applies them between frames and bumps library.generation.
+    std::vector<std::pair<std::string, std::string>> new_names = {};
     // The song the background music plays now (its file name), set by the
     // app every frame; a design that wants the next one sets skip_song.
     std::string now_playing = {};

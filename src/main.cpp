@@ -272,6 +272,7 @@ int main()
         titles.offer_setup = true;
         library::prefer_saved_icons(titles, titles.state_dir + "/icons");
         scan_emulators(true);
+        library::apply_names(titles, orion::load_prefs(titles.state_dir).title_names);
         const int icons = library::load_icons(titles, renderer.batch());
         char summary[128];
         std::snprintf(summary, sizeof(summary), "titles=%zu icons=%d in %lld ms",
@@ -419,6 +420,7 @@ int main()
                     before.push_back(title);
             }
             const int games = scan_emulators(false);
+            library::apply_names(titles, orion::load_prefs(titles.state_dir).title_names);
             // A game still there keeps its picture; the others' go.
             for (library::Title &title : titles.titles)
             {
@@ -443,6 +445,12 @@ int main()
             sys::log("[ORION] emulators scanned again: %zu apps, %d games",
                      titles.emulator.apps.size(), games);
         }
+        // The player renamed titles.
+        if (auto names = shell.take_new_names(); !names.empty())
+        {
+            library::apply_names(titles, names);
+            ++titles.generation;
+        }
         // The system's registered titles changed: the new ones join.
         if (shell.take_registered_change())
         {
@@ -451,6 +459,7 @@ int main()
                 library::merge_registered(titles, cache, titles.state_dir + "/icons",
                                           titles.self_id) > 0)
             {
+                library::apply_names(titles, orion::load_prefs(titles.state_dir).title_names);
                 library::load_icons(titles, renderer.batch());
                 ++titles.generation;
             }

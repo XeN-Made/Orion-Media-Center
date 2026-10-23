@@ -372,6 +372,28 @@ int merge_registered(Library &library, std::string_view cache, const std::string
     return added;
 }
 
+int apply_names(Library &library, const std::vector<std::pair<std::string, std::string>> &names)
+{
+    int changed = 0;
+    for (const auto &[id, name] : names)
+    {
+        for (Title &title : library.titles)
+        {
+            if (title.id != id)
+                continue;
+            if (title.own_name.empty())
+                title.own_name = title.name;
+            const std::string &wanted = name.empty() ? title.own_name : name;
+            if (title.name != wanted)
+            {
+                title.name = wanted;
+                ++changed;
+            }
+        }
+    }
+    return changed;
+}
+
 int prefer_saved_icons(Library &library, const std::string &folder)
 {
     int found = 0;

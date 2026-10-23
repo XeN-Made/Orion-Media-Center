@@ -261,5 +261,24 @@ TEST(Library, MergesTheSystemsRegisteredTitles)
     EXPECT_EQ(library::merge_registered(shelf, cache, icons, "PPSA99061"), 0);
 }
 
+// The player's names for titles: applied over the names they came with, and
+// an empty one gives the title its own back.
+TEST(Library, AppliesThePlayersNamesForTitles)
+{
+    library::Library shelf;
+    shelf.titles.resize(2);
+    shelf.titles[0].id = "PPSA90180";
+    shelf.titles[0].name = "Quiet Bay";
+    shelf.titles[1].id = "rom-0000000000aa";
+    shelf.titles[1].name = "Moon Garden";
+    EXPECT_EQ(library::apply_names(shelf, {{"PPSA90180", "Bay"}, {"CUSA00000", "Nobody"}}), 1);
+    EXPECT_EQ(shelf.titles[0].name, "Bay");
+    EXPECT_EQ(shelf.titles[0].own_name, "Quiet Bay");
+    EXPECT_EQ(library::apply_names(shelf, {{"PPSA90180", "Bay"}}), 0); // already so
+    EXPECT_EQ(library::apply_names(shelf, {{"PPSA90180", ""}}), 1);
+    EXPECT_EQ(shelf.titles[0].name, "Quiet Bay");
+    EXPECT_EQ(shelf.titles[1].name, "Moon Garden");
+}
+
 } // namespace
 } // namespace hui

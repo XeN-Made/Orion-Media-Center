@@ -327,6 +327,24 @@ std::string LibraryPrefs::game_player(const std::string &id) const
     return "";
 }
 
+std::string LibraryPrefs::title_name(const std::string &id) const
+{
+    for (const auto &[title, name] : title_names)
+    {
+        if (title == id)
+            return name;
+    }
+    return "";
+}
+
+void LibraryPrefs::set_title_name(const std::string &id, const std::string &name)
+{
+    std::erase_if(title_names, [&](const auto &entry) { return entry.first == id; });
+    if (!name.empty() && name.size() <= kMaxTitleName && library::is_item_id(id) &&
+        title_names.size() < kMaxHidden)
+        title_names.emplace_back(id, name);
+}
+
 void LibraryPrefs::set_game_player(const std::string &id, const std::string &key)
 {
     std::erase_if(game_players, [&](const auto &entry) { return entry.first == id; });
@@ -407,6 +425,8 @@ LibraryPrefs load_prefs(const std::string &state_dir)
         prefs.set_title_hidden(value.string_or(""), true);
     for (const auto &member : root["game_players"].members())
         prefs.set_game_player(member.first, member.second.string_or(""));
+    for (const auto &member : root["title_names"].members())
+        prefs.set_title_name(member.first, member.second.string_or(""));
 
     for (const auto &member : root["systems"].members())
     {
@@ -535,6 +555,12 @@ bool save_prefs(const std::string &state_dir, const LibraryPrefs &prefs)
                 json::quote(prefs.game_players[i].first) + ": " +
                 json::quote(prefs.game_players[i].second);
     text += prefs.game_players.empty() ? "},\n" : "\n  },\n";
+    text += "  \"title_names\": {";
+    for (std::size_t i = 0; i < prefs.title_names.size(); ++i)
+        text += std::string(i == 0 ? "\n" : ",\n") + "    " +
+                json::quote(prefs.title_names[i].first) + ": " +
+                json::quote(prefs.title_names[i].second);
+    text += prefs.title_names.empty() ? "},\n" : "\n  },\n";
     text += "  \"systems\": {";
     for (std::size_t i = 0; i < prefs.systems.size(); ++i)
     {

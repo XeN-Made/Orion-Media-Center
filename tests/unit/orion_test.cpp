@@ -208,6 +208,24 @@ TEST(OrionPrefs, AGameKeepsTheEmulatorChosenForIt)
     EXPECT_EQ(back.game_players.size(), 1u);
 }
 
+TEST(OrionPrefs, TitlesKeepThePlayersNames)
+{
+    const std::string dir = fresh_dir("orion-prefs-names");
+    orion::LibraryPrefs prefs;
+    prefs.set_title_name("PPSA90180", "Bay \"Deluxe\"");
+    prefs.set_title_name("rom-0123456789ab", "Moon");
+    prefs.set_title_name("not an id", "Nope");                                     // refused
+    prefs.set_title_name("PPSA90181", std::string(orion::kMaxTitleName + 1, 'x')); // too long
+    ASSERT_TRUE(orion::save_prefs(dir, prefs));
+    orion::LibraryPrefs back = orion::load_prefs(dir);
+    EXPECT_EQ(back.title_name("PPSA90180"), "Bay \"Deluxe\"");
+    EXPECT_EQ(back.title_name("rom-0123456789ab"), "Moon");
+    EXPECT_EQ(back.title_names.size(), 2u);
+    back.set_title_name("PPSA90180", ""); // its own name again
+    EXPECT_EQ(back.title_name("PPSA90180"), "");
+    EXPECT_EQ(back.title_names.size(), 1u);
+}
+
 TEST(OrionPrefs, RomFoldersAreKept)
 {
     const std::string dir = fresh_dir("orion-prefs-rom-folders");

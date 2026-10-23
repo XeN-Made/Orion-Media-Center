@@ -135,9 +135,10 @@ enum class Typing : std::uint8_t
     new_tab,           // from Settings > Tabs > New tab
     new_tab_for_title, // from a title's menu: the title moves into it
     rename_tab,
-    theme_name, // from Settings > Save as new theme
-    art_folder, // from Settings > Box art > Your own folder
-    rom_folder, // from Settings > Storage > Add a ROM folder
+    rename_title, // from a title's menu
+    theme_name,   // from Settings > Save as new theme
+    art_folder,   // from Settings > Box art > Your own folder
+    rom_folder,   // from Settings > Storage > Add a ROM folder
 };
 
 // Tags of the menu items.
@@ -155,6 +156,7 @@ enum : int
     kItemRemoveErase,
     kItemRemoveRom,
     kItemHdArt,
+    kItemRename,
     kItemMove = 100,   // + the tab's index
     kItemPlayer = 300, // 0: the default, then 1 + an index in library::players_for
 };
@@ -1766,6 +1768,7 @@ class Library final : public app::Concept
     {
         return typing == Typing::search                                       ? kMaxQuery
                : typing == Typing::art_folder || typing == Typing::rom_folder ? kMaxPath
+               : typing == Typing::rename_title                               ? orion::kMaxTitleName
                                                                               : kMaxName;
     }
 
@@ -1814,6 +1817,11 @@ class Library final : public app::Concept
             save_theme(feedback);
             return;
         }
+        if (typing == Typing::rename_title)
+        {
+            rename_title(feedback);
+            return;
+        }
         if (typing == Typing::rom_folder)
         {
             struct stat info = {};
@@ -1860,6 +1868,30 @@ class Library final : public app::Concept
         feedback.play(audio::Cue::saved);
     }
 
+    // The name typed for the title whose menu was open: the player's name for
+    // it from now on, or with nothing typed, its own name back. The app
+    // renames it (Context::new_names) and the screen rebuilds.
+    void rename_title(app::Feedback &feedback)
+    {
+        const Title *title = find_title(menu_title_);
+        if (title == nullptr)
+            return;
+        std::string name = name_;
+        while (!name.empty() && name.back() == ' ')
+            name.pop_back();
+        while (!name.empty() && name.front() == ' ')
+            name.erase(0, 1);
+        const std::string own = title->own_name.empty() ? title->name : title->own_name;
+        if (name == own)
+            name.clear();
+        prefs_.set_title_name(title->id, name);
+        save_prefs();
+        context_.new_names.emplace_back(title->id, name);
+        show_note(true, name.empty() ? title->id + " has its own name again: " + own
+                                     : "Renamed to " + name);
+        feedback.play(audio::Cue::saved);
+    }
+
     // ---- menus ----
 
     void open_title_menu(app::Feedback &feedback)
@@ -1893,6 +1925,9 @@ class Library final : public app::Concept
         ui::MenuItem hide = menu_item(hidden ? "Show this title" : "Hide this title");
         hide.tag = kItemHide;
         items.push_back(hide);
+        ui::MenuItem rename = menu_item("Rename…");
+        rename.tag = kItemRename;
+        items.push_back(rename);
         // A sharper picture: the home screen's for a console title shown from
         // ShadowMountPlus's small copy, box art again for a game.
         if (title.is_rom() || title.icon.find("/icon-cache/") != std::string::npos ||
@@ -2315,6 +2350,15 @@ class Library final : public app::Concept
             }
             show_note(true, title->name + " plays with " + player_label(*title));
             feedback.play(audio::Cue::select);
+            return;
+        }
+        if (tag == kItemRename)
+        {
+            const Title *title = find_title(menu_title_);
+            if (title == nullptr)
+                return;
+            start_typing(Typing::rename_title, title->name);
+            feedback.play(audio::Cue::modal_open);
             return;
         }
         if (tag == kItemHdArt)
@@ -4579,13 +4623,14 @@ class Library final : public app::Concept
         const ui::Fonts &fonts = context_.fonts;
         const bool search = typing_ == Typing::search || typing_ == Typing::none;
         const std::string &text = search ? query_ : name_;
-        const char *placeholder = search                          ? "Search titles or IDs"
-                                  : typing_ == Typing::rename_tab ? "Rename the tab"
-                                  : typing_ == Typing::theme_name ? "Name the new theme"
-                                  : typing_ == Typing::art_folder ? "A folder under /data or /mnt"
-                                  : typing_ == Typing::rom_folder
-                                      ? "A folder of games, like /mnt/usb0/roms"
-                                      : "Name the new tab";
+        const char *placeholder =
+            search                            ? "Search titles or IDs"
+            : typing_ == Typing::rename_tab   ? "Rename the tab"
+            : typing_ == Typing::rename_title ? "A new name; empty gives it its own back"
+            : typing_ == Typing::theme_name   ? "Name the new theme"
+            : typing_ == Typing::art_folder   ? "A folder under /data or /mnt"
+            : typing_ == Typing::rom_folder   ? "A folder of games, like /mnt/usb0/roms"
+                                              : "Name the new tab";
         const bool empty = text.empty();
         ui::text(list, fonts.regular, empty ? placeholder : text.c_str(), field.x + 28,
                  field.y + 37, 25, empty ? Color::rgb(0xffffff, 0.66f) : Color::rgb(0xffffff));

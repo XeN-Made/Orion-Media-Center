@@ -82,6 +82,10 @@ class Shell
     {
         return std::exchange(context_.registered_changed, false);
     }
+    std::vector<std::pair<std::string, std::string>> take_new_names()
+    {
+        return std::exchange(context_.new_names, {});
+    }
 
     void update(const InputFrame &input, float dt);
     // Queues this frame's layers; the caller presents them.

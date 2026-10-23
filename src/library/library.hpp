@@ -40,9 +40,10 @@ enum class Source : std::uint8_t
 
 struct Title
 {
-    std::string id;      // "PPSA01234"
-    std::string name;    // as the home screen shows it
-    std::string version; // "01.000.010"; empty when unknown
+    std::string id;       // "PPSA01234"
+    std::string name;     // as the home screen shows it, or as the player renamed it
+    std::string own_name; // the name it came with, once renamed (apply_names); else empty
+    std::string version;  // "01.000.010"; empty when unknown
     Category category = Category::game;
     Platform platform = Platform::unknown;
     Source source = Source::folder;
@@ -203,6 +204,9 @@ std::vector<Title> scan(const ScanOptions &options);
 // the home screen's 512-pixel icon0.png; ShadowMountPlus caches 128 pixels)
 // show that instead. Returns how many.
 int prefer_saved_icons(Library &library, const std::string &folder);
+// The player's names for titles (id, name); an empty name gives a title the
+// name it came with back. Returns how many titles changed.
+int apply_names(Library &library, const std::vector<std::pair<std::string, std::string>> &names);
 // The titles the system has registered that ORION's own scan does not find:
 // installed packages, and images ShadowMountPlus mounted from wherever it
 // found them. orion/registered_titles.hpp keeps them in a cache, one line a
