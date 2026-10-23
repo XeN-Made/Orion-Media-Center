@@ -14,14 +14,17 @@ Title ID: `PPSA99061`. Questions, ideas and bug reports: the
 
 **One library for everything**
 - PS5 and PS4 games, homebrew and media apps, found where ShadowMountPlus
-  mounts them (`/data/homebrew`, `/mnt/ext0/homebrew`, USB drives).
+  mounts them (`/data/homebrew`, `/mnt/ext0/homebrew`, USB drives), and
+  everything else on the home screen: installed PS4 and PS5 packages, and
+  images ShadowMountPlus mounted from anywhere (exFAT images included).
 - Emulated games next to them: RetroArch (its folders and every playlist),
-  Porpoise for GameCube and Wii, PS5SX2 for PS2, PS5-ECAM for Wii U, 3DS, DS
-  and Switch, and folders of your own.
+  Porpoise for GameCube and Wii, PS5SX2 for PS2, PSwanStation for PS1,
+  ProsperoEden for Switch, PS5-ECAM for Wii U, 3DS, DS and Switch, and folders
+  of your own.
 - Start a game straight from its cover: emulated games open directly in the
   emulator that plays them, and ORION asks which one when two can.
 - Box art downloaded as the covers scroll into view, or taken from what
-  PS5SX2, Porpoise and PS5-ECAM already downloaded.
+  the emulators already downloaded.
 
 ![PS5 games, homebrew, and DS and GBA games side by side in Favourites](docs/screenshots/mixed.jpg)
 
@@ -78,8 +81,10 @@ The pictures show invented titles: ORION's renderer drew them on a PC
   the home screen shows behind a game).
 
 Optional, for retro games: **RetroArch**, **Porpoise** (Dolphin for PS5:
-GameCube and Wii), **PS5SX2** (PS2) and **PS5-ECAM** (Wii U, 3DS, DS and
-Switch), installed as folder apps too.
+GameCube and Wii), **PS5SX2** (PS2), **PSwanStation** (PS1),
+**ProsperoEden** (Switch) and **PS5-ECAM** (Wii U, 3DS, DS and Switch),
+installed as folder apps too. Installed games beyond the homebrew folders
+are read through the FTP server.
 
 ## Install
 
@@ -207,7 +212,7 @@ within 30 minutes. Every step it took is written to
 ## Emulators and their games
 
 Settings, Emulators, **Scan for emulators** finds RetroArch, Porpoise,
-PS5SX2 and PS5-ECAM and the games they can see:
+PS5SX2, PSwanStation, ProsperoEden and PS5-ECAM and the games they can see:
 
 - **RetroArch**: games in its own `content/<system>/` folders and every game in
   its playlists, wherever the files are.
@@ -215,6 +220,12 @@ PS5SX2 and PS5-ECAM and the games they can see:
   `/data/porpoise/games`, `/data/games`, `/data/roms` and `/data/iso`.
 - **PS5SX2**: PS2 discs (`.iso`, `.chd`, `.cso`, `.zso`) in `/data/PCSX2/games`,
   `/data/PCSX2`, and `PS2/` or `PCSX2/games/` on a drive.
+- **PSwanStation**: PS1 discs (`.chd`, `.cue`, `.iso`, `.img`, `.pbp`, `.ecm`,
+  `.mds`) in its `games` folder and, with its "USB drives" setting on, a
+  `psx`, `ps1` or `playstation` folder at the top of a drive. A game on
+  several discs shows once. Its covers are used.
+- **ProsperoEden**: Switch games (`.xci`, `.nsp`, `.nro`) in the game folder
+  set in its settings and in `/data/prosperoeden/roms`. Its covers are used.
 - **PS5-ECAM**: every game in its own library (Wii U, 3DS, DS and Switch), and
   the games folders set in its Settings: Wii U games as `.wua`, `.wud`, `.wux`,
   `.rpx` or a folder of NUS files (`title.tmd`), 3DS as `.3ds`, `.cci`, `.cia`,
@@ -228,15 +239,16 @@ version of a game** shows them all.
 
 When two emulators can play a game, ORION asks which one the first time and
 remembers (Options, Play with… changes it). PS2 games start straight in
-PS5SX2; GameCube and Wii games straight in Porpoise; Wii U, 3DS and Switch
-games straight in PS5-ECAM; every other system in RetroArch with the core you
-chose for it.
+PS5SX2; GameCube and Wii games straight in Porpoise; PS1 games in
+PSwanStation or RetroArch; Switch games in ProsperoEden or PS5-ECAM; Wii U and
+3DS games straight in PS5-ECAM; every other system in RetroArch with the core
+you chose for it.
 
 ## Box art and music
 
 - Box art downloads as the covers scroll into view and is kept in
   `/data/orion/art` (Settings, Box art, can move it to a USB drive). Covers
-  PS5SX2, Porpoise and PS5-ECAM already downloaded are used as they are.
+  the emulators already downloaded are used as they are.
   RetroArch's systems get theirs from the libretro thumbnail sets; Switch,
   Wii U, 3DS and DS games from GameTDB (Switch games are matched by name).
 - Games mounted from disc images show the home screen's sharp 512-pixel

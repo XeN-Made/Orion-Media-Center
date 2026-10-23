@@ -1673,7 +1673,10 @@ class Library final : public app::Concept
             start_typing(Typing::rom_folder, folder_emulator_ == "porpoise" ? "/mnt/usb0/games"
                                              : folder_emulator_ == "ps5sx2" ? "/mnt/usb0/PS2"
                                              : folder_emulator_ == "ecam"   ? "/mnt/usb0/switch"
-                                                                            : "/mnt/usb0/roms");
+                                             : folder_emulator_ == "eden"   ? "/mnt/usb0/switch"
+                                             : folder_emulator_ == "psswanstation"
+                                                 ? "/mnt/usb0/psx"
+                                                 : "/mnt/usb0/roms");
             feedback.play(audio::Cue::modal_open);
             break;
         case orion::SettingsPanel::Change::add_folder:
@@ -2440,8 +2443,10 @@ class Library final : public app::Concept
         if (retroarch)
             request = launcher + "\n@install " + staged_args + "\t" + args + "\n@install " +
                       staged_test_run + "\t" + test_run + "\n";
-        else if (app != nullptr && (app->key == "porpoise" || app->key == "ecam"))
-            // Porpoise and PS5-ECAM close when the game ends, so ORION comes back.
+        else if (app != nullptr && (app->key == "porpoise" || app->key == "ecam" ||
+                                    app->key == "psswanstation" || app->key == "eden"))
+            // These start a game from their command line, as their own home-screen
+            // tiles do, and close when it ends, so ORION comes back.
             request = launcher + "\n" +
                       library::porpoise_arguments(launcher, player.rom, prefs_.return_on_close);
         else if (ps5sx2)

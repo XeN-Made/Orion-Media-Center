@@ -10,6 +10,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <vector>
 
 namespace hui::library
@@ -41,6 +42,14 @@ Emulator scan_retroarch(const Title &retroarch, std::vector<Title> *roms);
 //   ps5sx2     PS5SX2: PS2 discs in /data/PCSX2/games, /data/PCSX2 and a
 //              drive's PS2/ or PCSX2/games/. Starts a game through the
 //              note its disc helper leaves it (kPs5sx2LaunchNote, below).
+//   psswanstation  PSwanStation: PS1 discs in <root>/games (and the folders in
+//              it) and, with its "USB drives" setting on, a psx, ps1 or
+//              playstation folder at the top of a drive. Covers from its
+//              covers/ (in its folder or kSwanData) by the game's file name.
+//   eden       ProsperoEden: Switch games in the folder its settings name
+//              (kEdenData/config/prosperoeden.json, "game_files") and its
+//              roms/. Covers from its covers/, matched by title.
+//              Both start a game as Porpoise does: --rom, --exit-after-game.
 //   ecam       PS5-ECAM: Wii U (Cemu), 3DS (Azahar), DS (melonDS) and Switch
 //              (Eden) games: the list it keeps (read_ecam_library), then its
 //              sides' folders (ps5cemu.json). Starts a game from its command
@@ -109,12 +118,18 @@ int read_retroarch_playlist(Emulator &emulator, std::string_view text, const std
                             std::vector<Title> *roms);
 // PS5-ECAM's data folder: its library.json, settings and covers.
 inline constexpr const char *kEcamData = "/data/ps5cemu";
+// PSwanStation's and ProsperoEden's data folders, beside their install folders.
+inline constexpr const char *kSwanData = "/data/psswanstation";
+inline constexpr const char *kEdenData = "/data/prosperoeden";
 // The games PS5-ECAM has listed itself (<data_dir>/library.json: a list per
 // side, "wiiu", "3ds", "ds", "switch", of each game's name, file, title ID
 // and GameTDB ID), with the covers it downloaded (<data_dir>/covers: the box
 // at boxart/<side>/<game ID>.tga, else the game's icon). A game another
 // emulator listed first gets the cover when it has none. Returns how many
 // games were added.
+// ProsperoEden keeps a game's cover as <data>/covers/<hash>.tga beside a
+// .name file holding its title: the covers by their titles, folded (art_key).
+std::unordered_map<std::string, std::string> eden_covers(const std::string &data);
 int read_ecam_library(Emulator &emulator, std::string_view text, const std::string &data_dir,
                       std::vector<Title> *roms);
 // A way to play a game here: an installed emulator (and for RetroArch, one

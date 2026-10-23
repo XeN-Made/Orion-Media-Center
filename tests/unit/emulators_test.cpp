@@ -611,6 +611,72 @@ TEST(Emulators, KeepsTheBestVersionOfEachGame)
     EXPECT_EQ(library::keep_best_versions(roms, ""), 0);
 }
 
+// PSwanStation's PS1 discs (the first disc of a game on several, a .cue and
+// not its .bin) with its covers by file name; ProsperoEden's Switch games and
+// its covers by title. Both start games themselves; ProsperoEden is offered
+// before PS5-ECAM for a Switch game.
+TEST(Emulators, ListsPSwanStationAndProsperoEdenGames)
+{
+    namespace fs = std::filesystem;
+    const fs::path root = fs::temp_directory_path() / "hui-swan-eden";
+    fs::remove_all(root);
+    const fs::path swan_root = root / "PPSA90170";
+    const fs::path games = swan_root / "games";
+    write_file(games / "Quiet Bay (USA) (Disc 1).chd", "chd");
+    write_file(games / "Quiet Bay (USA) (Disc 2).chd", "chd");
+    write_file(games / "Paper Tower (USA).cue", "cue");
+    write_file(games / "Paper Tower (USA).bin", "bin");
+    write_file(games / "notes.txt", "not a game");
+    write_file(swan_root / "covers/Paper Tower (USA).png", "png");
+    const fs::path switch_games = root / "switch";
+    write_file(switch_games / "Moon Garden [0100AAAA00000000][v0][US].xci", "xci");
+    write_file(switch_games / "readme.txt", "no");
+    const fs::path eden_data = root / "prosperoeden";
+    write_file(eden_data / "covers/0a1b2c3d.name", "Moon Garden");
+    write_file(eden_data / "covers/0a1b2c3d.tga", "tga");
+    write_file(eden_data / "covers/ffffffff.name", "No Picture Here");
+
+    const std::vector<library::Title> titles = {
+        app_title("PPSA90170", "PSSwanStation", swan_root.string()),
+        app_title("PPSA90171", "ProsperoEden", (root / "PPSA90171").string()),
+        app_title("PPSA90172", "PS5-ECAM", (root / "PPSA90172").string()),
+    };
+    EXPECT_EQ(library::emulator_key(titles[0]), "psswanstation");
+    EXPECT_EQ(library::emulator_key(titles[1]), "eden");
+
+    std::vector<library::Title> roms;
+    library::Emulator emulator = library::scan_emulators(titles, {}, &roms);
+    const library::EmulatorApp *swan = emulator.app("psswanstation");
+    ASSERT_NE(swan, nullptr);
+    EXPECT_TRUE(swan->starts_games);
+    EXPECT_EQ(swan->games, 2);
+    ASSERT_EQ(roms.size(), 2u);
+    EXPECT_EQ(roms[0].name, "Paper Tower");
+    EXPECT_EQ(roms[0].system, "Sony - PlayStation");
+    EXPECT_EQ(roms[0].rom, "/app0/games/Paper Tower (USA).cue"); // its folder is /app0 to it
+    EXPECT_EQ(roms[0].icon, (swan_root / "covers/Paper Tower (USA).png").string());
+    EXPECT_EQ(roms[1].name, "Quiet Bay");
+    EXPECT_EQ(roms[1].launcher, "PPSA90170");
+
+    // ProsperoEden's games, from a folder of the player's, with its covers.
+    const auto covers = library::eden_covers(eden_data.string());
+    ASSERT_EQ(covers.size(), 1u);
+    EXPECT_EQ(covers.begin()->second, (eden_data / "covers/0a1b2c3d.tga").string());
+    EXPECT_EQ(library::scan_game_folder(emulator, {switch_games.string(), "", "eden"}, &roms), 1);
+    ASSERT_EQ(roms.size(), 3u);
+    EXPECT_EQ(roms[2].name, "Moon Garden");
+    EXPECT_EQ(roms[2].system, "Nintendo - Switch");
+    const std::vector<library::Player> players = library::players_for(emulator, roms[2]);
+    ASSERT_EQ(players.size(), 2u);
+    EXPECT_EQ(players[0].key, "eden");
+    EXPECT_EQ(players[1].key, "ecam");
+    // A Switch folder is no PS1 folder.
+    EXPECT_EQ(
+        library::scan_game_folder(emulator, {switch_games.string(), "", "psswanstation"}, &roms),
+        0);
+    fs::remove_all(root);
+}
+
 // Game Boy games share the Game Boy Color's tab, each keeping its own system
 // (its box art is the Game Boy's).
 TEST(Emulators, PutsGameBoyGamesOnTheColorsTab)
