@@ -1140,6 +1140,24 @@ std::vector<std::string> known_systems(const Emulator &emulator, std::string_vie
     return known_systems(emulator);
 }
 
+std::vector<std::string> distinct_folders(const std::vector<std::string> &folders)
+{
+    std::vector<std::string> kept;
+    std::vector<std::pair<dev_t, ino_t>> seen;
+    for (const std::string &folder : folders)
+    {
+        struct stat info = {};
+        if (::stat(folder.c_str(), &info) != 0 || !S_ISDIR(info.st_mode))
+            continue;
+        const std::pair<dev_t, ino_t> identity{info.st_dev, info.st_ino};
+        if (std::find(seen.begin(), seen.end(), identity) != seen.end())
+            continue;
+        seen.push_back(identity);
+        kept.push_back(folder);
+    }
+    return kept;
+}
+
 std::unordered_map<std::string, std::string> eden_covers(const std::string &data)
 {
     std::unordered_map<std::string, std::string> covers;
@@ -1465,11 +1483,7 @@ Emulator scan_emulators(const std::vector<Title> &titles, const std::vector<Game
             app.root = title.path;
             app.systems = known_systems(emulator, known.key);
             app.starts_games = app.key != "retroarch";
-            for (const std::string &folder : own_folders(app.key, app.root))
-            {
-                if (is_folder(folder))
-                    app.folders.push_back(folder);
-            }
+            app.folders = distinct_folders(own_folders(app.key, app.root));
             emulator.apps.push_back(std::move(app));
             const std::size_t index = emulator.apps.size() - 1;
             if (known.key == std::string_view("ecam"))

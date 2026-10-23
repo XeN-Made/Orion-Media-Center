@@ -30,6 +30,24 @@ library::Title retroarch()
     return titles.empty() ? library::Title() : titles.front();
 }
 
+TEST(Emulators, ListsEachRealFolderOnce)
+{
+    // On an exFAT drive ps1 and PS1 are one folder; a link stands in for that
+    // here, where the filesystem keeps case.
+    const std::filesystem::path drive = std::filesystem::temp_directory_path() / "orion-one-folder";
+    std::filesystem::remove_all(drive);
+    std::filesystem::create_directories(drive / "ps1");
+    std::filesystem::create_directories(drive / "psx");
+    std::filesystem::create_directory_symlink(drive / "ps1", drive / "PS1");
+    const std::vector<std::string> kept = library::distinct_folders(
+        {(drive / "ps1").string(), (drive / "PS1").string(), (drive / "psx").string(),
+         (drive / "missing").string(), (drive / "ps1").string()});
+    ASSERT_EQ(kept.size(), 2u);
+    EXPECT_EQ(kept[0], (drive / "ps1").string());
+    EXPECT_EQ(kept[1], (drive / "psx").string());
+    std::filesystem::remove_all(drive);
+}
+
 TEST(Emulators, FindsRetroArchByNameAndCores)
 {
     const library::Title title = retroarch();

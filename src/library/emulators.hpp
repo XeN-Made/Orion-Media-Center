@@ -130,6 +130,12 @@ inline constexpr const char *kEdenData = "/data/prosperoeden";
 // ProsperoEden keeps a game's cover as <data>/covers/<hash>.tga beside a
 // .name file holding its title: the covers by their titles, folded (art_key).
 std::unordered_map<std::string, std::string> eden_covers(const std::string &data);
+
+// The folders of a list that exist, each real folder once. An exFAT drive
+// ignores case, so /mnt/usb0/ps1 and /mnt/usb0/PS1 are one folder there (and
+// its games were listed twice); folders are told apart by the filesystem's
+// own identity (device and inode), so on a drive that keeps case both stay.
+std::vector<std::string> distinct_folders(const std::vector<std::string> &folders);
 int read_ecam_library(Emulator &emulator, std::string_view text, const std::string &data_dir,
                       std::vector<Title> *roms);
 // A way to play a game here: an installed emulator (and for RetroArch, one
