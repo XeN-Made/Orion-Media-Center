@@ -216,7 +216,7 @@ author = ORION
 "SteamGridDB key" = "Chave do SteamGridDB"
 "Set" = "Definida"
 "Not set" = "Não definida"
-"Free from steamgriddb.com (Preferences, API): covers no other source has, and Find other art on a title. Also read from /data/orion/keys.txt" = "Grátis em steamgriddb.com (Preferences, API): capas que nenhuma outra fonte tem, e Procurar outra capa num título. Também lida de /data/orion/keys.txt"
+"Free at steamgriddb.com: your profile, Preferences, API. Or a line in /data/orion/keys.txt" = "Grátis em steamgriddb.com: seu perfil, Preferences, API. Ou uma linha em /data/orion/keys.txt"
 
 # src/library/emulators.cpp
 "Every system its cores play" = "Todos os sistemas dos seus núcleos"
