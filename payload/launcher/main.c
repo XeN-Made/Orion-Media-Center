@@ -443,27 +443,45 @@ static int smp_call(const char *path, const char *json, char *body, size_t size,
     return 1;
 }
 
-// erase: delete the files, watch the job, then uninstall. Otherwise uninstall
-// only. 1 when it did what it was asked; why not in error.
-static int remove_game(int erase, const char *id, const char *name, char *error, size_t error_size)
+// Whether ShadowMountPlus refused because a game is still open or closing:
+// ORION itself, for a few seconds after it closes (seen on a console).
+static int still_closing(const char *body, const char *reason_key, const char *error)
+{
+    char reason[32] = "";
+    json_text(body, reason_key, reason, sizeof(reason));
+    return strcmp(reason, "game_active") == 0 || strstr(error, "awaiting exit") != NULL ||
+           strstr(error, "game is active") != NULL;
+}
+
+#define REMOVE_PATIENCE_S 45 // how long a refusal while ORION closes is asked again
+
+// One try of remove_game; *busy says the refusal was only ORION closing.
+static int remove_once(int erase, const char *id, const char *name, int first, int *busy,
+                       char *error, size_t error_size)
 {
     static char body[16384];
+    *busy = 0;
     char json[128];
     snprintf(json, sizeof(json), "{\"title_id\": \"%s\"%s}", id, erase ? ", \"confirm\": true" : "");
     if (!erase)
     {
         const int ok = smp_call("/api/v1/games/uninstall", json, body, sizeof(body), error,
                                 error_size);
+        *busy = !ok && still_closing(body, "error_reason", error);
         say("uninstall %s: %s", id, ok ? "done" : error);
         return ok;
     }
     if (!smp_call("/api/v1/games/delete", json, body, sizeof(body), error, error_size))
+    {
+        *busy = still_closing(body, "error_reason", error);
         return 0;
+    }
     int active = !json_true(body, "source_missing");
     say("delete %s: %s", id, active ? "job started" : "its files were already gone");
     char note[256];
     snprintf(note, sizeof(note), "Deleting %s\xe2\x80\xa6 ORION opens again when it is done", name);
-    notify(note);
+    if (first)
+        notify(note);
     int last_tenth = -1;
     for (int poll = 0; active && poll < 6 * 60 * 60; ++poll)
     {
@@ -486,6 +504,7 @@ static int remove_game(int erase, const char *id, const char *name, char *error,
             json_text(body, "result_error", error, error_size);
             if (error[0] == '\0')
                 snprintf(error, error_size, "the delete did not finish");
+            *busy = still_closing(body, "result_error_reason", error);
             say("delete %s stopped: %s", id, error);
             return 0;
         }
@@ -502,6 +521,24 @@ static int remove_game(int erase, const char *id, const char *name, char *error,
     smp_call("/api/v1/games/uninstall", json, body, sizeof(body), ignored, sizeof(ignored));
     say("delete %s: done", id);
     return 1;
+}
+
+// erase: delete the files, watch the job, then uninstall. Otherwise uninstall
+// only. 1 when it did what it was asked; why not in error. ORION has just
+// closed when this runs, and ShadowMountPlus refuses any removal while it
+// still counts ORION as closing, so that refusal is asked again for a while.
+static int remove_game(int erase, const char *id, const char *name, char *error, size_t error_size)
+{
+    int busy = 0;
+    for (int waited = 0;; waited += 2)
+    {
+        if (remove_once(erase, id, name, waited == 0, &busy, error, error_size))
+            return 1;
+        if (!busy || waited >= REMOVE_PATIENCE_S)
+            return 0;
+        say("remove %s: ORION is still closing; asking again", id);
+        sleep(2);
+    }
 }
 
 // "<kind> <ok> <title ID>\t<message>", for ORION to read when it opens.
