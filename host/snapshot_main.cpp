@@ -46,6 +46,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
 #include <cstdlib>
 #include <string>
 #include <vector>
@@ -410,6 +411,21 @@ int main(int argc, char **argv)
             logo(list, 256.0f, 214.0f, 104.0f);
             hui::ui::text(list, fonts.display, "ORION", 256, 428, 84, Color::rgb(0xffffff),
                           hui::gfx::Align::center, 6.0f);
+            // HUI_HOME_ART_BADGE=<word>: a tag in the top right corner, so a
+            // second ORION tile (a new title ID) is told from the first.
+            if (const char *badge = std::getenv("HUI_HOME_ART_BADGE"); badge != nullptr && *badge)
+            {
+                constexpr float kSize = 34.0f;
+                constexpr float kTracking = 3.0f;
+                const float width = fonts.semibold.font->measure(badge, kSize) +
+                                    kTracking * static_cast<float>(std::strlen(badge)) + 44.0f;
+                const hui::gfx::Rect pill{512.0f - 28.0f - width, 28.0f, width, 56.0f};
+                list.shadow({pill.x, pill.y + 4.0f, pill.w, pill.h}, 28.0f, 14.0f,
+                            Color::rgb(0x000000, 0.45f));
+                list.rounded_rect(pill, 28.0f, accent);
+                hui::ui::text(list, fonts.semibold, badge, pill.cx(), pill.y + 40.0f, kSize,
+                              Color::rgb(0x061018), hui::gfx::Align::center, kTracking);
+            }
             ok = paint(512, 512, 512.0f, 512.0f, list, dir + "/icon0.png") && ok;
         }
         {
