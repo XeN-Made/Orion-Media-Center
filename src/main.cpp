@@ -234,6 +234,22 @@ int main()
                            "# the = and take the # away, then open ORION again.\n"
                            "# steamgriddb = \n");
 
+    // ORION under a new title ID has a save area of its own: the console
+    // settings the old ORION left in the shared folder are taken once, when
+    // this title has none yet.
+    {
+        const std::string carried = "/data/orion/carry/settings.bin";
+        const std::string own = std::string(kDataRoot) + "/settings.bin";
+        std::string bytes;
+        struct stat info = {};
+        if (::stat(own.c_str(), &info) != 0 && save::read_file(carried, &bytes, 1u << 20) &&
+            save::write_atomic(own, bytes).empty())
+        {
+            std::remove(carried.c_str());
+            sys::log("[HUI] console settings taken from the old ORION");
+        }
+    }
+
     // The display opens at the saved resolution (1080p if that fails).
     const Settings saved = app::Shell::load_settings(kDataRoot);
     int resolution = ps5::Display::supports_display_modes() ? saved.resolution : 0;

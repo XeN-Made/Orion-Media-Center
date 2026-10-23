@@ -235,7 +235,7 @@ std::string update_source(const std::string &state_dir)
 }
 
 bool stage_update(std::string_view zip, const std::string &title_id, const std::string &stage,
-                  std::string *error)
+                  std::string *error, const std::string &next)
 {
     // ensure_directory makes one level: each folder of a path in turn.
     const auto folders = [&](const std::string &relative)
@@ -249,14 +249,23 @@ bool stage_update(std::string_view zip, const std::string &title_id, const std::
         }
         return true;
     };
-    const std::string prefix = title_id + "/";
+    // The title folder: this ORION's, or the next title ID's, whichever the
+    // release has first.
+    std::string prefix;
     std::string list;
     std::string why;
     const bool read = unzip(
         zip,
         [&](const std::string &name, std::string_view data)
         {
-            if (name.compare(0, prefix.size(), prefix) != 0)
+            if (prefix.empty())
+            {
+                if (name.compare(0, title_id.size() + 1, title_id + "/") == 0)
+                    prefix = title_id + "/";
+                else if (!next.empty() && name.compare(0, next.size() + 1, next + "/") == 0)
+                    prefix = next + "/";
+            }
+            if (prefix.empty() || name.compare(0, prefix.size(), prefix) != 0)
                 return true; // beside the title folder (SHA256SUMS): not installed
             const std::string relative = name.substr(prefix.size());
             if (relative.empty() || relative.front() == '/' ||
@@ -324,7 +333,8 @@ bool UpdateInstaller::start(Release release, std::string title_id, std::string u
     }
     running_ = true;
     worker_ = std::thread(
-        [this, release = std::move(release), id = std::move(title_id), dir = std::move(update_dir)]
+        [this, release = std::move(release), id = std::move(title_id), dir = std::move(update_dir),
+         next = next_title_]
         {
             const auto set = [&](State state, std::string error = {})
             {
@@ -370,7 +380,7 @@ bool UpdateInstaller::start(Release release, std::string title_id, std::string u
                 set(State::unpacking);
                 const std::string stage = dir + "/stage";
                 std::remove((stage + "/files.txt").c_str());
-                if (!stage_update(zip.view(), id, stage, &error))
+                if (!stage_update(zip.view(), id, stage, &error, next))
                     return set(State::failed, error);
                 save::write_atomic(stage + "/version.txt", release.version + "\n");
                 std::remove(zip_path.c_str()); // unpacked: no longer needed

@@ -32,6 +32,9 @@
 //   @record <id>\t<log>        when the title closes, append "<start> <end> <id>"
 //                              (seconds since 1970) to <log>, a play-log.txt
 //                              in ORION's folder: how long it was played
+//   @fallback <title ID>       the title to start instead when the system
+//                              refuses the request's (ORION installed under a
+//                              new title ID the system has not listed yet)
 //   @update <stage>\t<folder>  before the title starts (ORION, updating
 //                              itself): copy the files <stage>/files.txt lists
 //                              over <folder>'s, keep the old ones beside the
@@ -889,6 +892,7 @@ int main(void)
     const char *remove_id = NULL;
     const char *remove_name = NULL;
     const char *remove_result = NULL;
+    const char *fallback_to = NULL;   // @fallback
     const char *update_stage = NULL;  // @update
     const char *update_target = NULL;
     int line_number = 0;
@@ -928,6 +932,8 @@ int main(void)
             note = line + 8;
         else if (strncmp(line, "@return ", 8) == 0 && is_title_id(line + 8))
             return_to = line + 8;
+        else if (strncmp(line, "@fallback ", 10) == 0 && is_title_id(line + 10))
+            fallback_to = line + 10;
         else if (strncmp(line, "@record ", 8) == 0 && strchr(line, '\t') != NULL)
         {
             char *tab = strchr(line, '\t');
@@ -1020,6 +1026,12 @@ int main(void)
         int ok = update_allowed(job.title, update_stage, update_target);
         if (!ok)
             snprintf(error, sizeof(error), "the request names folders it may not change");
+        else if (mkdir(update_target, 0777) != 0 && errno != EEXIST)
+        {
+            // A title ID ORION has not been installed under yet: its folder.
+            ok = 0;
+            snprintf(error, sizeof(error), "could not make %s (errno %d)", update_target, errno);
+        }
         else
             ok = apply_update(job.title, update_stage, update_target, error, sizeof(error));
         say("update: %s%s", ok ? "done" : "failed: ", ok ? "" : error);
@@ -1060,11 +1072,11 @@ int main(void)
                      (unsigned)answer);
             notify(said);
             // Not left on the home screen: back to ORION, which asked.
-            if (return_to != NULL)
+            if (return_to != NULL || fallback_to != NULL)
             {
                 static launch_job_t back;
                 memset(&back, 0, sizeof(back));
-                strcpy(back.title, return_to);
+                strcpy(back.title, return_to != NULL ? return_to : fallback_to);
                 launch(&back);
             }
             return 1;

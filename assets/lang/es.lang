@@ -228,6 +228,14 @@ author = ORION
 "Title music" = "Música del título"
 "A focused game plays its own music, as on the home screen; yours from /data/orion/hover-music first" = "El juego enfocado reproduce su propia música, como en la pantalla de inicio; antes la tuya de /data/orion/hover-music"
 
+"OK" = "Aceptar"
+"This is the new ORION" = "Este es el nuevo ORION"
+"Delete the old ORION ({0}) from the home screen: Options on its tile, Delete.\nYour settings, favourites, tabs, themes and box art are all here.\nAutoboot: point your autoloader at {1}" = "Borra el ORION anterior ({0}) de la pantalla de inicio: Options en su icono, Eliminar.\nTus ajustes, favoritos, pestañas, temas y carátulas están aquí.\nInicio automático: apunta tu autoloader a {1}"
+"The new ORION is installed" = "El nuevo ORION está instalado"
+"It appears on the home screen in a moment, with its new icon.\nClose this ORION, delete its tile (Options on it, Delete),\nthen open the new ORION. Everything comes along." = "Aparece en la pantalla de inicio en un momento, con su nuevo icono.\nCierra este ORION, borra su icono (Options en él, Eliminar)\ny abre el nuevo ORION. Todo se conserva."
+"A heads-up about the next update" = "Un aviso sobre la próxima actualización"
+"ORION's next update installs it as a new tile ({0}), with a slightly\ndifferent icon. When it appears, delete the old ORION and open the new\none: your settings, favourites, tabs, themes and box art come along." = "La próxima actualización instala ORION como un icono nuevo ({0}), con un\nicono algo distinto. Cuando aparezca, borra el ORION anterior y abre el\nnuevo: tus ajustes, favoritos, pestañas, temas y carátulas se conservan."
+
 # src/library/emulators.cpp
 "Every system its cores play" = "Todos los sistemas de sus núcleos"
 "GameCube, Wii" = "GameCube, Wii"

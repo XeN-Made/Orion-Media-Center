@@ -122,9 +122,11 @@ class UpdateCheck
 std::string sum_for(std::string_view sums, std::string_view file_name);
 
 // Unpacks the title folder of a release ZIP ("PPSA99061/...") into `stage`
-// and writes files.txt. Entries outside it, or with "..", are refused.
+// and writes files.txt. Entries outside it, or with "..", are refused. A
+// folder named `next` (ORION's next title ID, when it has one) is taken too:
+// that release installs beside this ORION (concepts/library.cpp).
 bool stage_update(std::string_view zip, const std::string &title_id, const std::string &stage,
-                  std::string *error);
+                  std::string *error, const std::string &next = {});
 
 // Fetches a URL into a file at `path` (at most limit bytes). False with
 // *error set when it could not.
@@ -151,6 +153,11 @@ class UpdateInstaller
     void set_log(std::string path)
     {
         log_ = std::move(path);
+    }
+    // ORION's next title ID: a release built for it is staged as well.
+    void set_next_title(std::string id)
+    {
+        next_title_ = std::move(id);
     }
     // False while one is running.
     bool start(Release release, std::string title_id, std::string update_dir);
@@ -179,6 +186,7 @@ class UpdateInstaller
     Release release_;
     std::string error_;
     std::string log_;
+    std::string next_title_;
 };
 
 } // namespace hui::orion

@@ -78,8 +78,13 @@ constexpr float kMargin = 96.0f;
 constexpr float kTabsTop = 204.0f;
 constexpr float kTabEdge = 76.0f;     // room for L1 (and R1 after the tabs)
 constexpr float kTabsWidth = 1180.0f; // the tab bar between them
-constexpr float kSortWidth = 330.0f;  // the sort picker in the header
-constexpr float kViewWidth = 250.0f;  // the view picker, left of it
+// ORION's title ID from the release after this one on. Another app had
+// PPSA99061 in a catalog first, so ORION moves: a release built as
+// PPSA99062 installs beside this ORION, the player deletes the old tile and
+// opens the new one (everything else lives in /data/orion and comes along).
+constexpr const char *kNextTitleId = "PPSA99062";
+constexpr float kSortWidth = 330.0f; // the sort picker in the header
+constexpr float kViewWidth = 250.0f; // the view picker, left of it
 constexpr float kGridTop = 280.0f;
 constexpr float kSubTop = 262.0f;                  // the systems' row under the Emulators tab
 constexpr float kSubRoom = 56.0f;                  // how far the covers move down for it
@@ -673,6 +678,7 @@ class Library final : public app::Concept
         tidy_update_folder();
         start_resume_watcher();
         read_hover_music();
+        take_new_title_id();
         settings_.set_grid_key(
             !orion::read_service_key(context_.library.state_dir, orion::kSteamGridDb).empty());
         rebuild_tabs(start);
@@ -876,6 +882,18 @@ class Library final : public app::Concept
         }
         age_ += dt;
         clock_ += dt;
+        // A message waiting (the new title ID), once nothing else is up.
+        if (!info_title_.empty() && clock_ > 1.5f && !dialog_.is_open() && !setup_.is_open() &&
+            !settings_.is_open() && !menu_.is_open() && typing_ == Typing::none)
+        {
+            ui::DialogContent content;
+            content.icon = ui::StatusKind::info;
+            content.title = std::exchange(info_title_, std::string());
+            content.body = std::exchange(info_body_, std::string());
+            content.buttons = {{tr("OK"), ui::ButtonKind::primary, false}};
+            dialog_info_ = true;
+            dialog_.open(std::move(content), feedback);
+        }
         update_title_music(dt);
         follow_backdrop(dt);
         poll_art(feedback);
@@ -2787,6 +2805,13 @@ class Library final : public app::Concept
                 dialog_update_ = false;
             return;
         }
+        if (dialog_info_)
+        {
+            dialog_.handle(input, feedback);
+            if (!dialog_.is_open())
+                dialog_info_ = false;
+            return;
+        }
         const bool hold = remove_kind_ != kItemRemoveHome && dialog_.focus() == 1;
         if (hold &&
             (input.is_pressed(Action::confirm) || (input.held & action_bit(Action::confirm)) != 0))
@@ -3703,6 +3728,7 @@ class Library final : public app::Concept
         installer_.set_log(update_log_path());
         if (installer_.resume(release, state + "/update"))
             return; // downloaded before, never installed: asked again
+        installer_.set_next_title(own_title_id() != kNextTitleId ? kNextTitleId : "");
         if (!installer_.start(release, own_title_id(), state + "/update"))
         {
             orion::update_log(update_log_path(), "orion: a download is already running");
@@ -3759,6 +3785,94 @@ class Library final : public app::Concept
         dialog_.open(std::move(content), feedback);
     }
 
+    // ---- ORION's next title ID ----
+
+    std::string autoboot_payload_for(const std::string &id) const
+    {
+        return "/data/homebrew/" + id + "/assets/payloads/orion-autostart.elf";
+    }
+
+    // A release built for the next title ID: installed into its own folder
+    // beside this one, which stays. The helper opens the new ORION, or this
+    // one again when the system has not listed the new title yet; either
+    // way move-pending.txt says what happened at the next start.
+    std::string install_beside(const std::string &id, const std::string &update)
+    {
+        const std::string &self_path = context_.library.self_path;
+        const std::string &state = context_.library.state_dir;
+        const std::string target = self_path.substr(0, self_path.rfind('/') + 1) + id;
+        // The console settings are in this title's own save area, which the
+        // new one cannot read: they wait in the shared folder.
+        std::string settings;
+        save::ensure_directory(state + "/carry");
+        if (save::read_file("/download0/hui/settings.bin", &settings, 1u << 20))
+            save::write_atomic(state + "/carry/settings.bin", settings);
+        save::write_atomic(state + "/move-pending.txt",
+                           id + "\t" + own_title_id() + "\t" + self_path + "\n");
+        orion::update_log(update_log_path(), "orion: installing " + id + " beside, in " + target);
+        return send_helper(id + "\n@update " + update + "/stage\t" + target + "\n@fallback " +
+                           own_title_id() + "\n");
+    }
+
+    // At start: the heads-up before the move, or what to do after it.
+    void take_new_title_id()
+    {
+        const std::string &state = context_.library.state_dir;
+        const std::string self = own_title_id();
+        if (!sys::on_console() || state.empty() || self.empty())
+            return;
+        std::string pending;
+        const bool moved = save::read_file(state + "/move-pending.txt", &pending, 1024);
+        const std::size_t tab = pending.find('\t');
+        const std::size_t second = pending.find('\t', tab + 1);
+        const std::string old_id =
+            tab == std::string::npos ? std::string() : pending.substr(tab + 1, second - tab - 1);
+        std::string old_path =
+            second == std::string::npos ? std::string() : pending.substr(second + 1);
+        old_path = old_path.substr(0, old_path.find_first_of("\r\n"));
+        if (moved && self == kNextTitleId)
+        {
+            // The new ORION, opened for the first time: the play times come
+            // along (the old one kept them in its own folder), once.
+            const std::string &self_path = context_.library.self_path;
+            std::string log;
+            struct stat info = {};
+            if (!self_path.empty() && ::stat((self_path + "/play-log.txt").c_str(), &info) != 0 &&
+                !old_path.empty() && save::read_file(old_path + "/play-log.txt", &log, 8u << 20))
+                save::write_atomic(self_path + "/play-log.txt", log);
+            std::remove((state + "/move-pending.txt").c_str());
+            info_title_ = tr("This is the new ORION");
+            info_body_ = trf(
+                "Delete the old ORION ({0}) from the home screen: Options on its tile, Delete.\n"
+                "Your settings, favourites, tabs, themes and box art are all here.\n"
+                "Autoboot: point your autoloader at {1}",
+                {old_id.empty() ? std::string("PPSA99061") : old_id, autoboot_payload_for(self)});
+            return;
+        }
+        if (moved && self != kNextTitleId)
+        {
+            // This ORION installed the new one, and opened again because the
+            // system had not listed it yet.
+            info_title_ = tr("The new ORION is installed");
+            info_body_ = tr("It appears on the home screen in a moment, with its new icon.\n"
+                            "Close this ORION, delete its tile (Options on it, Delete),\n"
+                            "then open the new ORION. Everything comes along.");
+            return;
+        }
+        // Before the move: said once.
+        std::string told;
+        if (self != kNextTitleId && !save::read_file(state + "/new-title-id.txt", &told, 64))
+        {
+            save::write_atomic(state + "/new-title-id.txt", std::string(kNextTitleId) + "\n");
+            info_title_ = tr("A heads-up about the next update");
+            info_body_ =
+                trf("ORION's next update installs it as a new tile ({0}), with a slightly\n"
+                    "different icon. When it appears, delete the old ORION and open the new\n"
+                    "one: your settings, favourites, tabs, themes and box art come along.",
+                    {kNextTitleId});
+        }
+    }
+
     // ORION cannot replace its own files while it runs: the launch helper
     // copies the staged ones over them once ORION has closed, then opens it
     // again (payload/launcher, "@update"). How it went is read at the next
@@ -3790,7 +3904,9 @@ class Library final : public app::Concept
             if (save::read_file(update + "/stage/sce_sys/param.json", &staged, 1u << 20) &&
                 json::parse(staged, &root))
                 staged_id = root["titleId"].string_or("");
-            if (staged_id != self)
+            if (staged_id == kNextTitleId && self != kNextTitleId)
+                why = install_beside(staged_id, update);
+            else if (staged_id != self)
                 why = tr("no update is ready");
             else
             {
@@ -5564,6 +5680,9 @@ class Library final : public app::Concept
         { return sys::http_download(url, path, limit, error); }};
     bool update_waiting_ = false; // an update is ready: ask when nothing else is open
     bool dialog_update_ = false;  // the dialog asks about the update, not a removal
+    bool dialog_info_ = false;    // the dialog only tells something (OK)
+    std::string info_title_;      // a message waiting to be shown
+    std::string info_body_;
 };
 
 } // namespace

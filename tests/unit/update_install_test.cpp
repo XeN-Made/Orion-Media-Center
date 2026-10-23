@@ -140,6 +140,22 @@ TEST(OrionUpdates, AsksTheReleaseATestFileNames)
     EXPECT_EQ(orion::update_source(state), orion::kLatestRelease);
 }
 
+TEST(OrionUpdates, StagesTheNextTitleIdsRelease)
+{
+    // ORION under PPSA90000 told its next title ID is PPSA99061: that
+    // release is staged; without being told, it is refused (as above).
+    const std::string stage = fresh_dir("orion-update-next") + "/stage";
+    std::string error;
+    ASSERT_TRUE(
+        orion::stage_update(fixture("PPSA99061.zip"), "PPSA90000", stage, &error, "PPSA99061"))
+        << error;
+    std::string list;
+    ASSERT_TRUE(save::read_file(stage + "/files.txt", &list));
+    EXPECT_EQ(list, "eboot.bin\nsce_sys/param.json\n");
+    EXPECT_FALSE(
+        orion::stage_update(fixture("PPSA99061.zip"), "PPSA90000", stage, &error, "PPSA90001"));
+}
+
 TEST(OrionUpdates, DownloadsChecksAndStagesARelease)
 {
     const std::string zip = fixture("PPSA99061.zip");
