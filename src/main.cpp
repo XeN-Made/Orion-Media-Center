@@ -183,6 +183,29 @@ int main()
     sys::log("[HUI] entry");
     sys::log("[HUI] storage dir=%d", save::ensure_directory(kDataRoot) ? 1 : 0);
 
+    // ORION's folders from before its files were made open to everyone are
+    // opened up once: its own and any copy a player made of it
+    // (/data/orion-backup), which FTP could otherwise not change or delete.
+    if (std::string done; save::ensure_directory("/data/orion") &&
+                          !save::read_file("/data/orion/opened-up.txt", &done, 64))
+    {
+        int changed = 0;
+        for (const save::DirectoryEntry &entry : save::list_directory("/data"))
+        {
+            if (entry.directory && entry.name.rfind("orion", 0) == 0)
+                changed += save::open_up_tree("/data/" + entry.name);
+        }
+        save::write_atomic("/data/orion/opened-up.txt", "ORION's folders are open to FTP\n");
+        sys::log("[HUI] opened up %d files and folders for FTP", changed);
+    }
+    // Where a player pastes keys for other services (orion/steamgriddb.hpp):
+    // there from the start, so it can be edited over FTP.
+    if (std::string keys; !save::read_file("/data/orion/keys.txt", &keys, 64u << 10))
+        save::write_atomic("/data/orion/keys.txt",
+                           "# ORION's keys for other services, one a line. Paste a key after\n"
+                           "# the = and take the # away, then open ORION again.\n"
+                           "# steamgriddb = \n");
+
     // The display opens at the saved resolution (1080p if that fails).
     const Settings saved = app::Shell::load_settings(kDataRoot);
     int resolution = ps5::Display::supports_display_modes() ? saved.resolution : 0;

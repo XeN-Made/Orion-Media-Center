@@ -7,6 +7,9 @@
 
 #include <gtest/gtest.h>
 
+#include <sys/stat.h>
+#include <unistd.h>
+
 #include <filesystem>
 
 #include <algorithm>
@@ -19,6 +22,37 @@ namespace
 {
 
 using hui::save::Kind;
+
+TEST(SaveFile, LeavesFilesAndFoldersOpenToAnFtpServer)
+{
+    const std::string root = ::testing::TempDir() + "hui-open-up";
+    hui::save::remove_tree(root);
+    const mode_t before = ::umask(022); // what most processes run with
+    ASSERT_TRUE(hui::save::ensure_directory(root));
+    ASSERT_TRUE(hui::save::write_atomic(root + "/keys.txt", "k").empty());
+    struct stat info = {};
+    ASSERT_EQ(::stat(root.c_str(), &info), 0);
+    EXPECT_EQ(info.st_mode & 07777, 0777u);
+    ASSERT_EQ(::stat((root + "/keys.txt").c_str(), &info), 0);
+    EXPECT_EQ(info.st_mode & 07777, 0666u);
+
+    // A tree made before: shut, then opened up; a link is left alone.
+    ASSERT_EQ(::mkdir((root + "/art").c_str(), 0700), 0);
+    ASSERT_TRUE(hui::save::write_atomic(root + "/art/a.png", "png").empty());
+    ASSERT_EQ(::chmod((root + "/art/a.png").c_str(), 0600), 0);
+    ASSERT_EQ(::chmod((root + "/keys.txt").c_str(), 0644), 0);
+    ASSERT_EQ(::symlink("/etc/hostname", (root + "/art/link").c_str()), 0);
+    EXPECT_EQ(hui::save::open_up_tree(root), 3); // art, a.png, keys.txt
+    ASSERT_EQ(::stat((root + "/art").c_str(), &info), 0);
+    EXPECT_EQ(info.st_mode & 07777, 0777u);
+    ASSERT_EQ(::stat((root + "/art/a.png").c_str(), &info), 0);
+    EXPECT_EQ(info.st_mode & 07777, 0666u);
+    EXPECT_EQ(hui::save::open_up_tree(root), 0); // nothing left to change
+    EXPECT_EQ(hui::save::open_up_tree("relative/path"), 0);
+    EXPECT_EQ(hui::save::open_up_tree("/"), 0);
+    ::umask(before);
+    hui::save::remove_tree(root);
+}
 
 TEST(SaveFile, Crc32MatchesReferenceVector)
 {

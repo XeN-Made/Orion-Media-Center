@@ -112,9 +112,13 @@ Decoded decode(Kind kind, std::string_view data)
 std::string write_atomic(const std::string &path, std::string_view data)
 {
     const std::string temporary = path + ".tmp";
-    const int fd = ::open(temporary.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    // Open to everyone: on a console the app's files belong to its own user,
+    // and a player's FTP server (another user) must be able to replace and
+    // delete them. fchmod, as the process's umask trims the mode.
+    const int fd = ::open(temporary.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0666);
     if (fd < 0)
         return errno_text("open");
+    ::fchmod(fd, 0666);
     std::size_t written = 0;
     while (written < data.size())
     {
@@ -189,14 +193,56 @@ bool read_file(const std::string &path, std::string *data, std::size_t max_bytes
 
 bool ensure_directory(const std::string &path)
 {
-    if (::mkdir(path.c_str(), 0755) == 0 || errno == EEXIST)
+    // Open to everyone, as write_atomic's files are: an FTP server must be
+    // able to add files here and delete the folder.
+    if (::mkdir(path.c_str(), 0777) == 0)
+        ::chmod(path.c_str(), 0777);
+    else if (errno != EEXIST)
+        return false;
+    struct stat info
     {
+    };
+    return ::stat(path.c_str(), &info) == 0 && S_ISDIR(info.st_mode);
+}
+
+int open_up_tree(const std::string &root)
+{
+    if (root.empty() || root.front() != '/' || root == "/" || root.find("..") != std::string::npos)
+        return 0;
+    int changed = 0;
+    // Depth first, with a list instead of recursion; a link is not followed.
+    std::vector<std::pair<std::string, int>> folders = {{root, 0}};
+    while (!folders.empty())
+    {
+        const auto [folder, depth] = folders.back();
+        folders.pop_back();
         struct stat info
         {
         };
-        return ::stat(path.c_str(), &info) == 0 && S_ISDIR(info.st_mode);
+        if (::lstat(folder.c_str(), &info) != 0 || !S_ISDIR(info.st_mode))
+            continue;
+        if ((info.st_mode & 07777) != 0777 && ::chmod(folder.c_str(), 0777) == 0)
+            ++changed;
+        for (const DirectoryEntry &entry : list_directory(folder))
+        {
+            if (entry.name == "." || entry.name == "..")
+                continue;
+            const std::string path = folder + "/" + entry.name;
+            if (entry.directory)
+            {
+                if (depth < 32)
+                    folders.emplace_back(path, depth + 1);
+                continue;
+            }
+            struct stat file
+            {
+            };
+            if (::lstat(path.c_str(), &file) == 0 && S_ISREG(file.st_mode) &&
+                (file.st_mode & 0666) != 0666 && ::chmod(path.c_str(), 0666) == 0)
+                ++changed;
+        }
     }
-    return false;
+    return changed;
 }
 
 std::vector<std::string> list_files(const std::string &directory)

@@ -77,6 +77,12 @@ std::vector<std::string> list_files(const std::string &directory);
 
 // Creates a directory if it does not exist (single level).
 bool ensure_directory(const std::string &path);
+// Folders made, and files written (write_atomic), are open to every user:
+// on a console an FTP server runs as another user than the app and must be
+// able to add, replace and delete them. This opens up a tree made before
+// that (folders 0777, files 0666; links are not followed) and returns how
+// many entries changed. Refuses a relative path, "/" and one with "..".
+int open_up_tree(const std::string &root);
 
 // Removes a directory and everything in it. Refuses a relative path, "/"
 // and one with ".."; true when nothing of it is left.
