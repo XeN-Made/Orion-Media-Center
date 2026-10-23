@@ -642,7 +642,16 @@ class Library final : public app::Concept
         settings_.set_app_settings(context_.settings);
         settings_.set_autostart_payload(autostart_payload());
         // A console that has not been set up yet starts on the setup.
-        setup_pending_ = context_.library.offer_setup && !prefs_.setup_done;
+        // ORION keeps everything in /data/orion. A title's sandbox has /data
+        // only when ShadowMountPlus mounts it there (its sandbox watcher,
+        // backport_fakelib); without it nothing can be saved or launched,
+        // and the setup would come back on every start. Say so plainly.
+        data_missing_ = sys::on_console() && (context_.library.state_dir.empty() ||
+                                              !save::ensure_directory(context_.library.state_dir));
+        if (data_missing_)
+            sys::notify(tr("ORION cannot reach /data: update ShadowMountPlus, keep its "
+                           "backport_fakelib on and turn BackPork off"));
+        setup_pending_ = context_.library.offer_setup && !prefs_.setup_done && !data_missing_;
         restyle();
         // ORION reopens where it was left, when asked to.
         std::string start = prefs_.reopen_last_tab ? prefs_.last_tab : std::string("all");
@@ -2727,6 +2736,8 @@ class Library final : public app::Concept
     {
         const std::string &dir = context_.library.state_dir;
         std::string elf;
+        if (data_missing_)
+            return tr("ORION cannot reach /data (see ShadowMountPlus)");
         if (dir.empty() || !save::write_atomic(dir + "/launch-request.txt", request).empty())
             return tr("could not write the launch request");
         if (!save::read_file(kLauncherPath, &elf, 4u << 20) || elf.empty())
@@ -5037,6 +5048,7 @@ class Library final : public app::Concept
     // A check whose request never returns cannot be stopped, only left
     // behind: Check now starts a new one (check_for_updates).
     std::unique_ptr<orion::UpdateCheck> updates_ = new_update_check();
+    bool data_missing_ = false;   // no /data in ORION's sandbox (ShadowMountPlus)
     bool retire_pending_ = false; // the old ORION is removed a moment after start
     std::string moving_to_;       // a move waiting for its title to be listed
     float move_poll_ = 0.0f;

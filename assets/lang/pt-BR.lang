@@ -191,6 +191,9 @@ author = ORION
 "Finishing the move to ORION's own title ID ({0})…" = "Concluindo a mudança para o ID de título próprio do ORION ({0})…"
 "The new ORION is ready: opening it" = "O novo ORION está pronto: abrindo"
 
+"ORION cannot reach /data: update ShadowMountPlus, keep its backport_fakelib on and turn BackPork off" = "O ORION não consegue acessar /data: atualize o ShadowMountPlus, deixe backport_fakelib ligado e desligue o BackPork"
+"ORION cannot reach /data (see ShadowMountPlus)" = "O ORION não consegue acessar /data (veja o ShadowMountPlus)"
+
 # src/library/emulators.cpp
 "Every system its cores play" = "Todos os sistemas dos seus núcleos"
 "GameCube, Wii" = "GameCube, Wii"

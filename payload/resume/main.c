@@ -5,9 +5,10 @@
 // ORION sends this ELF to the ELF loader when it starts, while Settings,
 // Library, "Open ORION after rest mode" is on. It stays in the background:
 //
-//   - One copy runs at a time. The first holds a socket on 127.0.0.1
-//     (WATCH_PORT) for as long as it lives; a later copy cannot bind it and
-//     ends at once.
+//   - One copy runs at a time: it holds a socket on 127.0.0.1 (WATCH_PORT)
+//     for as long as it lives. A later copy (ORION sends one each time it
+//     starts, maybe a newer one) connects to it, which tells it to end, and
+//     takes the socket over.
 //   - Rest mode freezes it with everything else. It notices the wake by the
 //     clock: a short sleep that took far longer than asked was a rest.
 //   - On a wake it waits for the system to settle. With nothing in front
@@ -27,6 +28,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/select.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <time.h>
@@ -39,7 +41,7 @@
 #define FALLBACK_TITLE "PPSA99061"
 #define WATCH_PORT 10161     // held while a watcher runs: one at a time
 #define TICK_S 2             // how often it looks at the clock
-#define REST_GAP_S 20        // a tick this much longer than asked was a rest
+#define REST_GAP_S 8         // a tick this much longer than asked was a rest (one of 21 s was seen)
 #define SETTLE_S 6           // after a wake: the home screen comes back first
 #define USER_WAIT_S 120      // waiting for someone to sign in after the wake
 #define LAUNCH_WAIT_S 300 // a wake often stops on the profile screen: until one is picked
@@ -125,23 +127,68 @@ static void orion_title(char *title, size_t size)
     snprintf(title, size, "%s", text);
 }
 
-// Holds WATCH_PORT for the life of the process; -1 when another watcher has it.
-static int claim(void)
+static struct sockaddr_in watch_address(void)
 {
-    const int fd = socket(AF_INET, SOCK_STREAM, 0);
-    if (fd < 0)
-        return -1;
     struct sockaddr_in address;
     memset(&address, 0, sizeof(address));
     address.sin_family = AF_INET;
     address.sin_port = htons(WATCH_PORT);
     address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    return address;
+}
+
+static int try_claim(void)
+{
+    const int fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (fd < 0)
+        return -1;
+    const int on = 1;
+    setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
+    struct sockaddr_in address = watch_address();
     if (bind(fd, (struct sockaddr *)&address, sizeof(address)) != 0 || listen(fd, 1) != 0)
     {
         close(fd);
         return -1;
     }
     return fd;
+}
+
+// Holds WATCH_PORT for the life of the process. A watcher already holding
+// it is asked to end (a connection says so) and the port is taken over;
+// -1 when it does not let go (an older watcher that does not listen).
+static int claim(void)
+{
+    int fd = try_claim();
+    if (fd >= 0)
+        return fd;
+    const int knock = socket(AF_INET, SOCK_STREAM, 0);
+    if (knock >= 0)
+    {
+        struct sockaddr_in address = watch_address();
+        connect(knock, (struct sockaddr *)&address, sizeof(address));
+        close(knock);
+    }
+    for (int tries = 0; tries < 20 && fd < 0; ++tries)
+    {
+        usleep(250 * 1000);
+        fd = try_claim();
+    }
+    return fd;
+}
+
+// Sleeps for a tick, or less when another watcher knocks: 1 then.
+static int knocked(int held)
+{
+    fd_set ready;
+    FD_ZERO(&ready);
+    FD_SET(held, &ready);
+    struct timeval wait = {TICK_S, 0};
+    if (select(held + 1, &ready, NULL, NULL, &wait) <= 0)
+        return 0;
+    const int other = accept(held, NULL, NULL);
+    if (other >= 0)
+        close(other);
+    return 1;
 }
 
 static void open_orion(void)
@@ -197,7 +244,7 @@ int main(void)
     const int held = claim();
     if (held < 0)
     {
-        say("a watcher is already running (pid %d here)", (int)getpid());
+        say("an older watcher is running and does not let go (pid %d here)", (int)getpid());
         return 0;
     }
     sceUserServiceInitialize(NULL);
@@ -206,7 +253,11 @@ int main(void)
     long long last_up = uptime_s();
     for (;;)
     {
-        sleep(TICK_S);
+        if (knocked(held))
+        {
+            say("a newer watcher takes over (pid %d ends)", (int)getpid());
+            break;
+        }
         const time_t now = time(NULL);
         const long long up = uptime_s();
         const long long gap = (long long)(now - last) - TICK_S;

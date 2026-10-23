@@ -833,12 +833,15 @@ static void write_update_result(const char *stage, const char *target, int ok,
 
 // ---- @moved-from: ORION installed under a new title ID ----
 
-// ShadowMountPlus defers its scans after an app closes until another opens
-// (a console showed the new title listed two seconds after one did, and
-// not in three minutes before). So the helper looks briefly, then lets the
-// old ORION open, which waits for the new title itself.
-#define REGISTER_WAIT_S 20
-#define RESCAN_EVERY_S 30
+// ShadowMountPlus skips a folder changed in the last seconds ("source not
+// stable yet", in its log), so the scan is asked for once the copy has
+// settled, and again later. When it lists the new title in that time, the
+// new ORION opens straight away; otherwise the old one opens and waits for
+// it (concepts/library.cpp): a console also showed ShadowMountPlus holding
+// its scans while it still counted a closed app as closing.
+#define SETTLE_S 12
+#define REGISTER_WAIT_S 60
+#define RESCAN_EVERY_S 25
 
 // A title's folder: under /data/homebrew or /mnt, named after the title.
 static int title_folder(const char *title, const char *folder)
@@ -891,7 +894,7 @@ static int wait_for_registration(const char *title)
             say("move: %s is registered after %d s", title, waited);
             return 1;
         }
-        if (waited % RESCAN_EVERY_S == 0)
+        if (waited >= SETTLE_S && (waited - SETTLE_S) % RESCAN_EVERY_S == 0)
         {
             char error[160] = "";
             const int asked = smp_call("/api/v1/scan", "{\"reset_attempts\": true}", body,
