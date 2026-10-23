@@ -186,10 +186,7 @@ author = ORION
 "{0} title" = "{0} título"
 "{0} titles" = "{0} títulos"
 
-"ORION has a title ID of its own now ({0}): removing the old ORION. ORION opens again when it is done" = "O ORION agora tem um ID de título próprio ({0}): removendo o ORION antigo. O ORION abre de novo ao terminar"
 
-"Finishing the move to ORION's own title ID ({0})…" = "Concluindo a mudança para o ID de título próprio do ORION ({0})…"
-"The new ORION is ready: opening it" = "O novo ORION está pronto: abrindo"
 
 "ORION cannot reach /data: update ShadowMountPlus, keep its backport_fakelib on and turn BackPork off" = "O ORION não consegue acessar /data: atualize o ShadowMountPlus, deixe backport_fakelib ligado e desligue o BackPork"
 "ORION cannot reach /data (see ShadowMountPlus)" = "O ORION não consegue acessar /data (veja o ShadowMountPlus)"

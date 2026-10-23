@@ -76,14 +76,8 @@ constexpr float kMargin = 96.0f;
 constexpr float kTabsTop = 204.0f;
 constexpr float kTabEdge = 76.0f;     // room for L1 (and R1 after the tabs)
 constexpr float kTabsWidth = 1180.0f; // the tab bar between them
-// The title IDs ORION had before the one it has now. The catalog of PS5
-// apps gave PPSA99061 to another app first, so ORION moved; the ORION that
-// opens under its new ID removes the old copy (retire_old_orion).
-constexpr const char *kOldTitleIds[] = {"PPSA99061"};
-// The title's own save area, where the console settings are (main.cpp).
-constexpr const char *kSaveArea = "/download0/hui";
-constexpr float kSortWidth = 330.0f; // the sort picker in the header
-constexpr float kViewWidth = 250.0f; // the view picker, left of it
+constexpr float kSortWidth = 330.0f;  // the sort picker in the header
+constexpr float kViewWidth = 250.0f;  // the view picker, left of it
 constexpr float kGridTop = 280.0f;
 constexpr float kSubTop = 262.0f;                  // the systems' row under the Emulators tab
 constexpr float kSubRoom = 56.0f;                  // how far the covers move down for it
@@ -660,8 +654,6 @@ class Library final : public app::Concept
         take_update_result();
         tidy_update_folder();
         start_resume_watcher();
-        retire_pending_ = sys::on_console() && old_orion() != nullptr;
-        take_pending_move();
         rebuild_tabs(start);
         restyle();
         rebuild();
@@ -846,27 +838,11 @@ class Library final : public app::Concept
         }
         age_ += dt;
         clock_ += dt;
-        // A moment after it opens, so the library is seen before it closes.
-        if (retire_pending_ && clock_ > 2.5f && !settings_.is_open() && !setup_.is_open())
-        {
-            retire_pending_ = false;
-            retire_old_orion(feedback);
-        }
         follow_backdrop(dt);
         poll_art(feedback);
         poll_icon_copies();
-        if (registered_.take_finished())
-        {
-            if (registered_.result().changed)
-                context_.registered_changed = true;
-            if (!moving_to_.empty())
-                open_moved_orion(feedback);
-        }
-        if (!moving_to_.empty() && (move_poll_ -= dt) <= 0.0f && !registered_.running())
-        {
-            move_poll_ = 5.0f;
-            registered_.start(context_.library.state_dir, kFtpPort);
-        }
+        if (registered_.take_finished() && registered_.result().changed)
+            context_.registered_changed = true;
         const bool reduced = context_.settings.reduced_motion;
         if (reduced != reduced_)
         {
@@ -3184,43 +3160,20 @@ class Library final : public app::Concept
             // ORION's data folder, so the folder is made for it, open to it.
             save::ensure_directory(update + "/previous");
             ::chmod((update + "/previous").c_str(), 0777);
-            // What is staged says what it is: its own param.json, not a note
-            // beside it. The stage is shared by every ORION on the console,
-            // and one under another title ID may have staged it for itself.
-            std::string moved_to;
+            // What is staged says what it is: its own param.json. A release
+            // built for another title ID is never installed over this one.
+            std::string staged_id;
             std::string staged;
             json::Value root;
             if (save::read_file(update + "/stage/sce_sys/param.json", &staged, 1u << 20) &&
                 json::parse(staged, &root))
-                moved_to = root["titleId"].string_or("");
-            if (!orion::is_title_id(moved_to))
+                staged_id = root["titleId"].string_or("");
+            if (staged_id != self)
                 why = tr("no update is ready");
-            else if (moved_to == self)
+            else
             {
                 orion::update_log(update_log_path(), "orion: handing the install to the helper");
                 why = send_helper(self + "\n@update " + update + "/stage\t" + self_path + "\n");
-            }
-            else
-            {
-                // A new title ID: installed beside this one, which the helper
-                // deletes once the system lists the new one (and the new ORION
-                // when it opens, if that did not happen: retire_old_orion). The
-                // console settings live in this title's own save area, which
-                // the new one cannot read: they wait in the shared folder.
-                const std::string target = self_path.substr(0, self_path.rfind('/') + 1) + moved_to;
-                save::ensure_directory(context_.library.state_dir + "/carry");
-                std::string settings;
-                if (save::read_file(std::string(kSaveArea) + "/settings.bin", &settings, 1u << 20))
-                    save::write_atomic(context_.library.state_dir + "/carry/settings.bin",
-                                       settings);
-                // This ORION may open again before the new one is listed
-                // (the helper waits only briefly): it then waits for it.
-                save::write_atomic(context_.library.state_dir + "/move-pending.txt",
-                                   moved_to + "\n");
-                orion::update_log(update_log_path(),
-                                  "orion: handing the move to " + target + " to the helper");
-                why = send_helper(moved_to + "\n@update " + update + "/stage\t" + target +
-                                  "\n@moved-from " + self + "\t" + self_path + "\n");
             }
         }
         if (!why.empty())
@@ -3274,113 +3227,6 @@ class Library final : public app::Concept
         // Not fetched again by itself, or it would ask on every start: Check
         // now (Settings, About) tries again.
         save::write_atomic(update + "/failed.txt", version + "\t" + why + "\n");
-    }
-
-    // The ORION this one moved from (its title ID went to another app in a
-    // catalog): its tile, if it is still installed. Only a folder that is
-    // ORION's by its content ID, never another app that has that ID now.
-    const Title *old_orion() const
-    {
-        const std::string self = own_title_id();
-        for (const char *id : kOldTitleIds)
-        {
-            const Title *title = id != self ? find_title(id) : nullptr;
-            std::string text;
-            json::Value root;
-            if (title != nullptr && !title->path.empty() &&
-                save::read_file(title->path + "/sce_sys/param.json", &text, 1u << 20) &&
-                json::parse(text, &root) &&
-                root["contentId"].string_or("").find("ORIONMEDIACENTER") != std::string::npos)
-                return title;
-        }
-        return nullptr;
-    }
-
-    // Deletes the old ORION through the launch helper, as Delete does, once:
-    // a refusal is not tried again on every start (moved-from.txt).
-    void retire_old_orion(app::Feedback &feedback)
-    {
-        const Title *old = old_orion();
-        const std::string &state = context_.library.state_dir;
-        // "<title ID> <tries>": a refusal is tried again on the next starts,
-        // three times in all, not on every start for ever.
-        const std::string marker = state + "/moved-from.txt";
-        std::string tried;
-        int tries = 0;
-        if (save::read_file(marker, &tried, 256))
-            tries = tried.find(' ') == std::string::npos
-                        ? 1
-                        : std::atoi(tried.c_str() + tried.find(' ') + 1);
-        if (old == nullptr || state.empty() || tries >= 3)
-            return;
-        save::write_atomic(marker, old->id + " " + std::to_string(tries + 1) + "\n");
-        const std::string self = own_title_id();
-        const std::string &self_path = context_.library.self_path;
-        if (self.empty() || self_path.empty())
-            return;
-        std::remove((self_path + "/remove-result.txt").c_str());
-        const std::string why =
-            send_helper(self + "\n@remove erase\t" + old->id + "\t" + one_line(old->name) +
-                        "\n@remove-result " + self_path + "/remove-result.txt\n");
-        if (!why.empty())
-        {
-            show_note(false, trf("Could not remove {0}: {1}", {old->name, why}));
-            return;
-        }
-        launch_ok_ = true;
-        launch_message_ = trf("ORION has a title ID of its own now ({0}): removing the old "
-                              "ORION. ORION opens again when it is done",
-                              {self});
-        launch_shown_ = 7.0f;
-        launch_exit_ = 2.5f;
-        launch_pending_ = 30.0f;
-        feedback.play(audio::Cue::select);
-    }
-
-    // A move this ORION handed over and that is not finished: the new title
-    // was not listed when the helper looked, so this ORION opened again and
-    // waits for it (open_moved_orion). The new ORION removes the file.
-    void take_pending_move()
-    {
-        const std::string &state = context_.library.state_dir;
-        std::string id;
-        if (state.empty() || !save::read_file(state + "/move-pending.txt", &id, 64))
-            return;
-        id = id.substr(0, id.find_first_of("\r\n"));
-        const std::string self = own_title_id();
-        if (!orion::is_title_id(id) || id == self || !sys::on_console())
-        {
-            std::remove((state + "/move-pending.txt").c_str());
-            return;
-        }
-        moving_to_ = id;
-        move_poll_ = 2.0f;
-        show_note(true, trf("Finishing the move to ORION's own title ID ({0})…", {id}));
-    }
-
-    // Opens the new ORION once the system lists it (registered.tsv, read by
-    // registered_ every few seconds while a move is pending).
-    void open_moved_orion(app::Feedback &feedback)
-    {
-        std::string cache;
-        save::read_file(context_.library.state_dir + "/registered.tsv", &cache, 4u << 20);
-        if (cache.compare(0, moving_to_.size() + 1, moving_to_ + "\t") != 0 &&
-            cache.find("\n" + moving_to_ + "\t") == std::string::npos)
-            return;
-        const std::string id = std::exchange(moving_to_, std::string());
-        orion::update_log(update_log_path(), "orion: " + id + " is listed; opening it");
-        const std::string why = send_helper(id + "\n");
-        if (!why.empty())
-        {
-            show_note(false, trf("Could not start {0}: {1}", {"ORION", why}));
-            return;
-        }
-        launch_ok_ = true;
-        launch_message_ = tr("The new ORION is ready: opening it");
-        launch_shown_ = 5.0f;
-        launch_exit_ = 1.6f;
-        launch_pending_ = 30.0f;
-        feedback.play(audio::Cue::select);
     }
 
     // A staged update this ORION is already as new as is spent: tens of MB,
@@ -5048,10 +4894,7 @@ class Library final : public app::Concept
     // A check whose request never returns cannot be stopped, only left
     // behind: Check now starts a new one (check_for_updates).
     std::unique_ptr<orion::UpdateCheck> updates_ = new_update_check();
-    bool data_missing_ = false;   // no /data in ORION's sandbox (ShadowMountPlus)
-    bool retire_pending_ = false; // the old ORION is removed a moment after start
-    std::string moving_to_;       // a move waiting for its title to be listed
-    float move_poll_ = 0.0f;
+    bool data_missing_ = false;        // no /data in ORION's sandbox (ShadowMountPlus)
     float check_started_ = 0.0f;       // clock_ when the running check began
     bool update_asked_ = false;        // the check this launch makes by itself has started
     bool manual_update_check_ = false; // the running check was asked for: say how it went

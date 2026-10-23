@@ -220,19 +220,6 @@ std::string sum_for(std::string_view sums, std::string_view file_name)
     return {};
 }
 
-bool is_title_id(std::string_view text)
-{
-    if (text.size() != 9)
-        return false;
-    for (std::size_t i = 0; i < 9; ++i)
-    {
-        const char c = text[i];
-        if (i < 4 ? (c < 'A' || c > 'Z') : (c < '0' || c > '9'))
-            return false;
-    }
-    return true;
-}
-
 std::string update_source(const std::string &state_dir)
 {
     std::string text;
@@ -248,7 +235,7 @@ std::string update_source(const std::string &state_dir)
 }
 
 bool stage_update(std::string_view zip, const std::string &title_id, const std::string &stage,
-                  std::string *error, std::string *moved_to)
+                  std::string *error)
 {
     // ensure_directory makes one level: each folder of a path in turn.
     const auto folders = [&](const std::string &relative)
@@ -262,26 +249,14 @@ bool stage_update(std::string_view zip, const std::string &title_id, const std::
         }
         return true;
     };
-    // The title folder: ORION's own, or (moving) the first title ID's folder.
-    std::string folder;
-    std::string prefix;
+    const std::string prefix = title_id + "/";
     std::string list;
     std::string why;
     const bool read = unzip(
         zip,
         [&](const std::string &name, std::string_view data)
         {
-            if (folder.empty())
-            {
-                const std::size_t slash = name.find('/');
-                const std::string top = slash == std::string::npos ? "" : name.substr(0, slash);
-                if (top == title_id || (moved_to != nullptr && is_title_id(top)))
-                {
-                    folder = top;
-                    prefix = top + "/";
-                }
-            }
-            if (prefix.empty() || name.compare(0, prefix.size(), prefix) != 0)
+            if (name.compare(0, prefix.size(), prefix) != 0)
                 return true; // beside the title folder (SHA256SUMS): not installed
             const std::string relative = name.substr(prefix.size());
             if (relative.empty() || relative.front() == '/' ||
@@ -313,12 +288,6 @@ bool stage_update(std::string_view zip, const std::string &title_id, const std::
             *error = why.empty() ? "the update holds no " + title_id + " folder" : why;
         return false;
     }
-    const std::string moving = folder == title_id ? std::string() : folder;
-    std::remove((stage + "/title.txt").c_str());
-    if (!moving.empty())
-        save::write_atomic(stage + "/title.txt", moving + "\n");
-    if (moved_to != nullptr)
-        *moved_to = moving;
     const std::string failed = save::write_atomic(stage + "/files.txt", list);
     if (!failed.empty())
     {
@@ -401,11 +370,8 @@ bool UpdateInstaller::start(Release release, std::string title_id, std::string u
                 set(State::unpacking);
                 const std::string stage = dir + "/stage";
                 std::remove((stage + "/files.txt").c_str());
-                std::string moved_to;
-                if (!stage_update(zip.view(), id, stage, &error, &moved_to))
+                if (!stage_update(zip.view(), id, stage, &error))
                     return set(State::failed, error);
-                if (!moved_to.empty())
-                    update_log(log_, "install: this release moves ORION to " + moved_to);
                 save::write_atomic(stage + "/version.txt", release.version + "\n");
                 std::remove(zip_path.c_str()); // unpacked: no longer needed
                 set(State::ready);

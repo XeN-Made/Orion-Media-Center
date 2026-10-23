@@ -37,13 +37,6 @@
 //                              over <folder>'s, keep the old ones beside the
 //                              stage, refresh the home screen's pictures, and
 //                              say how it went in result.txt (orion/updates.hpp)
-//   @moved-from <title ID>\t<folder>
-//                              with @update: ORION moving to a title ID of its
-//                              own. <folder> is the old title's; the update
-//                              goes into a new folder (the request's title),
-//                              its play log comes along, and the new title
-//                              starts once the system has registered it (the
-//                              old one starts again if it never does)
 //
 // The helper stays until the title closes when it has something to watch
 // for, and ends at once otherwise.
@@ -831,84 +824,6 @@ static void write_update_result(const char *stage, const char *target, int ok,
     write_shared(path, text, (size_t)length);
 }
 
-// ---- @moved-from: ORION installed under a new title ID ----
-
-// ShadowMountPlus skips a folder changed in the last seconds ("source not
-// stable yet", in its log), so the scan is asked for once the copy has
-// settled, and again later. When it lists the new title in that time, the
-// new ORION opens straight away; otherwise the old one opens and waits for
-// it (concepts/library.cpp): a console also showed ShadowMountPlus holding
-// its scans while it still counted a closed app as closing.
-#define SETTLE_S 12
-#define REGISTER_WAIT_S 60
-#define RESCAN_EVERY_S 25
-
-// A title's folder: under /data/homebrew or /mnt, named after the title.
-static int title_folder(const char *title, const char *folder)
-{
-    const size_t title_length = strlen(title);
-    const size_t length = strlen(folder);
-    return is_title_id(title) && strstr(folder, "..") == NULL && length > title_length + 1 &&
-           strcmp(folder + length - title_length, title) == 0 &&
-           folder[length - title_length - 1] == '/' &&
-           (strncmp(folder, "/data/homebrew/", 15) == 0 || strncmp(folder, "/mnt/", 5) == 0);
-}
-
-// What the old folder holds that is ORION's record rather than its program:
-// the play log (seconds played per game), copied unless the new one has it.
-static void carry_records(const char *from, const char *to)
-{
-    char source[1024];
-    char target[1024];
-    snprintf(source, sizeof(source), "%s/play-log.txt", from);
-    snprintf(target, sizeof(target), "%s/play-log.txt", to);
-    if (access(source, F_OK) == 0 && access(target, F_OK) != 0)
-        say(copy_file(source, target) ? "move: the play log came along"
-                                      : "move: could not copy the play log");
-}
-
-// Whether the system has the title installed, as ShadowMountPlus reports it
-// from the system's own database ("installed"). The files the system keeps
-// under /user/app are not a reliable sign from a payload: a test found the
-// title installed (and opened) while they never showed.
-static int installed(const char *title)
-{
-    static char body[16384];
-    char json[64];
-    char error[160] = "";
-    snprintf(json, sizeof(json), "{\"title_id\": \"%s\"}", title);
-    return smp_call("/api/v1/games/info", json, body, sizeof(body), error, sizeof(error)) &&
-           json_true(body, "installed");
-}
-
-// Waits for the system to list the new title. ShadowMountPlus finds a new
-// folder on its own schedule, so it is asked to scan now, and again every
-// RESCAN_EVERY_S (it defers a scan while an app is starting or open).
-static int wait_for_registration(const char *title)
-{
-    static char body[4096];
-    for (int waited = 0; waited < REGISTER_WAIT_S; ++waited)
-    {
-        if (waited % 3 == 0 && installed(title))
-        {
-            say("move: %s is registered after %d s", title, waited);
-            return 1;
-        }
-        if (waited >= SETTLE_S && (waited - SETTLE_S) % RESCAN_EVERY_S == 0)
-        {
-            char error[160] = "";
-            const int asked = smp_call("/api/v1/scan", "{\"reset_attempts\": true}", body,
-                                       sizeof(body), error, sizeof(error));
-            say("move: asked ShadowMountPlus to scan: %s", asked ? "queued" : error);
-        }
-        if (waited == 20)
-            notify("ORION is waiting for the system to list its new title ID");
-        sleep(1);
-    }
-    say("move: %s is not registered after %d s", title, REGISTER_WAIT_S);
-    return 0;
-}
-
 // Whether the staged param.json is the title's: its "titleId" is <title>.
 // An update staged for another title ID never goes over this one.
 static int staged_for(const char *title, const char *stage)
@@ -976,8 +891,6 @@ int main(void)
     const char *remove_result = NULL;
     const char *update_stage = NULL;  // @update
     const char *update_target = NULL;
-    const char *moved_from = NULL;    // @moved-from
-    const char *moved_folder = NULL;
     int line_number = 0;
     int arguments = 0;
     for (char *line = request; *line != '\0';)
@@ -1048,14 +961,6 @@ int main(void)
             update_stage = line + 8;
             update_target = tab + 1;
         }
-        else if (strncmp(line, "@moved-from ", 12) == 0 && strchr(line, '\t') != NULL)
-        {
-            // "@moved-from <old title ID>\t<its folder>"
-            char *tab = strchr(line, '\t');
-            *tab = '\0';
-            moved_from = line + 12;
-            moved_folder = tab + 1;
-        }
         else if (strncmp(line, "@remove-result ", 15) == 0)
             remove_result = line + 15;
         else if (arguments < MAX_ARGUMENTS)
@@ -1112,51 +1017,14 @@ int main(void)
     if (update_stage != NULL)
     {
         char error[256] = "could not be applied";
-        const int moving = moved_from != NULL;
         int ok = update_allowed(job.title, update_stage, update_target);
-        if (ok && moving)
-            ok = title_folder(moved_from, moved_folder) && strcmp(moved_from, job.title) != 0;
         if (!ok)
             snprintf(error, sizeof(error), "the request names folders it may not change");
-        else if (moving && mkdir(update_target, 0777) != 0 && errno != EEXIST)
-        {
-            ok = 0;
-            snprintf(error, sizeof(error), "could not make %s (errno %d)", update_target, errno);
-        }
         else
-        {
-            if (moving)
-                notify("ORION is moving to its own title ID; it opens again in a moment");
             ok = apply_update(job.title, update_stage, update_target, error, sizeof(error));
-        }
         say("update: %s%s", ok ? "done" : "failed: ", ok ? "" : error);
-        int listed = 1;
-        if (ok && moving)
-        {
-            carry_records(moved_folder, update_target);
-            // Either way the new ORION removes the old one when it first
-            // opens; the old one, open meanwhile, opens the new one once the
-            // system lists it (concepts/library.cpp, move-pending.txt).
-            listed = wait_for_registration(job.title);
-            say(listed ? "move: opening the new ORION"
-                       : "move: not listed yet; the old ORION opens and waits for it");
-            if (!listed)
-                strcpy(job.title, moved_from);
-        }
-        if (!moving)
-            notify(ok ? "ORION is updated; it opens again now" : "ORION could not be updated");
-        else if (!ok)
-            notify("ORION could not move to its new title ID");
-        else
-            notify(listed ? "ORION has its own title ID now; it opens again now"
-                          : "The new ORION is installed; it opens as soon as the system lists it");
-        // The new ORION says how it went; one not listed yet has nothing to say.
-        if (!moving || !ok || listed)
-            write_update_result(update_stage, ok || !moving ? update_target : moved_folder, ok,
-                                error);
-        // A move that did not finish opens the ORION that asked for it.
-        if (moving && !ok)
-            strcpy(job.title, moved_from);
+        notify(ok ? "ORION is updated; it opens again now" : "ORION could not be updated");
+        write_update_result(update_stage, update_target, ok, error);
     }
     for (int i = 0; i < file_count; ++i)
     {

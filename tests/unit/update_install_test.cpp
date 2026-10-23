@@ -119,36 +119,6 @@ TEST(OrionUpdates, StagesTheTitleFolderAndListsItsFiles)
     EXPECT_NE(error.find("unsafe"), std::string::npos) << error;
 }
 
-TEST(OrionUpdates, StagesAMoveToAnotherTitleId)
-{
-    // ORION under PPSA90000 meeting a release built as PPSA99061: a move.
-    const std::string stage = fresh_dir("orion-update-move") + "/stage";
-    std::string error;
-    std::string moved_to = "unset";
-    ASSERT_TRUE(
-        orion::stage_update(fixture("PPSA99061.zip"), "PPSA90000", stage, &error, &moved_to))
-        << error;
-    EXPECT_EQ(moved_to, "PPSA99061");
-    std::string title;
-    ASSERT_TRUE(save::read_file(stage + "/title.txt", &title));
-    EXPECT_EQ(title, "PPSA99061\n");
-    std::string list;
-    ASSERT_TRUE(save::read_file(stage + "/files.txt", &list));
-    EXPECT_EQ(list, "eboot.bin\nsce_sys/param.json\n");
-
-    // Its own title ID: an update in place, and title.txt is gone.
-    ASSERT_TRUE(
-        orion::stage_update(fixture("PPSA99061.zip"), "PPSA99061", stage, &error, &moved_to))
-        << error;
-    EXPECT_EQ(moved_to, "");
-    EXPECT_FALSE(save::read_file(stage + "/title.txt", &title));
-
-    EXPECT_TRUE(orion::is_title_id("PPSA99062"));
-    EXPECT_FALSE(orion::is_title_id("ppsa99062"));
-    EXPECT_FALSE(orion::is_title_id("PPSA9906"));
-    EXPECT_FALSE(orion::is_title_id("SHA256SUMS"));
-}
-
 TEST(OrionUpdates, AsksTheReleaseATestFileNames)
 {
     const std::string state = fresh_dir("orion-update-feed");

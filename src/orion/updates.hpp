@@ -123,16 +123,8 @@ std::string sum_for(std::string_view sums, std::string_view file_name);
 
 // Unpacks the title folder of a release ZIP ("PPSA99061/...") into `stage`
 // and writes files.txt. Entries outside it, or with "..", are refused.
-//
-// With moved_to, a ZIP whose title folder is another title ID is unpacked
-// too: ORION moving to a title ID of its own (a catalog gave its old one to
-// another app). *moved_to is that ID, or empty for an update in place, and
-// stage/title.txt says it for the install.
 bool stage_update(std::string_view zip, const std::string &title_id, const std::string &stage,
-                  std::string *error, std::string *moved_to = nullptr);
-
-// A title ID: four capital letters and five digits ("PPSA99061").
-bool is_title_id(std::string_view text);
+                  std::string *error);
 
 // Fetches a URL into a file at `path` (at most limit bytes). False with
 // *error set when it could not.

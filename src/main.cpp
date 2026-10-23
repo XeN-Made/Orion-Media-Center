@@ -183,22 +183,6 @@ int main()
     sys::log("[HUI] entry");
     sys::log("[HUI] storage dir=%d", save::ensure_directory(kDataRoot) ? 1 : 0);
 
-    // ORION that moved to a new title ID left its console settings in the
-    // shared folder (a title's save area is its own): taken once, when this
-    // title has none yet.
-    {
-        const std::string carried = "/data/orion/carry/settings.bin";
-        const std::string own = std::string(kDataRoot) + "/settings.bin";
-        std::string bytes;
-        struct stat info = {};
-        if (::stat(own.c_str(), &info) != 0 && save::read_file(carried, &bytes, 1u << 20) &&
-            save::write_atomic(own, bytes).empty())
-        {
-            std::remove(carried.c_str());
-            sys::log("[HUI] settings carried over from the old title ID");
-        }
-    }
-
     // The display opens at the saved resolution (1080p if that fails).
     const Settings saved = app::Shell::load_settings(kDataRoot);
     int resolution = ps5::Display::supports_display_modes() ? saved.resolution : 0;
