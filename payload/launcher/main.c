@@ -796,7 +796,11 @@ static void write_update_result(const char *stage, const char *target, int ok,
 
 // ---- @moved-from: ORION installed under a new title ID ----
 
-#define REGISTER_WAIT_S 300 // ShadowMountPlus lists a new folder once it has scanned it
+// ShadowMountPlus defers its scans after an app closes until another opens
+// (a console showed the new title listed two seconds after one did, and
+// not in three minutes before). So the helper looks briefly, then lets the
+// old ORION open, which waits for the new title itself.
+#define REGISTER_WAIT_S 20
 #define RESCAN_EVERY_S 30
 
 // A title's folder: under /data/homebrew or /mnt, named after the title.
@@ -1086,35 +1090,30 @@ int main(void)
             ok = apply_update(job.title, update_stage, update_target, error, sizeof(error));
         }
         say("update: %s%s", ok ? "done" : "failed: ", ok ? "" : error);
+        int listed = 1;
         if (ok && moving)
         {
             carry_records(moved_folder, update_target);
-            if (wait_for_registration(job.title))
-            {
-                // The old ORION goes now, while nothing is open: ShadowMountPlus
-                // refuses to touch a title that is. (The new ORION also looks
-                // for it when it opens, in case this did not happen.)
-                char removed[256] = "";
-                say("move: removing the old ORION (%s)",
-                    remove_game(1, moved_from, "the old ORION", removed, sizeof(removed))
-                        ? "done"
-                        : removed);
-            }
-            else
-            {
-                // The new ORION is in place but not listed yet: the old one
-                // opens instead, and the new tile appears when it is listed.
-                ok = 0;
-                snprintf(error, sizeof(error),
-                         "the system has not listed ORION's new title ID yet; it appears on the "
-                         "home screen shortly");
-            }
+            // Either way the new ORION removes the old one when it first
+            // opens; the old one, open meanwhile, opens the new one once the
+            // system lists it (concepts/library.cpp, move-pending.txt).
+            listed = wait_for_registration(job.title);
+            say(listed ? "move: opening the new ORION"
+                       : "move: not listed yet; the old ORION opens and waits for it");
+            if (!listed)
+                strcpy(job.title, moved_from);
         }
-        if (!moving || ok)
+        if (!moving)
             notify(ok ? "ORION is updated; it opens again now" : "ORION could not be updated");
-        else
+        else if (!ok)
             notify("ORION could not move to its new title ID");
-        write_update_result(update_stage, ok || !moving ? update_target : moved_folder, ok, error);
+        else
+            notify(listed ? "ORION has its own title ID now; it opens again now"
+                          : "The new ORION is installed; it opens as soon as the system lists it");
+        // The new ORION says how it went; one not listed yet has nothing to say.
+        if (!moving || !ok || listed)
+            write_update_result(update_stage, ok || !moving ? update_target : moved_folder, ok,
+                                error);
         // A move that did not finish opens the ORION that asked for it.
         if (moving && !ok)
             strcpy(job.title, moved_from);

@@ -652,6 +652,7 @@ class Library final : public app::Concept
         tidy_update_folder();
         start_resume_watcher();
         retire_pending_ = sys::on_console() && old_orion() != nullptr;
+        take_pending_move();
         rebuild_tabs(start);
         restyle();
         rebuild();
@@ -845,8 +846,18 @@ class Library final : public app::Concept
         follow_backdrop(dt);
         poll_art(feedback);
         poll_icon_copies();
-        if (registered_.take_finished() && registered_.result().changed)
-            context_.registered_changed = true;
+        if (registered_.take_finished())
+        {
+            if (registered_.result().changed)
+                context_.registered_changed = true;
+            if (!moving_to_.empty())
+                open_moved_orion(feedback);
+        }
+        if (!moving_to_.empty() && (move_poll_ -= dt) <= 0.0f && !registered_.running())
+        {
+            move_poll_ = 5.0f;
+            registered_.start(context_.library.state_dir, kFtpPort);
+        }
         const bool reduced = context_.settings.reduced_motion;
         if (reduced != reduced_)
         {
@@ -3191,6 +3202,10 @@ class Library final : public app::Concept
                 if (save::read_file(std::string(kSaveArea) + "/settings.bin", &settings, 1u << 20))
                     save::write_atomic(context_.library.state_dir + "/carry/settings.bin",
                                        settings);
+                // This ORION may open again before the new one is listed
+                // (the helper waits only briefly): it then waits for it.
+                save::write_atomic(context_.library.state_dir + "/move-pending.txt",
+                                   moved_to + "\n");
                 orion::update_log(update_log_path(),
                                   "orion: handing the move to " + target + " to the helper");
                 why = send_helper(moved_to + "\n@update " + update + "/stage\t" + target +
@@ -3276,11 +3291,18 @@ class Library final : public app::Concept
     {
         const Title *old = old_orion();
         const std::string &state = context_.library.state_dir;
+        // "<title ID> <tries>": a refusal is tried again on the next starts,
+        // three times in all, not on every start for ever.
         const std::string marker = state + "/moved-from.txt";
         std::string tried;
-        if (old == nullptr || state.empty() || save::read_file(marker, &tried, 256))
+        int tries = 0;
+        if (save::read_file(marker, &tried, 256))
+            tries = tried.find(' ') == std::string::npos
+                        ? 1
+                        : std::atoi(tried.c_str() + tried.find(' ') + 1);
+        if (old == nullptr || state.empty() || tries >= 3)
             return;
-        save::write_atomic(marker, old->id + "\n");
+        save::write_atomic(marker, old->id + " " + std::to_string(tries + 1) + "\n");
         const std::string self = own_title_id();
         const std::string &self_path = context_.library.self_path;
         if (self.empty() || self_path.empty())
@@ -3300,6 +3322,52 @@ class Library final : public app::Concept
                               {self});
         launch_shown_ = 7.0f;
         launch_exit_ = 2.5f;
+        launch_pending_ = 30.0f;
+        feedback.play(audio::Cue::select);
+    }
+
+    // A move this ORION handed over and that is not finished: the new title
+    // was not listed when the helper looked, so this ORION opened again and
+    // waits for it (open_moved_orion). The new ORION removes the file.
+    void take_pending_move()
+    {
+        const std::string &state = context_.library.state_dir;
+        std::string id;
+        if (state.empty() || !save::read_file(state + "/move-pending.txt", &id, 64))
+            return;
+        id = id.substr(0, id.find_first_of("\r\n"));
+        const std::string self = own_title_id();
+        if (!orion::is_title_id(id) || id == self || !sys::on_console())
+        {
+            std::remove((state + "/move-pending.txt").c_str());
+            return;
+        }
+        moving_to_ = id;
+        move_poll_ = 2.0f;
+        show_note(true, trf("Finishing the move to ORION's own title ID ({0})…", {id}));
+    }
+
+    // Opens the new ORION once the system lists it (registered.tsv, read by
+    // registered_ every few seconds while a move is pending).
+    void open_moved_orion(app::Feedback &feedback)
+    {
+        std::string cache;
+        save::read_file(context_.library.state_dir + "/registered.tsv", &cache, 4u << 20);
+        if (cache.compare(0, moving_to_.size() + 1, moving_to_ + "\t") != 0 &&
+            cache.find("\n" + moving_to_ + "\t") == std::string::npos)
+            return;
+        const std::string id = std::exchange(moving_to_, std::string());
+        orion::update_log(update_log_path(), "orion: " + id + " is listed; opening it");
+        const std::string why = send_helper(id + "\n");
+        if (!why.empty())
+        {
+            show_note(false, trf("Could not start {0}: {1}", {"ORION", why}));
+            return;
+        }
+        launch_ok_ = true;
+        launch_message_ = tr("The new ORION is ready: opening it");
+        launch_shown_ = 5.0f;
+        launch_exit_ = 1.6f;
         launch_pending_ = 30.0f;
         feedback.play(audio::Cue::select);
     }
@@ -4969,7 +5037,9 @@ class Library final : public app::Concept
     // A check whose request never returns cannot be stopped, only left
     // behind: Check now starts a new one (check_for_updates).
     std::unique_ptr<orion::UpdateCheck> updates_ = new_update_check();
-    bool retire_pending_ = false;      // the old ORION is removed a moment after start
+    bool retire_pending_ = false; // the old ORION is removed a moment after start
+    std::string moving_to_;       // a move waiting for its title to be listed
+    float move_poll_ = 0.0f;
     float check_started_ = 0.0f;       // clock_ when the running check began
     bool update_asked_ = false;        // the check this launch makes by itself has started
     bool manual_update_check_ = false; // the running check was asked for: say how it went
