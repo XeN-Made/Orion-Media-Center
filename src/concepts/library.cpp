@@ -3823,10 +3823,15 @@ class Library final : public app::Concept
         const std::string self = own_title_id();
         if (!sys::on_console() || state.empty() || self.empty())
             return;
+        // "<new ID>\t<old ID>\t<old folder>", as install_beside writes it; a
+        // file in any other shape (an older ORION's) says nothing.
         std::string pending;
-        const bool moved = save::read_file(state + "/move-pending.txt", &pending, 1024);
+        save::read_file(state + "/move-pending.txt", &pending, 1024);
         const std::size_t tab = pending.find('\t');
-        const std::size_t second = pending.find('\t', tab + 1);
+        const std::size_t second =
+            tab == std::string::npos ? std::string::npos : pending.find('\t', tab + 1);
+        const bool moved =
+            second != std::string::npos && pending.compare(0, tab, kNextTitleId) == 0;
         const std::string old_id =
             tab == std::string::npos ? std::string() : pending.substr(tab + 1, second - tab - 1);
         std::string old_path =
