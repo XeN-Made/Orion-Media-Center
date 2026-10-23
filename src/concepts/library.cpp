@@ -19,7 +19,9 @@
 #include "library/favourites.hpp"
 #include "library/json.hpp"
 #include "orion/art_fetcher.hpp"
+#include "core/i18n.hpp"
 #include "orion/backdrop_copies.hpp"
+#include "orion/languages.hpp"
 #include "orion/registered_titles.hpp"
 #include "orion/look.hpp"
 #include "orion/playtime.hpp"
@@ -596,6 +598,21 @@ class Library final : public app::Concept
             save::write_atomic(state + "/themes.txt", report);
         }
         look_ = orion::load_look(state, themes_);
+        // The languages: ORION's files beside its themes, then the player's.
+        {
+            std::string builtin = context_.library.themes_dir;
+            const std::size_t slash = builtin.rfind('/');
+            builtin = slash == std::string::npos ? "lang" : builtin.substr(0, slash) + "/lang";
+            languages_.load(builtin, state.empty() ? "" : state + "/lang");
+            if (!state.empty() && !languages_.problems().empty())
+            {
+                std::string report;
+                for (const std::string &problem : languages_.problems())
+                    report += problem + "\n";
+                save::write_atomic(state + "/languages.txt", report);
+            }
+            use_language();
+        }
         settings_.set_themes(themes_);
         settings_.set_state_dir(state);
         art_folder_was_ = orion::art_folder(prefs_, state);
@@ -1603,10 +1620,41 @@ class Library final : public app::Concept
             settings_.refresh(look_, prefs_);
     }
 
+    // The language the prefs ask for, everywhere: the text built ahead of
+    // time (tabs, rows, the keyboard's keys) is built again in it.
+    void use_language()
+    {
+        i18n::use(languages_.pick(prefs_.language, sys::system_language()));
+        const std::vector<orion::LanguageChoice> choices =
+            languages_.choices(sys::system_language());
+        settings_.set_languages(choices);
+        setup_.set_languages(choices);
+        keys_.style.space_label = i18n::tr("Space");
+        keys_.style.done_label = i18n::tr("Done");
+    }
+
+    void language_changed(app::Feedback &feedback)
+    {
+        save_prefs();
+        use_language();
+        settings_.set_tabs(every_tab());
+        rebuild_tabs(active_key());
+        restyle();
+        rebuild();
+        if (settings_.is_open())
+            settings_.rebuild_nav(look_, prefs_);
+        if (setup_.is_open())
+            setup_.refresh(look_, prefs_);
+        feedback.play(audio::Cue::select);
+    }
+
     void update_setup(const InputFrame &input, app::Feedback &feedback)
     {
         switch (setup_.handle(input, feedback, &look_, &prefs_))
         {
+        case orion::SetupPanel::Change::language:
+            language_changed(feedback);
+            break;
         case orion::SetupPanel::Change::look:
             restyle();
             orion::save_look(context_.library.state_dir, look_);
@@ -1640,6 +1688,9 @@ class Library final : public app::Concept
     {
         switch (settings_.handle(input, feedback, &look_, &prefs_))
         {
+        case orion::SettingsPanel::Change::language:
+            language_changed(feedback);
+            break;
         case orion::SettingsPanel::Change::look:
             restyle();
             orion::save_look(context_.library.state_dir, look_);
@@ -4647,8 +4698,9 @@ class Library final : public app::Concept
 
     app::Context &context_;
     orion::ThemeLibrary themes_; // before the look, which is read through it
-    orion::Look look_;           // the main look, as Settings edits it
-    orion::Look shown_;          // what the active tab wears (its own theme, or look_)
+    orion::LanguageLibrary languages_;
+    orion::Look look_;  // the main look, as Settings edits it
+    orion::Look shown_; // what the active tab wears (its own theme, or look_)
     orion::LibraryPrefs prefs_;
     ui::Theme theme_;
     bool reduced_ = false;

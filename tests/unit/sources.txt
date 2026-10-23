@@ -12,6 +12,7 @@ src/audio/wav.cpp
 src/concepts/*.cpp
 src/concepts/components/*.cpp
 src/core/frame_stats.cpp
+src/core/i18n.cpp
 src/core/input.cpp
 src/core/mapped_file.cpp
 src/core/save_file.cpp

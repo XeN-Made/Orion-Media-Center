@@ -26,7 +26,8 @@ using gfx::Color;
 
 enum : int
 {
-    kSort = 1,
+    kLanguage = 1,
+    kSort,
     kView,
     kReopen,
     kContinueRow,
@@ -447,6 +448,20 @@ void SettingsPanel::build(const Look &look, const LibraryPrefs &prefs)
 void SettingsPanel::build_library(const LibraryPrefs &prefs)
 {
     form_.add_header("Library");
+    // The language first: everything after it reads in it.
+    if (!languages_.empty())
+    {
+        std::vector<std::string> names;
+        int chosen = 0;
+        for (std::size_t i = 0; i < languages_.size(); ++i)
+        {
+            names.push_back(languages_[i].name);
+            if (languages_[i].code == prefs.language)
+                chosen = static_cast<int>(i);
+        }
+        form_.add_choice(kLanguage, "Language", std::move(names), chosen).description =
+            "Automatic follows the console's language";
+    }
     form_
         .add_choice(kSort, "Sort by", {kSortNames, kSortNames + kSortCount}, sort_index(prefs.sort))
         .description = "The order of the covers, on every tab without an order of its own";
@@ -1262,6 +1277,14 @@ SettingsPanel::Change SettingsPanel::handle(const InputFrame &input, ui::Feedbac
     }
     switch (id)
     {
+    case kLanguage:
+    {
+        const int index = form_.choice_index(kLanguage);
+        if (index < 0 || index >= static_cast<int>(languages_.size()))
+            return Change::none;
+        prefs->language = languages_[static_cast<std::size_t>(index)].code;
+        return Change::language;
+    }
     case kSort:
         prefs->sort = kSortKeys[std::clamp(form_.choice_index(kSort), 0, kSortCount - 1)];
         return Change::prefs;

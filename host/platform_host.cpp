@@ -60,6 +60,12 @@ bool on_console()
     return false;
 }
 
+std::string system_language()
+{
+    const char *language = std::getenv("HUI_LANG");
+    return language != nullptr && *language != '\0' ? language : "en";
+}
+
 void art_trace(const char *step, bool reset)
 {
     (void)step;

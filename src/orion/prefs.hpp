@@ -102,6 +102,7 @@ struct Placement
 //     "setup_done": true,
 //     "autostart": false,
 //     "every_version": false,
+//     "language": "es",
 //     "moved_leave_shelf": true,
 //     "auto_art": true,
 //     "return_on_close": true,
@@ -155,6 +156,9 @@ struct LibraryPrefs
     // Every file of a game RetroArch plays has a cover (bad dumps, hacks,
     // other regions); off, only the best of them (library::keep_best_versions).
     bool every_version = false;
+    // The language ORION is shown in: a code ("es", "pt-BR"), or empty for
+    // the console's own (orion/languages.hpp).
+    std::string language;
     // A title moved to a custom tab leaves its Games / Homebrew / Media
     // shelf; it always stays in All.
     bool moved_leave_shelf = true;

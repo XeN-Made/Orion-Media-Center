@@ -463,6 +463,11 @@ LibraryPrefs load_prefs(const std::string &state_dir)
     prefs.setup_done = root["setup_done"].bool_or(prefs.setup_done);
     prefs.autostart = root["autostart"].bool_or(prefs.autostart);
     prefs.every_version = root["every_version"].bool_or(prefs.every_version);
+    if (const std::string language = root["language"].string_or("");
+        language.size() <= 16 &&
+        std::all_of(language.begin(), language.end(),
+                    [](char c) { return std::isalnum(static_cast<unsigned char>(c)) || c == '-'; }))
+        prefs.language = language;
     prefs.moved_leave_shelf = root["moved_leave_shelf"].bool_or(prefs.moved_leave_shelf);
     prefs.auto_art = root["auto_art"].bool_or(prefs.auto_art);
     prefs.return_on_close = root["return_on_close"].bool_or(prefs.return_on_close);
@@ -505,6 +510,7 @@ bool save_prefs(const std::string &state_dir, const LibraryPrefs &prefs)
     text += std::string("  \"setup_done\": ") + (prefs.setup_done ? "true" : "false") + ",\n";
     text += std::string("  \"autostart\": ") + (prefs.autostart ? "true" : "false") + ",\n";
     text += std::string("  \"every_version\": ") + (prefs.every_version ? "true" : "false") + ",\n";
+    text += "  \"language\": " + json::quote(prefs.language) + ",\n";
     text += std::string("  \"moved_leave_shelf\": ") +
             (prefs.moved_leave_shelf ? "true" : "false") + ",\n";
     text += std::string("  \"auto_art\": ") + (prefs.auto_art ? "true" : "false") + ",\n";

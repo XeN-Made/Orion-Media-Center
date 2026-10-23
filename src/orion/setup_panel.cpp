@@ -19,6 +19,7 @@ enum : int
 {
     kNext = 1, // the row that goes on, last on every step
     kSkip,
+    kLanguage,
     kInfo,
     kInfoEmulators,
     kBase,
@@ -151,6 +152,20 @@ void SetupPanel::build(const Look &look, const LibraryPrefs &prefs)
     case Step::welcome:
     {
         form_.add_header("Welcome to ORION Media Center");
+        // The language first: everything after it reads in it.
+        if (!languages_.empty())
+        {
+            std::vector<std::string> names;
+            int chosen = 0;
+            for (std::size_t i = 0; i < languages_.size(); ++i)
+            {
+                names.push_back(languages_[i].name);
+                if (languages_[i].code == prefs.language)
+                    chosen = static_cast<int>(i);
+            }
+            form_.add_choice(kLanguage, "Language", std::move(names), chosen).description =
+                "Automatic follows the console's language";
+        }
         next("Get started", "A few choices, all of them in Settings later");
         int games = 0;
         std::string emulators;
@@ -323,6 +338,14 @@ SetupPanel::Change SetupPanel::handle(const InputFrame &input, ui::Feedback &fee
             return Change::look;
         }
         return Change::none;
+    case kLanguage:
+    {
+        const int index = form_.choice_index(id);
+        if (index < 0 || index >= static_cast<int>(languages_.size()))
+            return Change::none;
+        prefs->language = languages_[static_cast<std::size_t>(index)].code;
+        return Change::language;
+    }
     case kGameBackgrounds:
         prefs->game_backgrounds = form_.toggle_value(id);
         return Change::prefs;

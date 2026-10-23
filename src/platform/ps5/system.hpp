@@ -35,6 +35,11 @@ void sleep_us(std::uint32_t microseconds);
 // True on the console, false in the PC builds (tests and pictures).
 bool on_console();
 
+// The console's language as a code ORION's language files are named by: "en",
+// "es", "pt-BR", "fr", "de", "ja"... (both Spanish settings are "es", both
+// Portuguese ones "pt-BR"). A PC says what HUI_LANG says, else "en".
+std::string system_language();
+
 // What launch_app returns on a PC, where there is nothing to launch.
 constexpr int kLaunchUnsupported = -1;
 

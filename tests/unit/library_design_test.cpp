@@ -69,7 +69,8 @@ TEST_F(LibraryDesign, TheSetupWalksThroughEveryStep)
     library_.offer_setup = true;
     auto design = with_fixture();
     send(*design, hui::InputFrame());
-    // Welcome: Get started is the first row.
+    // Welcome: Language first, then Get started.
+    send(*design, nav(Direction::down));
     send(*design, press(hui::Action::confirm));
     // Look, Emulators, Box art, Library, Autostart: Continue is the last row.
     for (int step = 0; step < 5; ++step)

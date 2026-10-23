@@ -31,6 +31,7 @@ extern "C"
     int sceKernelUsleep(unsigned int microseconds);
     int sceSystemServiceHideSplashScreen(void);
     int sceSystemServiceLoadExec(const char *path, const char **arguments);
+    int sceSystemServiceParamGetInt(int param_id, int *value);
     int sceUserServiceGetForegroundUser(int *user);
     int sceUserServiceGetInitialUser(int *user);
 
@@ -105,6 +106,22 @@ void quit()
     const int refused = sceSystemServiceLoadExec("exit", nullptr);
     log("[HUI] quit refused rc=0x%x", static_cast<unsigned>(refused));
     park();
+}
+
+std::string system_language()
+{
+    // SCE_SYSTEM_SERVICE_PARAM_ID_LANG, and its values in the order the
+    // system numbers its languages.
+    constexpr int kParamLanguage = 1;
+    static constexpr const char *kCodes[] = {
+        "ja",      "en",      "fr", "es", "de", "it", "nl", "pt-BR", "ru", "ko",
+        "zh-Hant", "zh-Hans", "fi", "sv", "da", "no", "pl", "pt-BR", "en", "tr",
+        "es",      "ar",      "fr", "cs", "hu", "el", "ro", "th",    "vi", "id"};
+    int value = -1;
+    if (sceSystemServiceParamGetInt(kParamLanguage, &value) != 0 || value < 0 ||
+        value >= static_cast<int>(sizeof(kCodes) / sizeof(kCodes[0])))
+        return "en";
+    return kCodes[value];
 }
 
 bool on_console()

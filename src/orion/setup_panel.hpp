@@ -5,6 +5,7 @@
 #pragma once
 
 #include "library/library.hpp"
+#include "orion/languages.hpp"
 #include "orion/look.hpp"
 #include "orion/prefs.hpp"
 #include "ui/components/form.hpp"
@@ -57,6 +58,7 @@ class SetupPanel
         art_folder,     // the box art folder changed (prefs.art_dir)
         scan_emulators, // "Scan for emulators" was chosen
         finished,       // the last step (or Skip setup): setup_done is set, the sheet closes
+        language,       // the Language row changed (prefs.language)
     };
 
     enum class Step : std::uint8_t
@@ -77,6 +79,11 @@ class SetupPanel
     void set_themes(const ThemeLibrary &themes)
     {
         themes_ = &themes;
+    }
+    // What the Language row offers (LanguageLibrary::choices).
+    void set_languages(std::vector<LanguageChoice> languages)
+    {
+        languages_ = std::move(languages);
     }
     // The emulators the Emulators step lists; must outlive the panel.
     void set_emulator(const library::Emulator &emulator)
@@ -136,6 +143,7 @@ class SetupPanel
     ui::Form form_;
     Step step_ = Step::welcome;
     const ThemeLibrary *themes_ = nullptr;
+    std::vector<LanguageChoice> languages_;
     const library::Emulator *emulator_ = nullptr;
     int titles_ = 0;
     std::string scan_status_ = "Finds RetroArch, Porpoise, PS5SX2, PSwanStation, ProsperoEden and "

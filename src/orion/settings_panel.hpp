@@ -7,6 +7,7 @@
 #include "core/settings.hpp"
 #include "core/tween.hpp"
 #include "library/library.hpp"
+#include "orion/languages.hpp"
 #include "orion/look.hpp"
 #include "orion/prefs.hpp"
 #include "ui/components/form.hpp"
@@ -87,6 +88,7 @@ class SettingsPanel
         skip_song,      // "Next song" was chosen
         check_updates,  // "Check now" (Library, updates)
         install_update, // "Install ORION <version>": the screen hands it to the helper
+        language,       // the Language row changed (prefs.language)
     };
 
     enum class Section : std::uint8_t
@@ -108,6 +110,11 @@ class SettingsPanel
     void set_themes(const ThemeLibrary &themes)
     {
         themes_ = &themes;
+    }
+    // What the Language row offers (LanguageLibrary::choices).
+    void set_languages(std::vector<LanguageChoice> languages)
+    {
+        languages_ = std::move(languages);
     }
     // Every tab, in the tab bar's order, hidden ones included.
     // The tab the library was on when Settings opened: Appearance offers a
@@ -277,6 +284,7 @@ class SettingsPanel
     std::string page_;        // the tab whose page is open; empty: the list
     std::string current_tab_; // the library's tab behind Settings
     const ThemeLibrary *themes_ = nullptr;
+    std::vector<LanguageChoice> languages_;
     const library::Emulator *emulator_ = nullptr;
     std::vector<TabEntry> tabs_;
     std::string tab_id_;
