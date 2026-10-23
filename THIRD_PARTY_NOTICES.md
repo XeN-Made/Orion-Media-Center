@@ -68,6 +68,13 @@ domain or MIT; see `src/third_party/stb/LICENSE`), vendored at the commit in
 `src/third_party/stb/UPSTREAM` by `tools/update-stb.sh`. It is linked into the
 PS5 application.
 
+A title's own music (its `snd0.at9`, ATRAC9) is decoded by
+[LibAtrac9](https://github.com/Thealexbarney/LibAtrac9), Copyright (c) 2018
+Alex Barney, MIT licence (`src/third_party/libatrac9/LICENSE`), vendored from
+its `C/src` folder. ORION changes two lines of `utility.c`, marked "ORION:",
+so a shift by 32 bits and a negative signed left shift (both undefined in C)
+no longer happen. It is linked into the PS5 application.
+
 ## Icon decoding
 
 Title icons (PNG) are decoded by [stb_image](https://github.com/nothings/stb)

@@ -74,6 +74,9 @@ class MusicPlayer
 
     // Lowers the music under a sting for a moment.
     void duck();
+    // Lowers it for as long as a title's own song plays over it
+    // (audio/title_music.hpp), and brings it back.
+    void set_lowered(bool lowered);
     // Ends the song playing now; the next one starts after the usual breath
     // (what is already decoded, under a second, still plays).
     void skip();
@@ -106,9 +109,10 @@ class MusicPlayer
     StreamRing ring_{1u << 16};
     std::unique_ptr<MusicTrack> track_;
     std::string current_;
-    int gap_frames_ = 0; // silence still to write before the next song
-    int failures_ = 0;   // songs in a row that could not be opened
-    float duck_ = 0.0f;  // seconds of ducking left
+    int gap_frames_ = 0;   // silence still to write before the next song
+    int failures_ = 0;     // songs in a row that could not be opened
+    float duck_ = 0.0f;    // seconds of ducking left
+    bool lowered_ = false; // a title's song plays over it
     std::vector<float> buffer_;
 };
 

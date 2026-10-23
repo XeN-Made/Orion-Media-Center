@@ -216,6 +216,18 @@ author = ORION
 "Not set" = "Sin poner"
 "Free at steamgriddb.com: your profile, Preferences, API. Or a line in /data/orion/keys.txt" = "Gratis en steamgriddb.com: tu perfil, Preferences, API. O una línea en /data/orion/keys.txt"
 
+"Your songs" = "Tus canciones"
+"Choose music" = "Elige música"
+"No music or folders here" = "No hay música ni carpetas aquí"
+"Could not save the music: {0}" = "No se pudo guardar la música: {0}"
+"New music for {0}" = "Nueva música para {0}"
+"{0} plays {1}: remove that file to hear its own music" = "{0} reproduce {1}: quita ese archivo para oír su propia música"
+"{0} has its own music again" = "{0} vuelve a tener su propia música"
+"Choose music…" = "Elegir música…"
+"Use its own music" = "Usar su propia música"
+"Title music" = "Música del título"
+"A focused game plays its own music, as on the home screen; yours from /data/orion/hover-music first" = "El juego enfocado reproduce su propia música, como en la pantalla de inicio; antes la tuya de /data/orion/hover-music"
+
 # src/library/emulators.cpp
 "Every system its cores play" = "Todos los sistemas de sus núcleos"
 "GameCube, Wii" = "GameCube, Wii"

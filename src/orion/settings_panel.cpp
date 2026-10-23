@@ -91,6 +91,7 @@ enum : int
     kUiVolume,
     kNowPlaying,
     kNextSong,
+    kTitleMusic,
     kMusicFolder,
     kBrowseUse,
     kBrowseUp,
@@ -447,7 +448,7 @@ void SettingsPanel::build(const Look &look, const LibraryPrefs &prefs)
         build_storage(prefs);
         break;
     case Section::sound:
-        build_sound();
+        build_sound(prefs);
         break;
     case Section::appearance:
         build_appearance(look, prefs);
@@ -860,7 +861,7 @@ void SettingsPanel::build_browser()
         tr("Any folder under /data or /mnt, with the keyboard");
 }
 
-void SettingsPanel::build_sound()
+void SettingsPanel::build_sound(const LibraryPrefs &prefs)
 {
     form_.add_header(tr("Sound"));
     if (app_settings_ == nullptr)
@@ -885,6 +886,9 @@ void SettingsPanel::build_sound()
                     app_settings_->music_volume == 0 ? tr("Music is off")
                     : now_playing_.empty()           ? tr("Between songs")
                                                      : now_playing_);
+    form_.add_toggle(kTitleMusic, tr("Title music"), prefs.title_music).description =
+        tr("A focused game plays its own music, as on the home screen; yours from "
+           "/data/orion/hover-music first");
     form_.add_action(kNextSong, tr("Next song")).description =
         tr("Your own songs join when ORION starts: .ogg files, 48 kHz, in the folder below");
     form_.add_value(kMusicFolder, tr("Your music"), "/data/orion/music");
@@ -1362,6 +1366,9 @@ SettingsPanel::Change SettingsPanel::handle(const InputFrame &input, ui::Feedbac
         return Change::prefs;
     case kReopenAfterRest:
         prefs->reopen_after_rest = form_.toggle_value(kReopenAfterRest);
+        return Change::prefs;
+    case kTitleMusic:
+        prefs->title_music = form_.toggle_value(kTitleMusic);
         return Change::prefs;
     case kAskPlayer:
         prefs->ask_player = form_.toggle_value(kAskPlayer);

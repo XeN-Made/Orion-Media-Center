@@ -82,6 +82,10 @@ class Shell
     {
         return std::exchange(context_.registered_changed, false);
     }
+    const std::string &title_music() const
+    {
+        return context_.title_music;
+    }
     bool take_custom_art_change()
     {
         return std::exchange(context_.custom_art_changed, false);

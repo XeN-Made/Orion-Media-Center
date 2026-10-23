@@ -15,6 +15,7 @@
 
 #include "core/save_file.hpp"
 #include "core/tween.hpp"
+#include "library/art_match.hpp"
 #include "library/emulators.hpp"
 #include "library/favourites.hpp"
 #include "library/json.hpp"
@@ -171,6 +172,8 @@ enum : int
     kItemPicture,         // Choose picture…
     kItemOwnPicture,      // Use its own picture
     kItemFindArt,         // Find other art… (SteamGridDB)
+    kItemMusic,           // Choose music…
+    kItemOwnMusic,        // Use its own music
     kItemPickUp,          // the picture browser: up one folder
     kItemPickMore,        // its next page
     kItemPickLess,        // its page before
@@ -669,6 +672,7 @@ class Library final : public app::Concept
         take_update_result();
         tidy_update_folder();
         start_resume_watcher();
+        read_hover_music();
         settings_.set_grid_key(
             !orion::read_service_key(context_.library.state_dir, orion::kSteamGridDb).empty());
         rebuild_tabs(start);
@@ -855,6 +859,7 @@ class Library final : public app::Concept
         }
         age_ += dt;
         clock_ += dt;
+        update_title_music(dt);
         follow_backdrop(dt);
         poll_art(feedback);
         poll_icon_copies();
@@ -2279,7 +2284,14 @@ class Library final : public app::Concept
         {
             save::ensure_directory(custom_art_folder());
             pick_places_.clear();
-            pick_places_.emplace_back(tr("Your pictures"), custom_art_folder());
+            if (picking_music_)
+            {
+                save::ensure_directory(hover_music_folder());
+                pick_places_.emplace_back(tr("Your music"), hover_music_folder());
+                pick_places_.emplace_back(tr("Your songs"), context_.library.state_dir + "/music");
+            }
+            else
+                pick_places_.emplace_back(tr("Your pictures"), custom_art_folder());
             for (int i = 0; i < 8; ++i)
                 pick_places_.emplace_back(trf("USB drive {0}", {std::to_string(i + 1)}),
                                           "/mnt/usb" + std::to_string(i));
@@ -2287,7 +2299,7 @@ class Library final : public app::Concept
             pick_places_.emplace_back(tr("The console's storage"), "/data");
             if (!sys::on_console())
                 pick_places_.emplace_back(tr("This folder (PC preview)"), ".");
-            add(tr("Choose a picture"), 0, true);
+            add(picking_music_ ? tr("Choose music") : tr("Choose a picture"), 0, true);
             for (std::size_t i = 0; i < pick_places_.size(); ++i)
             {
                 struct stat info = {};
@@ -2312,7 +2324,8 @@ class Library final : public app::Concept
                 };
                 if (entry.directory)
                     pick_dirs_.push_back(entry.name);
-                else if (ends(".png") || ends(".jpg") || ends(".jpeg"))
+                else if (picking_music_ ? ends(".ogg") || ends(".at9")
+                                        : ends(".png") || ends(".jpg") || ends(".jpeg"))
                     pick_files_.push_back(entry.name);
             }
             std::sort(pick_dirs_.begin(), pick_dirs_.end());
@@ -2338,10 +2351,156 @@ class Library final : public app::Concept
             if ((pick_page_ + 1) * kPickPage < total)
                 add(tr("More…"), kItemPickMore);
             if (total == 0)
-                add(tr("No pictures or folders here"), 0, true);
+                add(picking_music_ ? tr("No music or folders here")
+                                   : tr("No pictures or folders here"),
+                    0, true);
         }
         menu_.set_items(std::move(items));
         menu_.open(grid_.cell_rect(grid_.focus()), feedback);
+    }
+
+    // ---- a title's music, as it plays while the title is focused ----
+
+    std::string hover_music_folder() const
+    {
+        return context_.library.state_dir + "/hover-music";
+    }
+
+    // The player's music for a title: <ID>.ogg/.at9 in hover-music, else one
+    // named after it (art_key folding, as custom art). Empty when none.
+    std::string custom_music(const Title &title) const
+    {
+        const std::string folder = hover_music_folder();
+        for (const char *extension : {".ogg", ".at9"})
+        {
+            struct stat info = {};
+            const std::string path = folder + "/" + title.id + extension;
+            if (::stat(path.c_str(), &info) == 0)
+                return path;
+        }
+        const std::string key = library::art_key(title.name);
+        const auto found = hover_names_.find(key);
+        return key.empty() || found == hover_names_.end() ? std::string() : found->second;
+    }
+
+    // The player's songs by their folded names, read when the folder changes.
+    void read_hover_music()
+    {
+        hover_names_.clear();
+        for (const save::DirectoryEntry &entry : save::list_directory(hover_music_folder()))
+        {
+            const std::size_t dot = entry.name.rfind('.');
+            if (entry.directory || dot == std::string::npos)
+                continue;
+            std::string extension = entry.name.substr(dot);
+            for (char &c : extension)
+                c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+            if (extension == ".ogg" || extension == ".at9")
+                hover_names_.emplace(library::art_key(entry.name.substr(0, dot)),
+                                     hover_music_folder() + "/" + entry.name);
+        }
+        music_paths_.clear();
+    }
+
+    // What a title plays when focused: the player's music, else its own
+    // (snd0.at9: in its folder, or the system's copy fetched over FTP into
+    // <state>/sounds). Empty when it has none yet.
+    std::string title_music_for(const Title &title)
+    {
+        if (const auto known = music_paths_.find(title.id); known != music_paths_.end())
+            return known->second;
+        std::string path = custom_music(title);
+        if (path.empty() && !title.is_rom())
+        {
+            const std::string folder = context_.library.state_dir + "/sounds";
+            struct stat info = {};
+            const auto exists = [&](const std::string &file)
+            { return ::stat(file.c_str(), &info) == 0; };
+            if (exists(folder + "/" + title.id + ".at9"))
+                path = folder + "/" + title.id + ".at9";
+            else if (exists(title.path + "/sce_sys/snd0.at9"))
+                path = title.path + "/sce_sys/snd0.at9";
+            else if (!exists(folder + "/" + title.id + ".none"))
+            {
+                // Asked of the system once; the answer comes on a later frame.
+                if (sys::on_console() && !sound_copies_.running())
+                    sound_copies_.start({title.id}, folder, kFtpPort, {"/snd0.at9"}, ".at9");
+                return {};
+            }
+        }
+        music_paths_[title.id] = path;
+        return path;
+    }
+
+    // The focused title's music, once the focus has rested on it a moment.
+    void update_title_music(float dt)
+    {
+        std::string want;
+        if (prefs_.title_music && !view_.empty() && !settings_.is_open() && !setup_.is_open() &&
+            !menu_.is_open() && typing_ == Typing::none && !previewing())
+        {
+            const Title &title = focused();
+            if (title.id != music_focus_)
+            {
+                music_focus_ = title.id;
+                music_dwell_ = 0.0f;
+            }
+            music_dwell_ += dt;
+            if (music_dwell_ > 0.8f)
+                want = title_music_for(title);
+        }
+        else
+            music_focus_.clear();
+        context_.title_music = want;
+    }
+
+    void choose_music(const std::string &file, app::Feedback &feedback)
+    {
+        const Title *title = find_title(menu_title_);
+        std::string bytes;
+        if (title == nullptr || !save::read_file(file, &bytes, 32u << 20) || bytes.empty())
+        {
+            show_note(false, trf("Could not read {0}", {file}));
+            feedback.play(audio::Cue::error);
+            return;
+        }
+        std::string extension = file.substr(file.rfind('.'));
+        for (char &c : extension)
+            c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        const std::string folder = hover_music_folder();
+        save::ensure_directory(folder);
+        for (const char *old : {".ogg", ".at9"})
+            std::remove((folder + "/" + title->id + old).c_str());
+        const std::string failed = save::write_atomic(folder + "/" + title->id + extension, bytes);
+        if (!failed.empty())
+        {
+            show_note(false, trf("Could not save the music: {0}", {failed}));
+            feedback.play(audio::Cue::error);
+            return;
+        }
+        read_hover_music();
+        show_note(true, trf("New music for {0}", {title->name}));
+        feedback.play(audio::Cue::saved);
+    }
+
+    void use_own_music(app::Feedback &feedback)
+    {
+        const Title *title = find_title(menu_title_);
+        if (title == nullptr)
+            return;
+        for (const char *old : {".ogg", ".at9"})
+            std::remove((hover_music_folder() + "/" + title->id + old).c_str());
+        read_hover_music();
+        const std::string left = custom_music(*title);
+        if (!left.empty())
+        {
+            show_note(false, trf("{0} plays {1}: remove that file to hear its own music",
+                                 {title->name, left}));
+            feedback.play(audio::Cue::error);
+            return;
+        }
+        show_note(true, trf("{0} has its own music again", {title->name}));
+        feedback.play(audio::Cue::select);
     }
 
     // The chosen file becomes the title's picture: copied into the player's
@@ -2446,6 +2605,15 @@ class Library final : public app::Concept
         {
             ui::MenuItem own = menu_item(tr("Use its own picture"));
             own.tag = kItemOwnPicture;
+            items.push_back(own);
+        }
+        ui::MenuItem music = menu_item(tr("Choose music…"));
+        music.tag = kItemMusic;
+        items.push_back(music);
+        if (!custom_music(title).empty())
+        {
+            ui::MenuItem own = menu_item(tr("Use its own music"));
+            own.tag = kItemOwnMusic;
             items.push_back(own);
         }
         // A sharper picture: the home screen's for a console title shown from
@@ -2870,11 +3038,17 @@ class Library final : public app::Concept
             feedback.play(audio::Cue::select);
             return;
         }
-        if (tag == kItemPicture)
+        if (tag == kItemPicture || tag == kItemMusic)
         {
+            picking_music_ = tag == kItemMusic;
             pick_dir_.clear();
             pick_page_ = 0;
             open_picture_menu(feedback);
+            return;
+        }
+        if (tag == kItemOwnMusic)
+        {
+            use_own_music(feedback);
             return;
         }
         if (tag == kItemOwnPicture)
@@ -2918,9 +3092,12 @@ class Library final : public app::Concept
         }
         if (tag >= kItemPickFile)
         {
-            choose_picture(pick_dir_ + "/" +
-                               pick_files_[static_cast<std::size_t>(tag - kItemPickFile)],
-                           feedback);
+            const std::string file =
+                pick_dir_ + "/" + pick_files_[static_cast<std::size_t>(tag - kItemPickFile)];
+            if (picking_music_)
+                choose_music(file, feedback);
+            else
+                choose_picture(file, feedback);
             return;
         }
         if (tag == kItemRename)
@@ -5332,6 +5509,15 @@ class Library final : public app::Concept
     // behind: Check now starts a new one (check_for_updates).
     std::unique_ptr<orion::UpdateCheck> updates_ = new_update_check();
     bool data_missing_ = false; // no /data in ORION's sandbox (ShadowMountPlus)
+    // Title music: the player's songs by name, what each title plays (empty:
+    // none), the title the focus rests on and for how long, and the copier
+    // of the system's snd0.at9 files.
+    std::unordered_map<std::string, std::string> hover_names_;
+    std::unordered_map<std::string, std::string> music_paths_;
+    std::string music_focus_;
+    float music_dwell_ = 0.0f;
+    orion::BackdropCopies sound_copies_;
+    bool picking_music_ = false; // the browser lists music, not pictures
     // Find other art: the title looked through, its picture before, the
     // covers so far, the one shown, and whether the full one is coming.
     orion::GridPicker picker_{grid_http()};

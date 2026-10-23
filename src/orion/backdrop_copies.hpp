@@ -39,9 +39,11 @@ class BackdropCopies
     BackdropCopies &operator=(const BackdropCopies &) = delete;
 
     // False while a run is going. pictures: the files of /user/appmeta/<ID>
-    // to try, in order ("/icon0.png" for the sharper icons).
+    // to try, in order ("/icon0.png" for the sharper icons, "/snd0.at9" for
+    // a title's music), kept as <ID><extension>.
     bool start(std::vector<std::string> ids, std::string folder, int port,
-               std::vector<std::string> pictures = {"/pic0.png", "/pic1.png"});
+               std::vector<std::string> pictures = {"/pic0.png", "/pic1.png"},
+               std::string extension = ".png");
     bool running() const
     {
         return running_.load();
@@ -52,7 +54,7 @@ class BackdropCopies
 
   private:
     void run(std::vector<std::string> ids, std::string folder, int port,
-             std::vector<std::string> pictures);
+             std::vector<std::string> pictures, std::string extension);
 
     std::thread worker_;
     std::atomic<bool> running_{false};

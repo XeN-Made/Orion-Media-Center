@@ -11,6 +11,7 @@
 #include "audio/cues.hpp"
 #include "audio/mixer.hpp"
 #include "audio/music.hpp"
+#include "audio/title_music.hpp"
 #include "core/frame_stats.hpp"
 #include "core/input.hpp"
 #include "core/save_file.hpp"
@@ -374,10 +375,16 @@ int main()
     // ORION's own songs, and the player's in /data/orion/music (48 kHz .ogg),
     // a folder made here so it is there to copy songs into over FTP.
     save::ensure_directory("/data/orion/music");
+    // And the folders a player fills over FTP: pictures and music per title.
+    save::ensure_directory("/data/orion/custom-art");
+    save::ensure_directory("/data/orion/hover-music");
     const int tracks = music.init(
         mixer, std::vector<std::string>{std::string(kAssets) + "/audio/music", "/data/orion/music"},
         static_cast<std::uint64_t>(sys::monotonic_us()));
     sys::log("[HUI] music songs=%d", tracks);
+    // A focused title's own song, on the second music deck over the playlist.
+    audio::TitleMusic title_music;
+    title_music.init(mixer, music);
     ps5::AudioOut audio_out;
     audio_out.start(mixer);
     audio::SoundBank sounds;
@@ -604,6 +611,8 @@ int main()
         if (shell.take_skip_song())
             music.skip();
         music.pump(dt);
+        title_music.play(shell.title_music());
+        title_music.pump(dt);
         shell.set_now_playing(music.current());
 
         shell.compose(renderer);

@@ -8,6 +8,7 @@ src/app/tour.cpp
 src/audio/cues.cpp
 src/audio/mixer.cpp
 src/audio/music.cpp
+src/audio/title_music.cpp
 src/audio/wav.cpp
 src/concepts/*.cpp
 src/concepts/components/*.cpp
@@ -33,6 +34,7 @@ src/library/library.cpp
 src/orion/*.cpp
 src/third_party/stb/image.c
 src/third_party/stb/vorbis.c
+src/third_party/libatrac9/*.c
 src/ui/components/*.cpp
 src/ui/confetti.cpp
 src/ui/glyphs.cpp

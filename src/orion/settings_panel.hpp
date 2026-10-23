@@ -262,7 +262,7 @@ class SettingsPanel
     const library::EmulatorApp *page_app() const;
     void build_art(const LibraryPrefs &prefs);
     void build_storage(const LibraryPrefs &prefs);
-    void build_sound();
+    void build_sound(const LibraryPrefs &prefs);
     void build_about(const LibraryPrefs &prefs);
     void build_folder_page(const LibraryPrefs &prefs);
     Change edit_folder_page(int id, LibraryPrefs *prefs);

@@ -27,7 +27,7 @@ BackdropCopies::~BackdropCopies()
 }
 
 bool BackdropCopies::start(std::vector<std::string> ids, std::string folder, int port,
-                           std::vector<std::string> pictures)
+                           std::vector<std::string> pictures, std::string extension)
 {
     if (running_.load())
         return false;
@@ -37,9 +37,11 @@ bool BackdropCopies::start(std::vector<std::string> ids, std::string folder, int
         result_ = Result();
     }
     running_ = true;
-    worker_ = std::thread([this, ids = std::move(ids), folder = std::move(folder), port,
-                           pictures = std::move(pictures)]() mutable
-                          { run(std::move(ids), std::move(folder), port, std::move(pictures)); });
+    worker_ = std::thread(
+        [this, ids = std::move(ids), folder = std::move(folder), port,
+         pictures = std::move(pictures), extension = std::move(extension)]() mutable {
+            run(std::move(ids), std::move(folder), port, std::move(pictures), std::move(extension));
+        });
     return true;
 }
 
@@ -56,7 +58,7 @@ void BackdropCopies::wait()
 }
 
 void BackdropCopies::run(std::vector<std::string> ids, std::string folder, int port,
-                         std::vector<std::string> pictures)
+                         std::vector<std::string> pictures, std::string extension)
 {
     Result result;
     LocalFtp ftp;
@@ -70,7 +72,7 @@ void BackdropCopies::run(std::vector<std::string> ids, std::string folder, int p
         for (const std::string &name : pictures)
         {
             if (!got && ftp.get("/user/appmeta/" + id + name, kMaxPicture, &bytes))
-                got = save::write_atomic(folder + "/" + id + ".png", bytes).empty();
+                got = save::write_atomic(folder + "/" + id + extension, bytes).empty();
         }
         if (got)
             ++result.copied;

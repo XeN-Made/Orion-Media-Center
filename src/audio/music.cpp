@@ -25,6 +25,7 @@ namespace
 constexpr float kBaseGain = 0.4f;
 constexpr float kDuckSeconds = 2.5f;
 constexpr float kDuckGain = 0.5f;     // -6 dB
+constexpr float kLowGain = 0.12f;     // under a title's own song
 constexpr float kGapSeconds = 1.5f;   // quiet breath between songs
 constexpr std::size_t kAhead = 32768; // frames kept buffered (~0.7 s)
 constexpr int kChunk = 2048;          // frames decoded per step
@@ -224,10 +225,20 @@ void MusicPlayer::duck()
     apply_gain(0.15f);
 }
 
+void MusicPlayer::set_lowered(bool lowered)
+{
+    if (lowered == lowered_)
+        return;
+    lowered_ = lowered;
+    apply_gain(lowered ? 0.4f : 1.2f);
+}
+
 void MusicPlayer::apply_gain(float seconds)
 {
     if (mixer_ != nullptr)
-        mixer_->set_stream_gain(0, kBaseGain * (duck_ > 0.0f ? kDuckGain : 1.0f), seconds);
+        mixer_->set_stream_gain(
+            0, kBaseGain * (duck_ > 0.0f ? kDuckGain : 1.0f) * (lowered_ ? kLowGain : 1.0f),
+            seconds);
 }
 
 void MusicPlayer::pump(float dt)

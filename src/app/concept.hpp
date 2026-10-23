@@ -94,6 +94,9 @@ struct Context
     // A design that changed the player's own pictures (<state>/custom-art)
     // sets this; the app applies them between frames (library::apply_custom_art).
     bool custom_art_changed = false;
+    // The music of the focused title, a file to play over the playlist
+    // (audio/title_music.hpp), or empty for none. A design sets it each frame.
+    std::string title_music = {};
     // Titles the player renamed (id, name; empty: its own again): the app
     // applies them between frames and bumps library.generation.
     std::vector<std::pair<std::string, std::string>> new_names = {};

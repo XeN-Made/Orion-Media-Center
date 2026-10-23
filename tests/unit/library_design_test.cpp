@@ -265,10 +265,10 @@ TEST_F(LibraryDesign, CrossMovesATitleToACustomTabAndItIsRemembered)
     auto design = with_fixture();
 
     // Options opens the menu on Ciel Ouvert: Launch, Favourite, Hide, Rename,
-    // Choose picture, Find other art, then Move to RPGs.
+    // Choose picture, Find other art, Choose music, then Move to RPGs.
     send(*design, press(hui::Action::menu));
     EXPECT_FALSE(last_cues_.empty());
-    for (int i = 0; i < 6; ++i)
+    for (int i = 0; i < 7; ++i)
         send(*design, nav(Direction::down));
     send(*design, press(hui::Action::confirm));
     expect_drawable(*design);
@@ -363,9 +363,9 @@ TEST_F(LibraryDesign, DeletingAGameFileWantsCrossHeld)
     for (int i = 0; i < 5; ++i)
         send(*design, press(hui::Action::page_next));
     // Options: Launch, Favourite, Hide, Rename, Choose picture, Find other
-    // art, Download box art again, Move to a new tab, Remove….
+    // art, Choose music, Download box art again, Move to a new tab, Remove….
     send(*design, press(hui::Action::menu));
-    for (int i = 0; i < 8; ++i)
+    for (int i = 0; i < 9; ++i)
         send(*design, nav(Direction::down));
     send(*design, press(hui::Action::confirm)); // Remove…
     send(*design, press(hui::Action::confirm)); // Delete the game file…

@@ -277,6 +277,11 @@ you chose for it.
   `steamgriddb = <your key>` in `/data/orion/keys.txt`.
 - Background music: every `.ogg` in `/data/orion/music` joins ORION's own
   tracks. Settings, Sound sets the volumes and skips a song.
+- **Title music**: rest the focus on a game and its own home-screen music
+  plays over ORION's, as on the PS5's home screen. Options on a title,
+  **Choose music…**, picks an `.ogg` (or `.at9`) of yours instead; or drop
+  one into `/data/orion/hover-music` named after the game or its title ID.
+  Settings, Sound, **Title music** turns it off.
 
 ## If something goes wrong
 
