@@ -190,21 +190,38 @@ int main()
     // file says how it went.
     if (std::string done; save::ensure_directory("/data/orion") &&
                           (!save::read_file("/data/orion/opened-up.txt", &done, 256) ||
-                           done.rfind("done (2)", 0) != 0))
+                           done.rfind("done (3)", 0) != 0))
     {
         int changed = 0;
         int failed = 0;
-        for (const save::DirectoryEntry &entry : save::list_directory("/data"))
+        std::string report;
+        // /data/orion always; any copy of it a player made, as far as /data
+        // can be listed from inside the sandbox.
+        std::vector<std::string> roots = {"/data/orion"};
+        save::ListingStats stats;
+        for (const save::DirectoryEntry &entry : save::list_directory("/data", &stats))
         {
+            if (entry.directory && entry.name.rfind("orion", 0) == 0 && entry.name != "orion")
+                roots.push_back("/data/" + entry.name);
+        }
+        report += "/data: " + std::to_string(stats.records) + " entries, open errno " +
+                  std::to_string(stats.open_error) + "\n";
+        for (const std::string &root : roots)
+        {
+            struct stat info = {};
+            const int seen = ::lstat(root.c_str(), &info);
             int missed = 0;
-            if (entry.directory && entry.name.rfind("orion", 0) == 0)
-                changed += save::open_up_tree("/data/" + entry.name, &missed);
+            const int set = save::open_up_tree(root, &missed);
+            changed += set;
             failed += missed;
+            report += root + ": lstat " + std::to_string(seen) + " mode " +
+                      std::to_string(info.st_mode) + ", set " + std::to_string(set) + ", refused " +
+                      std::to_string(missed) + "\n";
         }
         save::write_atomic("/data/orion/opened-up.txt",
-                           std::string(failed == 0 ? "done (2)" : "not yet") + ": " +
+                           std::string(changed > 0 && failed == 0 ? "done (3)" : "not yet") + ": " +
                                std::to_string(changed) + " opened up for FTP, " +
-                               std::to_string(failed) + " refused\n");
+                               std::to_string(failed) + " refused\n" + report);
         sys::log("[HUI] opened up %d files and folders for FTP, %d refused", changed, failed);
     }
     // Where a player pastes keys for other services (orion/steamgriddb.hpp):
