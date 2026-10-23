@@ -679,6 +679,8 @@ class Library final : public app::Concept
         start_resume_watcher();
         read_hover_music();
         take_new_title_id();
+        if (!own_title_id().empty())
+            settings_.set_title_id(own_title_id());
         settings_.set_grid_key(
             !orion::read_service_key(context_.library.state_dir, orion::kSteamGridDb).empty());
         rebuild_tabs(start);
@@ -1834,7 +1836,7 @@ class Library final : public app::Concept
     std::string autostart_payload() const
     {
         const std::string &self = context_.library.self_path;
-        return (self.empty() ? std::string("/data/homebrew/PPSA99061") : self) +
+        return (self.empty() ? "/data/homebrew/" + own_title_id() : self) +
                "/assets/payloads/orion-autostart.elf";
     }
 

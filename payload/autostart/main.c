@@ -3,8 +3,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // For a jailbreak's autoloader: add this ELF to the payloads it sends after
-// the exploit (it ships as /data/homebrew/PPSA99061/assets/payloads/
-// orion-autostart.elf). A title cannot start while another app is in
+// the exploit (it ships as /data/homebrew/<ORION's title ID>/assets/payloads/
+// orion-autostart.elf). It opens the title in /data/orion/title.txt, which
+// ORION writes as it starts, so it follows ORION to a new title ID. A title cannot start while another app is in
 // front, and a browser-based jailbreak still has the browser in front when
 // its payloads run, so the payload waits:
 //
@@ -28,7 +29,8 @@
 #include <time.h>
 #include <unistd.h>
 
-#define ORION_TITLE "PPSA99061"
+#define ORION_TITLE "PPSA99061" // when ORION has not written title.txt yet
+#define TITLE_PATH "/data/orion/title.txt"
 #define OFF_PATH "/data/orion/autostart-off"
 #define LOG_PATH "/data/orion/autostart.txt"
 #define AUTOSTART_WINDOW_S (30 * 60) // waiting longer than this, the moment has passed
@@ -81,8 +83,32 @@ static int exists(const char *path)
 // A start the system takes answers the new app's ID (positive); a refusal
 // is a negative error code. A refusal straight after the browser closed is
 // the system still tearing it down, so it is tried again a few times.
+// The title ORION has now, as it last wrote it; ORION_TITLE without one.
+static void orion_title(char *title, size_t size)
+{
+    snprintf(title, size, "%s", ORION_TITLE);
+    char text[32] = "";
+    const int fd = open(TITLE_PATH, O_RDONLY);
+    if (fd < 0)
+        return;
+    const ssize_t got = read(fd, text, sizeof(text) - 1);
+    close(fd);
+    if (got < 9)
+        return;
+    text[9] = '\0';
+    for (int i = 0; i < 9; ++i)
+    {
+        const char c = text[i];
+        if (i < 4 ? (c < 'A' || c > 'Z') : (c < '0' || c > '9'))
+            return;
+    }
+    snprintf(title, size, "%s", text);
+}
+
 static int open_orion(void)
 {
+    char title[16];
+    orion_title(title, sizeof(title));
     int user = 0;
     if (sceUserServiceGetForegroundUser(&user) != 0)
         say("no foreground user; launching for user 0");
@@ -92,7 +118,7 @@ static int open_orion(void)
         memset(&param, 0, sizeof(param));
         param.structsize = sizeof(param);
         param.user_id = (uint32_t)user;
-        const int result = sceSystemServiceLaunchApp(ORION_TITLE, NULL, &param);
+        const int result = sceSystemServiceLaunchApp(title, NULL, &param);
         say("launch %d of %d: 0x%08x", attempt, LAUNCH_TRIES, (unsigned)result);
         if (result >= 0)
             return 0;

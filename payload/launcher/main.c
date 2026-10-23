@@ -65,7 +65,7 @@
 #define FRESH_REQUEST_S 120     // a launch request older than this is a leftover
 #define LOG_PATH "/data/orion/launch-helper.txt"
 // ORION's own folder, for when /data/orion does not take the helper's files.
-#define LOG_FALLBACK "/data/homebrew/PPSA99061/launch-helper.txt"
+#define LOG_FALLBACK "/data/orion/launch-helper.txt"
 #define WAIT_FOR_EXIT_MS 20000
 #define SMP_PORT 10101 // ShadowMountPlus's API, for removing games
 #define WAIT_FOR_LAUNCH_MS 15000

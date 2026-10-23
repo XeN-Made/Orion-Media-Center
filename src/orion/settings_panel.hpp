@@ -174,6 +174,10 @@ class SettingsPanel
         update_ready_ = std::move(version);
     }
     // This ORION's version, for About ("01.001.002"; empty: unknown).
+    void set_title_id(std::string id)
+    {
+        title_id_ = std::move(id);
+    }
     void set_version(std::string version)
     {
         version_ = std::move(version);
@@ -315,6 +319,7 @@ class SettingsPanel
     std::string update_status_ = "Not checked yet";
     std::string update_ready_;
     std::string version_;
+    std::string title_id_ = "PPSA99061";
     std::string payload_ = "/data/homebrew/PPSA99061/assets/payloads/orion-autostart.elf";
     std::string art_status_ = "Covers from thumbnails.libretro.com for games without one";
 };

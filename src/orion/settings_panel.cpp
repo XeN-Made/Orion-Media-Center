@@ -510,7 +510,7 @@ void SettingsPanel::build_about(const LibraryPrefs &prefs)
 {
     form_.add_header(tr("ORION Media Center"));
     form_.add_value(kAboutVersion, tr("Version"), version_.empty() ? tr("Unknown") : version_);
-    form_.add_value(kAboutTitle, tr("Title ID"), "PPSA99061");
+    form_.add_value(kAboutTitle, tr("Title ID"), title_id_);
     form_.add_value(kAboutReleases, tr("Releases"), kReleasesPage);
     form_.add_header(tr("Updates"));
     if (!update_ready_.empty())
