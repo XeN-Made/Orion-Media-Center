@@ -81,8 +81,9 @@ bool ensure_directory(const std::string &path);
 // Folders made, and files written (write_atomic), are open to every user:
 // on a console an FTP server runs as another user than the app and must be
 // able to add, replace and delete them. This opens up a tree made before
-// that (folders 0777, files 0666; links are not followed) and returns how
-// many entries changed. Refuses a relative path, "/" and one with "..".
+// that (folders 0777, files 0666; links are not followed), setting every
+// entry whatever its mode reads as, and returns how many it set. Refuses a
+// relative path, "/" and one with "..".
 // *failed, when given, counts what could not be changed.
 int open_up_tree(const std::string &root, int *failed = nullptr);
 // Sets a file's or folder's mode through an open descriptor, else by path.

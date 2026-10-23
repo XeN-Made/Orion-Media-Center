@@ -246,8 +246,10 @@ int open_up_tree(const std::string &root, int *failed)
         };
         if (::lstat(folder.c_str(), &info) != 0 || !S_ISDIR(info.st_mode))
             continue;
-        if ((info.st_mode & 07777) != 0777)
-            open_up(folder, 0777, true);
+        // Set whatever the mode reads as: inside a console's app sandbox a
+        // mounted /data reports modes the disk does not have (a test read
+        // every file as open while an FTP server saw them shut).
+        open_up(folder, 0777, true);
         for (const DirectoryEntry &entry : list_directory(folder))
         {
             if (entry.name == "." || entry.name == "..")
@@ -262,9 +264,8 @@ int open_up_tree(const std::string &root, int *failed)
             struct stat file
             {
             };
-            if (::lstat(path.c_str(), &file) == 0 && S_ISREG(file.st_mode) &&
-                (file.st_mode & 0666) != 0666)
-                open_up(path, file.st_mode & 0111 ? 0777 : 0666, false);
+            if (::lstat(path.c_str(), &file) == 0 && S_ISREG(file.st_mode))
+                open_up(path, (file.st_mode & 0111) != 0 ? 0777 : 0666, false);
         }
     }
     return changed;

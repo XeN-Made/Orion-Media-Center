@@ -188,9 +188,9 @@ int main()
     // (/data/orion-backup), which FTP could otherwise not change or delete.
     // Until it has all worked, it is tried again on the next start; the
     // file says how it went.
-    if (std::string done;
-        save::ensure_directory("/data/orion") &&
-        (!save::read_file("/data/orion/opened-up.txt", &done, 256) || done.rfind("done", 0) != 0))
+    if (std::string done; save::ensure_directory("/data/orion") &&
+                          (!save::read_file("/data/orion/opened-up.txt", &done, 256) ||
+                           done.rfind("done (2)", 0) != 0))
     {
         int changed = 0;
         int failed = 0;
@@ -202,7 +202,7 @@ int main()
             failed += missed;
         }
         save::write_atomic("/data/orion/opened-up.txt",
-                           std::string(failed == 0 ? "done" : "not yet") + ": " +
+                           std::string(failed == 0 ? "done (2)" : "not yet") + ": " +
                                std::to_string(changed) + " opened up for FTP, " +
                                std::to_string(failed) + " refused\n");
         sys::log("[HUI] opened up %d files and folders for FTP, %d refused", changed, failed);

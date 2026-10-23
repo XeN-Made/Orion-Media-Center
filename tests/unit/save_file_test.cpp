@@ -42,12 +42,14 @@ TEST(SaveFile, LeavesFilesAndFoldersOpenToAnFtpServer)
     ASSERT_EQ(::chmod((root + "/art/a.png").c_str(), 0600), 0);
     ASSERT_EQ(::chmod((root + "/keys.txt").c_str(), 0644), 0);
     ASSERT_EQ(::symlink("/etc/hostname", (root + "/art/link").c_str()), 0);
-    EXPECT_EQ(hui::save::open_up_tree(root), 3); // art, a.png, keys.txt
+    EXPECT_EQ(hui::save::open_up_tree(root), 4); // every entry: root, art, a.png, keys.txt
     ASSERT_EQ(::stat((root + "/art").c_str(), &info), 0);
     EXPECT_EQ(info.st_mode & 07777, 0777u);
     ASSERT_EQ(::stat((root + "/art/a.png").c_str(), &info), 0);
     EXPECT_EQ(info.st_mode & 07777, 0666u);
-    EXPECT_EQ(hui::save::open_up_tree(root), 0); // nothing left to change
+    int failed = -1;
+    EXPECT_EQ(hui::save::open_up_tree(root, &failed), 4); // set again, whatever they read as
+    EXPECT_EQ(failed, 0);
     EXPECT_EQ(hui::save::open_up_tree("relative/path"), 0);
     EXPECT_EQ(hui::save::open_up_tree("/"), 0);
     ::umask(before);
