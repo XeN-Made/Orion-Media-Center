@@ -305,6 +305,73 @@ bool parse_image_name(std::string_view file_name, Title *title)
     return true;
 }
 
+std::string registered_line(const Title &title)
+{
+    std::string name = title.name;
+    for (char &c : name)
+    {
+        if (c == '\t' || c == '\n' || c == '\r')
+            c = ' ';
+    }
+    return title.id + "\t" + std::to_string(static_cast<int>(title.platform)) + "\t" +
+           std::to_string(static_cast<int>(title.category)) + "\t" + (title.homebrew ? "1" : "0") +
+           "\t" + name + "\n";
+}
+
+int merge_registered(Library &library, std::string_view cache, const std::string &icons,
+                     const std::string &skip_id)
+{
+    int added = 0;
+    std::size_t start = 0;
+    while (start < cache.size())
+    {
+        std::size_t end = cache.find('\n', start);
+        if (end == std::string_view::npos)
+            end = cache.size();
+        const std::string_view line = cache.substr(start, end - start);
+        start = end + 1;
+        std::vector<std::string_view> fields;
+        std::size_t at = 0;
+        for (int i = 0; i < 4; ++i)
+        {
+            const std::size_t tab = line.find('\t', at);
+            if (tab == std::string_view::npos)
+                break;
+            fields.push_back(line.substr(at, tab - at));
+            at = tab + 1;
+        }
+        if (fields.size() != 4 || at >= line.size() || !is_title_id(fields[0]) ||
+            fields[0] == skip_id)
+            continue;
+        const std::string id(fields[0]);
+        if (std::any_of(library.titles.begin(), library.titles.end(),
+                        [&](const Title &t) { return t.id == id; }))
+            continue;
+        const auto number = [](std::string_view text, int top)
+        {
+            const int value = text.size() == 1 ? text[0] - '0' : -1;
+            return value >= 0 && value <= top ? value : -1;
+        };
+        const int platform = number(fields[1], static_cast<int>(Platform::unknown));
+        const int category = number(fields[2], static_cast<int>(Category::app));
+        if (platform < 0 || category < 0)
+            continue;
+        Title title;
+        title.id = id;
+        title.name = std::string(line.substr(at));
+        title.platform = static_cast<Platform>(platform);
+        title.category = static_cast<Category>(category);
+        title.homebrew = fields[3] == "1";
+        title.source = Source::installed;
+        const std::string icon = icons + "/" + id + ".png";
+        if (file_exists(icon))
+            title.icon = icon;
+        library.titles.push_back(std::move(title));
+        ++added;
+    }
+    return added;
+}
+
 int prefer_saved_icons(Library &library, const std::string &folder)
 {
     int found = 0;

@@ -87,6 +87,10 @@ struct Context
     // Scan for emulators) sets this; the app scans between frames and bumps
     // library.generation.
     bool rescan_requested = false;
+    // A design that found the system's registered titles changed
+    // (orion/registered_titles.hpp) sets this; the app merges them between
+    // frames and bumps library.generation.
+    bool registered_changed = false;
     // The song the background music plays now (its file name), set by the
     // app every frame; a design that wants the next one sets skip_song.
     std::string now_playing = {};

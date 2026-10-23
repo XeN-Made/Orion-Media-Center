@@ -175,6 +175,56 @@ bool LocalFtp::open(int port)
 
 bool LocalFtp::get(const std::string &path, std::size_t limit, std::string *bytes)
 {
+    return transfer("RETR " + path, limit, bytes);
+}
+
+bool LocalFtp::list(const std::string &folder, std::vector<FtpEntry> *entries)
+{
+    entries->clear();
+    std::string text;
+    if (control_ < 0 || !send_all(control_, "CWD " + folder + "\r\n") || reply() / 100 != 2 ||
+        !transfer("MLSD", 4u << 20, &text))
+        return false;
+    *entries = parse_mlsd(text);
+    return true;
+}
+
+std::vector<FtpEntry> parse_mlsd(std::string_view text)
+{
+    std::vector<FtpEntry> entries;
+    std::size_t start = 0;
+    while (start < text.size())
+    {
+        std::size_t end = text.find('\n', start);
+        if (end == std::string_view::npos)
+            end = text.size();
+        std::string_view line = text.substr(start, end - start);
+        start = end + 1;
+        if (!line.empty() && line.back() == '\r')
+            line.remove_suffix(1);
+        // The facts end at the first space; the name is everything after it.
+        const std::size_t space = line.find(' ');
+        if (space == std::string_view::npos || space == 0 || line[space - 1] != ';')
+            continue;
+        const std::string_view facts = line.substr(0, space);
+        FtpEntry entry;
+        entry.name = std::string(line.substr(space + 1));
+        if (entry.name.empty() || entry.name == "." || entry.name == "..")
+            continue;
+        std::string lowered(facts);
+        for (char &c : lowered)
+            c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        entry.folder = lowered.find("type=dir;") != std::string::npos;
+        if (lowered.find("type=cdir;") != std::string::npos ||
+            lowered.find("type=pdir;") != std::string::npos)
+            continue;
+        entries.push_back(std::move(entry));
+    }
+    return entries;
+}
+
+bool LocalFtp::transfer(const std::string &line, std::size_t limit, std::string *bytes)
+{
     bytes->clear();
     if (control_ < 0 || !send_all(control_, "PASV\r\n"))
         return false;
@@ -185,7 +235,7 @@ bool LocalFtp::get(const std::string &path, std::size_t limit, std::string *byte
     const int data = connect_loopback(port);
     if (data < 0)
         return false;
-    if (!send_all(control_, "RETR " + path + "\r\n") || reply() / 100 != 1)
+    if (!send_all(control_, line + "\r\n") || reply() / 100 != 1)
     {
         ::close(data);
         return false; // 550: no such file
@@ -210,7 +260,8 @@ bool LocalFtp::get(const std::string &path, std::size_t limit, std::string *byte
     const bool done = reply() / 100 == 2; // 226: transfer complete
     if (!whole || !done)
         bytes->clear();
-    return whole && done && !bytes->empty();
+    // An empty folder lists nothing and is still a listing.
+    return whole && done && (!bytes->empty() || line == "MLSD");
 }
 
 void LocalFtp::close()

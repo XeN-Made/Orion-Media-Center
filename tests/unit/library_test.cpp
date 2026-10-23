@@ -224,5 +224,42 @@ TEST(Library, RecognisesTitleIds)
     EXPECT_FALSE(library::is_title_id("PPS101234"));
 }
 
+// The system's registered titles, through their cache: the ones the scan
+// missed join as installed, with their saved icon; ORION itself, titles
+// already listed and broken lines do not.
+TEST(Library, MergesTheSystemsRegisteredTitles)
+{
+    library::Title installed;
+    installed.id = "CUSA90160";
+    installed.name = "Quiet\tBay";
+    installed.platform = library::Platform::ps4;
+    installed.category = library::Category::game;
+    const std::string line = library::registered_line(installed);
+    EXPECT_EQ(line, "CUSA90160\t1\t0\t0\tQuiet Bay\n");
+
+    const std::string icons = ::testing::TempDir() + "hui-registered-icons";
+    ASSERT_TRUE(save::ensure_directory(icons));
+    ASSERT_TRUE(save::write_atomic(icons + "/CUSA90160.png", "png").empty());
+    library::Library shelf;
+    shelf.titles.resize(1);
+    shelf.titles[0].id = "PPSA90161"; // already found by the scan
+    const std::string cache = line + "PPSA90161\t0\t0\t0\tFound Already\n" +
+                              "PPSA99061\t0\t0\t0\tORION\n" +
+                              "PPSA90162\t0\t2\t1\tLantern Tools\n" + "not a line\n" +
+                              "PPSA90163\t9\t0\t0\tBad Platform\n";
+    EXPECT_EQ(library::merge_registered(shelf, cache, icons, "PPSA99061"), 2);
+    ASSERT_EQ(shelf.titles.size(), 3u);
+    EXPECT_EQ(shelf.titles[1].id, "CUSA90160");
+    EXPECT_EQ(shelf.titles[1].name, "Quiet Bay");
+    EXPECT_EQ(shelf.titles[1].platform, library::Platform::ps4);
+    EXPECT_EQ(shelf.titles[1].source, library::Source::installed);
+    EXPECT_EQ(shelf.titles[1].icon, icons + "/CUSA90160.png");
+    EXPECT_EQ(shelf.titles[2].category, library::Category::app);
+    EXPECT_TRUE(shelf.titles[2].homebrew);
+    EXPECT_EQ(shelf.titles[2].icon, "");
+    // Again: nothing new.
+    EXPECT_EQ(library::merge_registered(shelf, cache, icons, "PPSA99061"), 0);
+}
+
 } // namespace
 } // namespace hui

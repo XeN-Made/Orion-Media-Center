@@ -32,6 +32,26 @@ TEST(LocalFtp, ReadsReplies)
     EXPECT_EQ(orion::passive_port("227 (1,2,3)"), 0);
 }
 
+// A folder listing, as the console's server sends it: folders told from
+// files, names with spaces whole, the folder itself and its parent left out.
+TEST(LocalFtp, ReadsAFolderListing)
+{
+    const std::vector<orion::FtpEntry> entries =
+        orion::parse_mlsd("type=cdir;modify=20261022; .\r\n"
+                          "type=pdir;modify=20261022; ..\r\n"
+                          "type=dir;size=65536;modify=20261022; PPSA90150\r\n"
+                          "type=file;size=12;modify=20261022; Quiet Bay (USA).iso\r\n"
+                          "Type=Dir;Size=0; CUSA90151\n"
+                          "no facts here\r\n");
+    ASSERT_EQ(entries.size(), 3u); // the line without facts is no entry
+    EXPECT_EQ(entries[0].name, "PPSA90150");
+    EXPECT_TRUE(entries[0].folder);
+    EXPECT_EQ(entries[1].name, "Quiet Bay (USA).iso");
+    EXPECT_FALSE(entries[1].folder);
+    EXPECT_EQ(entries[2].name, "CUSA90151");
+    EXPECT_TRUE(entries[2].folder);
+}
+
 // A listening socket on the loopback, and its port.
 int listen_on(int *port)
 {

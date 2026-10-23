@@ -35,6 +35,7 @@ enum class Source : std::uint8_t
 {
     folder,
     image,
+    installed, // registered with the system, nowhere ORION looks (see merge_registered)
 };
 
 struct Title
@@ -152,6 +153,8 @@ struct Library
     // ORION's own folder as the launch helper sees it ("/data/homebrew/PPSA99061"):
     // where its play log and backdrops go. ORION is not in titles itself.
     std::string self_path;
+    // ORION's own title ID: never listed (merge_registered skips it).
+    std::string self_id;
     // The app's own theme files (orion/theme_file.hpp); the player's are in
     // <state_dir>/themes. Empty: the kit's themes, built in.
     std::string themes_dir;
@@ -200,6 +203,16 @@ std::vector<Title> scan(const ScanOptions &options);
 // the home screen's 512-pixel icon0.png; ShadowMountPlus caches 128 pixels)
 // show that instead. Returns how many.
 int prefer_saved_icons(Library &library, const std::string &folder);
+// The titles the system has registered that ORION's own scan does not find:
+// installed packages, and images ShadowMountPlus mounted from wherever it
+// found them. orion/registered_titles.hpp keeps them in a cache, one line a
+// title: "ID\tplatform\tcategory\thomebrew\tname".
+std::string registered_line(const Title &title);
+// Adds the cache's titles that are not listed yet (nor skip_id, ORION's own),
+// as Source::installed, with <icons>/<ID>.png as their picture when there is
+// one. Returns how many were added.
+int merge_registered(Library &library, std::string_view cache, const std::string &icons,
+                     const std::string &skip_id);
 
 // "PPSA01234" style: four capital letters and five digits.
 bool is_title_id(std::string_view text);

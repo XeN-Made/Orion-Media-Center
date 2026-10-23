@@ -259,6 +259,15 @@ int main()
         }
         titles.scanned = true;
         titles.state_dir = "/data/orion";
+        titles.self_id = known ? self.id : std::string();
+        // What the system has registered beyond the homebrew folders, as the
+        // last run found it (orion/registered_titles.hpp refreshes it).
+        {
+            std::string cache;
+            if (save::read_file(titles.state_dir + "/registered.tsv", &cache, 4u << 20))
+                library::merge_registered(titles, cache, titles.state_dir + "/icons",
+                                          titles.self_id);
+        }
         titles.themes_dir = std::string(kAssets) + "/themes";
         titles.offer_setup = true;
         library::prefer_saved_icons(titles, titles.state_dir + "/icons");
@@ -433,6 +442,18 @@ int main()
             ++titles.generation;
             sys::log("[ORION] emulators scanned again: %zu apps, %d games",
                      titles.emulator.apps.size(), games);
+        }
+        // The system's registered titles changed: the new ones join.
+        if (shell.take_registered_change())
+        {
+            std::string cache;
+            if (save::read_file(titles.state_dir + "/registered.tsv", &cache, 4u << 20) &&
+                library::merge_registered(titles, cache, titles.state_dir + "/icons",
+                                          titles.self_id) > 0)
+            {
+                library::load_icons(titles, renderer.batch());
+                ++titles.generation;
+            }
         }
         shell.update(input, dt);
         // Games' box art that comes into view, a few a frame. The newest

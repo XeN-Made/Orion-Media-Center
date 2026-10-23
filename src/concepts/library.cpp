@@ -20,6 +20,7 @@
 #include "library/json.hpp"
 #include "orion/art_fetcher.hpp"
 #include "orion/backdrop_copies.hpp"
+#include "orion/registered_titles.hpp"
 #include "orion/look.hpp"
 #include "orion/playtime.hpp"
 #include "orion/prefs.hpp"
@@ -412,7 +413,9 @@ std::string describe(const Title &title, const std::string &emulator)
     std::string text = library::platform_name(title.platform);
     if (!text.empty())
         text += "  \xc2\xb7  ";
-    text += title.source == library::Source::image ? "Image" : "Folder";
+    text += title.source == library::Source::image       ? "Image"
+            : title.source == library::Source::installed ? "Installed"
+                                                         : "Folder";
     return text;
 }
 
@@ -652,6 +655,9 @@ class Library final : public app::Concept
             request_backdrops();
         if (sys::on_console())
             request_icons();
+        // Installed packages and images mounted from elsewhere.
+        if (sys::on_console() && !state.empty())
+            registered_.start(state, kFtpPort);
     }
 
     // ---- sharper pictures for the console's titles ----
@@ -789,7 +795,10 @@ class Library final : public app::Concept
         if (context_.library.generation != generation_)
         {
             generation_ = context_.library.generation;
-            emulators_scanned(feedback);
+            if (std::exchange(scan_asked_, false))
+                emulators_scanned(feedback);
+            else
+                library_changed();
         }
         // The song playing now, for Settings, Sound.
         if (context_.now_playing != now_playing_)
@@ -804,6 +813,8 @@ class Library final : public app::Concept
         follow_backdrop(dt);
         poll_art(feedback);
         poll_icon_copies();
+        if (registered_.take_finished() && registered_.result().changed)
+            context_.registered_changed = true;
         const bool reduced = context_.settings.reduced_motion;
         if (reduced != reduced_)
         {
@@ -1502,6 +1513,7 @@ class Library final : public app::Concept
     void scan_emulators(app::Feedback &feedback)
     {
         context_.rescan_requested = true;
+        scan_asked_ = true;
         settings_.set_scan_status("Looking for emulators and their games…");
         if (settings_.is_open())
             settings_.refresh(look_, prefs_);
@@ -1564,6 +1576,16 @@ class Library final : public app::Concept
         rebuild_tabs(key);
         restyle();
         rebuild();
+    }
+
+    // Titles joined while ORION runs (the system's registered ones): every
+    // index into them is rebuilt, quietly.
+    void library_changed()
+    {
+        rebuild_tabs(active_key());
+        restyle();
+        rebuild();
+        settings_.set_tabs(every_tab());
     }
 
     // After the tabs changed: the tab bar, the covers and Settings follow.
@@ -4584,6 +4606,8 @@ class Library final : public app::Concept
     orion::PlayLog plays_;
     std::string art_folder_was_; // where box art was before the folder last changed
     orion::BackdropCopies backdrop_copies_;
+    orion::RegisteredTitles registered_;     // the system's titles beyond the homebrew folders
+    bool scan_asked_ = false;                // the next generation is a scan someone asked for
     orion::BackdropCopies icon_copies_;      // the home screen's icon0.png (request_icons)
     std::vector<std::string> icons_waiting_; // to copy once the FTP server is free
     std::vector<std::string> icon_ids_;      // what the running copy is for

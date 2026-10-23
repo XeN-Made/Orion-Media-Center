@@ -78,6 +78,10 @@ class Shell
     {
         return std::exchange(context_.rescan_requested, false);
     }
+    bool take_registered_change()
+    {
+        return std::exchange(context_.registered_changed, false);
+    }
 
     void update(const InputFrame &input, float dt);
     // Queues this frame's layers; the caller presents them.
