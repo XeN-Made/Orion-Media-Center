@@ -191,12 +191,28 @@ bool read_file(const std::string &path, std::string *data, std::size_t max_bytes
     return true;
 }
 
+// A file's or folder's mode, set through an open descriptor first: a
+// console's app sandbox refuses chmod by path (a test showed folders left
+// as they were) yet takes fchmod on what the app opened.
+bool set_mode(const std::string &path, mode_t mode, bool folder)
+{
+    const int fd = ::open(path.c_str(), folder ? O_RDONLY | O_DIRECTORY : O_RDONLY);
+    if (fd >= 0)
+    {
+        const bool done = ::fchmod(fd, mode) == 0;
+        ::close(fd);
+        if (done)
+            return true;
+    }
+    return ::chmod(path.c_str(), mode) == 0;
+}
+
 bool ensure_directory(const std::string &path)
 {
     // Open to everyone, as write_atomic's files are: an FTP server must be
     // able to add files here and delete the folder.
     if (::mkdir(path.c_str(), 0777) == 0)
-        ::chmod(path.c_str(), 0777);
+        set_mode(path, 0777, true);
     else if (errno != EEXIST)
         return false;
     struct stat info
@@ -205,11 +221,20 @@ bool ensure_directory(const std::string &path)
     return ::stat(path.c_str(), &info) == 0 && S_ISDIR(info.st_mode);
 }
 
-int open_up_tree(const std::string &root)
+int open_up_tree(const std::string &root, int *failed)
 {
+    if (failed != nullptr)
+        *failed = 0;
     if (root.empty() || root.front() != '/' || root == "/" || root.find("..") != std::string::npos)
         return 0;
     int changed = 0;
+    const auto open_up = [&](const std::string &path, mode_t mode, bool folder)
+    {
+        if (set_mode(path, mode, folder))
+            ++changed;
+        else if (failed != nullptr)
+            ++*failed;
+    };
     // Depth first, with a list instead of recursion; a link is not followed.
     std::vector<std::pair<std::string, int>> folders = {{root, 0}};
     while (!folders.empty())
@@ -221,8 +246,8 @@ int open_up_tree(const std::string &root)
         };
         if (::lstat(folder.c_str(), &info) != 0 || !S_ISDIR(info.st_mode))
             continue;
-        if ((info.st_mode & 07777) != 0777 && ::chmod(folder.c_str(), 0777) == 0)
-            ++changed;
+        if ((info.st_mode & 07777) != 0777)
+            open_up(folder, 0777, true);
         for (const DirectoryEntry &entry : list_directory(folder))
         {
             if (entry.name == "." || entry.name == "..")
@@ -238,8 +263,8 @@ int open_up_tree(const std::string &root)
             {
             };
             if (::lstat(path.c_str(), &file) == 0 && S_ISREG(file.st_mode) &&
-                (file.st_mode & 0666) != 0666 && ::chmod(path.c_str(), 0666) == 0)
-                ++changed;
+                (file.st_mode & 0666) != 0666)
+                open_up(path, file.st_mode & 0111 ? 0777 : 0666, false);
         }
     }
     return changed;

@@ -6,6 +6,7 @@
 
 #include <cstdint>
 #include <string>
+#include <sys/types.h>
 #include <string_view>
 #include <vector>
 
@@ -82,7 +83,10 @@ bool ensure_directory(const std::string &path);
 // able to add, replace and delete them. This opens up a tree made before
 // that (folders 0777, files 0666; links are not followed) and returns how
 // many entries changed. Refuses a relative path, "/" and one with "..".
-int open_up_tree(const std::string &root);
+// *failed, when given, counts what could not be changed.
+int open_up_tree(const std::string &root, int *failed = nullptr);
+// Sets a file's or folder's mode through an open descriptor, else by path.
+bool set_mode(const std::string &path, mode_t mode, bool folder);
 
 // Removes a directory and everything in it. Refuses a relative path, "/"
 // and one with ".."; true when nothing of it is left.

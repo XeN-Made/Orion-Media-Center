@@ -160,7 +160,6 @@ enum : int
     kItemNewTab,
     kItemUnplace,
     kItemLaunch,
-    kItemClose,
     kItemHide,
     kItemPlayWith,
     kItemRemove,
@@ -2493,10 +2492,6 @@ class Library final : public app::Concept
             remove.danger = true;
             items.push_back(remove);
         }
-        ui::MenuItem close = menu_item(tr("Close ORION"));
-        close.shortcut = tr("Hold Circle");
-        close.tag = kItemClose;
-        items.push_back(close);
         menu_.set_items(std::move(items));
         menu_.open(grid_.cell_rect(grid_.focus()), feedback);
     }
@@ -2841,11 +2836,6 @@ class Library final : public app::Concept
         if (tag == kItemRemoveHome || tag == kItemRemoveErase || tag == kItemRemoveRom)
         {
             ask_remove(tag, feedback);
-            return;
-        }
-        if (tag == kItemClose)
-        {
-            context_.exit_requested = true;
             return;
         }
         if (tag == kItemFavourite)
@@ -3594,7 +3584,7 @@ class Library final : public app::Concept
             // The helper keeps the old files here; it may not make folders in
             // ORION's data folder, so the folder is made for it, open to it.
             save::ensure_directory(update + "/previous");
-            ::chmod((update + "/previous").c_str(), 0777);
+            save::set_mode(update + "/previous", 0777, true);
             // What is staged says what it is: its own param.json. A release
             // built for another title ID is never installed over this one.
             std::string staged_id;
@@ -3713,7 +3703,7 @@ class Library final : public app::Concept
     // reads its defaults instead.
     static bool write_shared(const std::string &file, std::string_view bytes)
     {
-        return save::write_atomic(file, bytes).empty() && ::chmod(file.c_str(), 0666) == 0;
+        return save::write_atomic(file, bytes).empty(); // written open to every app
     }
 
     // The focused game's home-screen picture, once the focus has rested on it

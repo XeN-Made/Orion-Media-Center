@@ -186,17 +186,26 @@ int main()
     // ORION's folders from before its files were made open to everyone are
     // opened up once: its own and any copy a player made of it
     // (/data/orion-backup), which FTP could otherwise not change or delete.
-    if (std::string done; save::ensure_directory("/data/orion") &&
-                          !save::read_file("/data/orion/opened-up.txt", &done, 64))
+    // Until it has all worked, it is tried again on the next start; the
+    // file says how it went.
+    if (std::string done;
+        save::ensure_directory("/data/orion") &&
+        (!save::read_file("/data/orion/opened-up.txt", &done, 256) || done.rfind("done", 0) != 0))
     {
         int changed = 0;
+        int failed = 0;
         for (const save::DirectoryEntry &entry : save::list_directory("/data"))
         {
+            int missed = 0;
             if (entry.directory && entry.name.rfind("orion", 0) == 0)
-                changed += save::open_up_tree("/data/" + entry.name);
+                changed += save::open_up_tree("/data/" + entry.name, &missed);
+            failed += missed;
         }
-        save::write_atomic("/data/orion/opened-up.txt", "ORION's folders are open to FTP\n");
-        sys::log("[HUI] opened up %d files and folders for FTP", changed);
+        save::write_atomic("/data/orion/opened-up.txt",
+                           std::string(failed == 0 ? "done" : "not yet") + ": " +
+                               std::to_string(changed) + " opened up for FTP, " +
+                               std::to_string(failed) + " refused\n");
+        sys::log("[HUI] opened up %d files and folders for FTP, %d refused", changed, failed);
     }
     // Where a player pastes keys for other services (orion/steamgriddb.hpp):
     // there from the start, so it can be edited over FTP.
