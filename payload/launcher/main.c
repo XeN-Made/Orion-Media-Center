@@ -823,19 +823,29 @@ static void carry_records(const char *from, const char *to)
                                       : "move: could not copy the play log");
 }
 
+// Whether the system has the title installed, as ShadowMountPlus reports it
+// from the system's own database ("installed"). The files the system keeps
+// under /user/app are not a reliable sign from a payload: a test found the
+// title installed (and opened) while they never showed.
+static int installed(const char *title)
+{
+    static char body[16384];
+    char json[64];
+    char error[160] = "";
+    snprintf(json, sizeof(json), "{\"title_id\": \"%s\"}", title);
+    return smp_call("/api/v1/games/info", json, body, sizeof(body), error, sizeof(error)) &&
+           json_true(body, "installed");
+}
+
 // Waits for the system to list the new title. ShadowMountPlus finds a new
 // folder on its own schedule, so it is asked to scan now, and again every
 // RESCAN_EVERY_S (it defers a scan while an app is starting or open).
 static int wait_for_registration(const char *title)
 {
-    char app[64];
-    char meta[64];
-    snprintf(app, sizeof(app), "/user/app/%s/sce_sys/param.json", title);
-    snprintf(meta, sizeof(meta), "/user/appmeta/%s/param.json", title);
     static char body[4096];
     for (int waited = 0; waited < REGISTER_WAIT_S; ++waited)
     {
-        if (access(app, F_OK) == 0 || access(meta, F_OK) == 0)
+        if (waited % 3 == 0 && installed(title))
         {
             say("move: %s is registered after %d s", title, waited);
             return 1;

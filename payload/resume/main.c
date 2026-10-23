@@ -35,13 +35,14 @@
 #define ON_PATH "/data/orion/reopen-after-rest"
 #define TITLE_PATH "/data/orion/title.txt"
 #define LOG_PATH "/data/orion/resume.txt"
+#define TICK_PATH "/data/orion/resume-tick.txt" // rewritten every tick: was it alive, and when
 #define FALLBACK_TITLE "PPSA99061"
 #define WATCH_PORT 10161     // held while a watcher runs: one at a time
 #define TICK_S 2             // how often it looks at the clock
 #define REST_GAP_S 20        // a tick this much longer than asked was a rest
 #define SETTLE_S 6           // after a wake: the home screen comes back first
 #define USER_WAIT_S 120      // waiting for someone to sign in after the wake
-#define LAUNCH_TRIES 5
+#define LAUNCH_WAIT_S 300 // a wake often stops on the profile screen: until one is picked
 
 typedef struct launch_param
 {
@@ -73,6 +74,27 @@ static void say(const char *format, ...)
         return;
     write(fd, line, (size_t)length);
     close(fd);
+}
+
+// The clocks now, rewritten each tick: after a rest, the file shows whether
+// the watcher kept running through it, was frozen, or was ended.
+static void tick(long long wall, long long up)
+{
+    char text[96];
+    const int length = snprintf(text, sizeof(text), "wall %lld up %lld pid %d\n", wall, up,
+                                (int)getpid());
+    const int fd = open(TICK_PATH, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+    if (fd < 0)
+        return;
+    write(fd, text, (size_t)length);
+    close(fd);
+}
+
+static long long uptime_s(void)
+{
+    struct timespec now;
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    return (long long)now.tv_sec;
 }
 
 static int exists(const char *path)
@@ -138,19 +160,34 @@ static void open_orion(void)
     }
     char title[16];
     orion_title(title, sizeof(title));
-    for (int attempt = 1; attempt <= LAUNCH_TRIES; ++attempt)
+    // The system refuses a title until a profile is picked on the screen a
+    // wake can stop on (0x8094000a, seen on a console), so it is asked again
+    // every couple of seconds; anything coming to the front ends the wait.
+    int last = 0;
+    for (int waited = 0; waited < LAUNCH_WAIT_S; waited += 2)
     {
+        if (sceUserServiceGetForegroundUser(&user) != 0)
+            user = 0;
         launch_param_t param;
         memset(&param, 0, sizeof(param));
         param.structsize = sizeof(param);
         param.user_id = (uint32_t)user;
         const int result = sceSystemServiceLaunchApp(title, NULL, &param);
-        say("woke on the home screen: opening %s, try %d: 0x%08x", title, attempt,
-            (unsigned)result);
-        if (result >= 0 || sceSystemServiceGetAppIdOfRunningBigApp() > 0)
+        if (result != last || result >= 0)
+            say("opening %s after %d s: 0x%08x", title, waited, (unsigned)result);
+        last = result;
+        if (result >= 0)
             return;
-        sleep(1);
+        sleep(2);
+        const int app = sceSystemServiceGetAppIdOfRunningBigApp();
+        if (app > 0)
+        {
+            say("an app came to the front (0x%08x): not opening ORION", (unsigned)app);
+            return;
+        }
     }
+    say("the system did not take %s in %d s: giving up until the next wake", title,
+        LAUNCH_WAIT_S);
 }
 
 int main(void)
@@ -159,16 +196,25 @@ int main(void)
         return 0;
     const int held = claim();
     if (held < 0)
-        return 0; // a watcher is already running
+    {
+        say("a watcher is already running (pid %d here)", (int)getpid());
+        return 0;
+    }
     sceUserServiceInitialize(NULL);
-    say("watching for the console to wake");
+    say("watching for the console to wake (pid %d)", (int)getpid());
     time_t last = time(NULL);
+    long long last_up = uptime_s();
     for (;;)
     {
         sleep(TICK_S);
         const time_t now = time(NULL);
+        const long long up = uptime_s();
         const long long gap = (long long)(now - last) - TICK_S;
+        if (gap > 5 || up - last_up > TICK_S + 5)
+            say("tick gap: wall +%lld s, uptime +%lld s", (long long)(now - last), up - last_up);
         last = now;
+        last_up = up;
+        tick((long long)now, up);
         if (!exists(ON_PATH))
         {
             say("turned off in ORION: stopping");
