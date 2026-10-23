@@ -20,7 +20,7 @@ TEMPLATE = ROOT / "docs" / "lang" / "template.lang"
 BS = chr(92)
 
 CALL = re.compile(r"(?<![\w.>])((?:hui::)?i18n::)?(tr|trf|marked|plural)\s*\(")
-ESCAPES = {"n": "\n", "t": "\t", '"': '"', BS: BS, "'": "'"}
+ESCAPES = {"n": "\n", "r": "\r", "t": "\t", "0": "\0", '"': '"', BS: BS, "'": "'"}
 
 
 def literal(text, at):

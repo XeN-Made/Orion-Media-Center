@@ -21,6 +21,15 @@ namespace hui::orion
 inline constexpr const char *kLatestRelease =
     "https://api.github.com/repos/XeN-Made/Orion-Media-Center/releases/latest";
 inline constexpr const char *kReleasesPage = "github.com/XeN-Made/Orion-Media-Center/releases";
+// Only this repository's releases may stand in for the newest one
+// (UpdateCheck::set_source): a test release, a pre-release, a tag.
+inline constexpr const char *kReleasesApi =
+    "https://api.github.com/repos/XeN-Made/Orion-Media-Center/releases/";
+
+// The release to ask for: the first line of <state_dir>/update-feed.txt when
+// it names one of this repository's releases (a pre-release to try an update
+// before it is the newest), else kLatestRelease.
+std::string update_source(const std::string &state_dir);
 
 struct Release
 {
@@ -72,6 +81,11 @@ class UpdateCheck
     {
         log_ = std::move(path);
     }
+    // The release to ask about (update_source); kLatestRelease unless set.
+    void set_source(std::string url)
+    {
+        source_ = std::move(url);
+    }
     // False while a check is running.
     bool start(std::string current_version);
     State state() const;
@@ -90,6 +104,7 @@ class UpdateCheck
     Release latest_;
     std::string error_;
     std::string log_;
+    std::string source_ = kLatestRelease;
 };
 
 // ---- installing an update ----
@@ -108,8 +123,16 @@ std::string sum_for(std::string_view sums, std::string_view file_name);
 
 // Unpacks the title folder of a release ZIP ("PPSA99061/...") into `stage`
 // and writes files.txt. Entries outside it, or with "..", are refused.
+//
+// With moved_to, a ZIP whose title folder is another title ID is unpacked
+// too: ORION moving to a title ID of its own (a catalog gave its old one to
+// another app). *moved_to is that ID, or empty for an update in place, and
+// stage/title.txt says it for the install.
 bool stage_update(std::string_view zip, const std::string &title_id, const std::string &stage,
-                  std::string *error);
+                  std::string *error, std::string *moved_to = nullptr);
+
+// A title ID: four capital letters and five digits ("PPSA99061").
+bool is_title_id(std::string_view text);
 
 // Fetches a URL into a file at `path` (at most limit bytes). False with
 // *error set when it could not.

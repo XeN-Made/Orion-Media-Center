@@ -123,6 +123,7 @@ author =
 "Opening {0}: choose {1} there" = ""
 "ORION could not update to {0}: {1}" = ""
 "ORION does not know its own folder" = ""
+"ORION has a title ID of its own now ({0}): removing the old ORION. ORION opens again when it is done" = ""
 "ORION is updated to {0}" = ""
 "ORION MEDIA CENTER" = ""
 "ORION shows what ShadowMountPlus can mount from /data/homebrew," = ""

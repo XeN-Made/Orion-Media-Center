@@ -186,6 +186,8 @@ author = ORION
 "{0} title" = "{0} título"
 "{0} titles" = "{0} títulos"
 
+"ORION has a title ID of its own now ({0}): removing the old ORION. ORION opens again when it is done" = "ORION ya tiene su propio ID de título ({0}): quitando el ORION anterior. ORION se vuelve a abrir al terminar"
+
 # src/library/emulators.cpp
 "Every system its cores play" = "Todos los sistemas de sus núcleos"
 "GameCube, Wii" = "GameCube, Wii"

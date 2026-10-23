@@ -37,6 +37,13 @@
 //                              over <folder>'s, keep the old ones beside the
 //                              stage, refresh the home screen's pictures, and
 //                              say how it went in result.txt (orion/updates.hpp)
+//   @moved-from <title ID>\t<folder>
+//                              with @update: ORION moving to a title ID of its
+//                              own. <folder> is the old title's; the update
+//                              goes into a new folder (the request's title),
+//                              its play log comes along, and the new title
+//                              starts once the system has registered it (the
+//                              old one starts again if it never does)
 //
 // The helper stays until the title closes when it has something to watch
 // for, and ends at once otherwise.
@@ -787,6 +794,52 @@ static void write_update_result(const char *stage, const char *target, int ok,
     write_shared(path, text, (size_t)length);
 }
 
+// ---- @moved-from: ORION installed under a new title ID ----
+
+#define REGISTER_WAIT_S 120 // ShadowMountPlus registers a new folder in about ten seconds
+
+// A title's folder: under /data/homebrew or /mnt, named after the title.
+static int title_folder(const char *title, const char *folder)
+{
+    const size_t title_length = strlen(title);
+    const size_t length = strlen(folder);
+    return is_title_id(title) && strstr(folder, "..") == NULL && length > title_length + 1 &&
+           strcmp(folder + length - title_length, title) == 0 &&
+           folder[length - title_length - 1] == '/' &&
+           (strncmp(folder, "/data/homebrew/", 15) == 0 || strncmp(folder, "/mnt/", 5) == 0);
+}
+
+// What the old folder holds that is ORION's record rather than its program:
+// the play log (seconds played per game), copied unless the new one has it.
+static void carry_records(const char *from, const char *to)
+{
+    char source[1024];
+    char target[1024];
+    snprintf(source, sizeof(source), "%s/play-log.txt", from);
+    snprintf(target, sizeof(target), "%s/play-log.txt", to);
+    if (access(source, F_OK) == 0 && access(target, F_OK) != 0)
+        say(copy_file(source, target) ? "move: the play log came along"
+                                      : "move: could not copy the play log");
+}
+
+// Waits for the system to list the new title (its /user/app folder).
+static int wait_for_registration(const char *title)
+{
+    char path[64];
+    snprintf(path, sizeof(path), "/user/app/%s/sce_sys/param.json", title);
+    for (int waited = 0; waited < REGISTER_WAIT_S; ++waited)
+    {
+        if (access(path, F_OK) == 0)
+        {
+            say("move: %s is registered after %d s", title, waited);
+            return 1;
+        }
+        sleep(1);
+    }
+    say("move: %s is not registered after %d s", title, REGISTER_WAIT_S);
+    return 0;
+}
+
 // Only ORION's own staging folder, onto the title's own folder.
 static int update_allowed(const char *title, const char *stage, const char *target)
 {
@@ -836,6 +889,8 @@ int main(void)
     const char *remove_result = NULL;
     const char *update_stage = NULL;  // @update
     const char *update_target = NULL;
+    const char *moved_from = NULL;    // @moved-from
+    const char *moved_folder = NULL;
     int line_number = 0;
     int arguments = 0;
     for (char *line = request; *line != '\0';)
@@ -906,6 +961,14 @@ int main(void)
             update_stage = line + 8;
             update_target = tab + 1;
         }
+        else if (strncmp(line, "@moved-from ", 12) == 0 && strchr(line, '\t') != NULL)
+        {
+            // "@moved-from <old title ID>\t<its folder>"
+            char *tab = strchr(line, '\t');
+            *tab = '\0';
+            moved_from = line + 12;
+            moved_folder = tab + 1;
+        }
         else if (strncmp(line, "@remove-result ", 15) == 0)
             remove_result = line + 15;
         else if (arguments < MAX_ARGUMENTS)
@@ -962,14 +1025,45 @@ int main(void)
     if (update_stage != NULL)
     {
         char error[256] = "could not be applied";
+        const int moving = moved_from != NULL;
         int ok = update_allowed(job.title, update_stage, update_target);
+        if (ok && moving)
+            ok = title_folder(moved_from, moved_folder) && strcmp(moved_from, job.title) != 0;
         if (!ok)
             snprintf(error, sizeof(error), "the request names folders it may not change");
+        else if (moving && mkdir(update_target, 0777) != 0 && errno != EEXIST)
+        {
+            ok = 0;
+            snprintf(error, sizeof(error), "could not make %s (errno %d)", update_target, errno);
+        }
         else
+        {
+            if (moving)
+                notify("ORION is moving to its own title ID; it opens again in a moment");
             ok = apply_update(job.title, update_stage, update_target, error, sizeof(error));
+        }
         say("update: %s%s", ok ? "done" : "failed: ", ok ? "" : error);
-        notify(ok ? "ORION is updated; it opens again now" : "ORION could not be updated");
-        write_update_result(update_stage, update_target, ok, error);
+        if (ok && moving)
+        {
+            carry_records(moved_folder, update_target);
+            if (!wait_for_registration(job.title))
+            {
+                // The new ORION is in place but not listed yet: the old one
+                // opens instead, and the new tile appears when it is listed.
+                ok = 0;
+                snprintf(error, sizeof(error),
+                         "the system has not listed ORION's new title ID yet; it appears on the "
+                         "home screen shortly");
+            }
+        }
+        if (!moving || ok)
+            notify(ok ? "ORION is updated; it opens again now" : "ORION could not be updated");
+        else
+            notify("ORION could not move to its new title ID");
+        write_update_result(update_stage, ok || !moving ? update_target : moved_folder, ok, error);
+        // A move that did not finish opens the ORION that asked for it.
+        if (moving && !ok)
+            strcpy(job.title, moved_from);
     }
     for (int i = 0; i < file_count; ++i)
     {
