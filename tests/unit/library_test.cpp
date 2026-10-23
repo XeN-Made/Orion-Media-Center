@@ -14,6 +14,7 @@
 
 #include <cstdio>
 #include <string>
+#include <vector>
 
 namespace hui
 {
@@ -278,6 +279,44 @@ TEST(Library, AppliesThePlayersNamesForTitles)
     EXPECT_EQ(library::apply_names(shelf, {{"PPSA90180", ""}}), 1);
     EXPECT_EQ(shelf.titles[0].name, "Quiet Bay");
     EXPECT_EQ(shelf.titles[1].name, "Moon Garden");
+}
+
+TEST(Library, ShowsThePlayersOwnPictures)
+{
+    const std::string folder = ::testing::TempDir() + "orion-custom-art";
+    std::remove((folder + "/PPSA90180.png").c_str());
+    std::remove((folder + "/Moon Garden!.JPG").c_str());
+    ASSERT_TRUE(save::ensure_directory(folder));
+    ASSERT_TRUE(save::write_atomic(folder + "/PPSA90180.png", "png").empty());
+    ASSERT_TRUE(save::write_atomic(folder + "/Moon Garden!.JPG", "jpg").empty()); // folded
+    ASSERT_TRUE(save::write_atomic(folder + "/notes.txt", "not a picture").empty());
+
+    library::Library shelf;
+    shelf.titles.resize(3);
+    shelf.titles[0].id = "PPSA90180";
+    shelf.titles[0].name = "Quiet Bay";
+    shelf.titles[0].icon = "/data/homebrew/PPSA90180/sce_sys/icon0.png";
+    shelf.titles[1].id = "rom-0000000000aa";
+    shelf.titles[1].name = "moon garden";
+    shelf.titles[2].id = "PPSA90181";
+    shelf.titles[2].name = "Paper Kites";
+    shelf.titles[2].icon = "kites.png";
+
+    const std::vector<std::string> changed = library::apply_custom_art(shelf, folder);
+    EXPECT_EQ(changed, (std::vector<std::string>{"PPSA90180", "rom-0000000000aa"}));
+    EXPECT_EQ(shelf.titles[0].icon, folder + "/PPSA90180.png");
+    EXPECT_EQ(shelf.titles[0].own_icon, "/data/homebrew/PPSA90180/sce_sys/icon0.png");
+    EXPECT_EQ(shelf.titles[1].icon, folder + "/Moon Garden!.JPG");
+    EXPECT_EQ(shelf.titles[2].icon, "kites.png");
+    EXPECT_TRUE(library::apply_custom_art(shelf, folder).empty()); // nothing new
+
+    // Its file gone, a title has its own picture back, or none if it had none.
+    std::remove((folder + "/PPSA90180.png").c_str());
+    std::remove((folder + "/Moon Garden!.JPG").c_str());
+    EXPECT_EQ(library::apply_custom_art(shelf, folder).size(), 2u);
+    EXPECT_EQ(shelf.titles[0].icon, "/data/homebrew/PPSA90180/sce_sys/icon0.png");
+    EXPECT_TRUE(shelf.titles[0].own_icon.empty());
+    EXPECT_EQ(shelf.titles[1].icon, "");
 }
 
 } // namespace

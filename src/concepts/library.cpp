@@ -167,9 +167,22 @@ enum : int
     kItemRemoveRom,
     kItemHdArt,
     kItemRename,
-    kItemMove = 100,   // + the tab's index
-    kItemPlayer = 300, // 0: the default, then 1 + an index in library::players_for
+    kItemPicture,         // Choose picture…
+    kItemOwnPicture,      // Use its own picture
+    kItemPickUp,          // the picture browser: up one folder
+    kItemPickMore,        // its next page
+    kItemPickLess,        // its page before
+    kItemMove = 100,      // + the tab's index
+    kItemPlayer = 300,    // 0: the default, then 1 + an index in library::players_for
+    kItemPickPlace = 500, // + an index in pick_places_
+    kItemPickDir = 1000,  // + an index in pick_dirs_
+    kItemPickFile = 3000, // + an index in pick_files_
 };
+
+// The picture browser shows this many folders and pictures at a time: the
+// menu does not scroll.
+constexpr int kPickPage = 10;
+constexpr std::size_t kPickMost = 1500; // entries read from one folder
 
 constexpr const char *kTechniques[] = {
     "Reads the console's library the way ShadowMountPlus does: folders, images, icon cache",
@@ -2036,6 +2049,153 @@ class Library final : public app::Concept
 
     // ---- menus ----
 
+    // ---- the player's own picture for a title ----
+
+    std::string custom_art_folder() const
+    {
+        return context_.library.state_dir + "/custom-art";
+    }
+
+    // Choose picture…: the places, then folders and pictures, a page at a
+    // time in the title's menu (pick_dir_ empty: the places).
+    void open_picture_menu(app::Feedback &feedback)
+    {
+        std::vector<ui::MenuItem> items;
+        const auto add = [&](std::string label, int tag, bool disabled = false)
+        {
+            ui::MenuItem item = menu_item(std::move(label));
+            item.tag = tag;
+            item.disabled = disabled;
+            items.push_back(item);
+        };
+        pick_dirs_.clear();
+        pick_files_.clear();
+        if (pick_dir_.empty())
+        {
+            save::ensure_directory(custom_art_folder());
+            pick_places_.clear();
+            pick_places_.emplace_back(tr("Your pictures"), custom_art_folder());
+            for (int i = 0; i < 8; ++i)
+                pick_places_.emplace_back(trf("USB drive {0}", {std::to_string(i + 1)}),
+                                          "/mnt/usb" + std::to_string(i));
+            pick_places_.emplace_back(tr("Extended storage"), "/mnt/ext0");
+            pick_places_.emplace_back(tr("The console's storage"), "/data");
+            if (!sys::on_console())
+                pick_places_.emplace_back(tr("This folder (PC preview)"), ".");
+            add(tr("Choose a picture"), 0, true);
+            for (std::size_t i = 0; i < pick_places_.size(); ++i)
+            {
+                struct stat info = {};
+                if (::stat(pick_places_[i].second.c_str(), &info) == 0 && S_ISDIR(info.st_mode))
+                    add(pick_places_[i].first, kItemPickPlace + static_cast<int>(i));
+            }
+        }
+        else
+        {
+            for (const save::DirectoryEntry &entry : save::list_directory(pick_dir_))
+            {
+                if (entry.name.empty() || entry.name.front() == '.' ||
+                    pick_dirs_.size() + pick_files_.size() >= kPickMost)
+                    continue;
+                std::string lower = entry.name;
+                for (char &c : lower)
+                    c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+                const auto ends = [&](std::string_view end)
+                {
+                    return lower.size() > end.size() &&
+                           lower.compare(lower.size() - end.size(), end.size(), end) == 0;
+                };
+                if (entry.directory)
+                    pick_dirs_.push_back(entry.name);
+                else if (ends(".png") || ends(".jpg") || ends(".jpeg"))
+                    pick_files_.push_back(entry.name);
+            }
+            std::sort(pick_dirs_.begin(), pick_dirs_.end());
+            std::sort(pick_files_.begin(), pick_files_.end());
+            add(pick_dir_, 0, true);
+            add(tr("Up one folder"), kItemPickUp);
+            const int total = static_cast<int>(pick_dirs_.size() + pick_files_.size());
+            pick_page_ = std::clamp(pick_page_, 0, std::max(0, (total - 1) / kPickPage));
+            if (pick_page_ > 0)
+                add(tr("Back…"), kItemPickLess);
+            for (int i = pick_page_ * kPickPage; i < std::min(total, (pick_page_ + 1) * kPickPage);
+                 ++i)
+            {
+                const std::size_t index = static_cast<std::size_t>(i);
+                if (index < pick_dirs_.size())
+                    add(pick_dirs_[index] + "/", kItemPickDir + i);
+                else
+                {
+                    const int file = i - static_cast<int>(pick_dirs_.size());
+                    add(pick_files_[static_cast<std::size_t>(file)], kItemPickFile + file);
+                }
+            }
+            if ((pick_page_ + 1) * kPickPage < total)
+                add(tr("More…"), kItemPickMore);
+            if (total == 0)
+                add(tr("No pictures or folders here"), 0, true);
+        }
+        menu_.set_items(std::move(items));
+        menu_.open(grid_.cell_rect(grid_.focus()), feedback);
+    }
+
+    // The chosen file becomes the title's picture: copied into the player's
+    // pictures as <ID>.<its extension>, which wins over a picture named after
+    // the title (library::apply_custom_art).
+    void choose_picture(const std::string &file, app::Feedback &feedback)
+    {
+        const Title *title = find_title(menu_title_);
+        std::string bytes;
+        if (title == nullptr || !save::read_file(file, &bytes, 32u << 20) || bytes.empty())
+        {
+            show_note(false, trf("Could not read {0}", {file}));
+            feedback.play(audio::Cue::error);
+            return;
+        }
+        std::string extension = file.substr(file.rfind('.'));
+        for (char &c : extension)
+            c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        const std::string folder = custom_art_folder();
+        save::ensure_directory(folder);
+        for (const char *old : {".png", ".jpg", ".jpeg"})
+            std::remove((folder + "/" + title->id + old).c_str());
+        const std::string failed = save::write_atomic(folder + "/" + title->id + extension, bytes);
+        if (!failed.empty())
+        {
+            show_note(false, trf("Could not save the picture: {0}", {failed}));
+            feedback.play(audio::Cue::error);
+            return;
+        }
+        context_.custom_art_changed = true;
+        show_note(true, trf("New picture for {0}", {title->name}));
+        feedback.play(audio::Cue::saved);
+    }
+
+    // Use its own picture: the title's file in the player's pictures goes. A
+    // picture named after the game (not its ID) is the player's file: said,
+    // not deleted.
+    void use_own_picture(app::Feedback &feedback)
+    {
+        const Title *title = find_title(menu_title_);
+        if (title == nullptr)
+            return;
+        const std::string folder = custom_art_folder();
+        for (const char *old : {".png", ".jpg", ".jpeg"})
+            std::remove((folder + "/" + title->id + old).c_str());
+        const std::string shown = title->icon;
+        context_.custom_art_changed = true;
+        if (shown.compare(0, folder.size() + 1, folder + "/") == 0 &&
+            shown.compare(folder.size() + 1, title->id.size() + 1, title->id + ".") != 0)
+        {
+            show_note(false, trf("{0} shows {1}: remove that file to see its own picture",
+                                 {title->name, shown}));
+            feedback.play(audio::Cue::error);
+            return;
+        }
+        show_note(true, trf("{0} has its own picture again", {title->name}));
+        feedback.play(audio::Cue::select);
+    }
+
     void open_title_menu(app::Feedback &feedback)
     {
         const Title &title = focused();
@@ -2070,6 +2230,15 @@ class Library final : public app::Concept
         ui::MenuItem rename = menu_item(tr("Rename…"));
         rename.tag = kItemRename;
         items.push_back(rename);
+        ui::MenuItem picture = menu_item(tr("Choose picture…"));
+        picture.tag = kItemPicture;
+        items.push_back(picture);
+        if (!title.own_icon.empty())
+        {
+            ui::MenuItem own = menu_item(tr("Use its own picture"));
+            own.tag = kItemOwnPicture;
+            items.push_back(own);
+        }
         // A sharper picture: the home screen's for a console title shown from
         // ShadowMountPlus's small copy, box art again for a game.
         if (title.is_rom() || title.icon.find("/icon-cache/") != std::string::npos ||
@@ -2499,6 +2668,54 @@ class Library final : public app::Concept
             }
             show_note(true, trf("{0} plays with {1}", {title->name, player_label(*title)}));
             feedback.play(audio::Cue::select);
+            return;
+        }
+        if (tag == kItemPicture)
+        {
+            pick_dir_.clear();
+            pick_page_ = 0;
+            open_picture_menu(feedback);
+            return;
+        }
+        if (tag == kItemOwnPicture)
+        {
+            use_own_picture(feedback);
+            return;
+        }
+        if (tag == kItemPickUp || tag == kItemPickMore || tag == kItemPickLess ||
+            (tag >= kItemPickPlace && tag < kItemPickDir) ||
+            (tag >= kItemPickDir && tag < kItemPickFile))
+        {
+            if (tag == kItemPickMore)
+                ++pick_page_;
+            else if (tag == kItemPickLess)
+                pick_page_ = std::max(0, pick_page_ - 1);
+            else
+            {
+                pick_page_ = 0;
+                if (tag == kItemPickUp)
+                {
+                    const bool place =
+                        std::any_of(pick_places_.begin(), pick_places_.end(),
+                                    [&](const auto &p) { return p.second == pick_dir_; });
+                    const std::size_t slash = pick_dir_.rfind('/');
+                    pick_dir_ = place || slash == std::string::npos || slash == 0
+                                    ? std::string()
+                                    : pick_dir_.substr(0, slash);
+                }
+                else if (tag < kItemPickDir)
+                    pick_dir_ = pick_places_[static_cast<std::size_t>(tag - kItemPickPlace)].second;
+                else
+                    pick_dir_ += "/" + pick_dirs_[static_cast<std::size_t>(tag - kItemPickDir)];
+            }
+            open_picture_menu(feedback);
+            return;
+        }
+        if (tag >= kItemPickFile)
+        {
+            choose_picture(pick_dir_ + "/" +
+                               pick_files_[static_cast<std::size_t>(tag - kItemPickFile)],
+                           feedback);
             return;
         }
         if (tag == kItemRename)
@@ -4894,7 +5111,14 @@ class Library final : public app::Concept
     // A check whose request never returns cannot be stopped, only left
     // behind: Check now starts a new one (check_for_updates).
     std::unique_ptr<orion::UpdateCheck> updates_ = new_update_check();
-    bool data_missing_ = false;        // no /data in ORION's sandbox (ShadowMountPlus)
+    bool data_missing_ = false; // no /data in ORION's sandbox (ShadowMountPlus)
+    // Choose picture…: where the browser is (empty: the places), what is
+    // there, and the page shown.
+    std::string pick_dir_;
+    std::vector<std::pair<std::string, std::string>> pick_places_;
+    std::vector<std::string> pick_dirs_;
+    std::vector<std::string> pick_files_;
+    int pick_page_ = 0;
     float check_started_ = 0.0f;       // clock_ when the running check began
     bool update_asked_ = false;        // the check this launch makes by itself has started
     bool manual_update_check_ = false; // the running check was asked for: say how it went

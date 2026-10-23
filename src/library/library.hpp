@@ -52,6 +52,9 @@ struct Title
     bool homebrew = false;
     std::string path; // the folder or image file it was found at
     std::string icon; // a PNG to show for it; empty when there is none
+    // The picture it came with while one of the player's shows instead
+    // (apply_custom_art); else empty.
+    std::string own_icon;
     // When the folder or image last changed (seconds since 1970): the best
     // "recently added" the file system offers. 0 when unknown.
     std::int64_t added = 0;
@@ -207,6 +210,12 @@ int prefer_saved_icons(Library &library, const std::string &folder);
 // The player's names for titles (id, name); an empty name gives a title the
 // name it came with back. Returns how many titles changed.
 int apply_names(Library &library, const std::vector<std::pair<std::string, std::string>> &names);
+// The player's own pictures, in <folder> (/data/orion/custom-art): a PNG or
+// JPEG named after a title's ID, its name, or a game's file shows instead of
+// the title's picture; names match as box art does (art_key), so case and
+// punctuation do not matter. A title whose file is gone gets its own picture
+// back. Returns the IDs whose picture changed (their textures are stale).
+std::vector<std::string> apply_custom_art(Library &library, const std::string &folder);
 // The titles the system has registered that ORION's own scan does not find:
 // installed packages, and images ShadowMountPlus mounted from wherever it
 // found them. orion/registered_titles.hpp keeps them in a cache, one line a

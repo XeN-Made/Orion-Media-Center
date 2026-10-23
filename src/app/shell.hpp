@@ -82,6 +82,10 @@ class Shell
     {
         return std::exchange(context_.registered_changed, false);
     }
+    bool take_custom_art_change()
+    {
+        return std::exchange(context_.custom_art_changed, false);
+    }
     std::vector<std::pair<std::string, std::string>> take_new_names()
     {
         return std::exchange(context_.new_names, {});

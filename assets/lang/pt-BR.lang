@@ -187,9 +187,21 @@ author = ORION
 "{0} titles" = "{0} títulos"
 
 
-
 "ORION cannot reach /data: update ShadowMountPlus, keep its backport_fakelib on and turn BackPork off" = "O ORION não consegue acessar /data: atualize o ShadowMountPlus, deixe backport_fakelib ligado e desligue o BackPork"
 "ORION cannot reach /data (see ShadowMountPlus)" = "O ORION não consegue acessar /data (veja o ShadowMountPlus)"
+
+"Your pictures" = "Suas imagens"
+"Choose a picture" = "Escolha uma imagem"
+"Back…" = "Voltar…"
+"More…" = "Mais…"
+"No pictures or folders here" = "Não há imagens nem pastas aqui"
+"Could not read {0}" = "Não foi possível ler {0}"
+"Could not save the picture: {0}" = "Não foi possível salvar a imagem: {0}"
+"New picture for {0}" = "Nova imagem para {0}"
+"{0} shows {1}: remove that file to see its own picture" = "{0} mostra {1}: remova esse arquivo para ver a própria imagem"
+"{0} has its own picture again" = "{0} voltou à própria imagem"
+"Choose picture…" = "Escolher imagem…"
+"Use its own picture" = "Usar a própria imagem"
 
 # src/library/emulators.cpp
 "Every system its cores play" = "Todos os sistemas dos seus núcleos"

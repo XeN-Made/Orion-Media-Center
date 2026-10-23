@@ -12,6 +12,7 @@
 #include "library/library.hpp"
 
 #include "core/save_file.hpp"
+#include "library/art_match.hpp"
 #include "library/json.hpp"
 
 #include <algorithm>
@@ -21,6 +22,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <sys/stat.h>
+#include <unordered_map>
 
 namespace hui::library
 {
@@ -389,6 +391,67 @@ int apply_names(Library &library, const std::vector<std::pair<std::string, std::
                 title.name = wanted;
                 ++changed;
             }
+        }
+    }
+    return changed;
+}
+
+std::vector<std::string> apply_custom_art(Library &library, const std::string &folder)
+{
+    // The folder is read once: each picture by its exact stem and folded.
+    std::unordered_map<std::string, std::string> exact;
+    std::unordered_map<std::string, std::string> folded;
+    for (const save::DirectoryEntry &entry : save::list_directory(folder))
+    {
+        const std::size_t dot = entry.name.rfind('.');
+        if (entry.directory || dot == std::string::npos || dot == 0)
+            continue;
+        std::string extension = entry.name.substr(dot + 1);
+        for (char &c : extension)
+            c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        if (extension != "png" && extension != "jpg" && extension != "jpeg")
+            continue;
+        const std::string stem = entry.name.substr(0, dot);
+        const std::string path = folder + "/" + entry.name;
+        exact.emplace(stem, path);
+        const std::string key = art_key(stem);
+        if (!key.empty())
+            folded.emplace(key, path);
+    }
+    const auto by_key = [&](const std::string &name) -> std::string
+    {
+        const auto found = folded.find(art_key(name));
+        return name.empty() || found == folded.end() ? std::string() : found->second;
+    };
+    std::vector<std::string> changed;
+    for (Title &title : library.titles)
+    {
+        std::string picture;
+        if (const auto found = exact.find(title.id); found != exact.end())
+            picture = found->second;
+        if (picture.empty())
+            picture = by_key(title.name);
+        if (picture.empty())
+            picture = by_key(title.own_name);
+        if (picture.empty() && !title.rom.empty())
+        {
+            const std::size_t slash = title.rom.rfind('/');
+            const std::string file = title.rom.substr(slash == std::string::npos ? 0 : slash + 1);
+            picture = by_key(file.substr(0, file.rfind('.')));
+        }
+        if (!picture.empty() && title.icon != picture)
+        {
+            if (title.own_icon.empty())
+                title.own_icon = title.icon.empty() ? std::string("-") : title.icon;
+            title.icon = picture;
+            changed.push_back(title.id);
+        }
+        else if (picture.empty() && !title.own_icon.empty())
+        {
+            // "-": it had no picture before the player's.
+            title.icon = title.own_icon == "-" ? std::string() : title.own_icon;
+            title.own_icon.clear();
+            changed.push_back(title.id);
         }
     }
     return changed;

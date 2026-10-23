@@ -91,6 +91,9 @@ struct Context
     // (orion/registered_titles.hpp) sets this; the app merges them between
     // frames and bumps library.generation.
     bool registered_changed = false;
+    // A design that changed the player's own pictures (<state>/custom-art)
+    // sets this; the app applies them between frames (library::apply_custom_art).
+    bool custom_art_changed = false;
     // Titles the player renamed (id, name; empty: its own again): the app
     // applies them between frames and bumps library.generation.
     std::vector<std::pair<std::string, std::string>> new_names = {};

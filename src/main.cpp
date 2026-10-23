@@ -273,6 +273,7 @@ int main()
         library::prefer_saved_icons(titles, titles.state_dir + "/icons");
         scan_emulators(true);
         library::apply_names(titles, orion::load_prefs(titles.state_dir).title_names);
+        library::apply_custom_art(titles, titles.state_dir + "/custom-art");
         const int icons = library::load_icons(titles, renderer.batch());
         char summary[128];
         std::snprintf(summary, sizeof(summary), "titles=%zu icons=%d in %lld ms",
@@ -421,6 +422,7 @@ int main()
             }
             const int games = scan_emulators(false);
             library::apply_names(titles, orion::load_prefs(titles.state_dir).title_names);
+            library::apply_custom_art(titles, titles.state_dir + "/custom-art");
             // A game still there keeps its picture; the others' go.
             for (library::Title &title : titles.titles)
             {
@@ -460,9 +462,32 @@ int main()
                                           titles.self_id) > 0)
             {
                 library::apply_names(titles, orion::load_prefs(titles.state_dir).title_names);
+                library::apply_custom_art(titles, titles.state_dir + "/custom-art");
                 library::load_icons(titles, renderer.batch());
                 ++titles.generation;
             }
+        }
+        // The player chose a picture for a title, or gave it its own back.
+        if (shell.take_custom_art_change())
+        {
+            for (const std::string &id :
+                 library::apply_custom_art(titles, titles.state_dir + "/custom-art"))
+            {
+                for (library::Title &title : titles.titles)
+                {
+                    if (title.id != id)
+                        continue;
+                    if (title.texture != 0)
+                        renderer.batch().delete_texture(title.texture);
+                    if (title.sharp_texture != 0)
+                        renderer.batch().delete_texture(title.sharp_texture);
+                    title.texture = title.sharp_texture = 0;
+                    title.sharp_width = title.sharp_height = 0;
+                    if (!title.icon.empty())
+                        icon_queue.insert(icon_queue.begin(), id);
+                }
+            }
+            ++titles.generation;
         }
         shell.update(input, dt);
         // Games' box art that comes into view, a few a frame. The newest
