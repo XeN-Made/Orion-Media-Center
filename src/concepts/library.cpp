@@ -3162,18 +3162,27 @@ class Library final : public app::Concept
             // ORION's data folder, so the folder is made for it, open to it.
             save::ensure_directory(update + "/previous");
             ::chmod((update + "/previous").c_str(), 0777);
+            // What is staged says what it is: its own param.json, not a note
+            // beside it. The stage is shared by every ORION on the console,
+            // and one under another title ID may have staged it for itself.
             std::string moved_to;
-            save::read_file(update + "/stage/title.txt", &moved_to, 64);
-            moved_to = moved_to.substr(0, moved_to.find_first_of("\r\n"));
-            if (!orion::is_title_id(moved_to) || moved_to == self)
+            std::string staged;
+            json::Value root;
+            if (save::read_file(update + "/stage/sce_sys/param.json", &staged, 1u << 20) &&
+                json::parse(staged, &root))
+                moved_to = root["titleId"].string_or("");
+            if (!orion::is_title_id(moved_to))
+                why = tr("no update is ready");
+            else if (moved_to == self)
             {
                 orion::update_log(update_log_path(), "orion: handing the install to the helper");
                 why = send_helper(self + "\n@update " + update + "/stage\t" + self_path + "\n");
             }
             else
             {
-                // A new title ID: installed beside this one, which the new
-                // ORION removes when it first opens (retire_old_orion). The
+                // A new title ID: installed beside this one, which the helper
+                // deletes once the system lists the new one (and the new ORION
+                // when it opens, if that did not happen: retire_old_orion). The
                 // console settings live in this title's own save area, which
                 // the new one cannot read: they wait in the shared folder.
                 const std::string target = self_path.substr(0, self_path.rfind('/') + 1) + moved_to;

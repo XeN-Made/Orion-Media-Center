@@ -865,12 +865,30 @@ static int wait_for_registration(const char *title)
     return 0;
 }
 
-// Only ORION's own staging folder, onto the title's own folder.
+// Whether the staged param.json is the title's: its "titleId" is <title>.
+// An update staged for another title ID never goes over this one.
+static int staged_for(const char *title, const char *stage)
+{
+    static char param[64 * 1024];
+    char path[1024];
+    snprintf(path, sizeof(path), "%s/sce_sys/param.json", stage);
+    const long size = read_up_to(path, param, sizeof(param) - 1);
+    if (size <= 0)
+        return 0;
+    param[size] = '\0';
+    char value[16] = "";
+    json_text(param, "titleId", value, sizeof(value));
+    return strcmp(value, title) == 0;
+}
+
+// Only ORION's own staging folder, onto the title's own folder, and only
+// what was staged for that title.
 static int update_allowed(const char *title, const char *stage, const char *target)
 {
     const size_t title_length = strlen(title);
     const size_t target_length = strlen(target);
-    return strncmp(stage, UPDATE_ROOT, strlen(UPDATE_ROOT)) == 0 && strstr(stage, "..") == NULL &&
+    return staged_for(title, stage) && strncmp(stage, UPDATE_ROOT, strlen(UPDATE_ROOT)) == 0 &&
+           strstr(stage, "..") == NULL &&
            strstr(target, "..") == NULL && target_length > title_length + 1 &&
            strcmp(target + target_length - title_length, title) == 0 &&
            target[target_length - title_length - 1] == '/' &&
