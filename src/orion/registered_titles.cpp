@@ -1,4 +1,4 @@
-// ORION Media Center - The titles the system has registered, read through local FTP.
+// ORION Media Center - The titles the system has registered: ShadowMountPlus's list and local FTP.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 
@@ -8,8 +8,10 @@
 #include "library/library.hpp"
 #include "orion/art_fetcher.hpp"
 #include "orion/local_ftp.hpp"
+#include "orion/shadowmount_api.hpp"
 
 #include <algorithm>
+#include <map>
 #include <sys/stat.h>
 #include <utility>
 #include <vector>
@@ -69,8 +71,10 @@ void RegisteredTitles::run(std::string state_dir, int port)
     Result result;
     LocalFtp ftp;
     std::vector<FtpEntry> apps;
-    result.server = ftp.open(port) && ftp.list("/user/app", &apps);
-    std::vector<std::string> lines;
+    const bool listed = ftp.open(port) && ftp.list("/user/app", &apps);
+    // By title ID: the FTP server's (which knows each title's category from
+    // its metadata) first, then ShadowMountPlus's for anything it missed.
+    std::map<std::string, std::string> lines;
     const std::string icons = state_dir + "/icons";
     make_directories(icons);
     for (const FtpEntry &app : apps)
@@ -87,7 +91,7 @@ void RegisteredTitles::run(std::string state_dir, int port)
              library::read_param_sfo(text, &title));
         if (!known || title.id != app.name || title.name.empty())
             continue;
-        lines.push_back(library::registered_line(title));
+        lines[title.id] = library::registered_line(title);
         ++result.titles;
         const std::string icon = icons + "/" + app.name + ".png";
         struct stat info = {};
@@ -97,11 +101,35 @@ void RegisteredTitles::run(std::string state_dir, int port)
             ++result.icons;
     }
     ftp.close();
+    // ShadowMountPlus's own list: every title it mounted or found installed,
+    // backups on exFAT drives included, whether or not an FTP server runs.
+    std::string answer;
+    std::string error;
+    std::vector<library::Title> mounted;
+    const bool asked = shadowmount_request(kShadowMountPort, "/api/v1/games",
+                                           R"({"include_size": false})", &answer, &error) &&
+                       parse_shadowmount_games(answer, &mounted);
+    for (const library::Title &title : mounted)
+    {
+        if (lines.count(title.id) != 0)
+            continue;
+        lines[title.id] = library::registered_line(title);
+        ++result.titles;
+        const std::string icon = icons + "/" + title.id + ".png";
+        struct stat info = {};
+        std::string picture;
+        if (::stat(icon.c_str(), &info) != 0 &&
+            shadowmount_request(kShadowMountPort, "/api/v1/games/icon?title_id=" + title.id, "",
+                                &picture, &error, kMaxIcon) &&
+            picture.size() > 8 && picture.compare(1, 3, "PNG") == 0 &&
+            save::write_atomic(icon, picture).empty())
+            ++result.icons;
+    }
+    result.server = listed || asked;
     if (result.server)
     {
-        std::sort(lines.begin(), lines.end());
         std::string cache;
-        for (const std::string &line : lines)
+        for (const auto &[id, line] : lines) // sorted by ID, as the cache always was
             cache += line;
         std::string before;
         save::read_file(state_dir + "/registered.tsv", &before, 4u << 20);
