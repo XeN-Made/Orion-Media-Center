@@ -18,7 +18,7 @@
 //     removes that file when the setting is turned off).
 //
 // The title it opens is the one in /data/orion/title.txt, which ORION writes
-// as it starts, so it follows ORION to a new title ID. Every step is appended
+// as it starts, rather than a title ID fixed in this file. Every step is appended
 // to /data/orion/resume.txt.
 
 #include <arpa/inet.h>
