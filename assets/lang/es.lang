@@ -290,6 +290,7 @@ author = ORION
 "USB drive" = "Unidad USB"
 
 # src/orion/settings_panel.cpp
+"A name of your own on the tab bar; empty gives it its own back" = "Un nombre propio en la barra de pestañas; vacío le devuelve el suyo"
 "Open ORION after rest mode" = "Abrir ORION tras el modo de reposo"
 "When the console wakes on the home screen, ORION opens; a game left running stays in front" = "Si la consola despierta en la pantalla de inicio, ORION se abre; un juego que dejaste abierto sigue delante"
 "Finds {0}, and their games" = "Busca {0} y sus juegos"

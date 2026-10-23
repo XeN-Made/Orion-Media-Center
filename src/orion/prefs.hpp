@@ -77,6 +77,7 @@ struct TabPrefs
     std::string sort; // a sort key; empty: the Library's
     std::string view; // a view key; empty: the Library's
     bool hidden = false;
+    std::string name; // the player's name for a built-in tab; empty: its own
 };
 
 // How a tab shows its titles: covers in a grid, big cases three to a screen
@@ -224,9 +225,15 @@ struct LibraryPrefs
     // The tab's own view key, or empty for the Library's.
     std::string tab_view(const std::string &tab) const;
     void set_tab_view(const std::string &tab, const std::string &view);
-    // "all" never hides; a system's tab hides by switching the system off.
+    // Any tab hides, All too (the tab bar keeps All when every tab is
+    // hidden); a system's tab hides by switching the system off.
     bool tab_hidden(const std::string &tab) const;
     void set_tab_hidden(const std::string &tab, bool hidden);
+    // The player's name for a built-in tab (a shelf, Emulators, a system),
+    // or empty for its own. The player's own tabs keep theirs in CustomTab.
+    std::string tab_name(const std::string &tab) const;
+    // Empty gives the tab its own name back. One line, up to kMaxTitleName.
+    void set_tab_name(const std::string &tab, const std::string &name);
 
     // Titles (and games for an emulator) the player hid: they leave every
     // tab but Hidden. By item id (library::is_item_id).

@@ -567,13 +567,19 @@ void SettingsPanel::build_tab_page(const LibraryPrefs &prefs)
     }
     form_.add_header(tr("Tabs") + "  ·  " + tab->name);
     const library::System *system = system_of(page_);
-    if (page_ != "all")
     {
         const bool shown =
             system != nullptr ? prefs.system_enabled(system->name) : !prefs.tab_hidden(page_);
         form_.add_toggle(kPageShow, tr("Show this tab"), shown).description =
             system != nullptr ? tr("Off hides the tab and its games everywhere")
                               : tr("Off takes it off the tab bar; nothing is deleted");
+    }
+    // Every tab can be renamed: the player's own here, a built-in one below.
+    if (page_.rfind("tab:", 0) != 0)
+    {
+        ui::FormRow &rename = form_.add_action(kPageRename, tr("Rename"));
+        rename.chevron = true;
+        rename.description = tr("A name of your own on the tab bar; empty gives it its own back");
     }
     std::vector<std::string> themes = {tr("Main theme")};
     int theme = 0;
@@ -1469,8 +1475,9 @@ SettingsPanel::Change SettingsPanel::edit_tab_page(int id, LibraryPrefs *prefs)
         }
         return Change::prefs;
     case kPageRename:
-        tab_id_ = custom;
-        return custom.empty() ? Change::none : Change::rename_tab;
+        // The player's own tab by its id, a built-in one by its key.
+        tab_id_ = custom.empty() ? page_ : custom;
+        return Change::rename_tab;
     case kPageLeft:
     case kPageRight:
         return !custom.empty() && prefs->move_tab(custom, id == kPageLeft ? -1 : 1) ? Change::prefs

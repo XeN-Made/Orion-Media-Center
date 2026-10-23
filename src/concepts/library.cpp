@@ -1601,9 +1601,12 @@ class Library final : public app::Concept
     {
         std::vector<orion::TabEntry> tabs;
         for (const Shelf &shelf : kShelves)
-            tabs.push_back({shelf.key, tr(shelf.name)});
+            tabs.push_back({shelf.key, tab_label(shelf.key, tr(shelf.name))});
+        if (prefs_.group_systems && !context_.library.emulator.systems.empty())
+            tabs.push_back({kEmulatorsTab, tab_label(kEmulatorsTab, tr("Emulators"))});
         for (const library::System &system : context_.library.emulator.systems)
-            tabs.push_back({"sys:" + system.name, system.short_name});
+            tabs.push_back(
+                {"sys:" + system.name, tab_label("sys:" + system.name, system.short_name)});
         for (const orion::CustomTab &tab : prefs_.tabs)
             tabs.push_back({"tab:" + tab.id, tab.name});
         return tabs;
@@ -1821,7 +1824,8 @@ class Library final : public app::Concept
         {
             menu_tab_ = settings_.tab_id();
             const orion::CustomTab *tab = prefs_.tab(menu_tab_);
-            start_typing(Typing::rename_tab, tab != nullptr ? tab->name : "");
+            start_typing(Typing::rename_tab,
+                         tab != nullptr ? tab->name : prefs_.tab_name(menu_tab_));
             feedback.play(audio::Cue::modal_open);
             break;
         }
@@ -2042,7 +2046,11 @@ class Library final : public app::Concept
         }
         if (typing == Typing::rename_tab)
         {
-            prefs_.rename_tab(menu_tab_, name_);
+            if (prefs_.tab(menu_tab_) != nullptr)
+                prefs_.rename_tab(menu_tab_, name_);
+            else
+                prefs_.set_tab_name(menu_tab_, name_); // a built-in tab; empty: its own name
+            settings_.set_tabs(every_tab());
         }
         else
         {
@@ -4161,6 +4169,13 @@ class Library final : public app::Concept
         return std::clamp(grid_.focus(), 0, std::max(0, static_cast<int>(view_.size()) - 1));
     }
 
+    // A built-in tab's name on the tab bar: the player's, or its own.
+    std::string tab_label(const std::string &key, std::string own) const
+    {
+        std::string name = prefs_.tab_name(key);
+        return name.empty() ? own : name;
+    }
+
     // The tab row: the built-in shelves, then the player's tabs. The active
     // tab is chosen by key, so it survives tabs being added, moved or removed.
     void rebuild_tabs(const std::string &active)
@@ -4179,7 +4194,7 @@ class Library final : public app::Concept
         for (const Shelf &shelf : kShelves)
         {
             if (!prefs_.tab_hidden(shelf.key))
-                add(shelf.key, tr(shelf.name));
+                add(shelf.key, tab_label(shelf.key, tr(shelf.name)));
         }
         // The systems: a tab each, or one Emulators tab with a row of them.
         sub_keys_.clear();
@@ -4189,14 +4204,14 @@ class Library final : public app::Concept
             if (!prefs_.system_enabled(system.name))
                 continue;
             ui::TabItem item;
-            item.label = system.short_name;
+            item.label = tab_label("sys:" + system.name, system.short_name);
             item.badge = system.games;
             systems.push_back(std::move(item));
             sub_keys_.push_back("sys:" + system.name);
         }
         const bool grouped = prefs_.group_systems && !sub_keys_.empty();
-        if (grouped)
-            add(kEmulatorsTab, tr("Emulators"));
+        if (grouped && !prefs_.tab_hidden(kEmulatorsTab))
+            add(kEmulatorsTab, tab_label(kEmulatorsTab, tr("Emulators")));
         else
         {
             for (std::size_t i = 0; i < sub_keys_.size(); ++i)
@@ -4213,6 +4228,10 @@ class Library final : public app::Concept
         if (std::any_of(titles().begin(), titles().end(),
                         [&](const Title &t) { return prefs_.title_hidden(t.id); }))
             add(kHiddenTab, tr("Hidden"));
+        // Every tab hidden: All stays, or nothing could be reached (Settings
+        // brings the others back).
+        if (tab_keys_.empty())
+            add("all", tab_label("all", tr("All")));
         tabs_.set_tabs(std::move(tabs));
         subtabs_.set_tabs(std::move(systems));
         // A system asked for while grouped is the Emulators tab and its row.

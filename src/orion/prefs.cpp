@@ -256,7 +256,7 @@ void edit_tab_prefs(std::vector<TabPrefs> &all, const std::string &tab, Edit edi
     }
     edit(*at);
     if (at->theme.empty() && at->cover == CoverShape::automatic && at->sort.empty() &&
-        at->view.empty() && !at->hidden)
+        at->view.empty() && !at->hidden && at->name.empty())
         all.erase(at);
 }
 
@@ -309,12 +309,32 @@ void LibraryPrefs::set_tab_view(const std::string &tab, const std::string &view)
 bool LibraryPrefs::tab_hidden(const std::string &tab) const
 {
     const TabPrefs *entry = find_tab_prefs(tab_prefs, tab);
-    return tab != "all" && entry != nullptr && entry->hidden;
+    return entry != nullptr && entry->hidden;
 }
 
 void LibraryPrefs::set_tab_hidden(const std::string &tab, bool hidden)
 {
-    edit_tab_prefs(tab_prefs, tab, [&](TabPrefs &e) { e.hidden = hidden && tab != "all"; });
+    edit_tab_prefs(tab_prefs, tab, [&](TabPrefs &e) { e.hidden = hidden; });
+}
+
+std::string LibraryPrefs::tab_name(const std::string &tab) const
+{
+    const TabPrefs *entry = find_tab_prefs(tab_prefs, tab);
+    return entry != nullptr ? entry->name : std::string();
+}
+
+void LibraryPrefs::set_tab_name(const std::string &tab, const std::string &name)
+{
+    std::string clean;
+    for (const char c : name)
+        clean += c == '\n' || c == '\r' || c == '\t' ? ' ' : c;
+    while (!clean.empty() && clean.back() == ' ')
+        clean.pop_back();
+    while (!clean.empty() && clean.front() == ' ')
+        clean.erase(clean.begin());
+    if (clean.size() > kMaxTitleName)
+        clean.clear();
+    edit_tab_prefs(tab_prefs, tab, [&](TabPrefs &e) { e.name = clean; });
 }
 
 std::string LibraryPrefs::game_player(const std::string &id) const
@@ -451,6 +471,7 @@ LibraryPrefs load_prefs(const std::string &state_dir)
         prefs.set_tab_sort(member.first, value["sort"].string_or(""));
         prefs.set_tab_view(member.first, value["view"].string_or(""));
         prefs.set_tab_hidden(member.first, value["hidden"].bool_or(false));
+        prefs.set_tab_name(member.first, value["name"].string_or(""));
     }
     prefs.last_tab = root["last_tab"].string_or(prefs.last_tab);
     prefs.sort = root["sort"].string_or(prefs.sort);
@@ -589,7 +610,8 @@ bool save_prefs(const std::string &state_dir, const LibraryPrefs &prefs)
                 ", \"cover\": " + json::quote(cover_shape_key(entry.cover)) +
                 ", \"sort\": " + json::quote(entry.sort) +
                 ", \"view\": " + json::quote(entry.view) +
-                ", \"hidden\": " + (entry.hidden ? "true" : "false") + "}";
+                ", \"hidden\": " + (entry.hidden ? "true" : "false") +
+                ", \"name\": " + json::quote(entry.name) + "}";
     }
     text += prefs.tab_prefs.empty() ? "}\n}\n" : "\n  }\n}\n";
     return save::write_atomic(file_of(state_dir), text).empty();

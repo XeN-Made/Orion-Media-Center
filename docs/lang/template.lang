@@ -294,6 +294,7 @@ author =
 "A folder of discs (and the folders in it), under /data or /mnt" = ""
 "A game more than one emulator plays asks the first time; Options, Play with changes it" = ""
 "A hairline of light around each cover" = ""
+"A name of your own on the tab bar; empty gives it its own back" = ""
 "A newer ORION is made ready in the background; ORION asks before it installs it" = ""
 "A ring that drifts through the colours, or the theme's own" = ""
 "A row of what you played last over the All tab's covers" = ""

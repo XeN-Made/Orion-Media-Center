@@ -121,16 +121,23 @@ TEST(OrionPrefs, EachTabKeepsItsCoversSortAndPlace)
     prefs.set_tab_cover("sys:Sony - PlayStation 2", orion::CoverShape::portrait);
     prefs.set_tab_sort("sys:Sony - PlayStation 2", "recent");
     prefs.set_tab_hidden("media", true);
-    prefs.set_tab_hidden("all", true); // All always shows
+    prefs.set_tab_hidden("all", true); // any tab hides, All too
+    prefs.set_tab_name("games", "  My \"Games\"\n ");
+    prefs.set_tab_name("emulators", std::string(orion::kMaxTitleName + 1, 'x')); // too long
     ASSERT_TRUE(orion::save_prefs(dir, prefs));
     orion::LibraryPrefs back = orion::load_prefs(dir);
     EXPECT_EQ(back.tab_cover("sys:Sony - PlayStation 2"), orion::CoverShape::portrait);
     EXPECT_EQ(back.tab_sort("sys:Sony - PlayStation 2"), "recent");
     EXPECT_EQ(back.tab_sort("games"), "");
     EXPECT_TRUE(back.tab_hidden("media"));
-    EXPECT_FALSE(back.tab_hidden("all"));
+    EXPECT_TRUE(back.tab_hidden("all"));
+    EXPECT_EQ(back.tab_name("games"), "My \"Games\""); // one line, trimmed
+    EXPECT_EQ(back.tab_name("emulators"), "");
+    EXPECT_EQ(back.tab_name("media"), "");
     // Back to every default: the entry goes.
     back.set_tab_hidden("media", false);
+    back.set_tab_hidden("all", false);
+    back.set_tab_name("games", "");
     back.set_tab_cover("sys:Sony - PlayStation 2", orion::CoverShape::automatic);
     back.set_tab_sort("sys:Sony - PlayStation 2", "");
     EXPECT_TRUE(back.tab_prefs.empty());
