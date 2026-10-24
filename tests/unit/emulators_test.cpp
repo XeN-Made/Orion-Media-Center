@@ -761,7 +761,17 @@ TEST(Emulators, ListsPS5X360AndPSP5Games)
     write_file(roms / "Harbor Lights/default.xex", xex(0x454107d9u));
     write_file(roms / "Harbor Lights/cover.jpg", "jpg");
     write_file(roms / "Iron Valley/game.iso", "iso");
-    write_file(roms / "Night Relay (USA).iso", xbox_disc(0x4d5307e6u));
+    // An XGD2 disc: its game partition starts 0xFD90000 bytes in (a sparse
+    // file, so the test writes a few kilobytes, not 265 MB).
+    {
+        const std::string partition = xbox_disc(0x4d5307e6u);
+        const fs::path disc = roms / "Night Relay (USA).iso";
+        write_file(disc, "");
+        fs::resize_file(disc, 0xFD90000u + partition.size());
+        std::fstream out(disc, std::ios::binary | std::ios::in | std::ios::out);
+        out.seekp(0xFD90000);
+        out << partition;
+    }
     write_file(roms / "Night Relay (USA).png", "png");
     write_file(roms / "Empty Folder/readme.txt", "no");
     write_file(roms / "README.txt", "no");

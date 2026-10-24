@@ -769,7 +769,7 @@ std::string xbox_disc_title_id(const std::string &path)
         return "";
     std::string id;
     // A bare game partition (extracted), XGD3, XGD2, then XGD1.
-    for (const long long partition : {0LL, 0x2080000LL, 0xFDA0000LL, 0x18300000LL})
+    for (const long long partition : {0LL, 0x2080000LL, 0xFD90000LL, 0x18300000LL})
     {
         std::string volume;
         if (!read_at(in, partition + 32 * kXboxSector, 28, &volume) ||
