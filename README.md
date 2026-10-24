@@ -320,7 +320,8 @@ happened, and the log the list below names.
 
 - **A game does not start**: Settings, Emulators shows what ORION found. What
   happened at each start is in `/data/orion/launch.txt` and
-  `/data/orion/launch-helper.txt`.
+  `/data/orion/launch-helper.txt` (or `launch-helper.txt` in ORION's own
+  folder, `/data/homebrew/PPSA99062`, when the helper cannot write there).
 - **ORION does not open after rest mode**: restart the console (not rest
   mode) and jailbreak again; a jailbreak does not survive rest mode well.
 - **An update does not finish**: `/data/orion/update/log.txt` has each step,

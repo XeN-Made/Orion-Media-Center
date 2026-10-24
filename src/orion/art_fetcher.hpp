@@ -120,10 +120,6 @@ class ArtFetcher
     bool finished_ = false;
 };
 
-// What art/tried.txt remembers a game by when no source had a picture: its
-// id, and the ID it was looked up by, so that a game read better later (an
-// Xbox 360 game's title ID, new in 01.103) is looked for again.
-std::string tried_key(const std::string &id, const std::string &serial);
 // Of XboxUnity's covers for a title (CoverInfo.php's JSON), the one to use:
 // an official one first, then the best rated. Empty when there is none.
 std::string pick_xboxunity_cover(std::string_view json);

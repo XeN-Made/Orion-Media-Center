@@ -68,11 +68,6 @@ constexpr std::size_t kMaxSwitchIndex = 4u << 20;
 
 } // namespace
 
-std::string tried_key(const std::string &id, const std::string &serial)
-{
-    return serial.empty() ? id : id + "@" + serial;
-}
-
 std::string pick_xboxunity_cover(std::string_view json)
 {
     json::Value root;
@@ -260,7 +255,7 @@ void ArtFetcher::run(std::vector<ArtJob> jobs, std::string log_path)
         if (!error.empty() && progress_.error.empty())
             progress_.error = error;
         if (counter == &Progress::missing)
-            missing_.push_back(tried_key(job.id, job.serial));
+            missing_.push_back(job.id);
         append_line(log_path, job.system + "/" + job.rom_file + ": " + note);
     };
     // A picture downloaded: written where the library looks, and reported.
@@ -328,10 +323,7 @@ void ArtFetcher::run(std::vector<ArtJob> jobs, std::string log_path)
             library::Image front;
             if (!get_(std::string(kXboxUnity) + "CoverInfo.php?titleid=" + job.serial, kMaxIndex,
                       &info, &error))
-            {
-                ++failures_in_a_row;
                 append_line(log_path, job.system + "/" + job.rom_file + ": XboxUnity: " + error);
-            }
             else if (const std::string cover = pick_xboxunity_cover(info); cover.empty())
                 append_line(log_path, job.system + "/" + job.rom_file +
                                           ": XboxUnity has no cover for " + job.serial);

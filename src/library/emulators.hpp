@@ -187,9 +187,13 @@ std::string xbox360_title_id(const std::string &path);
 // The title ID in the start of an Xbox 360 executable (its XEX2 header's
 // execution info), or empty.
 std::string xex_title_id(std::string_view head);
+// What a game's cover is looked up by: its serial (GameTDB's ID), or for an
+// Xbox 360 game its title ID, read from the game only now (a disc read is
+// left out of every scan: only games without a cover need it).
+std::string cover_id(const Title &game);
 // The name a game's box art is kept by: its file's name without the
 // extension, or, for a file every game of its kind is called (a Wii U game's
-// title.tmd, an extracted Xbox 360 game's default.xex, a disc called
+// title.tmd, an extracted Xbox 360 game's default.xex, an Xbox disc called
 // game.iso), its folder's name.
 std::string art_stem(std::string_view rom);
 

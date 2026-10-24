@@ -3486,7 +3486,7 @@ class Library final : public app::Concept
         job.system = title.system;
         job.rom_file = file;
         job.name = title.name;
-        job.serial = title.serial;
+        job.serial = library::cover_id(title);
         job.target = orion::art_folder(prefs_, context_.library.state_dir) + "/" + title.system +
                      "/" + library::art_stem(title.rom) + ".png";
         return job;
@@ -3507,7 +3507,7 @@ class Library final : public app::Concept
         {
             if (!title.is_rom() || !title.icon.empty() ||
                 !prefs_.system_enabled(library::shelf_system(title.system)) ||
-                tried.find(orion::tried_key(title.id, title.serial) + "\n") != std::string::npos)
+                tried.find(title.id + "\n") != std::string::npos)
                 continue;
             jobs.push_back(art_job(title));
         }

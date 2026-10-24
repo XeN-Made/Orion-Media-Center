@@ -1024,12 +1024,7 @@ int add_x360_folder(Emulator &emulator, std::size_t app_index, const std::string
         listed.insert(rom.id);
     const std::size_t slash = dir.rfind('/');
     const std::string folder_name = slash == std::string::npos ? dir : dir.substr(slash + 1);
-    const auto is_file = [](const std::string &file)
-    {
-        struct stat info = {};
-        return ::stat(file.c_str(), &info) == 0 && S_ISREG(info.st_mode);
-    };
-    FolderIndex pictures;
+    FolderIndex files;
     std::vector<Title> found;
     // name: what the game is called by ("." keeps all of a folder's name).
     const auto add = [&](const std::string &path, const std::string &name,
@@ -1042,11 +1037,9 @@ int add_x360_folder(Emulator &emulator, std::size_t app_index, const std::string
             return;
         rom.system = kXbox360;
         rom.name = rom_display_name(name);
-        // What its cover is found by on XboxUnity (orion::ArtFetcher).
-        rom.serial = xbox360_title_id(path);
         for (const std::string &cover : covers)
         {
-            if (rom.icon.empty() && pictures.has(cover))
+            if (rom.icon.empty() && files.has(cover))
                 rom.icon = cover;
         }
         rom.launcher = app.title_id;
@@ -1063,7 +1056,7 @@ int add_x360_folder(Emulator &emulator, std::size_t app_index, const std::string
         const std::string path = dir + "/" + entry.name;
         if (entry.directory)
         {
-            if (is_file(path + "/default.xex"))
+            if (files.has(path + "/default.xex"))
                 add(path + "/default.xex", entry.name + ".",
                     {path + "/cover.png", path + "/cover.jpg"});
             continue;
@@ -1346,6 +1339,13 @@ std::string xbox360_title_id(const std::string &path)
     return xex_title_id(head);
 }
 
+std::string cover_id(const Title &game)
+{
+    if (!game.serial.empty() || game.system != kXbox360)
+        return game.serial;
+    return xbox360_title_id(game.path);
+}
+
 std::string art_stem(std::string_view rom)
 {
     const std::size_t slash = rom.rfind('/');
@@ -1353,8 +1353,8 @@ std::string art_stem(std::string_view rom)
     const std::size_t dot = file.rfind('.');
     const std::string_view stem =
         dot == std::string_view::npos || dot == 0 ? file : file.substr(0, dot);
-    const std::string generic = lower(stem);
-    if ((generic != "title" && generic != "default" && generic != "game") ||
+    const std::string name = lower(file);
+    if ((name != "title.tmd" && name != "default.xex" && name != "game.iso") ||
         slash == std::string_view::npos || slash == 0)
         return std::string(stem);
     const std::size_t before = rom.rfind('/', slash - 1);

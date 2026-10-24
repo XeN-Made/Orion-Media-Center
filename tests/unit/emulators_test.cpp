@@ -791,19 +791,23 @@ TEST(Emulators, ListsPS5X360Games)
     EXPECT_EQ(found[0].system, "Microsoft - Xbox 360");
     EXPECT_EQ(found[0].rom, "/app0/assets/roms/Harbor Lights/default.xex");
     EXPECT_EQ(found[0].icon, (roms / "Harbor Lights/cover.jpg").string());
-    // The title IDs XboxUnity knows their covers by, from default.xex.
-    EXPECT_EQ(found[0].serial, "454107D9");
+    // The title IDs XboxUnity knows their covers by, from default.xex, read
+    // only when a cover is wanted.
+    EXPECT_EQ(found[0].serial, "");
+    EXPECT_EQ(library::cover_id(found[0]), "454107D9");
     // The top folder's games, then those in its folders.
     EXPECT_EQ(found[1].name, "Night Relay");
     EXPECT_EQ(found[1].icon, (roms / "Night Relay (USA).png").string());
-    EXPECT_EQ(found[1].serial, "4D5307E6");
+    EXPECT_EQ(library::cover_id(found[1]), "4D5307E6");
     EXPECT_EQ(found[2].name, "Iron Valley");
-    EXPECT_EQ(found[2].serial, ""); // not a disc it can read
+    EXPECT_EQ(library::cover_id(found[2]), ""); // not a disc it can read
     // Box art is kept by the game's folder where every file is called alike.
     EXPECT_EQ(library::art_stem("/app0/assets/roms/Harbor Lights/default.xex"), "Harbor Lights");
     EXPECT_EQ(library::art_stem("/mnt/usb0/xbox360/Iron Valley/game.iso"), "Iron Valley");
     EXPECT_EQ(library::art_stem("/mnt/usb0/wiiu/Quiet Bay/title.tmd"), "Quiet Bay");
     EXPECT_EQ(library::art_stem("/mnt/usb0/xbox360/Night Relay (USA).iso"), "Night Relay (USA)");
+    EXPECT_EQ(library::art_stem("/mnt/usb0/roms/snes/game.sfc"),
+              "game"); // other systems keep theirs
     EXPECT_EQ(found[2].launcher, "PPSA50011");
 
     const std::vector<library::Player> players = library::players_for(emulator, found[0]);

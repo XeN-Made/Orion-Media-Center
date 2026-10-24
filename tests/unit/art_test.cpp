@@ -325,7 +325,7 @@ TEST(ArtFetcher, DownloadsXboxUnityCoversByTitleId)
     const orion::ArtFetcher::Progress done = art.progress();
     EXPECT_EQ(done.found, 1);
     EXPECT_EQ(done.missing, 1);
-    EXPECT_EQ(art.take_missing(), std::vector<std::string>{"rom-0000000000a2@4D5307E6"});
+    EXPECT_EQ(art.take_missing(), std::vector<std::string>{"rom-0000000000a2"});
     std::string bytes;
     ASSERT_TRUE(save::read_file(harbor.target, &bytes));
     library::Image cover;
