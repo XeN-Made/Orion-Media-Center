@@ -19,8 +19,8 @@ Title ID: `PPSA99061`. Questions, ideas and bug reports: the
   images ShadowMountPlus mounted from anywhere (exFAT images included).
 - Emulated games next to them: RetroArch (its folders and every playlist),
   Porpoise for GameCube and Wii, PS5SX2 for PS2, PSwanStation for PS1,
-  ProsperoEden for Switch, PS5-ECAM for Wii U, 3DS, DS and Switch, and folders
-  of your own.
+  ProsperoEden for Switch, PS5-ECAM for Wii U, 3DS, DS and Switch, PS5X360 for
+  Xbox 360, PSP5 for PSP, and folders of your own.
 - Start a game straight from its cover: emulated games open directly in the
   emulator that plays them, and ORION asks which one when two can.
 - Box art downloaded as the covers scroll into view, or taken from what
@@ -84,8 +84,8 @@ The pictures show invented titles: ORION's renderer drew them on a PC
 
 Optional, for retro games: **RetroArch**, **Porpoise** (Dolphin for PS5:
 GameCube and Wii), **PS5SX2** (PS2), **PSwanStation** (PS1),
-**ProsperoEden** (Switch) and **PS5-ECAM** (Wii U, 3DS, DS and Switch),
-installed as folder apps too. Installed games beyond the homebrew folders
+**ProsperoEden** (Switch), **PS5-ECAM** (Wii U, 3DS, DS and Switch),
+**PS5X360** (Xbox 360) and **PSP5** (PSP), installed as folder apps too. Installed games beyond the homebrew folders
 are read through the FTP server.
 
 ## Install
@@ -229,7 +229,8 @@ within 30 minutes. Every step it took is written to
 ## Emulators and their games
 
 Settings, Emulators, **Scan for emulators** finds RetroArch, Porpoise,
-PS5SX2, PSwanStation, ProsperoEden and PS5-ECAM and the games they can see:
+PS5SX2, PSwanStation, ProsperoEden, PS5-ECAM, PS5X360 and PSP5 and the games
+they can see:
 
 - **RetroArch**: games in its own `content/<system>/` folders and every game in
   its playlists, wherever the files are.
@@ -247,6 +248,12 @@ PS5SX2, PSwanStation, ProsperoEden and PS5-ECAM and the games they can see:
   the games folders set in its Settings: Wii U games as `.wua`, `.wud`, `.wux`,
   `.rpx` or a folder of NUS files (`title.tmd`), 3DS as `.3ds`, `.cci`, `.cia`,
   `.cxi`, `.3dsx`, DS as `.nds` or `.zip`, Switch as `.xci`, `.nsp`, `.nro`.
+- **PS5X360**: Xbox 360 games in its `assets/roms` folder, `/data/xbox360` and
+  `xbox360/` on a drive: a folder per extracted game (`default.xex`) and `.iso`
+  discs. A `cover.png` or `cover.jpg` in a game's folder, or a picture named as
+  the disc beside it, is its cover.
+- **PSP5**: PSP discs (`.iso`, `.cso`) in its memory stick's `ISO` folder and
+  `PSP/` on a drive.
 - **Your own folders**: Settings, Emulators, an emulator, **Add a game folder**.
 
 A full ROM set holds many files of one game: bad dumps, hacks, trainers,
@@ -258,7 +265,8 @@ When two emulators can play a game, ORION asks which one the first time and
 remembers (Options, Play with… changes it). PS2 games start straight in
 PS5SX2; GameCube and Wii games straight in Porpoise; PS1 games in
 PSwanStation or RetroArch; Switch games in ProsperoEden or PS5-ECAM; Wii U and
-3DS games straight in PS5-ECAM; every other system in RetroArch with the core
+3DS games straight in PS5-ECAM; Xbox 360 games straight in PS5X360; PSP games
+in PSP5 or RetroArch; every other system in RetroArch with the core
 you chose for it.
 
 ## Box art and music

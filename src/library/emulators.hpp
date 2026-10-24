@@ -54,6 +54,14 @@ Emulator scan_retroarch(const Title &retroarch, std::vector<Title> *roms);
 //              (Eden) games: the list it keeps (read_ecam_library), then its
 //              sides' folders (ps5cemu.json). Starts a game from its command
 //              line as Porpoise does (porpoise_arguments): its own tiles'.
+//   ps5x360    PS5X360: Xbox 360 games in <root>/assets/roms, /data/xbox360
+//              and a drive's xbox360/: .iso discs, and folders holding an
+//              extracted game's default.xex. Covers: cover.png or .jpg in a
+//              game's folder, or a picture named as the disc beside it.
+//   psp5       PSP5: PSP discs (.iso, .cso) in <root>/memstick/ISO and a
+//              PSP folder at the top of a drive.
+//              Both start the game given on their command line
+//              (game_arguments).
 struct KnownEmulator
 {
     const char *key;   // what the prefs name it by
@@ -171,6 +179,11 @@ bool read_nintendo_disc(std::string_view head, Disc *disc);
 // same.
 std::string porpoise_arguments(const std::string &title_id, const std::string &disc,
                                bool exit_after_game);
+// PS5X360's and PSP5's: the game is their one argument (PS5X360 boots it when
+// it is a file, else opens its list). With exit_after_game, PSP5's pause menu
+// ends it, so ORION comes back.
+std::string game_arguments(const std::string &title_id, const std::string &key,
+                           const std::string &game, bool exit_after_game);
 
 // PS5SX2 takes no command line, but when it starts it boots the game named
 // on the first line of this note (and deletes it) instead of opening its

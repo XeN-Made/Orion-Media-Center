@@ -239,8 +239,10 @@ author =
 "GameCube, Wii" = ""
 "PS1" = ""
 "PS2" = ""
+"PSP" = ""
 "Switch" = ""
 "Wii U, 3DS, DS, Switch" = ""
+"Xbox 360" = ""
 
 # src/orion/languages.cpp
 "Automatic ({0})" = ""

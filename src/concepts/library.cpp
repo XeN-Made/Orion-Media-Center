@@ -1987,9 +1987,10 @@ class Library final : public app::Concept
                                              : folder_emulator_ == "ps5sx2" ? "/mnt/usb0/PS2"
                                              : folder_emulator_ == "ecam"   ? "/mnt/usb0/switch"
                                              : folder_emulator_ == "eden"   ? "/mnt/usb0/switch"
-                                             : folder_emulator_ == "psswanstation"
-                                                 ? "/mnt/usb0/psx"
-                                                 : "/mnt/usb0/roms");
+                                             : folder_emulator_ == "psswanstation" ? "/mnt/usb0/psx"
+                                             : folder_emulator_ == "ps5x360" ? "/mnt/usb0/xbox360"
+                                             : folder_emulator_ == "psp5"    ? "/mnt/usb0/PSP"
+                                                                             : "/mnt/usb0/roms");
             feedback.play(audio::Cue::modal_open);
             break;
         case orion::SettingsPanel::Change::add_folder:
@@ -3386,6 +3387,11 @@ class Library final : public app::Concept
             // tiles do, and close when it ends, so ORION comes back.
             request = launcher + "\n" +
                       library::porpoise_arguments(launcher, player.rom, prefs_.return_on_close);
+        else if (app != nullptr && (app->key == "ps5x360" || app->key == "psp5"))
+            // The game is their one argument, as a file they can open.
+            request =
+                launcher + "\n" +
+                library::game_arguments(launcher, app->key, player.rom, prefs_.return_on_close);
         else if (ps5sx2)
             // The note PS5SX2's disc helper leaves it, written by the helper:
             // /data/PCSX2 is out of ORION's reach.
