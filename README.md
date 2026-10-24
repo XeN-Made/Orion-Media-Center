@@ -314,8 +314,10 @@ you chose for it.
 
 ## Anonymous usage
 
-To know how many consoles use it, ORION checks in when it opens and then every
-five minutes while it stays open. This is all of it:
+To help improve future updates, ORION sends a small anonymous check-in when it
+opens and then every five minutes while it stays open. It tells us how many
+consoles run ORION and which versions they are on, so we know which versions
+to keep fixing and testing first. This is all of it:
 
 ```json
 {"id": "3f9c0d27a1b84e6c9d5e2f7a8b1c4d03", "version": "01.104.000"}
