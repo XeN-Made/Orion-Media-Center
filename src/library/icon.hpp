@@ -58,11 +58,14 @@ constexpr int kSharpSize = 1024;
 // over frames, scrolling stays smooth). Returns how many it uploaded.
 int load_sharp_icons(Library &library, const std::vector<std::string> &ids, gfx::GlBatch &batch,
                      int budget);
-// The case pictures in <folder> (<key>.png, .jpg or .jpeg, a clear or flat
-// window where the cover goes; library/case_templates.hpp), uploaded into
-// library.cases; the ones
+// The case pictures in each folder, in order (<key>.png, .jpg, .jpeg or
+// .webp, a clear or flat window where the cover goes;
+// library/case_templates.hpp), uploaded into library.cases; a later folder's
+// picture replaces an earlier one of the same name (the player's ORION's own).
+// The ones
 // there before are released. Returns how many were taken.
-int load_case_templates(Library &library, const std::string &folder, gfx::GlBatch &batch);
+int load_case_templates(Library &library, const std::vector<std::string> &folders,
+                        gfx::GlBatch &batch);
 // The same for the wide copies in <folder>/<ID>.tga, for wide covers.
 int load_wide_icons(Library &library, const std::vector<std::string> &ids,
                     const std::string &folder, gfx::GlBatch &batch, int budget);

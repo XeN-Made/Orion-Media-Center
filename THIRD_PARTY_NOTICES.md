@@ -138,8 +138,8 @@ replace the pinned SDK or install files globally. PacBrew recipes and every
 linked third-party library retain their upstream licenses; applications must
 review those terms before redistribution.
 
-ORION links these ports statically (`PACBREW_PACKAGES=libcurl` in the
-Makefile) to download box art over HTTPS:
+ORION links these ports statically (`PACBREW_PACKAGES=libcurl libwebp` in the
+Makefile) to download box art over HTTPS and to read WebP pictures:
 
 | Library | Version | License |
 | --- | --- | --- |
@@ -148,6 +148,7 @@ Makefile) to download box art over HTTPS:
 | [libpsl](https://github.com/rockdaboot/libpsl) | 0.21.5 | MIT |
 | [zstd](https://github.com/facebook/zstd) | 1.5.x | BSD-3-Clause (dual-licensed with GPL-2.0) |
 | [zlib](https://zlib.net/) | 1.3.2 | zlib license |
+| [libwebp](https://chromium.googlesource.com/webm/libwebp) | 1.x | BSD-3-Clause |
 
 `assets/certs/cacert.pem` is Mozilla's CA certificate list as Ubuntu's
 `ca-certificates` package bundles it, used to verify the box art server. It is
@@ -164,6 +165,15 @@ metadata. It contains no Sony runtime implementation.
 Original ps5-native-app-boilerplate code is Copyright (C) 2026
 BlackBearReloaded and licensed under GPL-3.0-or-later. Source and script files
 carry matching SPDX identifiers.
+
+## Case pictures
+
+`assets/cases/*.png` are the empty cases Cases view draws covers in (PS1, PS2,
+PS3, PS4, PS5, PS Vita, Wii U, Xbox and Xbox 360), supplied by the project's
+owner. The console names and logos printed on them (PlayStation, PS Vita, Wii
+U, Xbox) are trademarks of Sony Interactive Entertainment, Nintendo and
+Microsoft respectively; ORION is not affiliated with or endorsed by them.
+Players' own pictures in `/data/orion/cases` replace these by name.
 
 ## Presentation assets
 

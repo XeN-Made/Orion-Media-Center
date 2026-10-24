@@ -349,7 +349,10 @@ int main()
         library::apply_names(titles, orion::load_prefs(titles.state_dir).title_names);
         library::apply_custom_art(titles, titles.state_dir + "/custom-art");
         const int icons = library::load_icons(titles, renderer.batch());
-        library::load_case_templates(titles, titles.state_dir + "/cases", renderer.batch());
+        // ORION's own case pictures, then the player's, which replace them by name.
+        library::load_case_templates(titles,
+                                     {std::string(kAssets) + "/cases", titles.state_dir + "/cases"},
+                                     renderer.batch());
         char summary[128];
         std::snprintf(summary, sizeof(summary), "titles=%zu icons=%d in %lld ms",
                       titles.titles.size(), icons,

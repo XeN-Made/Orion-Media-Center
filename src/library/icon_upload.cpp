@@ -34,6 +34,52 @@ bool load_icon(Title &title, gfx::GlBatch &batch)
     return title.texture != 0;
 }
 
+// One picture in a cases folder: taken when it decodes and has a window; one
+// of the same name taken before (ORION's own) gives way to it.
+void take_case_template(Library &library, const std::string &folder,
+                        const save::DirectoryEntry &entry, gfx::GlBatch &batch)
+{
+    const std::string &name = entry.name;
+    const std::size_t dot = name.rfind('.');
+    if (entry.directory || dot == std::string::npos || dot == 0 || library.cases.size() >= 48)
+        return;
+    // PNG, WebP, or JPEG (no transparency: its window is a flat colour).
+    std::string extension = name.substr(dot);
+    for (char &c : extension)
+        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    if (extension != ".png" && extension != ".jpg" && extension != ".jpeg" && extension != ".webp")
+        return;
+    std::string bytes;
+    Image picture;
+    CaseWindow window;
+    if (!save::read_file(folder + "/" + name, &bytes, kMaxFile) ||
+        !decode_png(bytes, kSharpSize, &picture) || !find_case_window(picture, &window))
+        return;
+    CaseTemplate shell;
+    for (const char c : name.substr(0, dot))
+        shell.key += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    shell.texture = batch.create_texture(picture.width, picture.height, picture.rgba.data());
+    if (shell.texture == 0)
+        return;
+    shell.width = picture.width;
+    shell.height = picture.height;
+    shell.window_x = window.x;
+    shell.window_y = window.y;
+    shell.window_w = window.w;
+    shell.window_h = window.h;
+    shell.window_solid = window.solid;
+    for (auto at = library.cases.begin(); at != library.cases.end(); ++at)
+    {
+        if (at->key == shell.key)
+        {
+            batch.delete_texture(at->texture);
+            library.cases.erase(at);
+            break;
+        }
+    }
+    library.cases.push_back(std::move(shell));
+}
+
 } // namespace
 
 int load_icons(Library &library, gfx::GlBatch &batch)
@@ -98,7 +144,8 @@ int load_sharp_icons(Library &library, const std::vector<std::string> &ids, gfx:
     return uploaded;
 }
 
-int load_case_templates(Library &library, const std::string &folder, gfx::GlBatch &batch)
+int load_case_templates(Library &library, const std::vector<std::string> &folders,
+                        gfx::GlBatch &batch)
 {
     for (const CaseTemplate &shell : library.cases)
     {
@@ -106,38 +153,10 @@ int load_case_templates(Library &library, const std::string &folder, gfx::GlBatc
             batch.delete_texture(shell.texture);
     }
     library.cases.clear();
-    for (const save::DirectoryEntry &entry : save::list_directory(folder))
+    for (const std::string &folder : folders)
     {
-        const std::string &name = entry.name;
-        const std::size_t dot = name.rfind('.');
-        if (entry.directory || dot == std::string::npos || dot == 0 || library.cases.size() >= 32)
-            continue;
-        // PNG, or JPEG (no transparency: its window is a flat colour).
-        std::string extension = name.substr(dot);
-        for (char &c : extension)
-            c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-        if (extension != ".png" && extension != ".jpg" && extension != ".jpeg")
-            continue;
-        std::string bytes;
-        Image picture;
-        CaseWindow window;
-        if (!save::read_file(folder + "/" + name, &bytes, kMaxFile) ||
-            !decode_png(bytes, kSharpSize, &picture) || !find_case_window(picture, &window))
-            continue;
-        CaseTemplate shell;
-        for (const char c : name.substr(0, dot))
-            shell.key += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-        shell.texture = batch.create_texture(picture.width, picture.height, picture.rgba.data());
-        if (shell.texture == 0)
-            continue;
-        shell.width = picture.width;
-        shell.height = picture.height;
-        shell.window_x = window.x;
-        shell.window_y = window.y;
-        shell.window_w = window.w;
-        shell.window_h = window.h;
-        shell.window_solid = window.solid;
-        library.cases.push_back(std::move(shell));
+        for (const save::DirectoryEntry &entry : save::list_directory(folder))
+            take_case_template(library, folder, entry, batch);
     }
     return static_cast<int>(library.cases.size());
 }

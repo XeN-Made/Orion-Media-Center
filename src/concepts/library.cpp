@@ -5383,9 +5383,11 @@ class Library final : public app::Concept
         return nullptr;
     }
 
-    // A game in the player's case picture: the cover in its clear window,
-    // the picture over it, both stretched to the case's cell (a case's
-    // shape; a picture of another shape is drawn to this one).
+    // A game in a case picture: the cover in its window, the picture over it
+    // (or under it, for a flat window), both stretched to the case's cell.
+    // A picture of another shape (a PS1 jewel case, near square) is drawn to
+    // this one too: the cover is cropped to its window, never stretched, and
+    // a cell left partly empty would show the grid's backing around it.
     void draw_case_template(ui::Canvas &canvas, const Rect &art, const ui::CardItem &item,
                             const Title &title, const library::CaseTemplate &shell,
                             float focus) const

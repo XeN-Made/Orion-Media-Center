@@ -298,16 +298,17 @@ you chose for it.
   after the game (`Chrono Trigger.png`) or its title ID (`PPSA01234.jpg`);
   case and punctuation do not matter. **Use its own picture** puts the
   original back.
-- **Case pictures for Cases view**: put a PNG or JPEG of an empty case in
-  `/data/orion/cases`, with a **transparent window** where the cover goes (or
-  one flat colour there, such as a white sleeve), and Cases view draws each
-  cover inside it. A JPEG has no transparency, so leave its cover area one
-  plain colour. Name it for what it holds: `ps5.png`,
-  `ps4.png`, `homebrew.png`, `media.png`, or a system's short name for its
-  games (`ps2.png`, `ps1.png`, `psp.png`, `wii.png`, `wiiu.png`, `ngc.png` or
-  `gc.png` for GameCube, `3ds.png`, `ds.png`, `switch.png`, `gba.png`,
-  `snes.png`...). Any size works; a case's shape (about 4:5) looks best. ORION
-  reads them when it opens; a kind with no picture keeps ORION's own case.
+- **Cases**: Cases view draws each cover inside a picture of its console's
+  case. ORION comes with PS1, PS2, PS3, PS4, PS5, PS Vita, Wii U, Xbox and
+  Xbox 360 cases. **Add your own** for any other system, or to replace one of
+  these: a PNG, JPEG or WebP of an empty case in `/data/orion/cases`, with a
+  **transparent window** where the cover goes (or one flat colour there, such
+  as a white sleeve; a JPEG has no transparency). Name it for what it holds:
+  `ps5.png`, `ps4.png`, `homebrew.png`, `media.png`, or a system's short name
+  for its games (`psp.png`, `wii.png`, `ngc.png` or `gc.png` for GameCube,
+  `3ds.png`, `ds.png`, `switch.png`, `gba.png`, `snes.png`...). Any size
+  works; a case's shape (about 4:5) looks best. ORION reads them when it
+  opens; a kind with no picture keeps ORION's own drawn case.
 - **SteamGridDB**: with a key of your own (free: steamgriddb.com, your
   profile, Preferences, API), games no other source has a cover for get one
   from SteamGridDB, and Options on any title, **Find other art…**, shows up to
