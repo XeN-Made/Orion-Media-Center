@@ -158,6 +158,16 @@ TEST(Library, ParsesImageNames)
     EXPECT_EQ(title.name, "Some Title");
     EXPECT_EQ(title.platform, Platform::ps4);
 
+    // A release name: the group's tag goes, dots are spaces.
+    ASSERT_TRUE(library::parse_image_name("[SPSX]-Planet.Zoo-PPSA18026-EUR-v01.009.002-EXFAT.exfat",
+                                          &title));
+    EXPECT_EQ(title.id, "PPSA18026");
+    EXPECT_EQ(title.name, "Planet Zoo");
+    ASSERT_TRUE(library::parse_image_name("Lantern_Row_(USA)-PPSA01234.ffpkg", &title));
+    EXPECT_EQ(title.name, "Lantern Row");
+    ASSERT_TRUE(library::parse_image_name("Mr. Quiet Bay - PPSA01234.ffpfsc", &title));
+    EXPECT_EQ(title.name, "Mr. Quiet Bay"); // a name with spaces keeps its dots
+
     EXPECT_FALSE(library::parse_image_name("PPSA01234 - Some Title.zip", &title));
     EXPECT_FALSE(library::parse_image_name("no id here.ffpfsc", &title));
     EXPECT_FALSE(library::parse_image_name("XPPSA01234.ffpfsc", &title));
@@ -260,6 +270,25 @@ TEST(Library, MergesTheSystemsRegisteredTitles)
     EXPECT_EQ(shelf.titles[2].icon, "");
     // Again: nothing new.
     EXPECT_EQ(library::merge_registered(shelf, cache, icons, "PPSA99061"), 0);
+
+    // An image's name came from its file name: the system's takes its place,
+    // or the one it came with when the player renamed it.
+    library::Library images;
+    images.titles.resize(2);
+    images.titles[0].id = "PPSA18026";
+    images.titles[0].name = "[SPSX]-Planet.Zoo";
+    images.titles[0].source = library::Source::image;
+    images.titles[1].id = "PPSA90164";
+    images.titles[1].name = "My Name";
+    images.titles[1].own_name = "From The File";
+    images.titles[1].source = library::Source::image;
+    EXPECT_EQ(library::merge_registered(
+                  images, "PPSA18026\t0\t0\t0\tPlanet Zoo\nPPSA90164\t0\t0\t0\tHollow Coast\n",
+                  icons, "PPSA99061"),
+              0);
+    EXPECT_EQ(images.titles[0].name, "Planet Zoo");
+    EXPECT_EQ(images.titles[1].name, "My Name");
+    EXPECT_EQ(images.titles[1].own_name, "Hollow Coast");
 }
 
 // The player's names for titles: applied over the names they came with, and

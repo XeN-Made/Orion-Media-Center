@@ -298,6 +298,24 @@ bool parse_image_name(std::string_view file_name, Title *title)
     std::string_view name = strip(stem.substr(at + 9));
     if (at > 0 && has_letters(strip(stem.substr(0, at))))
         name = strip(stem.substr(0, at));
+    // A release group's tags go ("[SPSX]-", "(EUR)"), and a name written with
+    // dots or underscores for spaces ("Planet.Zoo") gets its spaces back.
+    const bool spaced = name.find(' ') != std::string_view::npos;
+    std::string clean;
+    for (std::size_t i = 0; i < name.size(); ++i)
+    {
+        const char close = name[i] == '[' ? ']' : name[i] == '(' ? ')' : '\0';
+        if (const std::size_t end = close != '\0' ? name.find(close, i) : std::string_view::npos;
+            end != std::string_view::npos)
+        {
+            i = end;
+            continue;
+        }
+        const char c = !spaced && (name[i] == '.' || name[i] == '_') ? ' ' : name[i];
+        if (c != ' ' || (!clean.empty() && clean.back() != ' '))
+            clean += c;
+    }
+    name = strip(clean);
 
     title->id = std::string(stem.substr(at, 9));
     title->name = has_letters(name) ? std::string(name) : title->id;
@@ -346,9 +364,19 @@ int merge_registered(Library &library, std::string_view cache, const std::string
             fields[0] == skip_id)
             continue;
         const std::string id(fields[0]);
-        if (std::any_of(library.titles.begin(), library.titles.end(),
-                        [&](const Title &t) { return t.id == id; }))
+        const auto listed = std::find_if(library.titles.begin(), library.titles.end(),
+                                         [&](const Title &t) { return t.id == id; });
+        if (listed != library.titles.end())
+        {
+            // An image's name was read from its file name; the system's is
+            // the game's own. A name the player gave it stays (apply_names
+            // keeps the one it came with in own_name).
+            const std::string_view registered = line.substr(at);
+            if (listed->source == Source::image && has_letters(registered))
+                (listed->own_name.empty() ? listed->name : listed->own_name) =
+                    std::string(registered);
             continue;
+        }
         const auto number = [](std::string_view text, int top)
         {
             const int value = text.size() == 1 ? text[0] - '0' : -1;
