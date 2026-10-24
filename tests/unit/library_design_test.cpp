@@ -317,6 +317,27 @@ TEST_F(LibraryDesign, DetailsShowATitlesPageAndStarIt)
     EXPECT_TRUE(played(Cue::focus));
 }
 
+// The Hidden tab can be hidden like any other (Settings, Tabs, its page): a
+// hidden title then shows nowhere, and Favourites is the last tab.
+TEST_F(LibraryDesign, TheHiddenTabCanBeHiddenToo)
+{
+    const std::string dir = ::testing::TempDir() + "orion-design-hidden-tab";
+    ASSERT_TRUE(hui::save::ensure_directory(dir));
+    std::remove((dir + "/favourites.json").c_str());
+    hui::orion::LibraryPrefs prefs;
+    prefs.set_tab_hidden("hidden", true);
+    ASSERT_TRUE(prefs.set_title_hidden("PPSA90108", true));
+    ASSERT_TRUE(hui::orion::save_prefs(dir, prefs));
+    library_.state_dir = dir;
+    auto design = with_fixture();
+    // All, Games, Homebrew, Media, Favourites: four turns, then the end.
+    for (int i = 0; i < 4; ++i)
+        send(*design, press(hui::Action::page_next));
+    EXPECT_EQ(hui::orion::load_prefs(dir).last_tab, "favourites");
+    send(*design, press(hui::Action::page_next));
+    EXPECT_EQ(hui::orion::load_prefs(dir).last_tab, "favourites");
+}
+
 // Hide this title takes it off every shelf onto a Hidden tab at the end;
 // Show this title brings it back, and the Hidden tab goes with the last one.
 TEST_F(LibraryDesign, AHiddenTitleLeavesItsShelvesForTheHiddenTab)

@@ -102,7 +102,8 @@ class SettingsPanel
         storage,
         sound,
         appearance,
-        about, // the version, updates, where things are
+        system, // the language, autoboot, rest mode, returning after a game, usage
+        about,  // the version, updates, where things are
     };
 
     SettingsPanel();
@@ -262,6 +263,7 @@ class SettingsPanel
   private:
     void build(const Look &look, const LibraryPrefs &prefs);
     void build_library(const LibraryPrefs &prefs);
+    void build_system(const LibraryPrefs &prefs);
     void build_tabs(const LibraryPrefs &prefs);
     void build_tab_page(const LibraryPrefs &prefs);
     void build_emulators(const LibraryPrefs &prefs);

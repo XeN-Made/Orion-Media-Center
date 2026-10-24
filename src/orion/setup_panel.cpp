@@ -293,7 +293,7 @@ void SetupPanel::build(const Look &look, const LibraryPrefs &prefs)
         form_.add_value(kPayload, tr("Autoboot payload"), payload_.substr(slash + 1));
         form_.add_value(kPayloadFolder, tr("In the folder"), payload_.substr(0, slash));
         next(tr("Continue"),
-             tr("Turn it off here or in Settings, Library, without touching the autoloader"));
+             tr("Turn it off here or in Settings, System, without touching the autoloader"));
         break;
     }
     case Step::done:

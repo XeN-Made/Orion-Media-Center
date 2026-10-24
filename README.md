@@ -157,7 +157,7 @@ autoloader sends it with the others; it waits until nothing else is in front
 instead, it stays out of the way.
 
 Autoboot is **off** until you turn it on: in the first-run setup, or later in
-Settings, Library, **Autoboot ORION after the jailbreak**. Then add the payload
+Settings, System, **Autoboot ORION after the jailbreak**. Then add the payload
 to your autoloader as below.
 
 The payload is in the release ZIP at
@@ -193,7 +193,7 @@ ShadowMountPlus.
 
 ### Turning it on or off, and checking it
 
-Settings, Library, **Autoboot ORION after the jailbreak** turns it on or off
+Settings, System, **Autoboot ORION after the jailbreak** turns it on or off
 without touching the autoloader. It gives up if nothing has let it open ORION
 within 30 minutes. Every step it took is written to
 `/data/orion/autostart.txt`.
@@ -224,7 +224,7 @@ within 30 minutes. Every step it took is written to
 - **Wide covers**: give a tab the Landscape cover shape (Settings, Tabs, its
   page) and console games show their 16:9 home-screen picture, made small
   once in `/data/orion/wide`.
-- **Open ORION after rest mode** (Settings, Library): when the console wakes
+- **Open ORION after rest mode** (Settings, System): when the console wakes
   on the home screen, ORION opens; a game left running stays in front.
 - **FTP**: everything in `/data/orion` is open to your FTP server, to add
   pictures, music and keys or to delete the folder.
@@ -232,7 +232,7 @@ within 30 minutes. Every step it took is written to
 - **Themes of your own**: a `.theme` text file in `/data/orion/themes/`;
   [docs/ORION_THEMES.md](docs/ORION_THEMES.md) has every key and
   [template.theme](docs/themes/template.theme) to start from.
-- **Language**: Settings, Library, Language (or the first step of the setup).
+- **Language**: Settings, System, Language (or the first step of the setup).
   *Automatic* follows the console. To add or correct a language, copy
   [template.lang](docs/lang/template.lang) to `/data/orion/lang/<code>.lang`,
   fill in the translations and open ORION again; a file there replaces ORION's
@@ -332,7 +332,7 @@ last checked in and the days it did. It does not keep IP addresses, and it
 deletes everything older than 400 days. What ORION sent last, when and where
 to, is in `/data/orion/usage.txt`.
 
-It is on unless you turn it off: Settings, Library, **Share anonymous usage**.
+It is on unless you turn it off: Settings, System, **Share anonymous usage**.
 
 ## If something goes wrong
 

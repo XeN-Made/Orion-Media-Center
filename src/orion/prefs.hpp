@@ -168,7 +168,7 @@ struct LibraryPrefs
     bool reopen_after_rest = false;
     // Anonymous check-ins while ORION is open (orion/usage.hpp): a random ID
     // and ORION's version, to count the consoles that use it. On until turned
-    // off in Settings, Library, whose row says what is sent.
+    // off in Settings, System, whose row says what is sent.
     bool share_usage = true;
     // A focused title plays its own music (the home screen's snd0.at9, or the
     // player's from <state_dir>/hover-music) over the playlist.

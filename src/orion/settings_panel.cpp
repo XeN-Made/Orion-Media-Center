@@ -154,6 +154,8 @@ const char *section_name(SettingsPanel::Section section)
         return i18n::marked("Storage");
     case SettingsPanel::Section::sound:
         return i18n::marked("Sound");
+    case SettingsPanel::Section::system:
+        return i18n::marked("System");
     case SettingsPanel::Section::about:
         return i18n::marked("About");
     default:
@@ -346,6 +348,7 @@ void SettingsPanel::build_nav()
     sections_.push_back(Section::appearance);
     if (app_settings_ != nullptr)
         sections_.push_back(Section::sound);
+    sections_.push_back(Section::system);
     sections_.push_back(Section::about);
     std::vector<ui::NavEntry> entries;
     for (Section section : sections_)
@@ -483,6 +486,9 @@ void SettingsPanel::build(const Look &look, const LibraryPrefs &prefs)
     case Section::appearance:
         build_appearance(look, prefs);
         break;
+    case Section::system:
+        build_system(prefs);
+        break;
     case Section::about:
         build_about(prefs);
         break;
@@ -492,20 +498,6 @@ void SettingsPanel::build(const Look &look, const LibraryPrefs &prefs)
 void SettingsPanel::build_library(const LibraryPrefs &prefs)
 {
     form_.add_header(tr("Library"));
-    // The language first: everything after it reads in it.
-    if (!languages_.empty())
-    {
-        std::vector<std::string> names;
-        int chosen = 0;
-        for (std::size_t i = 0; i < languages_.size(); ++i)
-        {
-            names.push_back(languages_[i].name);
-            if (languages_[i].code == prefs.language)
-                chosen = static_cast<int>(i);
-        }
-        form_.add_choice(kLanguage, tr("Language"), std::move(names), chosen).description =
-            tr("Automatic follows the console's language");
-    }
     form_
         .add_choice(kSort, tr("Sort by"), i18n::tr_range(kSortNames, kSortNames + kSortCount),
                     sort_index(prefs.sort))
@@ -520,6 +512,27 @@ void SettingsPanel::build_library(const LibraryPrefs &prefs)
         tr("A row of what you played last over the All tab's covers");
     form_.add_toggle(kLeaveShelf, tr("Moved titles leave shelf"), prefs.moved_leave_shelf)
         .description = tr("A title moved to your own tab leaves Games, Homebrew or Media");
+}
+
+// What is about the console and ORION as an app, not the library: its
+// language, when it opens by itself, what it sends.
+void SettingsPanel::build_system(const LibraryPrefs &prefs)
+{
+    form_.add_header(tr("System"));
+    // The language first: everything after it reads in it.
+    if (!languages_.empty())
+    {
+        std::vector<std::string> names;
+        int chosen = 0;
+        for (std::size_t i = 0; i < languages_.size(); ++i)
+        {
+            names.push_back(languages_[i].name);
+            if (languages_[i].code == prefs.language)
+                chosen = static_cast<int>(i);
+        }
+        form_.add_choice(kLanguage, tr("Language"), std::move(names), chosen).description =
+            tr("Automatic follows the console's language");
+    }
     form_.add_toggle(kReturn, tr("Return to ORION after a game"), prefs.return_on_close)
         .description = tr("Close a game from the PS button menu and ORION opens again");
     form_.add_toggle(kReopenAfterRest, tr("Open ORION after rest mode"), prefs.reopen_after_rest)

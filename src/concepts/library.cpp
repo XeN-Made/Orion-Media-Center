@@ -295,6 +295,10 @@ constexpr app::TourStep kTour[] = {
     {0.2f, 0, Direction::right},
     {0.8f, 0, Direction::none, "settings-sound"},
     {0.2f, action_bit(Action::back)},
+    {0.3f, action_bit(Action::jump_next)},
+    {0.2f, 0, Direction::right},
+    {0.8f, 0, Direction::none, "settings-system"},
+    {0.2f, action_bit(Action::back)},
     {0.5f, action_bit(Action::back)},
     {0.6f, action_bit(Action::north)},
     {0.7f, 0, Direction::none, "search"},
@@ -1400,11 +1404,11 @@ class Library final : public app::Concept
         if (prefs_.autostart)
             std::remove(off.c_str());
         else
-            save::write_atomic(off, "ORION's autostart is off (Settings, Library)\n");
+            save::write_atomic(off, "ORION's autostart is off (Settings, System)\n");
         // The rest-mode watcher the same way: the file says "on".
         const std::string on = state + "/reopen-after-rest";
         if (prefs_.reopen_after_rest)
-            save::write_atomic(on, "ORION opens after rest mode (Settings, Library)\n");
+            save::write_atomic(on, "ORION opens after rest mode (Settings, System)\n");
         else
             std::remove(on.c_str());
     }
@@ -1745,10 +1749,15 @@ class Library final : public app::Concept
         settings_.set_version(context_.version);
         settings_.set_storage(context_.library.self_path,
                               orion::count_files(backdrop_folder(), ".png"));
-        // How full each drive is, asked again each time (statvfs is cheap).
-        settings_.set_drives(orion::find_drives(titles(), sys::on_console()
-                                                              ? orion::SpaceOf(orion::statfs_space)
-                                                              : orion::SpaceOf(preview_space)));
+        // How full each drive is, asked again each time (it is cheap), and
+        // what each step returned, in drives.txt.
+        std::string note;
+        const orion::SpaceOf ask = [&note](const std::string &path, orion::DriveSpace *space)
+        { return orion::statfs_space(path, space, &note); };
+        settings_.set_drives(
+            orion::find_drives(titles(), sys::on_console() ? ask : orion::SpaceOf(preview_space)));
+        if (sys::on_console() && !context_.library.state_dir.empty())
+            save::write_atomic(context_.library.state_dir + "/drives.txt", note);
         settings_.set_current_tab(active_key());
         settings_.open(look_, prefs_, feedback);
     }
@@ -1780,7 +1789,17 @@ class Library final : public app::Concept
                 {"sys:" + system.name, tab_label("sys:" + system.name, system.short_name)});
         for (const orion::CustomTab &tab : prefs_.tabs)
             tabs.push_back({"tab:" + tab.id, tab.name});
+        // Hidden too, while there is something on it: renamed or hidden like
+        // the others.
+        if (any_hidden())
+            tabs.push_back({kHiddenTab, tab_label(kHiddenTab, tr("Hidden"))});
         return tabs;
+    }
+
+    bool any_hidden() const
+    {
+        return std::any_of(titles().begin(), titles().end(),
+                           [&](const Title &t) { return prefs_.title_hidden(t.id); });
     }
 
     // Scan for emulators: the app does it between frames (it owns the
@@ -3836,7 +3855,7 @@ class Library final : public app::Concept
             check_for_updates(false);
         }
         // The anonymous check-in: a little after the update check, then every
-        // five minutes while ORION is open (Settings, Library turns it off).
+        // five minutes while ORION is open (Settings, System turns it off).
         if (age_ >= usage_next_)
         {
             usage_next_ = age_ + orion::kUsageEvery;
@@ -3869,7 +3888,7 @@ class Library final : public app::Concept
             }
             else
                 show_note(true,
-                          trf("ORION {0} is out: Settings, Library, Check now", {latest.version}));
+                          trf("ORION {0} is out: Settings, About, Check now", {latest.version}));
             break;
         case orion::UpdateCheck::State::up_to_date:
             status = trf("ORION {0} is the newest", {context_.version});
@@ -4771,10 +4790,10 @@ class Library final : public app::Concept
             if (!prefs_.tab_hidden("tab:" + tab.id))
                 add("tab:" + tab.id, tab.name);
         }
-        // Hidden, last, while something is hidden.
-        if (std::any_of(titles().begin(), titles().end(),
-                        [&](const Title &t) { return prefs_.title_hidden(t.id); }))
-            add(kHiddenTab, tr("Hidden"));
+        // Hidden, last, while something is hidden, unless the player hid
+        // the tab itself (Settings, Tabs, its page, brings it back).
+        if (any_hidden() && !prefs_.tab_hidden(kHiddenTab))
+            add(kHiddenTab, tab_label(kHiddenTab, tr("Hidden")));
         // Every tab hidden: All stays, or nothing could be reached (Settings
         // brings the others back).
         if (tab_keys_.empty())
