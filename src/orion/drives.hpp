@@ -30,8 +30,8 @@ struct DriveSpace
 // How full the file system holding path is; false when it cannot be asked
 // (not mounted, not reachable).
 using SpaceOf = std::function<bool(const std::string &path, DriveSpace *space)>;
-// The system's answer (statvfs).
-bool statvfs_space(const std::string &path, DriveSpace *space);
+// The system's answer (statfs).
+bool statfs_space(const std::string &path, DriveSpace *space);
 
 struct Drive
 {

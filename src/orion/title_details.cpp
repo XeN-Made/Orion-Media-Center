@@ -5,12 +5,12 @@
 #include "orion/title_details.hpp"
 
 #include "core/i18n.hpp"
+#include "core/save_file.hpp"
 #include "orion/drives.hpp"
 
 #include <algorithm>
 #include <thread>
 
-#include <dirent.h>
 #include <sys/stat.h>
 
 namespace hui::orion
@@ -86,35 +86,32 @@ std::uint64_t folder_bytes(const std::string &path, int max_entries, bool *compl
     std::uint64_t bytes = 0;
     int seen = 0;
     *complete = true;
+    // ORION's own listing: opendir is not in the console's runtime (getdents
+    // is, and save::list_directory uses it there).
     std::vector<std::string> todo = {path};
     while (!todo.empty())
     {
         const std::string folder = std::move(todo.back());
         todo.pop_back();
-        DIR *dir = ::opendir(folder.c_str());
-        if (dir == nullptr)
-            continue;
-        while (const dirent *entry = ::readdir(dir))
+        for (const save::DirectoryEntry &entry : save::list_directory(folder))
         {
-            const std::string name = entry->d_name;
-            if (name == "." || name == "..")
+            if (entry.name == "." || entry.name == "..")
                 continue;
             if (++seen > max_entries)
             {
                 *complete = false;
-                ::closedir(dir);
                 return bytes;
             }
-            const std::string full = folder + "/" + name;
-            struct stat info = {};
-            if (::stat(full.c_str(), &info) != 0)
-                continue;
-            if (S_ISDIR(info.st_mode))
+            const std::string full = folder + "/" + entry.name;
+            if (entry.directory)
+            {
                 todo.push_back(full);
-            else if (S_ISREG(info.st_mode))
+                continue;
+            }
+            struct stat info = {};
+            if (::stat(full.c_str(), &info) == 0 && S_ISREG(info.st_mode))
                 bytes += static_cast<std::uint64_t>(info.st_size);
         }
-        ::closedir(dir);
     }
     return bytes;
 }

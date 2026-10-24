@@ -1747,7 +1747,7 @@ class Library final : public app::Concept
                               orion::count_files(backdrop_folder(), ".png"));
         // How full each drive is, asked again each time (statvfs is cheap).
         settings_.set_drives(orion::find_drives(titles(), sys::on_console()
-                                                              ? orion::SpaceOf(orion::statvfs_space)
+                                                              ? orion::SpaceOf(orion::statfs_space)
                                                               : orion::SpaceOf(preview_space)));
         settings_.set_current_tab(active_key());
         settings_.open(look_, prefs_, feedback);

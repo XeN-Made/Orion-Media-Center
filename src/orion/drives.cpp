@@ -10,7 +10,18 @@
 #include <cstdlib>
 #include <unordered_map>
 
+#include <fcntl.h>
+#include <unistd.h>
+
+#if defined(__PROSPERO__)
+#include <sys/mount.h>
+#include <sys/param.h>
+// The console's libkernel offers fstatfs as _fstatfs; statfs and statvfs are
+// in libraries an app does not load (see statfs_space).
+extern "C" int _fstatfs(int fd, struct statfs *buf);
+#else
 #include <sys/statvfs.h>
+#endif
 
 namespace hui::orion
 {
@@ -29,14 +40,32 @@ bool starts_with(const std::string &path, const std::string &root)
 
 } // namespace
 
-bool statvfs_space(const std::string &path, DriveSpace *space)
+bool statfs_space(const std::string &path, DriveSpace *space)
 {
+#if defined(__PROSPERO__)
+    // statvfs is in the system's C library, which ORION does not run on (its
+    // own runtime, sce_module/libc.prx, has no such call: calling it ended
+    // ORION with SIGSEGV), and statfs only in libkernel_sys. libkernel's
+    // _fstatfs, on the drive's folder opened for it, asks the same.
+    const int fd = ::open(path.c_str(), O_RDONLY | O_DIRECTORY);
+    if (fd < 0)
+        return false;
+    struct statfs info = {};
+    const int result = _fstatfs(fd, &info);
+    ::close(fd);
+    if (result != 0 || info.f_blocks == 0)
+        return false;
+    const std::uint64_t unit = info.f_bsize;
+    space->capacity = static_cast<std::uint64_t>(info.f_blocks) * unit;
+    space->free = static_cast<std::uint64_t>(info.f_bavail > 0 ? info.f_bavail : 0) * unit;
+#else
     struct statvfs info = {};
     if (::statvfs(path.c_str(), &info) != 0 || info.f_blocks == 0)
         return false;
     const std::uint64_t unit = info.f_frsize != 0 ? info.f_frsize : info.f_bsize;
     space->capacity = static_cast<std::uint64_t>(info.f_blocks) * unit;
     space->free = static_cast<std::uint64_t>(info.f_bavail) * unit;
+#endif
     return true;
 }
 
