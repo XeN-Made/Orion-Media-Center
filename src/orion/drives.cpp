@@ -6,6 +6,7 @@
 
 #include "core/i18n.hpp"
 
+#include <cerrno>
 #include <cstdio>
 #include <cstdlib>
 #include <unordered_map>
@@ -40,8 +41,13 @@ bool starts_with(const std::string &path, const std::string &root)
 
 } // namespace
 
-bool statfs_space(const std::string &path, DriveSpace *space)
+bool statfs_space(const std::string &path, DriveSpace *space, std::string *note)
 {
+    const auto say = [&](const std::string &line)
+    {
+        if (note != nullptr)
+            *note += path + ": " + line + "\n";
+    };
 #if defined(__PROSPERO__)
     // statvfs is in the system's C library, which ORION does not run on (its
     // own runtime, sce_module/libc.prx, has no such call: calling it ended
@@ -49,10 +55,25 @@ bool statfs_space(const std::string &path, DriveSpace *space)
     // _fstatfs, on the drive's folder opened for it, asks the same.
     const int fd = ::open(path.c_str(), O_RDONLY | O_DIRECTORY);
     if (fd < 0)
+    {
+        say("open failed, errno " + std::to_string(errno));
         return false;
+    }
     struct statfs info = {};
     const int result = _fstatfs(fd, &info);
+    const int error = errno;
     ::close(fd);
+    say("fstatfs " + std::to_string(result) +
+        (result != 0 ? " errno " + std::to_string(error) : "") + ", version 0x" +
+        [&]
+        {
+            char hex[16];
+            std::snprintf(hex, sizeof(hex), "%x", static_cast<unsigned>(info.f_version));
+            return std::string(hex);
+        }() +
+        ", type " + std::string(info.f_fstypename) + ", block " + std::to_string(info.f_bsize) +
+        ", blocks " + std::to_string(info.f_blocks) + ", available " +
+        std::to_string(info.f_bavail));
     if (result != 0 || info.f_blocks == 0)
         return false;
     const std::uint64_t unit = info.f_bsize;
@@ -61,7 +82,10 @@ bool statfs_space(const std::string &path, DriveSpace *space)
 #else
     struct statvfs info = {};
     if (::statvfs(path.c_str(), &info) != 0 || info.f_blocks == 0)
+    {
+        say("statvfs failed");
         return false;
+    }
     const std::uint64_t unit = info.f_frsize != 0 ? info.f_frsize : info.f_bsize;
     space->capacity = static_cast<std::uint64_t>(info.f_blocks) * unit;
     space->free = static_cast<std::uint64_t>(info.f_bavail) * unit;
@@ -102,6 +126,14 @@ std::vector<Drive> find_drives(const std::vector<library::Title> &titles, const 
             drives.push_back(std::move(drive));
     };
     add(DriveKind::console, 0, "/data");
+    if (drives.empty())
+    {
+        Drive drive;
+        drive.kind = DriveKind::console;
+        drive.path = "/data"; // titles count by this name
+        if (space_of && space_of("/user", &drive.space) && drive.space.capacity > 0)
+            drives.push_back(std::move(drive));
+    }
     for (int i = 0; i < kExtendedDrives; ++i)
         add(DriveKind::extended, i, "/mnt/ext" + std::to_string(i));
     for (int i = 0; i < kUsbDrives; ++i)
