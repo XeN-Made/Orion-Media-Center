@@ -20,13 +20,17 @@ struct CaseWindow
     float y = 0.0f;
     float w = 0.0f;
     float h = 0.0f;
+    // The window is a flat colour, not clear (a template saved without
+    // transparency, its sleeve left white): the cover goes over the picture.
+    bool solid = false;
 };
 
 // The cover window of a case picture: the clear rectangle around its middle
-// (alpha below a quarter). Its edges are found along the middle row and
-// column, so the window is a rectangle, as a case's sleeve is. False when the
-// middle is not clear (a picture with no window) or the window is too small to
-// hold a cover (under a third of each side).
+// (alpha below a quarter), or, where the middle is opaque, the flat colour
+// around it. Its edges are found along the middle row and column, so the
+// window is a rectangle, as a case's sleeve is. False when the middle is
+// neither (a picture with no window) or the window is too small to hold a
+// cover (under a third of each side).
 bool find_case_window(const Image &picture, CaseWindow *window);
 
 // The name of a title's template in <state_dir>/cases, without ".png": "ps5"

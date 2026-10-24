@@ -24,6 +24,25 @@ bool clear(const Image &picture, int x, int y)
     return picture.rgba[pixel * 4 + 3] < kClear; // its alpha
 }
 
+// The middle's colour, for a window that is a flat colour: a pixel is in it
+// when no channel differs by more than this.
+constexpr int kSameColour = 24;
+
+bool same_colour(const Image &picture, int x, int y, const std::uint8_t *middle)
+{
+    const std::size_t pixel =
+        static_cast<std::size_t>(y) * static_cast<std::size_t>(picture.width) +
+        static_cast<std::size_t>(x);
+    for (int channel = 0; channel < 4; ++channel)
+    {
+        const int difference =
+            static_cast<int>(picture.rgba[pixel * 4 + channel]) - static_cast<int>(middle[channel]);
+        if (difference > kSameColour || difference < -kSameColour)
+            return false;
+    }
+    return true;
+}
+
 std::string simple(std::string_view name)
 {
     std::string key;
@@ -45,19 +64,24 @@ bool find_case_window(const Image &picture, CaseWindow *window)
         return false;
     const int cx = picture.width / 2;
     const int cy = picture.height / 2;
-    if (!clear(picture, cx, cy))
-        return false;
+    const bool solid = !clear(picture, cx, cy);
+    std::uint8_t middle[4] = {};
+    for (int channel = 0; channel < 4; ++channel)
+        middle[channel] = picture.rgba[(static_cast<std::size_t>(cy) * picture.width + cx) * 4 +
+                                       static_cast<std::size_t>(channel)];
+    const auto inside = [&](int x, int y)
+    { return solid ? same_colour(picture, x, y, middle) : clear(picture, x, y); };
     int left = cx;
     int right = cx;
     int top = cy;
     int bottom = cy;
-    while (left > 0 && clear(picture, left - 1, cy))
+    while (left > 0 && inside(left - 1, cy))
         --left;
-    while (right < picture.width - 1 && clear(picture, right + 1, cy))
+    while (right < picture.width - 1 && inside(right + 1, cy))
         ++right;
-    while (top > 0 && clear(picture, cx, top - 1))
+    while (top > 0 && inside(cx, top - 1))
         --top;
-    while (bottom < picture.height - 1 && clear(picture, cx, bottom + 1))
+    while (bottom < picture.height - 1 && inside(cx, bottom + 1))
         ++bottom;
     const int w = right - left + 1;
     const int h = bottom - top + 1;
@@ -66,7 +90,7 @@ bool find_case_window(const Image &picture, CaseWindow *window)
     const float width = static_cast<float>(picture.width);
     const float height = static_cast<float>(picture.height);
     *window = {static_cast<float>(left) / width, static_cast<float>(top) / height,
-               static_cast<float>(w) / width, static_cast<float>(h) / height};
+               static_cast<float>(w) / width, static_cast<float>(h) / height, solid};
     return true;
 }
 

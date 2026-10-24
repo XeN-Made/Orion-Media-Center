@@ -5413,10 +5413,15 @@ class Library final : public app::Concept
         }
         const Rect window{art.x + shell.window_x * art.w, art.y + shell.window_y * art.h,
                           shell.window_w * art.w, shell.window_h * art.h};
+        // A clear window shows the cover through the picture; a flat one
+        // (no transparency in the file) has it laid over the picture.
+        if (shell.window_solid)
+            list.image(shell.texture, art, gfx::kFullUv, Color::rgb(0xffffff));
         list.push_clip(window);
         draw_cover_art(canvas, window, window, item, title, 0.0f);
         list.pop_clip();
-        list.image(shell.texture, art, gfx::kFullUv, Color::rgb(0xffffff));
+        if (!shell.window_solid)
+            list.image(shell.texture, art, gfx::kFullUv, Color::rgb(0xffffff));
         if (favourite_of(title.id))
         {
             const float r = std::max(16.0f, art.w * 0.06f);

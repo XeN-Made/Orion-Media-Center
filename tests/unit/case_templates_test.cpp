@@ -35,9 +35,29 @@ TEST(CaseTemplates, FindTheCoverWindow)
     EXPECT_FLOAT_EQ(window.y, 0.15f);
     EXPECT_FLOAT_EQ(window.w, 0.92f);
     EXPECT_FLOAT_EQ(window.h, 0.83f);
-    // Opaque in the middle: no window. A clear spot too small for a cover: none.
-    EXPECT_FALSE(library::find_case_window(case_picture(100, 200, 0, 0, 0, 0), &window));
+    EXPECT_FALSE(window.solid);
+    // Opaque and one colour all over: that colour is the window (here all of
+    // it). A clear spot too small for a cover: none.
+    ASSERT_TRUE(library::find_case_window(case_picture(100, 200, 0, 0, 0, 0), &window));
+    EXPECT_TRUE(window.solid);
     EXPECT_FALSE(library::find_case_window(case_picture(100, 200, 45, 95, 55, 105), &window));
+    // A white sleeve under a coloured header, saved without transparency.
+    library::Image white = case_picture(100, 200, 0, 0, 0, 0);
+    for (int y = 0; y < 200; ++y)
+    {
+        for (int x = 0; x < 100; ++x)
+        {
+            const bool header = y < 30;
+            std::uint8_t *pixel = &white.rgba[(static_cast<std::size_t>(y) * 100 + x) * 4];
+            pixel[0] = header ? 20 : 250;
+            pixel[1] = header ? 60 : 250;
+            pixel[2] = header ? 200 : 252;
+        }
+    }
+    ASSERT_TRUE(library::find_case_window(white, &window));
+    EXPECT_TRUE(window.solid);
+    EXPECT_FLOAT_EQ(window.y, 0.15f);
+    EXPECT_FLOAT_EQ(window.h, 0.85f);
     library::Image broken;
     broken.width = 100;
     broken.height = 100;

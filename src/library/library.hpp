@@ -164,6 +164,7 @@ struct CaseTemplate
     float window_y = 0.0f;
     float window_w = 0.0f;
     float window_h = 0.0f;
+    bool window_solid = false; // a flat colour, not clear: the cover goes over it
 };
 
 struct Library

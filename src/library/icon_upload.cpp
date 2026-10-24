@@ -134,6 +134,7 @@ int load_case_templates(Library &library, const std::string &folder, gfx::GlBatc
         shell.window_y = window.y;
         shell.window_w = window.w;
         shell.window_h = window.h;
+        shell.window_solid = window.solid;
         library.cases.push_back(std::move(shell));
     }
     return static_cast<int>(library.cases.size());

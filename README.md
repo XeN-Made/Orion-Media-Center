@@ -299,8 +299,9 @@ you chose for it.
   case and punctuation do not matter. **Use its own picture** puts the
   original back.
 - **Case pictures for Cases view**: put a PNG of an empty case in
-  `/data/orion/cases`, with a **transparent window** where the cover goes, and
-  Cases view draws each cover inside it. Name it for what it holds: `ps5.png`,
+  `/data/orion/cases`, with a **transparent window** where the cover goes (or
+  one flat colour there, such as a white sleeve), and Cases view draws each
+  cover inside it. Name it for what it holds: `ps5.png`,
   `ps4.png`, `homebrew.png`, `media.png`, or a system's short name for its
   games (`ps2.png`, `ps1.png`, `psp.png`, `wii.png`, `wiiu.png`, `ngc.png` or
   `gc.png` for GameCube, `3ds.png`, `ds.png`, `switch.png`, `gba.png`,
