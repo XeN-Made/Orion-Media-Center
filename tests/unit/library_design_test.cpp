@@ -265,11 +265,15 @@ TEST_F(LibraryDesign, CrossMovesATitleToACustomTabAndItIsRemembered)
     auto design = with_fixture();
 
     // Options opens the menu on Ciel Ouvert: Launch, Favourite, Hide, Rename,
-    // Choose picture, Find other art, Choose music, then Move to RPGs.
+    // Choose picture, Find other art, Choose music, then Move to tab…, which
+    // lists the player's tabs (RPGs first) and New tab… after them.
     send(*design, press(hui::Action::menu));
     EXPECT_FALSE(last_cues_.empty());
     for (int i = 0; i < 7; ++i)
         send(*design, nav(Direction::down));
+    send(*design, press(hui::Action::confirm));
+    expect_drawable(*design);
+    EXPECT_EQ(hui::orion::load_prefs(dir).placement("PPSA90108"), nullptr); // not yet
     send(*design, press(hui::Action::confirm));
     expect_drawable(*design);
     const hui::orion::LibraryPrefs saved = hui::orion::load_prefs(dir);

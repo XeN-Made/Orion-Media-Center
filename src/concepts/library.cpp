@@ -57,6 +57,7 @@
 #include <ctime>
 #include <memory>
 #include <string>
+#include <thread>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -184,6 +185,7 @@ enum : int
     kItemPickUp,          // the picture browser: up one folder
     kItemPickMore,        // its next page
     kItemPickLess,        // its page before
+    kItemMoveMenu,        // Move to tab…: the list of tabs
     kItemMove = 100,      // + the tab's index
     kItemPlayer = 300,    // 0: the default, then 1 + an index in library::players_for
     kItemPickPlace = 500, // + an index in pick_places_
@@ -681,7 +683,6 @@ class Library final : public app::Concept
         start_resume_watcher();
         read_hover_music();
         take_new_title_id();
-        take_usage_notice();
         if (!own_title_id().empty())
             settings_.set_title_id(own_title_id());
         settings_.set_grid_key(
@@ -898,8 +899,6 @@ class Library final : public app::Concept
             content.buttons = {{tr("OK"), ui::ButtonKind::primary, false}};
             dialog_info_ = true;
             dialog_.open(std::move(content), feedback);
-            if (std::exchange(usage_notice_, false))
-                save::write_atomic(context_.library.state_dir + "/usage-notice.txt", "told\n");
         }
         update_title_music(dt);
         follow_backdrop(dt);
@@ -1420,11 +1419,18 @@ class Library final : public app::Concept
         std::string elf;
         if (!save::read_file(kResumePath, &elf, 1u << 20) || elf.empty())
             return;
-        const int error = sys::send_payload(elf, kLoaderPort);
-        orion::update_log(update_log_path(), error == 0 ? "orion: the rest-mode watcher is sent"
-                                                        : "orion: could not send the rest-mode "
-                                                          "watcher (errno " +
-                                                              std::to_string(error) + ")");
+        // On a thread of its own: a busy loader must not keep the library
+        // from opening (it did: the first frame waited on the send).
+        std::thread(
+            [elf = std::move(elf), log = update_log_path()]()
+            {
+                const int error = sys::send_payload(elf, kLoaderPort);
+                orion::update_log(log, error == 0 ? "orion: the rest-mode watcher is sent"
+                                                  : "orion: could not send the rest-mode watcher "
+                                                    "(errno " +
+                                                        std::to_string(error) + ")");
+            })
+            .detach();
     }
 
     // ---- input ----
@@ -2769,18 +2775,13 @@ class Library final : public app::Concept
         ui::MenuItem line;
         line.separator = true;
         items.push_back(line);
-        for (std::size_t i = 0; i < prefs_.tabs.size(); ++i)
-        {
-            const bool here = placed != nullptr && placed->id == prefs_.tabs[i].id;
-            ui::MenuItem move = menu_item(trf("Move to {0}", {prefs_.tabs[i].name}));
-            move.tag = kItemMove + static_cast<int>(i);
-            move.disabled = here;
-            move.shortcut = here ? tr("Here") : "";
-            items.push_back(move);
-        }
-        ui::MenuItem fresh = menu_item(tr("Move to a new tab…"));
-        fresh.tag = kItemNewTab;
-        items.push_back(fresh);
+        // One item, whatever the number of tabs: the menu does not scroll, and
+        // an item per tab pushed the list off the screen. It opens them.
+        ui::MenuItem move =
+            menu_item(prefs_.tabs.empty() ? tr("Move to a new tab…") : tr("Move to tab…"));
+        move.tag = prefs_.tabs.empty() ? kItemNewTab : kItemMoveMenu;
+        move.shortcut = placed != nullptr ? placed->name : "";
+        items.push_back(move);
         if (placed != nullptr)
         {
             ui::MenuItem unplace = menu_item(trf("Remove from {0}", {placed->name}));
@@ -3072,6 +3073,32 @@ class Library final : public app::Concept
     // every emulator and core that can play it.
     // launch_after: the game is starting and has no emulator chosen yet; the
     // list is just the emulators, and the one picked is kept and started.
+    // Move to tab…: the player's tabs (the one it is on marked Here), then
+    // New tab…, in the place of the title's menu. At most a page of them: the
+    // menu does not scroll.
+    void open_tab_menu(app::Feedback &feedback)
+    {
+        const orion::CustomTab *placed = prefs_.placement(menu_title_);
+        std::vector<ui::MenuItem> items;
+        for (std::size_t i = 0; i < prefs_.tabs.size() && i < kPickPage; ++i)
+        {
+            const bool here = placed != nullptr && placed->id == prefs_.tabs[i].id;
+            ui::MenuItem item = menu_item(prefs_.tabs[i].name);
+            item.tag = kItemMove + static_cast<int>(i);
+            item.disabled = here;
+            item.shortcut = here ? tr("Here") : "";
+            items.push_back(item);
+        }
+        ui::MenuItem line;
+        line.separator = true;
+        items.push_back(line);
+        ui::MenuItem fresh = menu_item(tr("New tab…"));
+        fresh.tag = kItemNewTab;
+        items.push_back(fresh);
+        menu_.set_items(std::move(items));
+        menu_.open(grid_.cell_rect(grid_.focus()), feedback);
+    }
+
     void open_player_menu(app::Feedback &feedback, bool launch_after = false)
     {
         const Title *title = find_title(menu_title_);
@@ -3161,6 +3188,11 @@ class Library final : public app::Concept
         if (tag == kItemPlayWith)
         {
             open_player_menu(feedback);
+            return;
+        }
+        if (tag == kItemMoveMenu)
+        {
+            open_tab_menu(feedback);
             return;
         }
         if (tag >= kItemPlayer && tag < kItemPlayer + 100)
@@ -3772,13 +3804,12 @@ class Library final : public app::Concept
             check_for_updates(false);
         }
         // The anonymous check-in: a little after the update check, then every
-        // five minutes while ORION is open, once the player has seen the notice.
+        // five minutes while ORION is open (Settings, Library turns it off).
         if (age_ >= usage_next_)
         {
             usage_next_ = age_ + orion::kUsageEvery;
             const std::string &state = context_.library.state_dir;
-            if (prefs_.share_usage && sys::on_console() && !context_.version.empty() &&
-                usage_told())
+            if (prefs_.share_usage && sys::on_console() && !context_.version.empty())
                 usage_.send([](const std::string &url, const std::string &body, std::string *error)
                             { return sys::http_post(url, body, error); }, orion::kUsageUrl, state,
                             {orion::usage_id(state), context_.version}, std::time(nullptr));
@@ -3918,29 +3949,6 @@ class Library final : public app::Concept
         orion::update_log(update_log_path(), "orion: installing " + id + " beside, in " + target);
         return send_helper(id + "\n@update " + update + "/stage\t" + target + "\n@fallback " +
                            own_title_id() + "\n");
-    }
-
-    // At start: what the anonymous check-in is, said once (after the setup
-    // on a new console; the dialog waits for it). Nothing is sent before it
-    // has been on screen (usage-notice.txt, written as it opens).
-    void take_usage_notice()
-    {
-        const std::string &state = context_.library.state_dir;
-        if (!sys::on_console() || state.empty() || !info_title_.empty() || usage_told())
-            return;
-        usage_notice_ = true;
-        info_title_ = tr("Anonymous usage");
-        info_body_ =
-            tr("To know how many consoles use ORION, it checks in while it is open (every\n"
-               "five minutes): a random ID made on this console and ORION's version. Nothing\n"
-               "else: no account, no games, no console details. What was sent last is in\n"
-               "/data/orion/usage.txt. Settings, Library, Share anonymous usage turns it off.");
-    }
-
-    bool usage_told() const
-    {
-        std::string told;
-        return save::read_file(context_.library.state_dir + "/usage-notice.txt", &told, 64);
     }
 
     // At start: the heads-up before the move, or what to do after it.
@@ -5820,9 +5828,8 @@ class Library final : public app::Concept
     bool dialog_update_ = false;  // the dialog asks about the update, not a removal
     bool dialog_info_ = false;    // the dialog only tells something (OK)
     orion::UsageSender usage_;
-    float usage_next_ = 6.0f;   // age_ at the next check-in
-    bool usage_notice_ = false; // the waiting message is the anonymous usage notice
-    std::string info_title_;    // a message waiting to be shown
+    float usage_next_ = 6.0f; // age_ at the next check-in
+    std::string info_title_;  // a message waiting to be shown
     std::string info_body_;
 };
 

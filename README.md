@@ -333,7 +333,6 @@ deletes everything older than 400 days. What ORION sent last, when and where
 to, is in `/data/orion/usage.txt`.
 
 It is on unless you turn it off: Settings, Library, **Share anonymous usage**.
-ORION says so in a message the first time it opens, before anything is sent.
 
 ## If something goes wrong
 
