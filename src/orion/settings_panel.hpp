@@ -9,6 +9,7 @@
 #include "library/library.hpp"
 #include "orion/languages.hpp"
 #include "orion/look.hpp"
+#include "orion/drives.hpp"
 #include "orion/prefs.hpp"
 #include "ui/components/form.hpp"
 #include "ui/components/sheet.hpp"
@@ -141,6 +142,11 @@ class SettingsPanel
     {
         self_path_ = std::move(self_path);
         backdrops_ = backdrops;
+    }
+    // The drives Storage shows, how full each is and the titles on it.
+    void set_drives(std::vector<Drive> drives)
+    {
+        drives_ = std::move(drives);
     }
     // ORION's own art folder, to show beside the choice that means it.
     void set_state_dir(std::string dir)
@@ -282,6 +288,7 @@ class SettingsPanel
     const TabEntry *tab_entry(const std::string &key) const;
     const library::System *system_of(const std::string &key) const;
     void draw_content(ui::Canvas &canvas, float opacity) const;
+    void draw_drive(ui::Canvas &canvas, const gfx::Rect &control, const ui::FormRow &row) const;
 
     ui::Sheet sheet_;
     ui::SideNav nav_;
@@ -312,6 +319,7 @@ class SettingsPanel
     std::string browse_path_;
     std::vector<std::string> browse_folders_;
     std::vector<std::pair<std::string, std::string>> places_;
+    std::vector<Drive> drives_; // Storage: how full each drive is
     int folder_page_ = -1; // the game folder whose page is open (in prefs.rom_folders); -1: none
     std::string scan_status_;
     bool grid_key_ =

@@ -120,6 +120,7 @@ enum : int
     kOwnFolderRow = 600, // + the index of a folder the emulator looks in by itself
     kMissingRow = 700,   // + the index of a known emulator that is not installed
     kBrowseRow = 800,    // + the folder's index in browse_folders_ (or in places_)
+    kDriveRow = 900,     // + the drive's index in drives_
 };
 
 // The emulator a game folder is for: empty in the prefs is RetroArch.
@@ -253,6 +254,34 @@ SettingsPanel::SettingsPanel()
     form_.style.value_size = 24.0f;
     form_.style.description_size = 20.0f;
     form_.style.control_width = 420.0f; // room for theme names
+    // The drive rows draw a bar of how full the drive is beside "free of".
+    form_.style.trailing_marked = true;
+    form_.trailing = [this](ui::Canvas &canvas, const gfx::Rect &control, const ui::FormRow &row,
+                            float) { draw_drive(canvas, control, row); };
+}
+
+// The control of a drive row: how full it is, then what is free of what.
+void SettingsPanel::draw_drive(ui::Canvas &canvas, const gfx::Rect &control,
+                               const ui::FormRow &row) const
+{
+    const int index = row.id - kDriveRow;
+    if (index < 0 || index >= static_cast<int>(drives_.size()))
+        return;
+    const DriveSpace &space = drives_[static_cast<std::size_t>(index)].space;
+    const ui::Theme &theme = form_.style.theme;
+    ui::Painter paint(canvas.list, canvas.fonts, theme, canvas.glass);
+    const float used = space.capacity == 0
+                           ? 0.0f
+                           : static_cast<float>(static_cast<double>(space.capacity - space.free) /
+                                                static_cast<double>(space.capacity));
+    const float size = form_.style.value_size;
+    const float baseline = control.y + control.h * 0.5f + size * 0.35f;
+    const float width = paint.label(
+        trf("{0} free of {1}", {format_bytes(space.free), format_bytes(space.capacity)}),
+        control.x + control.w, baseline, size, theme.text_muted, gfx::Align::right);
+    const float bar = control.w - width - 18.0f;
+    if (bar > 40.0f)
+        paint.progress({control.x, control.y + control.h * 0.5f - 6.0f, bar, 12.0f}, used);
 }
 
 void SettingsPanel::set_theme(const ui::Theme &theme, bool reduced_motion)
@@ -900,6 +929,22 @@ void SettingsPanel::build_sound(const LibraryPrefs &prefs)
 
 void SettingsPanel::build_storage(const LibraryPrefs &prefs)
 {
+    if (!drives_.empty())
+    {
+        form_.add_header(tr("Drives"));
+        for (std::size_t i = 0; i < drives_.size(); ++i)
+        {
+            const Drive &drive = drives_[i];
+            // The count goes with the name: these rows take no focus, so a
+            // description would never unfold.
+            ui::FormRow &row =
+                form_.add_value(kDriveRow + static_cast<int>(i),
+                                drive_name(drive.path) + "  ·  " +
+                                    i18n::plural(drive.titles, "{0} title", "{0} titles"),
+                                "");
+            row.own_control = true;
+        }
+    }
     form_.add_header(tr("Folders"));
     form_
         .add_choice(kArtFolder, tr("Box art folder"), i18n::tr_range(kArtPlaces, kArtPlaces + 4),

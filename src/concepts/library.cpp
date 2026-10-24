@@ -33,6 +33,8 @@
 #include "orion/setup_panel.hpp"
 #include "orion/storage.hpp"
 #include "orion/theme_file.hpp"
+#include "orion/drives.hpp"
+#include "orion/title_details.hpp"
 #include "orion/updates.hpp"
 #include "orion/usage.hpp"
 #include "platform/ps5/system.hpp"
@@ -186,6 +188,7 @@ enum : int
     kItemPickMore,        // its next page
     kItemPickLess,        // its page before
     kItemMoveMenu,        // Move to tab…: the list of tabs
+    kItemDetails,         // Details…: the title's page
     kItemMove = 100,      // + the tab's index
     kItemPlayer = 300,    // 0: the default, then 1 + an index in library::players_for
     kItemPickPlace = 500, // + an index in pick_places_
@@ -236,6 +239,12 @@ constexpr app::TourStep kTour[] = {
     {0.3f, 0, Direction::down},
     {0.6f, action_bit(Action::menu), Direction::none, "favourite"},
     {0.6f, action_bit(Action::back), Direction::none, "title-menu"},
+    // Details… opens the title's page; Circle closes it.
+    {0.4f, action_bit(Action::menu)},
+    {0.3f, 0, Direction::down},
+    {0.3f, action_bit(Action::confirm)},
+    {0.9f, 0, Direction::none, "details"},
+    {0.5f, action_bit(Action::back)},
     // Cross launches: on a PC the card says it needs the console.
     {0.4f, action_bit(Action::confirm)},
     {0.7f, 0, Direction::none, "launch"},
@@ -264,16 +273,8 @@ constexpr app::TourStep kTour[] = {
     {0.3f, action_bit(Action::jump_next)},
     {0.2f, 0, Direction::right},
     {0.8f, 0, Direction::none, "settings-emulators"},
-    {0.12f, 0, Direction::down},
-    {0.3f, action_bit(Action::confirm)},
-    {0.8f, 0, Direction::none, "settings-emulator-page"},
-    {0.2f, action_bit(Action::back)},
-    {0.2f, action_bit(Action::back)},
-    {0.3f, action_bit(Action::jump_next)},
-    {0.2f, 0, Direction::right},
-    {0.12f, 0, Direction::down},
-    {0.12f, 0, Direction::down},
-    {0.8f, 0, Direction::none, "settings-art"},
+    // Storage, next: the drives first (two invented ones on a PC), then the
+    // folders.
     {0.2f, action_bit(Action::back)},
     {0.3f, action_bit(Action::jump_next)},
     {0.2f, 0, Direction::right},
@@ -943,6 +944,8 @@ class Library final : public app::Concept
             update_typing(input, feedback);
         else if (menu_.is_open())
             update_menu(input, feedback);
+        else if (details_.is_open())
+            update_details(input, feedback);
         else if (setup_.is_open())
             update_setup(input, feedback);
         else if (settings_.is_open())
@@ -974,6 +977,7 @@ class Library final : public app::Concept
         menu_.update(dt);
         dialog_.update(dt);
         settings_.update(dt);
+        details_.update(dt);
         follow_preview();
         setup_.update(dt);
         if (launch_exit_ > 0.0f)
@@ -1062,6 +1066,7 @@ class Library final : public app::Concept
             draw_hints(list, paint);
         draw_launch_card(list, paint);
         draw_hold_to_exit(list, paint);
+        details_.draw(canvas);
         settings_.draw(canvas);
         setup_.draw(canvas);
         if (keyboard_shown_.value > 0.01f && over_settings)
@@ -1125,6 +1130,7 @@ class Library final : public app::Concept
             menu_.style.reduced_motion = continue_.style.reduced_motion = reduced_;
         settings_.set_theme(theme_, reduced_);
         setup_.set_theme(theme_, reduced_);
+        details_.set_theme(theme_, reduced_);
     }
 
     // The shape of the active tab's covers: the one chosen in Settings, else
@@ -1739,8 +1745,26 @@ class Library final : public app::Concept
         settings_.set_version(context_.version);
         settings_.set_storage(context_.library.self_path,
                               orion::count_files(backdrop_folder(), ".png"));
+        // How full each drive is, asked again each time (statvfs is cheap).
+        settings_.set_drives(orion::find_drives(titles(), sys::on_console()
+                                                              ? orion::SpaceOf(orion::statvfs_space)
+                                                              : orion::SpaceOf(preview_space)));
         settings_.set_current_tab(active_key());
         settings_.open(look_, prefs_, feedback);
+    }
+
+    // The PC preview has no console drives: two invented ones, so its
+    // pictures show the Drives rows.
+    static bool preview_space(const std::string &path, orion::DriveSpace *space)
+    {
+        constexpr std::uint64_t kGb = 1000ull * 1000ull * 1000ull;
+        if (path == "/data")
+            *space = {825 * kGb, 312 * kGb};
+        else if (path == "/mnt/usb1")
+            *space = {2000 * kGb, 1460 * kGb};
+        else
+            return false;
+        return true;
     }
 
     // Every tab ORION can show, in tab bar order, hidden ones included.
@@ -2717,6 +2741,9 @@ class Library final : public app::Concept
         launch.tag = kItemLaunch;
         launch.disabled = launch_pending_ > 0.0f;
         items.push_back(launch);
+        ui::MenuItem details = menu_item(tr("Details…"));
+        details.tag = kItemDetails;
+        items.push_back(details);
         ui::MenuItem gap;
         gap.separator = true;
         items.push_back(gap);
@@ -3168,6 +3195,11 @@ class Library final : public app::Concept
         if (tag == kItemLaunch)
         {
             launch(menu_title_, feedback);
+            return;
+        }
+        if (tag == kItemDetails)
+        {
+            open_details(menu_title_, feedback);
             return;
         }
         if (tag == kItemRemove)
@@ -4481,6 +4513,75 @@ class Library final : public app::Concept
         launch_shown_ = 4.0f;
         if (settings_.is_open())
             settings_.refresh(look_, prefs_);
+    }
+
+    // ---- details ----
+
+    // A title's page (orion/title_details.hpp): what it is, where it lives,
+    // its history; Play and Favourite from there.
+    void open_details(const std::string &id, app::Feedback &feedback)
+    {
+        const Title *title = find_title(id);
+        if (title == nullptr)
+            return;
+        details_id_ = id;
+        orion::TitleFacts facts;
+        facts.name = title->name;
+        if (title->is_rom())
+        {
+            const std::size_t slash = title->path.rfind('/');
+            facts.file = slash == std::string::npos ? title->path : title->path.substr(slash + 1);
+            facts.kind = library::short_system_name(title->system);
+            facts.plays_with = player_label(*title);
+            if (facts.plays_with.empty())
+                facts.plays_with = emulator_name(*title);
+        }
+        else
+        {
+            facts.id = title->id;
+            facts.version = title->version;
+            facts.kind = tr(shelf_name(library::shelf_of(*title)));
+            facts.plays_with = library::platform_name(title->platform);
+            facts.kept_as = title->source == library::Source::image       ? tr("Image")
+                            : title->source == library::Source::installed ? tr("Installed")
+                                                                          : tr("Folder");
+            facts.folder = title->source == library::Source::folder;
+        }
+        facts.path = title->path;
+        facts.drive = orion::drive_name(orion::drive_of(title->path));
+        const orion::PlayRecord &record = played(*title);
+        const std::int64_t now = static_cast<std::int64_t>(std::time(nullptr));
+        if (record.sessions > 0)
+        {
+            facts.play_time = orion::play_time_text(record.seconds);
+            facts.last_played = orion::ago_text(record.last, now);
+        }
+        if (title->added > 0)
+            facts.added = orion::ago_text(title->added, now);
+        facts.favourite = favourite_of(title->id);
+        facts.texture = title->sharp_texture != 0 ? title->sharp_texture : title->texture;
+        const int w = title->sharp_texture != 0 ? title->sharp_width : title->icon_width;
+        const int h = title->sharp_texture != 0 ? title->sharp_height : title->icon_height;
+        facts.aspect = w > 0 && h > 0 ? static_cast<float>(w) / static_cast<float>(h) : 1.0f;
+        details_.open(std::move(facts), feedback);
+    }
+
+    void update_details(const InputFrame &input, app::Feedback &feedback)
+    {
+        switch (details_.handle(input, feedback))
+        {
+        case orion::TitleDetails::Choice::play:
+            details_.close(feedback);
+            launch(details_id_, feedback);
+            break;
+        case orion::TitleDetails::Choice::favourite:
+            toggle_favourite(details_id_, feedback);
+            details_.set_favourite(favourite_of(details_id_));
+            break;
+        case orion::TitleDetails::Choice::closed:
+        case orion::TitleDetails::Choice::none:
+            break;
+        }
     }
 
     void toggle_favourite(const std::string &id, app::Feedback &feedback)
@@ -5828,8 +5929,10 @@ class Library final : public app::Concept
     bool dialog_update_ = false;  // the dialog asks about the update, not a removal
     bool dialog_info_ = false;    // the dialog only tells something (OK)
     orion::UsageSender usage_;
-    float usage_next_ = 6.0f; // age_ at the next check-in
-    std::string info_title_;  // a message waiting to be shown
+    orion::TitleDetails details_; // a title's page (Details… in its menu)
+    std::string details_id_;      // the title it shows
+    float usage_next_ = 6.0f;     // age_ at the next check-in
+    std::string info_title_;      // a message waiting to be shown
     std::string info_body_;
 };
 

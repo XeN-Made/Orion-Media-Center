@@ -264,12 +264,12 @@ TEST_F(LibraryDesign, CrossMovesATitleToACustomTabAndItIsRemembered)
     library_.state_dir = dir;
     auto design = with_fixture();
 
-    // Options opens the menu on Ciel Ouvert: Launch, Favourite, Hide, Rename,
-    // Choose picture, Find other art, Choose music, then Move to tab…, which
-    // lists the player's tabs (RPGs first) and New tab… after them.
+    // Options opens the menu on Ciel Ouvert: Launch, Details, Favourite, Hide,
+    // Rename, Choose picture, Find other art, Choose music, then Move to tab…,
+    // which lists the player's tabs (RPGs first) and New tab… after them.
     send(*design, press(hui::Action::menu));
     EXPECT_FALSE(last_cues_.empty());
-    for (int i = 0; i < 7; ++i)
+    for (int i = 0; i < 8; ++i)
         send(*design, nav(Direction::down));
     send(*design, press(hui::Action::confirm));
     expect_drawable(*design);
@@ -293,6 +293,30 @@ TEST_F(LibraryDesign, CrossMovesATitleToACustomTabAndItIsRemembered)
     EXPECT_TRUE(played(Cue::error));
 }
 
+// Details… shows the title's page: Play and Favourite first, then its facts.
+// Cross on Favourite stars it, Circle closes the page, and the library has the
+// input again.
+TEST_F(LibraryDesign, DetailsShowATitlesPageAndStarIt)
+{
+    const std::string dir = ::testing::TempDir() + "orion-design-details";
+    ASSERT_TRUE(hui::save::ensure_directory(dir));
+    std::remove((dir + "/library.json").c_str());
+    std::remove((dir + "/favourites.json").c_str());
+    library_.state_dir = dir;
+    auto design = with_fixture();
+    send(*design, press(hui::Action::menu));
+    send(*design, nav(Direction::down)); // Details…
+    send(*design, press(hui::Action::confirm));
+    expect_drawable(*design);
+    send(*design, nav(Direction::down)); // Play, then Add to Favourites
+    send(*design, press(hui::Action::confirm));
+    EXPECT_TRUE(played(Cue::favorite_on));
+    expect_drawable(*design);
+    send(*design, press(hui::Action::back)); // closes the page
+    send(*design, nav(Direction::right));    // the covers have the input again
+    EXPECT_TRUE(played(Cue::focus));
+}
+
 // Hide this title takes it off every shelf onto a Hidden tab at the end;
 // Show this title brings it back, and the Hidden tab goes with the last one.
 TEST_F(LibraryDesign, AHiddenTitleLeavesItsShelvesForTheHiddenTab)
@@ -303,10 +327,10 @@ TEST_F(LibraryDesign, AHiddenTitleLeavesItsShelvesForTheHiddenTab)
     std::remove((dir + "/favourites.json").c_str());
     library_.state_dir = dir;
     auto design = with_fixture();
-    // Options on the first title: Launch, Favourite, Hide.
+    // Options on the first title: Launch, Details, Favourite, Hide.
     send(*design, press(hui::Action::menu));
-    send(*design, nav(Direction::down));
-    send(*design, nav(Direction::down));
+    for (int i = 0; i < 3; ++i)
+        send(*design, nav(Direction::down));
     send(*design, press(hui::Action::confirm));
     const hui::orion::LibraryPrefs saved = hui::orion::load_prefs(dir);
     ASSERT_EQ(saved.hidden_titles.size(), 1u);
@@ -327,8 +351,8 @@ TEST_F(LibraryDesign, AHiddenTitleLeavesItsShelvesForTheHiddenTab)
     EXPECT_TRUE(played(Cue::error));
     // Show this title: no title is hidden, and the Hidden tab is gone.
     send(*design, press(hui::Action::menu));
-    send(*design, nav(Direction::down));
-    send(*design, nav(Direction::down));
+    for (int i = 0; i < 3; ++i)
+        send(*design, nav(Direction::down));
     send(*design, press(hui::Action::confirm));
     EXPECT_TRUE(hui::orion::load_prefs(dir).hidden_titles.empty());
     // Its tab went with it: ORION is on All again, and R1 turns to Games.
@@ -366,10 +390,11 @@ TEST_F(LibraryDesign, DeletingAGameFileWantsCrossHeld)
     // All, Games, Homebrew, Media, Favourites, Emulators: Doomed alone.
     for (int i = 0; i < 5; ++i)
         send(*design, press(hui::Action::page_next));
-    // Options: Launch, Favourite, Hide, Rename, Choose picture, Find other
-    // art, Choose music, Download box art again, Move to a new tab, Remove….
+    // Options: Launch, Details, Favourite, Hide, Rename, Choose picture, Find
+    // other art, Choose music, Download box art again, Move to a new tab,
+    // Remove….
     send(*design, press(hui::Action::menu));
-    for (int i = 0; i < 9; ++i)
+    for (int i = 0; i < 10; ++i)
         send(*design, nav(Direction::down));
     send(*design, press(hui::Action::confirm)); // Remove…
     send(*design, press(hui::Action::confirm)); // Delete the game file…
