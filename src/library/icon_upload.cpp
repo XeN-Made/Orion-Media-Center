@@ -109,12 +109,14 @@ int load_case_templates(Library &library, const std::string &folder, gfx::GlBatc
     for (const save::DirectoryEntry &entry : save::list_directory(folder))
     {
         const std::string &name = entry.name;
-        if (entry.directory || name.size() < 5 || library.cases.size() >= 32)
+        const std::size_t dot = name.rfind('.');
+        if (entry.directory || dot == std::string::npos || dot == 0 || library.cases.size() >= 32)
             continue;
-        std::string extension = name.substr(name.size() - 4);
+        // PNG, or JPEG (no transparency: its window is a flat colour).
+        std::string extension = name.substr(dot);
         for (char &c : extension)
             c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-        if (extension != ".png")
+        if (extension != ".png" && extension != ".jpg" && extension != ".jpeg")
             continue;
         std::string bytes;
         Image picture;
@@ -123,7 +125,7 @@ int load_case_templates(Library &library, const std::string &folder, gfx::GlBatc
             !decode_png(bytes, kSharpSize, &picture) || !find_case_window(picture, &window))
             continue;
         CaseTemplate shell;
-        for (const char c : name.substr(0, name.size() - 4))
+        for (const char c : name.substr(0, dot))
             shell.key += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
         shell.texture = batch.create_texture(picture.width, picture.height, picture.rgba.data());
         if (shell.texture == 0)

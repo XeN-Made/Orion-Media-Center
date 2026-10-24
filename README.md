@@ -298,10 +298,11 @@ you chose for it.
   after the game (`Chrono Trigger.png`) or its title ID (`PPSA01234.jpg`);
   case and punctuation do not matter. **Use its own picture** puts the
   original back.
-- **Case pictures for Cases view**: put a PNG of an empty case in
+- **Case pictures for Cases view**: put a PNG or JPEG of an empty case in
   `/data/orion/cases`, with a **transparent window** where the cover goes (or
   one flat colour there, such as a white sleeve), and Cases view draws each
-  cover inside it. Name it for what it holds: `ps5.png`,
+  cover inside it. A JPEG has no transparency, so leave its cover area one
+  plain colour. Name it for what it holds: `ps5.png`,
   `ps4.png`, `homebrew.png`, `media.png`, or a system's short name for its
   games (`ps2.png`, `ps1.png`, `psp.png`, `wii.png`, `wiiu.png`, `ngc.png` or
   `gc.png` for GameCube, `3ds.png`, `ds.png`, `switch.png`, `gba.png`,
