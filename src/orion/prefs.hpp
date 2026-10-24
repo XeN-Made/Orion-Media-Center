@@ -17,6 +17,9 @@
 namespace hui::orion
 {
 
+// The tab of the titles the player hid.
+inline constexpr const char *kHiddenTabKey = "hidden";
+
 // The orders a tab can be in: the keys library.json keeps, and their names.
 // "tag" groups them under labels (Games of every system, Homebrew, Media);
 // "played" and "most_played" follow ORION's play records (orion/playtime.hpp).
@@ -170,6 +173,10 @@ struct LibraryPrefs
     // and ORION's version, to count the consoles that use it. On until turned
     // off in Settings, System, whose row says what is sent.
     bool share_usage = true;
+    // The Hidden tab is off the tab bar until the player shows it (Settings,
+    // Tabs, its page): a hidden title is meant to be out of the way. Kept
+    // apart from tab_prefs, where an entry at its defaults is not saved.
+    bool hidden_tab_shown = false;
     // A focused title plays its own music (the home screen's snd0.at9, or the
     // player's from <state_dir>/hover-music) over the playlist.
     bool title_music = true;
@@ -236,6 +243,8 @@ struct LibraryPrefs
     void set_tab_view(const std::string &tab, const std::string &view);
     // Any tab hides, All too (the tab bar keeps All when every tab is
     // hidden); a system's tab hides by switching the system off.
+    // Whether a tab is off the tab bar; the Hidden tab (kHiddenTabKey) is
+    // until hidden_tab_shown.
     bool tab_hidden(const std::string &tab) const;
     void set_tab_hidden(const std::string &tab, bool hidden);
     // The player's name for a built-in tab (a shelf, Emulators, a system),

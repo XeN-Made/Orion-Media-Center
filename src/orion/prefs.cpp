@@ -308,12 +308,19 @@ void LibraryPrefs::set_tab_view(const std::string &tab, const std::string &view)
 
 bool LibraryPrefs::tab_hidden(const std::string &tab) const
 {
+    if (tab == kHiddenTabKey)
+        return !hidden_tab_shown;
     const TabPrefs *entry = find_tab_prefs(tab_prefs, tab);
     return entry != nullptr && entry->hidden;
 }
 
 void LibraryPrefs::set_tab_hidden(const std::string &tab, bool hidden)
 {
+    if (tab == kHiddenTabKey)
+    {
+        hidden_tab_shown = !hidden;
+        return;
+    }
     edit_tab_prefs(tab_prefs, tab, [&](TabPrefs &e) { e.hidden = hidden; });
 }
 
@@ -485,6 +492,7 @@ LibraryPrefs load_prefs(const std::string &state_dir)
     prefs.autostart = root["autostart"].bool_or(prefs.autostart);
     prefs.reopen_after_rest = root["reopen_after_rest"].bool_or(prefs.reopen_after_rest);
     prefs.share_usage = root["share_usage"].bool_or(prefs.share_usage);
+    prefs.hidden_tab_shown = root["hidden_tab_shown"].bool_or(prefs.hidden_tab_shown);
     prefs.title_music = root["title_music"].bool_or(prefs.title_music);
     prefs.every_version = root["every_version"].bool_or(prefs.every_version);
     if (const std::string language = root["language"].string_or("");
@@ -537,6 +545,8 @@ bool save_prefs(const std::string &state_dir, const LibraryPrefs &prefs)
     text += std::string("  \"reopen_after_rest\": ") +
             (prefs.reopen_after_rest ? "true" : "false") + ",\n";
     text += std::string("  \"share_usage\": ") + (prefs.share_usage ? "true" : "false") + ",\n";
+    text += std::string("  \"hidden_tab_shown\": ") + (prefs.hidden_tab_shown ? "true" : "false") +
+            ",\n";
     text += std::string("  \"every_version\": ") + (prefs.every_version ? "true" : "false") + ",\n";
     text += "  \"language\": " + json::quote(prefs.language) + ",\n";
     text += std::string("  \"moved_leave_shelf\": ") +

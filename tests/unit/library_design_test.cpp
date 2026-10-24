@@ -317,14 +317,19 @@ TEST_F(LibraryDesign, DetailsShowATitlesPageAndStarIt)
     EXPECT_TRUE(played(Cue::focus));
 }
 
-// The Hidden tab can be hidden like any other (Settings, Tabs, its page): a
-// hidden title then shows nowhere, and Favourites is the last tab.
-TEST_F(LibraryDesign, TheHiddenTabCanBeHiddenToo)
+// The Hidden tab is off the tab bar until the player shows it (Settings,
+// Tabs, its page): a hidden title then shows nowhere, and Favourites is the
+// last tab. The choice is kept.
+TEST_F(LibraryDesign, TheHiddenTabIsHiddenUntilShown)
 {
     const std::string dir = ::testing::TempDir() + "orion-design-hidden-tab";
     ASSERT_TRUE(hui::save::ensure_directory(dir));
     std::remove((dir + "/favourites.json").c_str());
     hui::orion::LibraryPrefs prefs;
+    EXPECT_TRUE(prefs.tab_hidden("hidden"));
+    prefs.set_tab_hidden("hidden", false);
+    ASSERT_TRUE(hui::orion::save_prefs(dir, prefs));
+    EXPECT_FALSE(hui::orion::load_prefs(dir).tab_hidden("hidden"));
     prefs.set_tab_hidden("hidden", true);
     ASSERT_TRUE(prefs.set_title_hidden("PPSA90108", true));
     ASSERT_TRUE(hui::orion::save_prefs(dir, prefs));
@@ -346,6 +351,9 @@ TEST_F(LibraryDesign, AHiddenTitleLeavesItsShelvesForTheHiddenTab)
     ASSERT_TRUE(hui::save::ensure_directory(dir));
     std::remove((dir + "/library.json").c_str());
     std::remove((dir + "/favourites.json").c_str());
+    hui::orion::LibraryPrefs prefs;
+    prefs.set_tab_hidden("hidden", false); // the player shows the Hidden tab
+    ASSERT_TRUE(hui::orion::save_prefs(dir, prefs));
     library_.state_dir = dir;
     auto design = with_fixture();
     // Options on the first title: Launch, Details, Favourite, Hide.
