@@ -29,7 +29,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#define ORION_TITLE "PPSA99061" // when ORION has not written title.txt yet
+#define ORION_TITLE "PPSA99062" // when ORION has not written title.txt yet
 #define TITLE_PATH "/data/orion/title.txt"
 #define OFF_PATH "/data/orion/autostart-off"
 #define LOG_PATH "/data/orion/autostart.txt"

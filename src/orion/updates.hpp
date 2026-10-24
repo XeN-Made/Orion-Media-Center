@@ -121,7 +121,7 @@ class UpdateCheck
 // when it names no such file.
 std::string sum_for(std::string_view sums, std::string_view file_name);
 
-// Unpacks the title folder of a release ZIP ("PPSA99061/...") into `stage`
+// Unpacks the title folder of a release ZIP ("PPSA99062/...") into `stage`
 // and writes files.txt. Entries outside it, or with "..", are refused. A
 // folder named `next` (ORION's next title ID, when it has one) is taken too:
 // that release installs beside this ORION (concepts/library.cpp).

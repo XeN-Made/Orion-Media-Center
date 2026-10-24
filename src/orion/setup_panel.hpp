@@ -149,7 +149,7 @@ class SetupPanel
     const library::Emulator *emulator_ = nullptr;
     int titles_ = 0;
     std::string scan_status_; // empty until a scan reports: what a scan finds
-    std::string payload_ = "/data/homebrew/PPSA99061/assets/payloads/orion-autostart.elf";
+    std::string payload_ = "/data/homebrew/PPSA99062/assets/payloads/orion-autostart.elf";
     std::string state_dir_ = "/data/orion";
 };
 

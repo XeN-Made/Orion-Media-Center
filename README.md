@@ -5,8 +5,8 @@ and emulated games in one library, with box art, favourites, tabs of your own
 and a galaxy glass look. Everything is driven with the controller, and
 everything can be changed in Settings.
 
-Title ID: `PPSA99061`. Questions, ideas and bug reports: the
-[ORION Discord](https://discord.gg/SS7N7ukzQv).
+Title ID: `PPSA99062` (`PPSA99061` before 01.103.000). Questions, ideas and
+bug reports: the [ORION Discord](https://discord.gg/SS7N7ukzQv).
 
 ![ORION's library in Grid view](docs/screenshots/grid.jpg)
 
@@ -20,7 +20,7 @@ Title ID: `PPSA99061`. Questions, ideas and bug reports: the
 - Emulated games next to them: RetroArch (its folders and every playlist),
   Porpoise for GameCube and Wii, PS5SX2 for PS2, PSwanStation for PS1,
   ProsperoEden for Switch, PS5-ECAM for Wii U, 3DS, DS and Switch, PS5X360 for
-  Xbox 360, PSP5 for PSP, and folders of your own.
+  Xbox 360, and folders of your own.
 - Start a game straight from its cover: emulated games open directly in the
   emulator that plays them, and ORION asks which one when two can.
 - Box art downloaded as the covers scroll into view, or taken from what
@@ -84,16 +84,16 @@ The pictures show invented titles: ORION's renderer drew them on a PC
 
 Optional, for retro games: **RetroArch**, **Porpoise** (Dolphin for PS5:
 GameCube and Wii), **PS5SX2** (PS2), **PSwanStation** (PS1),
-**ProsperoEden** (Switch), **PS5-ECAM** (Wii U, 3DS, DS and Switch),
-**PS5X360** (Xbox 360) and **PSP5** (PSP), installed as folder apps too. Installed games beyond the homebrew folders
-are read through the FTP server.
+**ProsperoEden** (Switch), **PS5-ECAM** (Wii U, 3DS, DS and Switch) and
+**PS5X360** (Xbox 360), installed as folder apps too. Installed games beyond
+the homebrew folders are read through the FTP server.
 
 ## Install
 
 1. Download the ORION release ZIP and extract it. It holds one folder,
-   `PPSA99061`.
+   `PPSA99062`.
 2. With an FTP client, upload that folder to `/data/homebrew/` on the
-   console, so you have `/data/homebrew/PPSA99061/eboot.bin`. Copy the
+   console, so you have `/data/homebrew/PPSA99062/eboot.bin`. Copy the
    folder whole, every file as it is, with a plain FTP client (binary
    mode); some upload tools leave out files they do not expect in an app,
    such as the `.txt` files ORION reads.
@@ -102,9 +102,24 @@ are read through the FTP server.
 4. Open ORION. The first time, a short setup walks you through the look,
    your emulators, box art, how the library is sorted and autoboot.
 
-If an older `PPSA99061.ffpkg` or `.ffpfsc` image is in `/data/homebrew`,
+If an older `PPSA99062.ffpkg` or `.ffpfsc` image is in `/data/homebrew`,
 delete it first: a folder and an image with the same title ID must not both
 be there.
+
+### Coming from PPSA99061
+
+ORION's title ID changed from `PPSA99061` to `PPSA99062` in 01.103.000 (the
+ID it has in the RecompStore). An ORION on 01.102.000 tells you, downloads
+01.103.000 like any update and installs it **beside** itself: a second ORION
+tile appears, with a small NEW badge. Open the new one; your settings,
+favourites, box art and music live in `/data/orion` and come along. Then
+delete the old one from the new ORION: Options on its tile (`PPSA99061`),
+Delete. Nothing is deleted for you.
+
+On an older ORION, install 01.103.000 by hand as above: upload the
+`PPSA99062` folder next to the old one, then delete the old one. Autoboot
+follows by itself (the payload asks ORION which title to open), but if your
+autoloader names the payload by its path, point it at the new folder.
 
 ### Updating
 
@@ -125,14 +140,14 @@ updates** and **Download updates by themselves**. Releases are at
 [github.com/XeN-Made/Orion-Media-Center/releases](https://github.com/XeN-Made/Orion-Media-Center/releases).
 
 To install one by hand instead, close ORION (hold Circle on the library, or
-close it from the PS button menu), then upload the new `PPSA99061` folder
+close it from the PS button menu), then upload the new `PPSA99062` folder
 over the old one. Your
 settings, favourites and box art live in `/data/orion` and are kept.
 
 The home screen keeps its own copy of the icon and backgrounds from the first
 install. A release that changes them asks you to replace
-`icon0.png`, `pic0.dds` and `pic1.dds` in `/user/app/PPSA99061/sce_sys/` and
-`/user/appmeta/PPSA99061/` as well (and `/user/app/PPSA99061/icon0.png`).
+`icon0.png`, `pic0.dds` and `pic1.dds` in `/user/app/PPSA99062/sce_sys/` and
+`/user/appmeta/PPSA99062/` as well (and `/user/app/PPSA99062/icon0.png`).
 
 ## Open ORION after every jailbreak (autoboot)
 
@@ -146,8 +161,8 @@ Settings, Library, **Autoboot ORION after the jailbreak**. Then add the payload
 to your autoloader as below.
 
 The payload is in the release ZIP at
-`PPSA99061/assets/payloads/orion-autostart.elf` (and on the console at
-`/data/homebrew/PPSA99061/assets/payloads/orion-autostart.elf`).
+`PPSA99062/assets/payloads/orion-autostart.elf` (and on the console at
+`/data/homebrew/PPSA99062/assets/payloads/orion-autostart.elf`).
 
 ### With Payload Manager (pldmgr)
 
@@ -229,8 +244,8 @@ within 30 minutes. Every step it took is written to
 ## Emulators and their games
 
 Settings, Emulators, **Scan for emulators** finds RetroArch, Porpoise,
-PS5SX2, PSwanStation, ProsperoEden, PS5-ECAM, PS5X360 and PSP5 and the games
-they can see:
+PS5SX2, PSwanStation, ProsperoEden, PS5-ECAM and PS5X360 and the games they
+can see:
 
 - **RetroArch**: games in its own `content/<system>/` folders and every game in
   its playlists, wherever the files are.
@@ -252,8 +267,6 @@ they can see:
   `xbox360/` on a drive: a folder per extracted game (`default.xex`) and `.iso`
   discs. A `cover.png` or `cover.jpg` in a game's folder, or a picture named as
   the disc beside it, is its cover.
-- **PSP5**: PSP discs (`.iso`, `.cso`) in its memory stick's `ISO` folder and
-  `PSP/` on a drive.
 - **Your own folders**: Settings, Emulators, an emulator, **Add a game folder**.
 
 A full ROM set holds many files of one game: bad dumps, hacks, trainers,
@@ -265,8 +278,7 @@ When two emulators can play a game, ORION asks which one the first time and
 remembers (Options, Play with… changes it). PS2 games start straight in
 PS5SX2; GameCube and Wii games straight in Porpoise; PS1 games in
 PSwanStation or RetroArch; Switch games in ProsperoEden or PS5-ECAM; Wii U and
-3DS games straight in PS5-ECAM; Xbox 360 games straight in PS5X360; PSP games
-in PSP5 or RetroArch; every other system in RetroArch with the core
+3DS games straight in PS5-ECAM; Xbox 360 games straight in PS5X360; every other system in RetroArch with the core
 you chose for it.
 
 ## Box art and music
@@ -308,11 +320,11 @@ happened, and the log the list below names.
 
 - **A game does not start**: Settings, Emulators shows what ORION found. What
   happened at each start is in `/data/orion/launch.txt` and
-  `/data/homebrew/PPSA99061/launch-helper.txt`.
+  `/data/orion/launch-helper.txt`.
 - **ORION does not open after rest mode**: restart the console (not rest
   mode) and jailbreak again; a jailbreak does not survive rest mode well.
 - **An update does not finish**: `/data/orion/update/log.txt` has each step,
-  and `/data/homebrew/PPSA99061/launch-helper.txt` what the install did.
+  and `/data/orion/launch-helper.txt` what the install did.
   A version that failed to install is not downloaded again by itself:
   Settings, About, **Check now** tries again.
 - **Start-up**: each step is noted in `/data/orion/boot.txt`.
@@ -330,7 +342,7 @@ sets up the tools.
 
 ```bash
 make test-unit      # the tests
-make                # the PS5 app folder, in dist/PPSA99061
+make                # the PS5 app folder, in dist/PPSA99062
 make deploy         # upload it to the console over FTP (PS5_HOST in .env)
 ```
 

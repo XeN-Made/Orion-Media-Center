@@ -2,7 +2,7 @@
 
 Every pull request is built in full by the [Build workflow](../.github/workflows/tooling.yml):
 lint, host tests, and the same packaging a release gets. The result is an installable copy
-of the app, **ORION Media Center** (`PPSA99061`), kept for 14 days, that a reviewer can
+of the app, **ORION Media Center** (`PPSA99062`), kept for 14 days, that a reviewer can
 put on a console before merging.
 
 ## What a pull request produces

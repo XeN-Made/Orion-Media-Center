@@ -58,10 +58,7 @@ Emulator scan_retroarch(const Title &retroarch, std::vector<Title> *roms);
 //              and a drive's xbox360/: .iso discs, and folders holding an
 //              extracted game's default.xex. Covers: cover.png or .jpg in a
 //              game's folder, or a picture named as the disc beside it.
-//   psp5       PSP5: PSP discs (.iso, .cso) in <root>/memstick/ISO and a
-//              PSP folder at the top of a drive.
-//              Both start the game given on their command line
-//              (game_arguments).
+//              Starts the game given on its command line (game_arguments).
 struct KnownEmulator
 {
     const char *key;   // what the prefs name it by
@@ -179,12 +176,10 @@ bool read_nintendo_disc(std::string_view head, Disc *disc);
 // same.
 std::string porpoise_arguments(const std::string &title_id, const std::string &disc,
                                bool exit_after_game);
-// PS5X360's and PSP5's: the game is their first argument, with no title ID
-// before it as Porpoise's has (PS5X360 takes its first argument for the game
-// and opens its list when that is no file; PSP5 boots the first that is not
-// an option). With exit_after_game, PSP5's pause menu ends it, so ORION comes
-// back.
-std::string game_arguments(const std::string &key, const std::string &game, bool exit_after_game);
+// PS5X360's: the game is its first argument, with no title ID before it as
+// Porpoise's has (PS5X360 takes its first argument for the game and opens its
+// list when that is no file).
+std::string game_arguments(const std::string &game);
 // An Xbox 360 game's title ID ("454107D9", what XboxUnity knows its covers
 // by), from its default.xex: the file itself, or the one on a disc image
 // (read through the disc's file system). Empty when it cannot be read.

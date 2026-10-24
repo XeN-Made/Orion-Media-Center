@@ -580,7 +580,6 @@ constexpr KnownEmulator kKnownEmulators[] = {
     {"eden", "ProsperoEden", i18n::marked("Switch")},
     {"ecam", "PS5-ECAM", i18n::marked("Wii U, 3DS, DS, Switch")},
     {"ps5x360", "PS5X360", i18n::marked("Xbox 360")},
-    {"psp5", "PSP5", i18n::marked("PSP")},
 };
 constexpr const char *kPs1 = "Sony - PlayStation";
 constexpr const char *kGameCube = "Nintendo - GameCube";
@@ -590,7 +589,6 @@ constexpr const char *kWiiU = "Nintendo - Wii U";
 constexpr const char *k3ds = "Nintendo - Nintendo 3DS";
 constexpr const char *kDs = "Nintendo - Nintendo DS";
 constexpr const char *kSwitch = "Nintendo - Switch";
-constexpr const char *kPsp = "Sony - PlayStation Portable";
 constexpr const char *kXbox360 = "Microsoft - Xbox 360";
 // PS5-ECAM's sides, as its library.json and its covers folders name them.
 struct EcamSide
@@ -818,12 +816,6 @@ std::string xbox_disc_title_id(const std::string &path)
     return id;
 }
 
-// PSP5's games: the discs its own list shows (it leaves out .zip).
-bool psp5_takes(const std::string &ext)
-{
-    return ext == "iso" || ext == "cso";
-}
-
 // "... (Disc 2)" and later: PSwanStation shows a game on several discs once,
 // from its first, and changes discs while it plays.
 bool later_disc(const std::string &file)
@@ -859,15 +851,6 @@ std::vector<std::string> own_folders(const std::string &key, const std::string &
         for (const char *drive :
              {"/mnt/usb0", "/mnt/usb1", "/mnt/usb2", "/mnt/usb3", "/mnt/ext0", "/mnt/ext1"})
             folders.push_back(std::string(drive) + "/xbox360");
-        return folders;
-    }
-    if (key == "psp5")
-    {
-        // Its memory stick's ISO folder, and a PSP folder at the top of a drive.
-        std::vector<std::string> folders = {root + "/memstick/ISO"};
-        for (const char *drive :
-             {"/mnt/usb0", "/mnt/usb1", "/mnt/usb2", "/mnt/usb3", "/mnt/ext0", "/mnt/ext1"})
-            folders.push_back(std::string(drive) + "/PSP");
         return folders;
     }
     if (key != "ps5sx2")
@@ -975,24 +958,21 @@ int add_file_folder(Emulator &emulator, std::size_t app_index, const std::string
 {
     const EmulatorApp &app = emulator.apps[app_index];
     const bool swan = app.key == "psswanstation";
-    const bool psp = app.key == "psp5";
-    const std::string own = swan ? kPs1 : psp ? kPsp : kSwitch;
+    const std::string own = swan ? kPs1 : kSwitch;
     if (!system.empty() && system != own)
         return 0;
     std::unordered_set<std::string> listed;
     for (const Title &rom : *roms)
         listed.insert(rom.id);
     const std::unordered_map<std::string, std::string> covers =
-        swan || psp ? std::unordered_map<std::string, std::string>() : eden_covers(kEdenData);
+        swan ? std::unordered_map<std::string, std::string>() : eden_covers(kEdenData);
     FolderIndex pictures;
     std::vector<Title> found;
     for (const save::DirectoryEntry &entry : save::list_directory(dir))
     {
         const std::string ext = extension_of(entry.name);
         if (entry.directory || entry.name.front() == '.' ||
-            !(swan  ? swan_takes(ext) && !later_disc(entry.name)
-              : psp ? psp5_takes(ext)
-                    : eden_takes(ext)))
+            !(swan ? swan_takes(ext) && !later_disc(entry.name) : eden_takes(ext)))
             continue;
         const std::string path = dir + "/" + entry.name;
         Title rom;
@@ -1113,7 +1093,7 @@ int add_app_folder(Emulator &emulator, std::size_t app_index, const std::string 
                    const std::string &system, std::vector<Title> *roms)
 {
     const std::string &key = emulator.apps[app_index].key;
-    if (key == "psswanstation" || key == "eden" || key == "psp5")
+    if (key == "psswanstation" || key == "eden")
         return add_file_folder(emulator, app_index, dir, system, roms);
     if (key == "ps5x360")
         return add_x360_folder(emulator, app_index, dir, system, roms);
@@ -1275,8 +1255,6 @@ std::string emulator_key(const Title &title)
         return "eden";
     if (name.find("ps5x360") != std::string::npos || name.find("xenia") != std::string::npos)
         return "ps5x360";
-    if (name.find("psp5") != std::string::npos)
-        return "psp5";
     return "";
 }
 
@@ -1325,10 +1303,9 @@ std::string porpoise_arguments(const std::string &title_id, const std::string &d
     return title_id + "\n--rom\n" + disc + "\n" + (exit_after_game ? "--exit-after-game\n" : "");
 }
 
-std::string game_arguments(const std::string &key, const std::string &game, bool exit_after_game)
+std::string game_arguments(const std::string &game)
 {
-    // PSP5's pause menu then ends it, rather than going back to its own list.
-    return game + "\n" + (key == "psp5" && exit_after_game ? "--pause-menu-exit\n" : "");
+    return game + "\n";
 }
 
 std::string xex_title_id(std::string_view head)
@@ -1405,8 +1382,6 @@ std::vector<std::string> known_systems(const Emulator &emulator, std::string_vie
         return {kSwitch};
     if (key == "ps5x360")
         return {kXbox360};
-    if (key == "psp5")
-        return {kPsp};
     return known_systems(emulator);
 }
 
@@ -1684,7 +1659,6 @@ std::vector<Player> players_for(const Emulator &emulator, const Title &game)
     standalone("eden", "ProsperoEden", game.system == kSwitch && eden_takes(ext));
     standalone("ecam", "PS5-ECAM", ecam_takes(game.system, ext));
     standalone("ps5x360", "PS5X360", game.system == kXbox360 && (ext == "iso" || ext == "xex"));
-    standalone("psp5", "PSP5", game.system == kPsp && psp5_takes(ext));
     // PS5SX2 reads its launch note after its jailbreak, where /data is /data.
     if (!players.empty() && players.back().key == "ps5sx2")
         players.back().rom = game.path;

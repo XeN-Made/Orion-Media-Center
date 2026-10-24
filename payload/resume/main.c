@@ -38,7 +38,7 @@
 #define TITLE_PATH "/data/orion/title.txt"
 #define LOG_PATH "/data/orion/resume.txt"
 #define TICK_PATH "/data/orion/resume-tick.txt" // rewritten every tick: was it alive, and when
-#define FALLBACK_TITLE "PPSA99061"
+#define FALLBACK_TITLE "PPSA99062"
 #define WATCH_PORT 10161     // held while a watcher runs: one at a time
 #define TICK_S 2             // how often it looks at the clock
 #define REST_GAP_S 8         // a tick this much longer than asked was a rest (one of 21 s was seen)

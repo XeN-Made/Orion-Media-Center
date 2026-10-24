@@ -749,12 +749,11 @@ TEST(Emulators, ListsPSwanStationAndProsperoEdenGames)
 
 // PS5X360's Xbox 360 games: a folder per extracted game (default.xex, named
 // for the folder, its cover.jpg) and disc images (a picture of the same name
-// beside one); PSP5's .iso and .cso discs, not the .zip RetroArch opens. Both
-// are handed the game as their one argument.
-TEST(Emulators, ListsPS5X360AndPSP5Games)
+// beside one). It is handed the game as its first argument.
+TEST(Emulators, ListsPS5X360Games)
 {
     namespace fs = std::filesystem;
-    const fs::path root = fs::temp_directory_path() / "hui-x360-psp5";
+    const fs::path root = fs::temp_directory_path() / "hui-x360";
     fs::remove_all(root);
     const fs::path x360_root = root / "PPSA50011";
     const fs::path roms = x360_root / "assets/roms";
@@ -775,28 +774,19 @@ TEST(Emulators, ListsPS5X360AndPSP5Games)
     write_file(roms / "Night Relay (USA).png", "png");
     write_file(roms / "Empty Folder/readme.txt", "no");
     write_file(roms / "README.txt", "no");
-    const fs::path psp_root = root / "PPSA99131";
-    write_file(psp_root / "memstick/ISO/Sand Kite (USA).iso", "iso");
-    write_file(psp_root / "memstick/ISO/Tin Comet (USA).cso", "cso");
-    write_file(psp_root / "memstick/ISO/Paper Moth (USA).zip", "zip");
 
     const std::vector<library::Title> titles = {
         app_title("PPSA50011", "PS5X360", x360_root.string()),
-        app_title("PPSA99131", "PSP5", psp_root.string()),
     };
     EXPECT_EQ(library::emulator_key(titles[0]), "ps5x360");
-    EXPECT_EQ(library::emulator_key(titles[1]), "psp5");
 
     std::vector<library::Title> found;
     library::Emulator emulator = library::scan_emulators(titles, {}, &found);
     const library::EmulatorApp *x360 = emulator.app("ps5x360");
-    const library::EmulatorApp *psp = emulator.app("psp5");
     ASSERT_NE(x360, nullptr);
-    ASSERT_NE(psp, nullptr);
     EXPECT_TRUE(x360->starts_games);
     EXPECT_EQ(x360->games, 3);
-    EXPECT_EQ(psp->games, 2);
-    ASSERT_EQ(found.size(), 5u);
+    ASSERT_EQ(found.size(), 3u);
     EXPECT_EQ(found[0].name, "Harbor Lights");
     EXPECT_EQ(found[0].system, "Microsoft - Xbox 360");
     EXPECT_EQ(found[0].rom, "/app0/assets/roms/Harbor Lights/default.xex");
@@ -814,21 +804,14 @@ TEST(Emulators, ListsPS5X360AndPSP5Games)
     EXPECT_EQ(library::art_stem("/mnt/usb0/xbox360/Iron Valley/game.iso"), "Iron Valley");
     EXPECT_EQ(library::art_stem("/mnt/usb0/wiiu/Quiet Bay/title.tmd"), "Quiet Bay");
     EXPECT_EQ(library::art_stem("/mnt/usb0/xbox360/Night Relay (USA).iso"), "Night Relay (USA)");
-    EXPECT_EQ(found[3].name, "Sand Kite");
-    EXPECT_EQ(found[3].system, "Sony - PlayStation Portable");
-    EXPECT_EQ(found[4].name, "Tin Comet");
-    EXPECT_EQ(found[4].launcher, "PPSA99131");
+    EXPECT_EQ(found[2].launcher, "PPSA50011");
 
     const std::vector<library::Player> players = library::players_for(emulator, found[0]);
     ASSERT_EQ(players.size(), 1u);
     EXPECT_EQ(players[0].key, "ps5x360");
     // The game first: PS5X360 took a title ID there for the game to boot.
-    EXPECT_EQ(library::game_arguments("ps5x360", players[0].rom, true),
+    EXPECT_EQ(library::game_arguments(players[0].rom),
               "/app0/assets/roms/Harbor Lights/default.xex\n");
-    EXPECT_EQ(library::game_arguments("psp5", "/app0/memstick/ISO/a.iso", true),
-              "/app0/memstick/ISO/a.iso\n--pause-menu-exit\n");
-    EXPECT_EQ(library::game_arguments("psp5", "/app0/memstick/ISO/a.iso", false),
-              "/app0/memstick/ISO/a.iso\n");
     EXPECT_EQ(library::xex_title_id("XEX2"), "");
     EXPECT_EQ(library::xex_title_id(xex(0)), "");
     fs::remove_all(root);

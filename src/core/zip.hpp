@@ -12,7 +12,7 @@ namespace hui
 {
 
 // Calls `each` for every file in the archive, in the central directory's
-// order, with its name ("PPSA99061/eboot.bin") and contents; folders are
+// order, with its name ("PPSA99062/eboot.bin") and contents; folders are
 // skipped. Stored and deflated entries are read; anything else (encrypted,
 // another method, ZIP64) is an error. Stops at the first false from `each`.
 // The archive's own integrity is the caller's to check (a published hash).

@@ -319,8 +319,8 @@ class SettingsPanel
     std::string update_status_ = "Not checked yet";
     std::string update_ready_;
     std::string version_;
-    std::string title_id_ = "PPSA99061";
-    std::string payload_ = "/data/homebrew/PPSA99061/assets/payloads/orion-autostart.elf";
+    std::string title_id_ = "PPSA99062";
+    std::string payload_ = "/data/homebrew/PPSA99062/assets/payloads/orion-autostart.elf";
     std::string art_status_ = "Covers from thumbnails.libretro.com for games without one";
 };
 

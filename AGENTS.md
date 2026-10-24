@@ -8,7 +8,7 @@ guessing.
 ## What this is
 
 ORION Media Center: a launcher for jailbroken PS5 consoles (games, homebrew,
-media apps and emulated games in one library; title `PPSA99061`, user guide in
+media apps and emulated games in one library; title `PPSA99062`, user guide in
 [README.md](README.md)), built on a kit for console-grade user interfaces
 with OpenGL 4.6. The kit's designs and gallery stay in the repository as its
 reference and tests; the ORION app ships only the library

@@ -79,10 +79,10 @@ constexpr float kMargin = 96.0f;
 constexpr float kTabsTop = 204.0f;
 constexpr float kTabEdge = 76.0f;     // room for L1 (and R1 after the tabs)
 constexpr float kTabsWidth = 1180.0f; // the tab bar between them
-// ORION's title ID from the release after this one on. Another app had
-// PPSA99061 in a catalog first, so ORION moves: a release built as
-// PPSA99062 installs beside this ORION, the player deletes the old tile and
-// opens the new one (everything else lives in /data/orion and comes along).
+// ORION's title ID since 01.103.000. Another app had PPSA99061 in a catalog
+// first, so ORION moved: an ORION still on PPSA99061 installs a release built
+// as PPSA99062 beside itself, the player deletes the old tile and opens the
+// new one (everything else lives in /data/orion and comes along).
 constexpr const char *kNextTitleId = "PPSA99062";
 constexpr float kSortWidth = 330.0f; // the sort picker in the header
 constexpr float kViewWidth = 250.0f; // the view picker, left of it
@@ -1989,7 +1989,6 @@ class Library final : public app::Concept
                                              : folder_emulator_ == "eden"   ? "/mnt/usb0/switch"
                                              : folder_emulator_ == "psswanstation" ? "/mnt/usb0/psx"
                                              : folder_emulator_ == "ps5x360" ? "/mnt/usb0/xbox360"
-                                             : folder_emulator_ == "psp5"    ? "/mnt/usb0/PSP"
                                                                              : "/mnt/usb0/roms");
             feedback.play(audio::Cue::modal_open);
             break;
@@ -3387,10 +3386,9 @@ class Library final : public app::Concept
             // tiles do, and close when it ends, so ORION comes back.
             request = launcher + "\n" +
                       library::porpoise_arguments(launcher, player.rom, prefs_.return_on_close);
-        else if (app != nullptr && (app->key == "ps5x360" || app->key == "psp5"))
-            // The game is their first argument, as a file they can open.
-            request = launcher + "\n" +
-                      library::game_arguments(app->key, player.rom, prefs_.return_on_close);
+        else if (app != nullptr && app->key == "ps5x360")
+            // The game is its first argument, as a file it can open.
+            request = launcher + "\n" + library::game_arguments(player.rom);
         else if (ps5sx2)
             // The note PS5SX2's disc helper leaves it, written by the helper:
             // /data/PCSX2 is out of ORION's reach.
