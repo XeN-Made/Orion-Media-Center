@@ -329,6 +329,20 @@ constexpr app::TourStep kTour[] = {
     // enough here to finish).
     {0.1f, action_bit(Action::back)},
     {0.8f, 0, Direction::none, "hold-exit", 0.0f, 0.0f, action_bit(Action::back)},
+    // Last, as nothing after it may depend on the view: Cases, from the View
+    // picker (left of the sort's; Default, Grid, then Cases), a PS4 case
+    // focused, then a PS5 one two to the right.
+    {0.6f, 0, Direction::up},
+    {0.2f, 0, Direction::left},
+    {0.3f, action_bit(Action::confirm)},
+    {0.2f, 0, Direction::down},
+    {0.2f, 0, Direction::down},
+    {0.3f, action_bit(Action::confirm)},
+    {0.3f, 0, Direction::down},
+    {1.0f, 0, Direction::none, "cases"},
+    {0.3f, 0, Direction::right},
+    {0.3f, 0, Direction::right},
+    {1.0f, 0, Direction::none, "cases-ps5"},
 };
 
 // iOS-like clear glass for the search keyboard: keys of frosted white at low
@@ -5273,6 +5287,11 @@ class Library final : public app::Concept
         Color ink;
         std::string label;
         bool orion = false;
+        // A console case as it is moulded: a squarer shell, the clips along
+        // its top and bottom edges, a rule under the header and the name set
+        // wide, as the console's own cases print it.
+        bool console = false;
+        Color rule{0.0f, 0.0f, 0.0f, 0.0f}; // under the header; alpha 0: none
     };
     CaseBand case_band(const Title &title) const
     {
@@ -5282,9 +5301,19 @@ class Library final : public app::Concept
         if (library::shelf_of(title) == library::Shelf::media)
             return {Color::rgb(0x202228), Color::rgb(0xffc94a), Color::rgb(0x1a1204), tr("MEDIA")};
         if (title.platform == library::Platform::ps4)
-            return {Color::rgb(0x1c4fb5), Color::rgb(0x0a3d91), Color::rgb(0xffffff), "PS4"};
+        {
+            CaseBand band{Color::rgb(0x1f56c8), Color::rgb(0x003087), Color::rgb(0xffffff), "PS4"};
+            band.console = true;
+            band.rule = Color::rgb(0x001b52);
+            return band;
+        }
         if (!title.is_rom())
-            return {Color::rgb(0x2463d9), Color::rgb(0xf7f8fa), Color::rgb(0x08090b), "PS5"};
+        {
+            CaseBand band{Color::rgb(0x1d5fe0), Color::rgb(0xfbfbfc), Color::rgb(0x0a0b0d), "PS5"};
+            band.console = true;
+            band.rule = Color::rgb(0x0b2f8a);
+            return band;
+        }
         std::string name = library::short_system_name(title.system);
         for (char &c : name)
             c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
@@ -5320,8 +5349,9 @@ class Library final : public app::Concept
         gfx::DrawList &list = canvas.list;
         const Title &title = titles()[static_cast<std::size_t>(item.tag)];
         const CaseBand band = case_band(title);
-        constexpr float kRadius = 14.0f;
-        constexpr float kInner = 5.0f;
+        // A console's case is squarer than the drawn ones for other systems.
+        const float kRadius = band.console ? 7.0f : 14.0f;
+        const float kInner = band.console ? 2.0f : 5.0f;
         const bool aurora = shown_.chrome.focus == orion::FocusRing::aurora && focus > 0.01f;
         if (aurora)
         {
@@ -5332,9 +5362,31 @@ class Library final : public app::Concept
         // The plastic, lit from the top left.
         list.rounded_rect(art, kRadius, band.rim);
         list.gradient_rect(art, kRadius, Color::rgb(0xffffff, 0.22f), Color::rgb(0x000000, 0.18f));
-        // The sleeve inside it: the header, then the cover.
-        const Rect sleeve = art.inset(std::round(art.w * 0.024f));
-        const float band_h = std::round(sleeve.h * 0.115f);
+        // The sleeve inside it: the header, then the cover. A console case's
+        // shell is thin at the sides and a little deeper top and bottom,
+        // where its clips are.
+        const float side = std::round(art.w * (band.console ? 0.018f : 0.024f));
+        const float ends = band.console ? std::round(art.h * 0.02f) : side;
+        const Rect sleeve{art.x + side, art.y + ends, art.w - 2.0f * side, art.h - 2.0f * ends};
+        const float band_h = std::round(sleeve.h * (band.console ? 0.125f : 0.115f));
+        if (band.console)
+        {
+            // The clips: short lighter ridges along the top and bottom edge,
+            // and the darker hinge line down the right side.
+            const float clip_w = art.w * 0.09f;
+            for (const float at : {0.12f, 0.36f, 0.62f, 0.86f})
+            {
+                const float cx = art.x + art.w * at;
+                list.rounded_rect({cx - clip_w * 0.5f, art.y + 1.5f, clip_w, ends * 0.45f}, 1.0f,
+                                  Color::rgb(0xffffff, 0.28f));
+                list.rounded_rect(
+                    {cx - clip_w * 0.5f, art.y + art.h - 1.5f - ends * 0.45f, clip_w, ends * 0.45f},
+                    1.0f, Color::rgb(0xffffff, 0.18f));
+            }
+            list.rounded_rect(
+                {art.x + art.w - side * 0.55f, art.y + art.h * 0.3f, 1.5f, art.h * 0.4f}, 0.0f,
+                Color::rgb(0x000000, 0.25f));
+        }
         list.rounded_rect(sleeve, kInner, band.fill);
         if (band.orion)
             list.gradient_rect(sleeve, kInner, Color::rgb(0x1b1450), Color::rgb(0x0b0e20));
@@ -5376,6 +5428,8 @@ class Library final : public app::Concept
                      Color::rgb(0xffffff, 0.9f), gfx::Align::center);
         }
         list.pop_clip();
+        if (band.rule.a > 0.0f)
+            list.rounded_rect({sleeve.x, cover.y - 2.0f, sleeve.w, 3.0f}, 0.0f, band.rule);
         // The header's name, large at its left, where a case prints its mark.
         const float size = band_h * 0.6f;
         float x = sleeve.x + band_h * 0.32f;
@@ -5390,8 +5444,13 @@ class Library final : public app::Concept
             x += ring * 2.0f + band_h * 0.25f;
         }
         const float label_size = band.orion ? size * 0.72f : size;
-        ui::text(list, canvas.fonts.semibold, band.label.c_str(), x, mid + label_size * 0.36f,
-                 label_size, band.ink, gfx::Align::left, label_size * 0.06f);
+        if (band.console)
+            // Set wide in the display face, as the console's own name is.
+            ui::text(list, canvas.fonts.display, band.label.c_str(), x, mid + size * 0.38f,
+                     size * 1.05f, band.ink, gfx::Align::left, size * 0.16f);
+        else
+            ui::text(list, canvas.fonts.semibold, band.label.c_str(), x, mid + label_size * 0.36f,
+                     label_size, band.ink, gfx::Align::left, label_size * 0.06f);
         // The plastic over the sleeve: a faint sheen and the case's edge.
         list.gradient_rect(cover, kInner, Color::rgb(0xffffff, 0.1f), Color::rgb(0xffffff, 0.0f));
         list.bordered_rect(art, kRadius, Color::rgb(0x000000, 0.0f), 1.5f,
