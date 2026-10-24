@@ -50,7 +50,8 @@ struct Drive
 std::string drive_of(const std::string &path);
 
 // Every drive that answers, the console's storage first, then extended
-// storage and the USB drives in order, each with the titles on it.
+// storage and the USB drives in order, each with the titles on it. An empty
+// mount point (a few megabytes of placeholder) is no drive.
 std::vector<Drive> find_drives(const std::vector<library::Title> &titles, const SpaceOf &space_of);
 
 // A drive as ORION names it: "The console's storage", "Extended storage",

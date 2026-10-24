@@ -18,6 +18,10 @@ namespace
 
 constexpr int kUsbDrives = 8;
 constexpr int kExtendedDrives = 2;
+// A mount point with no drive behind it still answers: a 2 MB placeholder
+// (the console's own, seen on every unused /mnt/usbN and /mnt/ext0). No drive
+// is this small.
+constexpr std::uint64_t kLeastDrive = 64ull * 1000 * 1000;
 
 bool starts_with(const std::string &path, const std::string &root)
 {
@@ -88,7 +92,7 @@ std::vector<Drive> find_drives(const std::vector<library::Title> &titles, const 
         drive.kind = kind;
         drive.number = number;
         drive.path = std::move(path);
-        if (space_of && space_of(drive.path, &drive.space) && drive.space.capacity > 0)
+        if (space_of && space_of(drive.path, &drive.space) && drive.space.capacity >= kLeastDrive)
             drives.push_back(std::move(drive));
     };
     add(DriveKind::console, 0, "/data");

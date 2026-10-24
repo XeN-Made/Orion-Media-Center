@@ -49,6 +49,8 @@ TEST(Drives, ListsTheDrivesThatAnswerWithTheirTitles)
             *out = {2000 * kGb, 1460 * kGb};
         else if (path == "/mnt/ext0")
             *out = {0, 0}; // answers, but holds nothing: not a drive
+        else if (path == "/mnt/usb2")
+            *out = {2097152, 1720320}; // the console's placeholder on an empty mount point
         else
             return false;
         return true;
