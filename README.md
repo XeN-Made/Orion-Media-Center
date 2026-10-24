@@ -204,6 +204,15 @@ within 30 minutes. Every step it took is written to
   own.
 - **Continue playing**: the titles you played last, over the All tab.
 - **Tabs of your own**, a theme per tab, hidden titles: Settings, Tabs.
+  Every tab, the built-in ones too (All, Games, Emulators, each system), can
+  be **renamed** or **hidden** from its page there.
+- **Wide covers**: give a tab the Landscape cover shape (Settings, Tabs, its
+  page) and console games show their 16:9 home-screen picture, made small
+  once in `/data/orion/wide`.
+- **Open ORION after rest mode** (Settings, Library): when the console wakes
+  on the home screen, ORION opens; a game left running stays in front.
+- **FTP**: everything in `/data/orion` is open to your FTP server, to add
+  pictures, music and keys or to delete the folder.
 - **Renaming a title**: Options, Rename. Clear the name to give it its own back.
 - **Themes of your own**: a `.theme` text file in `/data/orion/themes/`;
   [docs/ORION_THEMES.md](docs/ORION_THEMES.md) has every key and
