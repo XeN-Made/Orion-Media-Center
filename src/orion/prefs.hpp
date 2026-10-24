@@ -108,6 +108,7 @@ struct Placement
 //     "setup_done": true,
 //     "autostart": false,
 //     "reopen_after_rest": false,
+//     "share_usage": true,
 //     "title_music": true,
 //     "every_version": false,
 //     "language": "es",
@@ -165,6 +166,10 @@ struct LibraryPrefs
     // (payload/resume). On writes <state_dir>/reopen-after-rest, which the
     // watcher looks for; off by default, like autostart.
     bool reopen_after_rest = false;
+    // Anonymous check-ins while ORION is open (orion/usage.hpp): a random ID
+    // and ORION's version, to count the consoles that use it. On until turned
+    // off; the player is told once, before the first (take_usage_notice).
+    bool share_usage = true;
     // A focused title plays its own music (the home screen's snd0.at9, or the
     // player's from <state_dir>/hover-music) over the playlist.
     bool title_music = true;

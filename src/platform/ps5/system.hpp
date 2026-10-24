@@ -75,6 +75,11 @@ bool http_get(const std::string &url, std::size_t limit, std::string *body, std:
 bool http_get(const std::string &url, const std::vector<std::string> &headers, std::size_t limit,
               std::string *body, std::string *error);
 
+// Posts `json` (Content-Type: application/json) to an https:// URL; true on
+// any 2xx answer. Never follows a redirect: a POST goes to the address it was
+// meant for or nowhere. Blocking, as http_get. On a PC there is no network.
+bool http_post(const std::string &url, const std::string &json, std::string *error);
+
 // The same for a large file: written to `path` as it arrives (through
 // <path>.part, renamed when complete), so it never sits in memory. ORION's
 // heap is 128 MB; a release ZIP held in a string, doubling as it grows,

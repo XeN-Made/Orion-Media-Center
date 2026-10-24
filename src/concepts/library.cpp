@@ -34,6 +34,7 @@
 #include "orion/storage.hpp"
 #include "orion/theme_file.hpp"
 #include "orion/updates.hpp"
+#include "orion/usage.hpp"
 #include "platform/ps5/system.hpp"
 #include "ui/components/carousel.hpp"
 #include "ui/components/grid.hpp"
@@ -680,6 +681,7 @@ class Library final : public app::Concept
         start_resume_watcher();
         read_hover_music();
         take_new_title_id();
+        take_usage_notice();
         if (!own_title_id().empty())
             settings_.set_title_id(own_title_id());
         settings_.set_grid_key(
@@ -896,6 +898,8 @@ class Library final : public app::Concept
             content.buttons = {{tr("OK"), ui::ButtonKind::primary, false}};
             dialog_info_ = true;
             dialog_.open(std::move(content), feedback);
+            if (std::exchange(usage_notice_, false))
+                save::write_atomic(context_.library.state_dir + "/usage-notice.txt", "told\n");
         }
         update_title_music(dt);
         follow_backdrop(dt);
@@ -3767,6 +3771,18 @@ class Library final : public app::Concept
             update_asked_ = true;
             check_for_updates(false);
         }
+        // The anonymous check-in: a little after the update check, then every
+        // five minutes while ORION is open, once the player has seen the notice.
+        if (age_ >= usage_next_)
+        {
+            usage_next_ = age_ + orion::kUsageEvery;
+            const std::string &state = context_.library.state_dir;
+            if (prefs_.share_usage && sys::on_console() && !context_.version.empty() &&
+                usage_told())
+                usage_.send([](const std::string &url, const std::string &body, std::string *error)
+                            { return sys::http_post(url, body, error); }, orion::kUsageUrl, state,
+                            {orion::usage_id(state), context_.version}, std::time(nullptr));
+        }
         if (!updates_->take_finished())
             return;
         const orion::Release latest = updates_->latest();
@@ -3902,6 +3918,29 @@ class Library final : public app::Concept
         orion::update_log(update_log_path(), "orion: installing " + id + " beside, in " + target);
         return send_helper(id + "\n@update " + update + "/stage\t" + target + "\n@fallback " +
                            own_title_id() + "\n");
+    }
+
+    // At start: what the anonymous check-in is, said once (after the setup
+    // on a new console; the dialog waits for it). Nothing is sent before it
+    // has been on screen (usage-notice.txt, written as it opens).
+    void take_usage_notice()
+    {
+        const std::string &state = context_.library.state_dir;
+        if (!sys::on_console() || state.empty() || !info_title_.empty() || usage_told())
+            return;
+        usage_notice_ = true;
+        info_title_ = tr("Anonymous usage");
+        info_body_ =
+            tr("To know how many consoles use ORION, it checks in while it is open (every\n"
+               "five minutes): a random ID made on this console and ORION's version. Nothing\n"
+               "else: no account, no games, no console details. What was sent last is in\n"
+               "/data/orion/usage.txt. Settings, Library, Share anonymous usage turns it off.");
+    }
+
+    bool usage_told() const
+    {
+        std::string told;
+        return save::read_file(context_.library.state_dir + "/usage-notice.txt", &told, 64);
     }
 
     // At start: the heads-up before the move, or what to do after it.
@@ -5780,7 +5819,10 @@ class Library final : public app::Concept
     bool update_waiting_ = false; // an update is ready: ask when nothing else is open
     bool dialog_update_ = false;  // the dialog asks about the update, not a removal
     bool dialog_info_ = false;    // the dialog only tells something (OK)
-    std::string info_title_;      // a message waiting to be shown
+    orion::UsageSender usage_;
+    float usage_next_ = 6.0f;   // age_ at the next check-in
+    bool usage_notice_ = false; // the waiting message is the anonymous usage notice
+    std::string info_title_;    // a message waiting to be shown
     std::string info_body_;
 };
 

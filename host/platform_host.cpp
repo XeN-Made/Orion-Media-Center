@@ -88,6 +88,14 @@ bool http_get(const std::string &url, const std::vector<std::string> &headers, s
     return http_get(url, limit, body, error);
 }
 
+bool http_post(const std::string &url, const std::string &json, std::string *error)
+{
+    (void)url;
+    (void)json;
+    *error = "the PC preview has no network";
+    return false;
+}
+
 bool http_download(const std::string &url, const std::string &path, std::size_t limit,
                    std::string *error)
 {

@@ -548,3 +548,7 @@ author = ORION
 "Where covers go: {0}" = "Onde ficam as capas: {0}"
 "You're set" = "Tudo pronto"
 "{0}: install it, then scan" = "{0}: instale e depois procure"
+"Anonymous usage" = "Uso anônimo"
+"Share anonymous usage" = "Compartilhar uso anônimo"
+"While ORION is open, a random ID and its version, to count the consoles that use it. What was sent: /data/orion/usage.txt" = "Enquanto o ORION está aberto, um ID aleatório e a versão dele, para contar os consoles que o usam. O que foi enviado: /data/orion/usage.txt"
+"To know how many consoles use ORION, it checks in while it is open (every\nfive minutes): a random ID made on this console and ORION's version. Nothing\nelse: no account, no games, no console details. What was sent last is in\n/data/orion/usage.txt. Settings, Library, Share anonymous usage turns it off." = "Para saber quantos consoles usam o ORION, ele avisa enquanto está aberto (a cada\ncinco minutos): um ID aleatório criado neste console e a versão do ORION. Nada\nmais: nem conta, nem jogos, nem dados do console. O último envio está em\n/data/orion/usage.txt. Configurações, Biblioteca, Compartilhar uso anônimo desativa."

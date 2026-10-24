@@ -1,0 +1,16 @@
+# ORION Media Center - The usage counter as a Cloudflare Worker (for `npx wrangler deploy`).
+# Copyright (C) 2026 BlackBearReloaded
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+name = "orion-usage"
+main = "index.js"
+compatibility_date = "2026-10-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "orion-usage"
+database_id = "the id `npx wrangler d1 create orion-usage` prints"
+
+# Every night: rows older than 400 days go.
+[triggers]
+crons = ["17 3 * * *"]

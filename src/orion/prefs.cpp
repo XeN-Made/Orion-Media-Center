@@ -484,6 +484,7 @@ LibraryPrefs load_prefs(const std::string &state_dir)
     prefs.setup_done = root["setup_done"].bool_or(prefs.setup_done);
     prefs.autostart = root["autostart"].bool_or(prefs.autostart);
     prefs.reopen_after_rest = root["reopen_after_rest"].bool_or(prefs.reopen_after_rest);
+    prefs.share_usage = root["share_usage"].bool_or(prefs.share_usage);
     prefs.title_music = root["title_music"].bool_or(prefs.title_music);
     prefs.every_version = root["every_version"].bool_or(prefs.every_version);
     if (const std::string language = root["language"].string_or("");
@@ -535,6 +536,7 @@ bool save_prefs(const std::string &state_dir, const LibraryPrefs &prefs)
     text += std::string("  \"title_music\": ") + (prefs.title_music ? "true" : "false") + ",\n";
     text += std::string("  \"reopen_after_rest\": ") +
             (prefs.reopen_after_rest ? "true" : "false") + ",\n";
+    text += std::string("  \"share_usage\": ") + (prefs.share_usage ? "true" : "false") + ",\n";
     text += std::string("  \"every_version\": ") + (prefs.every_version ? "true" : "false") + ",\n";
     text += "  \"language\": " + json::quote(prefs.language) + ",\n";
     text += std::string("  \"moved_leave_shelf\": ") +

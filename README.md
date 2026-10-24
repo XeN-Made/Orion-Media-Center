@@ -53,7 +53,7 @@ most played.
 **Made for the controller**
 - Every setting in one place, Settings (R3), with a first-run setup that
   walks through the language, the look, emulators, box art and autoboot.
-- In English, Spanish or Portuguese (Brazil), following the console's language
+- In English, Spanish, Portuguese (Brazil) or Hungarian, following the console's language
   or the one you pick; other languages can be added as files.
 - Themes and a look of your own: colours, the galaxy sky, glass, corners,
   focus ring, per tab if you like.
@@ -311,6 +311,29 @@ you chose for it.
   **Choose music…**, picks an `.ogg` (or `.at9`) of yours instead; or drop
   one into `/data/orion/hover-music` named after the game or its title ID.
   Settings, Sound, **Title music** turns it off.
+
+## Anonymous usage
+
+To know how many consoles use it, ORION checks in when it opens and then every
+five minutes while it stays open. This is all of it:
+
+```json
+{"id": "3f9c0d27a1b84e6c9d5e2f7a8b1c4d03", "version": "01.104.000"}
+```
+
+- **`id`**: 32 random characters, made once on your console and kept in
+  `/data/orion/usage-id.txt`. It is not your console's ID, your account or
+  anything taken from them. Delete the file and ORION makes a new one.
+- **`version`**: the ORION version you run.
+
+Nothing else is sent: no account, no games, no play times, no console details.
+The counter ([stats/worker](stats/worker)) keeps the ID, the version, when it
+last checked in and the days it did. It does not keep IP addresses, and it
+deletes everything older than 400 days. What ORION sent last, when and where
+to, is in `/data/orion/usage.txt`.
+
+It is on unless you turn it off: Settings, Library, **Share anonymous usage**.
+ORION says so in a message the first time it opens, before anything is sent.
 
 ## If something goes wrong
 
