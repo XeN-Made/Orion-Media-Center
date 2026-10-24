@@ -5,10 +5,19 @@
 name: Site
 
 on:
-  # With each release, and by hand (Run workflow). Needs Settings, Pages,
-  # Source: GitHub Actions, once.
-  release:
-    types: [published]
+  # When main changes what the site is made of, and by hand (Run workflow).
+  # Not on a release: the github-pages environment deploys only from main, so
+  # a run on a release's tag is refused. A release pushes main first anyway.
+  # Needs Settings, Pages, Source: GitHub Actions, once.
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+      - "docs/screenshots/**"
+      - "docs/themes/**"
+      - "sce_sys/icon0.png"
+      - "tools/build-site.sh"
+      - ".github/workflows/pages.yml"
   workflow_dispatch:
 
 permissions:
