@@ -56,6 +56,7 @@ struct DetailListStyle : ComponentStyle
     bool panel = true;        // a themed panel behind the list
     bool dividers = true;     // hairlines between pairs (rows and stacked layouts)
     bool scroll_thumb = true; // shown only when the pairs overflow
+    bool copy_mark = true;    // focusable pairs show a copy mark; off for pairs that act
     // ---- behaviour ----
     EdgeExits exits; // edges that hand the focus back to the screen
 };

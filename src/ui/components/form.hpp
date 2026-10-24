@@ -57,6 +57,9 @@ struct FormRow
     bool chevron = false; // "this opens something"
     // ---- value, and the trailing text of an action ----
     std::string text;
+    // With FormStyle::trailing_marked, Form::trailing draws this row's
+    // control; the other rows keep their text and chevron.
+    bool own_control = false;
 
     // Animation, owned by the form.
     tween::Bounce on_amount; // the switch's thumb
@@ -99,6 +102,7 @@ struct FormStyle : ComponentStyle
     bool description_inline = true; // the focused row unfolds to show its description
     bool scroll_thumb = true;       // shown only when the form overflows
     StepperButtons stepper_buttons = StepperButtons::surface;
+    bool trailing_marked = false; // Form::trailing draws only rows with own_control
     const char *on_text = "On";
     const char *off_text = "Off";
     // ---- behaviour ----

@@ -730,7 +730,7 @@ void Form::draw_row(Canvas &canvas, Painter &paint, const FormRow &row, const Re
             label_ink = style.highlight.kind == HighlightKind::fill
                             ? gfx::mix(theme.danger, ink, focus)
                             : theme.danger;
-        if (trailing)
+        if (trailing && (!style.trailing_marked || row.own_control))
         {
             const Rect at = control_rect(line, style.control_width * zoom);
             trailing(canvas, at, row, focus);

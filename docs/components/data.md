@@ -229,6 +229,7 @@ colour), `tag`.
 | `panel` | true | A themed panel behind the list |
 | `dividers` | true | Hairlines between pairs (rows and stacked layouts) |
 | `scroll_thumb` | true | Shown only when the pairs overflow |
+| `copy_mark` | true | A copy mark on focusable pairs; off where confirming a pair does something else |
 | `exits` | none | Edges that hand the focus back |
 
 Slots: `value(canvas, area, item, index, focus)` draws a value instead of its

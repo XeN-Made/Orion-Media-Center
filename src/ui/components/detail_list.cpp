@@ -97,7 +97,7 @@ float DetailList::value_room(int index) const
     const float inside = rects_[static_cast<std::size_t>(index)].w - 2.0f * style.padding;
     if (style.layout != DetailLayout::rows)
         return std::max(inside, 20.0f);
-    const float mark = item.focusable ? kCopyMark : 0.0f;
+    const float mark = item.focusable && style.copy_mark ? kCopyMark : 0.0f;
     return std::max(inside - mark - inside * style.label_share - 14.0f, 20.0f);
 }
 
@@ -417,7 +417,8 @@ void DetailList::draw(Canvas &canvas) const
 
         const float left = r.x + style.padding;
         float right = r.x + r.w - style.padding;
-        if (item.focusable)
+        const bool marked = item.focusable && style.copy_mark;
+        if (marked)
         {
             const float cy = rows ? r.cy() : r.y + style.padding_y + style.label_size * 0.5f;
             draw_copy_mark(list, right - 9.0f, cy, gfx::mix(quiet.with_alpha(0.7f), mark, flash));
@@ -427,7 +428,7 @@ void DetailList::draw(Canvas &canvas) const
 
         // Where the value goes, and how wide it may be.
         const float label_room = rows ? (r.w - 2.0f * style.padding) * style.label_share
-                                      : right - left - (item.focusable ? kCopyMark : 0.0f);
+                                      : right - left - (marked ? kCopyMark : 0.0f);
         const float room = value_room(i);
         const float value_left = rows ? right - room : left;
         const bool one_line = item.numeric || style.max_lines <= 1 || static_cast<bool>(value);

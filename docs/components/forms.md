@@ -127,6 +127,7 @@ column there, and only there.
 | `toggle_text` | true | "On" / "Off" beside a switch |
 | `on_text`, `off_text` | "On", "Off" | Those two words |
 | `description_inline` | true | The focused row unfolds to show its description |
+| `trailing_marked` | false | `form.trailing` draws only the rows marked `own_control`; the others keep their text and chevron |
 | `scroll_thumb` | true | A thumb at the right edge when the form overflows |
 | `stepper_buttons` | surface | `StepperButtons::surface` (two small buttons) or `plain` (bare signs) |
 | `wrap` | false | Past the last row comes the first |
@@ -147,7 +148,7 @@ are not part of the style.
 
 | Slot | Replaces |
 | --- | --- |
-| `form.trailing(canvas, control, row, focus)` | The text and chevron of action and value rows |
+| `form.trailing(canvas, control, row, focus)` | The text and chevron of action and value rows; with `style.trailing_marked`, only of rows with `own_control` |
 | `row.format(value)` | The number and unit of a slider row |
 | `row.choice.option(canvas, area, index, focus)` | The text of a choice's options |
 | `row.stepper.format(value)` | The text of a stepper's value |
