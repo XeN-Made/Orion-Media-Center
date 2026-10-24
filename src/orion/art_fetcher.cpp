@@ -7,6 +7,8 @@
 #include "core/save_file.hpp"
 #include "core/zip.hpp"
 #include "library/art_match.hpp"
+#include "library/json.hpp"
+#include "orion/wide_copies.hpp"
 
 #include <algorithm>
 #include <cerrno>
@@ -55,12 +57,75 @@ bool is_picture(const std::string &bytes)
     return is_png(bytes) || (bytes.size() > 3 && bytes.compare(0, 3, "\xff\xd8\xff", 3) == 0);
 }
 
+// XboxUnity, where PS5X360 (and Aurora) find covers, by the game's title ID.
+constexpr const char *kXboxUnity = "https://xboxunity.net/Resources/Lib/";
+constexpr const char *kXbox360 = "Microsoft - Xbox 360";
+
 // GameTDB's Switch list: about 3.5 MB zipped, read once, then kept as a
 // small index beside the Switch covers.
 constexpr const char *kSwitchList = "https://www.gametdb.com/switchtdb.zip?LANG=EN";
 constexpr std::size_t kMaxSwitchIndex = 4u << 20;
 
 } // namespace
+
+std::string tried_key(const std::string &id, const std::string &serial)
+{
+    return serial.empty() ? id : id + "@" + serial;
+}
+
+std::string pick_xboxunity_cover(std::string_view json)
+{
+    json::Value root;
+    if (!json::parse(json, &root) || !root.is_object())
+        return "";
+    std::string best;
+    int best_score = -1;
+    for (const json::Value &cover : root["Covers"].elements())
+    {
+        const std::string id = cover["CoverID"].string_or("");
+        if (id.empty() || id.find_first_not_of("0123456789") != std::string::npos)
+            continue;
+        // Ratings are 1 to 5; an official scan outranks any of them.
+        const std::string rating = cover["Rating"].string_or("");
+        int score =
+            rating.size() == 1 && rating[0] >= '0' && rating[0] <= '9' ? rating[0] - '0' : 0;
+        if (cover["Official"].string_or("") == "1")
+            score += 10;
+        if (score > best_score)
+        {
+            best = id;
+            best_score = score;
+        }
+    }
+    return best;
+}
+
+bool front_of_sleeve(const library::Image &sleeve, library::Image *front)
+{
+    *front = library::Image();
+    if (sleeve.width <= 0 || sleeve.height <= 0 ||
+        sleeve.rgba.size() != static_cast<std::size_t>(sleeve.width) * sleeve.height * 4)
+        return false;
+    if (sleeve.width <= sleeve.height)
+    {
+        *front = sleeve;
+        return true;
+    }
+    // A case's front is 13.5 by 19 cm.
+    const int width = std::min(sleeve.width, (sleeve.height * 135 + 95) / 190);
+    front->width = width;
+    front->height = sleeve.height;
+    front->rgba.resize(static_cast<std::size_t>(width) * sleeve.height * 4);
+    const std::size_t row = static_cast<std::size_t>(width) * 4;
+    const std::size_t from = static_cast<std::size_t>(sleeve.width - width) * 4;
+    for (int y = 0; y < sleeve.height; ++y)
+    {
+        const std::size_t line = static_cast<std::size_t>(y) * sleeve.width * 4;
+        std::copy_n(sleeve.rgba.begin() + static_cast<std::ptrdiff_t>(line + from), row,
+                    front->rgba.begin() + static_cast<std::ptrdiff_t>(y * row));
+    }
+    return true;
+}
 
 bool make_directories(const std::string &path)
 {
@@ -195,7 +260,7 @@ void ArtFetcher::run(std::vector<ArtJob> jobs, std::string log_path)
         if (!error.empty() && progress_.error.empty())
             progress_.error = error;
         if (counter == &Progress::missing)
-            missing_.push_back(job.id);
+            missing_.push_back(tried_key(job.id, job.serial));
         append_line(log_path, job.system + "/" + job.rom_file + ": " + note);
     };
     // A picture downloaded: written where the library looks, and reported.
@@ -251,6 +316,39 @@ void ArtFetcher::run(std::vector<ArtJob> jobs, std::string log_path)
         {
             settle(job, &Progress::failed, "skipped (no network)", "");
             continue;
+        }
+        // XboxUnity by the Xbox 360 game's title ID; a miss goes on to the
+        // other sources.
+        if (job.system == kXbox360 && !job.serial.empty())
+        {
+            std::string info;
+            std::string error;
+            std::string bytes;
+            library::Image sleeve;
+            library::Image front;
+            if (!get_(std::string(kXboxUnity) + "CoverInfo.php?titleid=" + job.serial, kMaxIndex,
+                      &info, &error))
+            {
+                ++failures_in_a_row;
+                append_line(log_path, job.system + "/" + job.rom_file + ": XboxUnity: " + error);
+            }
+            else if (const std::string cover = pick_xboxunity_cover(info); cover.empty())
+                append_line(log_path, job.system + "/" + job.rom_file +
+                                          ": XboxUnity has no cover for " + job.serial);
+            else if (get_(std::string(kXboxUnity) + "Cover.php?size=large&cid=" + cover,
+                          kMaxPicture, &bytes, &error) &&
+                     is_picture(bytes) && library::decode_png(bytes, 2048, &sleeve) &&
+                     front_of_sleeve(sleeve, &front))
+            {
+                failures_in_a_row = 0;
+                // The decoder goes by the bytes (see is_picture).
+                keep(job, encode_tga(front), "XboxUnity: cover " + cover);
+                continue;
+            }
+            else
+                append_line(log_path, job.system + "/" + job.rom_file + ": XboxUnity cover " +
+                                          cover + ": " +
+                                          (error.empty() ? std::string("not a picture") : error));
         }
         // GameTDB by the game's ID: what PS5-ECAM names its games by, and the
         // only covers for Switch games (found by name, see switch_ids).

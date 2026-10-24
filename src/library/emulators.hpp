@@ -179,11 +179,24 @@ bool read_nintendo_disc(std::string_view head, Disc *disc);
 // same.
 std::string porpoise_arguments(const std::string &title_id, const std::string &disc,
                                bool exit_after_game);
-// PS5X360's and PSP5's: the game is their one argument (PS5X360 boots it when
-// it is a file, else opens its list). With exit_after_game, PSP5's pause menu
-// ends it, so ORION comes back.
-std::string game_arguments(const std::string &title_id, const std::string &key,
-                           const std::string &game, bool exit_after_game);
+// PS5X360's and PSP5's: the game is their first argument, with no title ID
+// before it as Porpoise's has (PS5X360 takes its first argument for the game
+// and opens its list when that is no file; PSP5 boots the first that is not
+// an option). With exit_after_game, PSP5's pause menu ends it, so ORION comes
+// back.
+std::string game_arguments(const std::string &key, const std::string &game, bool exit_after_game);
+// An Xbox 360 game's title ID ("454107D9", what XboxUnity knows its covers
+// by), from its default.xex: the file itself, or the one on a disc image
+// (read through the disc's file system). Empty when it cannot be read.
+std::string xbox360_title_id(const std::string &path);
+// The title ID in the start of an Xbox 360 executable (its XEX2 header's
+// execution info), or empty.
+std::string xex_title_id(std::string_view head);
+// The name a game's box art is kept by: its file's name without the
+// extension, or, for a file every game of its kind is called (a Wii U game's
+// title.tmd, an extracted Xbox 360 game's default.xex, a disc called
+// game.iso), its folder's name.
+std::string art_stem(std::string_view rom);
 
 // PS5SX2 takes no command line, but when it starts it boots the game named
 // on the first line of this note (and deletes it) instead of opening its

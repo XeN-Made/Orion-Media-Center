@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "library/icon.hpp"
 #include "orion/steamgriddb.hpp"
 
 #include <atomic>
@@ -11,6 +12,7 @@
 #include <functional>
 #include <mutex>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <vector>
 
@@ -117,6 +119,18 @@ class ArtFetcher
     std::vector<std::string> missing_;
     bool finished_ = false;
 };
+
+// What art/tried.txt remembers a game by when no source had a picture: its
+// id, and the ID it was looked up by, so that a game read better later (an
+// Xbox 360 game's title ID, new in 01.103) is looked for again.
+std::string tried_key(const std::string &id, const std::string &serial);
+// Of XboxUnity's covers for a title (CoverInfo.php's JSON), the one to use:
+// an official one first, then the best rated. Empty when there is none.
+std::string pick_xboxunity_cover(std::string_view json);
+// The front of a case's sleeve (XboxUnity's are back, spine and front side
+// by side): its right part, as wide as a case is for its height. A picture
+// that is not wider than tall is the front already.
+bool front_of_sleeve(const library::Image &sleeve, library::Image *front);
 
 // Creates a folder and its parents; true when it exists afterwards.
 bool make_directories(const std::string &path);

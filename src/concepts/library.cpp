@@ -3388,10 +3388,9 @@ class Library final : public app::Concept
             request = launcher + "\n" +
                       library::porpoise_arguments(launcher, player.rom, prefs_.return_on_close);
         else if (app != nullptr && (app->key == "ps5x360" || app->key == "psp5"))
-            // The game is their one argument, as a file they can open.
-            request =
-                launcher + "\n" +
-                library::game_arguments(launcher, app->key, player.rom, prefs_.return_on_close);
+            // The game is their first argument, as a file they can open.
+            request = launcher + "\n" +
+                      library::game_arguments(app->key, player.rom, prefs_.return_on_close);
         else if (ps5sx2)
             // The note PS5SX2's disc helper leaves it, written by the helper:
             // /data/PCSX2 is out of ORION's reach.
@@ -3484,30 +3483,15 @@ class Library final : public app::Concept
         const std::size_t slash = title.rom.rfind('/');
         const std::string file =
             slash == std::string::npos ? title.rom : title.rom.substr(slash + 1);
-        const std::size_t dot = file.rfind('.');
-        const std::string stem = dot == std::string::npos || dot == 0 ? file : file.substr(0, dot);
         orion::ArtJob job;
         job.id = title.id;
         job.system = title.system;
         job.rom_file = file;
         job.name = title.name;
         job.serial = title.serial;
-        // A Wii U game is its folder's title.tmd: the folder names it.
-        const std::string own =
-            stem == "title" && slash != std::string::npos ? folder_name(title.rom) : stem;
         job.target = orion::art_folder(prefs_, context_.library.state_dir) + "/" + title.system +
-                     "/" + own + ".png";
+                     "/" + library::art_stem(title.rom) + ".png";
         return job;
-    }
-
-    static std::string folder_name(const std::string &file)
-    {
-        const std::size_t slash = file.rfind('/');
-        const std::size_t before = slash == std::string::npos || slash == 0
-                                       ? std::string::npos
-                                       : file.rfind('/', slash - 1);
-        return before == std::string::npos ? std::string("title")
-                                           : file.substr(before + 1, slash - before - 1);
     }
 
     // Games for an emulator that have no box art yet. Without retry, games a
@@ -3525,7 +3509,7 @@ class Library final : public app::Concept
         {
             if (!title.is_rom() || !title.icon.empty() ||
                 !prefs_.system_enabled(library::shelf_system(title.system)) ||
-                tried.find(title.id + "\n") != std::string::npos)
+                tried.find(orion::tried_key(title.id, title.serial) + "\n") != std::string::npos)
                 continue;
             jobs.push_back(art_job(title));
         }

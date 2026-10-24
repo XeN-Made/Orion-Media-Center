@@ -12,6 +12,7 @@
 
 #include <gtest/gtest.h>
 
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -459,6 +460,57 @@ void write_file(const std::filesystem::path &path, const std::string &bytes)
     std::ofstream(path, std::ios::binary) << bytes;
 }
 
+void put_big32(std::string &bytes, std::size_t at, std::uint32_t value)
+{
+    for (int i = 0; i < 4; ++i)
+        bytes[at + i] = static_cast<char>((value >> (24 - 8 * i)) & 0xff);
+}
+
+void put_little(std::string &bytes, std::size_t at, std::uint32_t value, int size)
+{
+    for (int i = 0; i < size; ++i)
+        bytes[at + i] = static_cast<char>((value >> (8 * i)) & 0xff);
+}
+
+// The start of an Xbox 360 executable: its XEX2 header with two optional
+// headers, the second the execution info (at 0x40) holding the title ID.
+std::string xex(std::uint32_t title_id)
+{
+    std::string bytes(0x60, '\0');
+    bytes.replace(0, 4, "XEX2");
+    put_big32(bytes, 20, 2);
+    put_big32(bytes, 24, 0x000183ffu);
+    put_big32(bytes, 28, 0x1234);
+    put_big32(bytes, 32, 0x00040006u);
+    put_big32(bytes, 36, 0x40);
+    put_big32(bytes, 0x40 + 12, title_id);
+    return bytes;
+}
+
+// An Xbox disc's game partition (XDVDFS): the volume descriptor in sector
+// 32, the root folder in sector 33 (an entry "media" whose right subtree is
+// default.xex), the executable in sector 34.
+std::string xbox_disc(std::uint32_t title_id)
+{
+    const std::string head = xex(title_id);
+    std::string disc(34 * 2048 + head.size(), '\0');
+    disc.replace(32 * 2048, 20, "MICROSOFT*XBOX*MEDIA");
+    put_little(disc, 32 * 2048 + 20, 33, 4);
+    put_little(disc, 32 * 2048 + 24, 2048, 4);
+    const std::size_t folder = 33 * 2048;
+    put_little(disc, folder + 2, 8, 2); // right: 8 steps of 4 bytes on
+    disc[folder + 12] = 0x10;
+    disc[folder + 13] = 5;
+    disc.replace(folder + 14, 5, "media");
+    put_little(disc, folder + 32 + 4, 34, 4);
+    put_little(disc, folder + 32 + 8, static_cast<std::uint32_t>(head.size()), 4);
+    disc[folder + 32 + 12] = 0x20;
+    disc[folder + 32 + 13] = 11;
+    disc.replace(folder + 32 + 14, 11, "DEFAULT.XEX");
+    disc.replace(34 * 2048, head.size(), head);
+    return disc;
+}
+
 TEST(Emulators, FindsPorpoiseAndPs5sx2AndTheirGames)
 {
     namespace fs = std::filesystem;
@@ -706,10 +758,10 @@ TEST(Emulators, ListsPS5X360AndPSP5Games)
     fs::remove_all(root);
     const fs::path x360_root = root / "PPSA50011";
     const fs::path roms = x360_root / "assets/roms";
-    write_file(roms / "Harbor Lights/default.xex", "xex");
+    write_file(roms / "Harbor Lights/default.xex", xex(0x454107d9u));
     write_file(roms / "Harbor Lights/cover.jpg", "jpg");
     write_file(roms / "Iron Valley/game.iso", "iso");
-    write_file(roms / "Night Relay (USA).iso", "iso");
+    write_file(roms / "Night Relay (USA).iso", xbox_disc(0x4d5307e6u));
     write_file(roms / "Night Relay (USA).png", "png");
     write_file(roms / "Empty Folder/readme.txt", "no");
     write_file(roms / "README.txt", "no");
@@ -739,10 +791,19 @@ TEST(Emulators, ListsPS5X360AndPSP5Games)
     EXPECT_EQ(found[0].system, "Microsoft - Xbox 360");
     EXPECT_EQ(found[0].rom, "/app0/assets/roms/Harbor Lights/default.xex");
     EXPECT_EQ(found[0].icon, (roms / "Harbor Lights/cover.jpg").string());
+    // The title IDs XboxUnity knows their covers by, from default.xex.
+    EXPECT_EQ(found[0].serial, "454107D9");
     // The top folder's games, then those in its folders.
     EXPECT_EQ(found[1].name, "Night Relay");
     EXPECT_EQ(found[1].icon, (roms / "Night Relay (USA).png").string());
+    EXPECT_EQ(found[1].serial, "4D5307E6");
     EXPECT_EQ(found[2].name, "Iron Valley");
+    EXPECT_EQ(found[2].serial, ""); // not a disc it can read
+    // Box art is kept by the game's folder where every file is called alike.
+    EXPECT_EQ(library::art_stem("/app0/assets/roms/Harbor Lights/default.xex"), "Harbor Lights");
+    EXPECT_EQ(library::art_stem("/mnt/usb0/xbox360/Iron Valley/game.iso"), "Iron Valley");
+    EXPECT_EQ(library::art_stem("/mnt/usb0/wiiu/Quiet Bay/title.tmd"), "Quiet Bay");
+    EXPECT_EQ(library::art_stem("/mnt/usb0/xbox360/Night Relay (USA).iso"), "Night Relay (USA)");
     EXPECT_EQ(found[3].name, "Sand Kite");
     EXPECT_EQ(found[3].system, "Sony - PlayStation Portable");
     EXPECT_EQ(found[4].name, "Tin Comet");
@@ -751,12 +812,15 @@ TEST(Emulators, ListsPS5X360AndPSP5Games)
     const std::vector<library::Player> players = library::players_for(emulator, found[0]);
     ASSERT_EQ(players.size(), 1u);
     EXPECT_EQ(players[0].key, "ps5x360");
-    EXPECT_EQ(library::game_arguments("PPSA50011", "ps5x360", players[0].rom, true),
-              "PPSA50011\n/app0/assets/roms/Harbor Lights/default.xex\n");
-    EXPECT_EQ(library::game_arguments("PPSA99131", "psp5", "/app0/memstick/ISO/a.iso", true),
-              "PPSA99131\n/app0/memstick/ISO/a.iso\n--pause-menu-exit\n");
-    EXPECT_EQ(library::game_arguments("PPSA99131", "psp5", "/app0/memstick/ISO/a.iso", false),
-              "PPSA99131\n/app0/memstick/ISO/a.iso\n");
+    // The game first: PS5X360 took a title ID there for the game to boot.
+    EXPECT_EQ(library::game_arguments("ps5x360", players[0].rom, true),
+              "/app0/assets/roms/Harbor Lights/default.xex\n");
+    EXPECT_EQ(library::game_arguments("psp5", "/app0/memstick/ISO/a.iso", true),
+              "/app0/memstick/ISO/a.iso\n--pause-menu-exit\n");
+    EXPECT_EQ(library::game_arguments("psp5", "/app0/memstick/ISO/a.iso", false),
+              "/app0/memstick/ISO/a.iso\n");
+    EXPECT_EQ(library::xex_title_id("XEX2"), "");
+    EXPECT_EQ(library::xex_title_id(xex(0)), "");
     fs::remove_all(root);
 }
 

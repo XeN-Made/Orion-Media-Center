@@ -17,6 +17,7 @@
 #include <unordered_set>
 
 #include <sys/stat.h>
+#include <sys/types.h>
 
 namespace hui::library
 {
@@ -324,10 +325,7 @@ int attach_rom_art(std::vector<Title> &roms, const std::string &root, const std:
     {
         if (!rom.is_rom() || !rom.icon.empty())
             continue;
-        const std::size_t slash = rom.rom.rfind('/');
-        const std::string file = slash == std::string::npos ? rom.rom : rom.rom.substr(slash + 1);
-        const std::size_t dot = file.rfind('.');
-        const std::string stem = dot == std::string::npos || dot == 0 ? file : file.substr(0, dot);
+        const std::string stem = art_stem(rom.rom);
         const std::string es = esde_system_name(rom.system);
         std::vector<std::string> candidates;
         if (!art_dir.empty())
@@ -732,6 +730,94 @@ bool eden_takes(const std::string &ext)
     return ext == "xci" || ext == "nsp" || ext == "nro";
 }
 
+// An Xbox 360 executable's header is a few kilobytes; its execution info is
+// in the first 64.
+constexpr std::size_t kXexHead = 64u << 10;
+// The root folder of an Xbox disc is one or two sectors; anything near this
+// is not one.
+constexpr std::uint32_t kMaxXboxFolder = 1u << 20;
+constexpr long long kXboxSector = 2048;
+
+std::uint32_t little32(std::string_view bytes, std::size_t at)
+{
+    if (at + 4 > bytes.size())
+        return 0;
+    return static_cast<std::uint32_t>(static_cast<unsigned char>(bytes[at])) |
+           static_cast<std::uint32_t>(static_cast<unsigned char>(bytes[at + 1])) << 8 |
+           static_cast<std::uint32_t>(static_cast<unsigned char>(bytes[at + 2])) << 16 |
+           static_cast<std::uint32_t>(static_cast<unsigned char>(bytes[at + 3])) << 24;
+}
+
+// size bytes at offset (a disc is several gigabytes: a 64-bit offset).
+bool read_at(std::FILE *in, long long offset, std::size_t size, std::string *out)
+{
+    out->assign(size, '\0');
+    if (::fseeko(in, static_cast<off_t>(offset), SEEK_SET) != 0)
+        return false;
+    const std::size_t got = std::fread(out->data(), 1, size, in);
+    out->resize(got);
+    return got == size;
+}
+
+// The disc's default.xex, read through XDVDFS, the Xbox's disc file system:
+// its volume descriptor (sector 32 of the game partition, which starts where
+// the disc's kind puts it) names the root folder, a binary tree of entries.
+std::string xbox_disc_title_id(const std::string &path)
+{
+    std::FILE *in = std::fopen(path.c_str(), "rb");
+    if (in == nullptr)
+        return "";
+    std::string id;
+    // A bare game partition (extracted), XGD3, XGD2, then XGD1.
+    for (const long long partition : {0LL, 0x2080000LL, 0xFDA0000LL, 0x18300000LL})
+    {
+        std::string volume;
+        if (!read_at(in, partition + 32 * kXboxSector, 28, &volume) ||
+            volume.compare(0, 20, "MICROSOFT*XBOX*MEDIA") != 0)
+            continue;
+        const std::uint32_t root = little32(volume, 20);
+        const std::uint32_t size = little32(volume, 24);
+        std::string folder;
+        if (size == 0 || size > kMaxXboxFolder ||
+            !read_at(in, partition + root * kXboxSector, size, &folder))
+            break;
+        // Each entry: left and right subtrees (in 4-byte steps from the
+        // folder's start, 0 for none), first sector, size, attributes, the
+        // name's length, the name. 0xFFFF pads a sector's end.
+        std::vector<std::size_t> todo = {0};
+        for (int steps = 0; !todo.empty() && steps < 4096; ++steps)
+        {
+            const std::size_t at = todo.back();
+            todo.pop_back();
+            if (at + 14 > folder.size())
+                continue;
+            const std::uint32_t links = little32(folder, at);
+            const std::uint32_t left = links & 0xffffu;
+            const std::uint32_t right = links >> 16;
+            if (left == 0xffffu)
+                continue;
+            const std::size_t length = static_cast<unsigned char>(folder[at + 13]);
+            if (at + 14 + length <= folder.size() &&
+                lower(folder.substr(at + 14, length)) == "default.xex")
+            {
+                std::string head;
+                const std::uint32_t file_size = little32(folder, at + 8);
+                read_at(in, partition + little32(folder, at + 4) * kXboxSector,
+                        std::min<std::size_t>(file_size, kXexHead), &head);
+                id = xex_title_id(head);
+                break;
+            }
+            if (left != 0)
+                todo.push_back(left * 4);
+            if (right != 0)
+                todo.push_back(right * 4);
+        }
+        break;
+    }
+    std::fclose(in);
+    return id;
+}
+
 // PSP5's games: the discs its own list shows (it leaves out .zip).
 bool psp5_takes(const std::string &ext)
 {
@@ -976,6 +1062,8 @@ int add_x360_folder(Emulator &emulator, std::size_t app_index, const std::string
             return;
         rom.system = kXbox360;
         rom.name = rom_display_name(name);
+        // What its cover is found by on XboxUnity (orion::ArtFetcher).
+        rom.serial = xbox360_title_id(path);
         for (const std::string &cover : covers)
         {
             if (rom.icon.empty() && pictures.has(cover))
@@ -1237,12 +1325,65 @@ std::string porpoise_arguments(const std::string &title_id, const std::string &d
     return title_id + "\n--rom\n" + disc + "\n" + (exit_after_game ? "--exit-after-game\n" : "");
 }
 
-std::string game_arguments(const std::string &title_id, const std::string &key,
-                           const std::string &game, bool exit_after_game)
+std::string game_arguments(const std::string &key, const std::string &game, bool exit_after_game)
 {
     // PSP5's pause menu then ends it, rather than going back to its own list.
-    return title_id + "\n" + game + "\n" +
-           (key == "psp5" && exit_after_game ? "--pause-menu-exit\n" : "");
+    return game + "\n" + (key == "psp5" && exit_after_game ? "--pause-menu-exit\n" : "");
+}
+
+std::string xex_title_id(std::string_view head)
+{
+    if (head.size() < 24 || head.substr(0, 4) != "XEX2")
+        return "";
+    // Optional headers after the fixed ones: a key and a value each; the
+    // execution info's value is where it is (media ID, version, base
+    // version, title ID, ...).
+    const std::uint32_t count = big32(head, 20);
+    for (std::uint32_t i = 0; i < count && i < 256; ++i)
+    {
+        const std::size_t at = 24 + static_cast<std::size_t>(i) * 8;
+        if (at + 8 > head.size())
+            break;
+        if (big32(head, at) != 0x00040006u)
+            continue;
+        const std::uint32_t id = big32(head, static_cast<std::size_t>(big32(head, at + 4)) + 12);
+        if (id == 0)
+            return "";
+        char text[9];
+        std::snprintf(text, sizeof(text), "%08X", static_cast<unsigned>(id));
+        return text;
+    }
+    return "";
+}
+
+std::string xbox360_title_id(const std::string &path)
+{
+    if (extension_of(path) != "xex")
+        return xbox_disc_title_id(path);
+    std::string head;
+    std::FILE *in = std::fopen(path.c_str(), "rb");
+    if (in == nullptr)
+        return "";
+    read_at(in, 0, kXexHead, &head);
+    std::fclose(in);
+    return xex_title_id(head);
+}
+
+std::string art_stem(std::string_view rom)
+{
+    const std::size_t slash = rom.rfind('/');
+    const std::string_view file = slash == std::string_view::npos ? rom : rom.substr(slash + 1);
+    const std::size_t dot = file.rfind('.');
+    const std::string_view stem =
+        dot == std::string_view::npos || dot == 0 ? file : file.substr(0, dot);
+    const std::string generic = lower(stem);
+    if ((generic != "title" && generic != "default" && generic != "game") ||
+        slash == std::string_view::npos || slash == 0)
+        return std::string(stem);
+    const std::size_t before = rom.rfind('/', slash - 1);
+    return std::string(before == std::string_view::npos
+                           ? rom.substr(0, slash)
+                           : rom.substr(before + 1, slash - before - 1));
 }
 
 std::string ps5sx2_launch_note(const std::string &game)

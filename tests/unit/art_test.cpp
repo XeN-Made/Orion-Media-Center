@@ -277,5 +277,62 @@ TEST(ArtFetcher, DownloadsGameTdbCoversByIdAndName)
                              { return url.find("libretro") != std::string::npos; }));
 }
 
+// Xbox 360 games: XboxUnity's covers by title ID, the official one first,
+// cut to the front of the sleeve; a title it has none for goes on to the
+// other sources and is remembered with its ID.
+TEST(ArtFetcher, DownloadsXboxUnityCoversByTitleId)
+{
+    EXPECT_EQ(orion::pick_xboxunity_cover(R"({"Covers":[{"CoverID":"7","Rating":"5","Official":"0"},
+        {"CoverID":"464","Rating":null,"Official":"1"}]})"),
+              "464");
+    EXPECT_EQ(orion::pick_xboxunity_cover(R"({"Covers":[],"CoversCount":0})"), "");
+    library::Image tall;
+    tall.width = 2;
+    tall.height = 3;
+    tall.rgba.assign(24, 9);
+    library::Image front;
+    ASSERT_TRUE(orion::front_of_sleeve(tall, &front));
+    EXPECT_EQ(front.width, 2);
+
+    const std::string dir = ::testing::TempDir() + "hui-art-xboxunity";
+    const std::string x360 = dir + "/art/Microsoft - Xbox 360";
+    std::remove((x360 + "/Harbor Lights.png").c_str());
+    std::string sleeve; // 32 x 16: back, spine and front
+    ASSERT_TRUE(
+        save::read_file(std::string(HUI_SOURCE_DIR) + "/tests/fixtures/images/cover.jpg", &sleeve));
+    const std::string unity = "https://xboxunity.net/Resources/Lib/";
+    FakeServer server;
+    server.pages[unity + "CoverInfo.php?titleid=454107D9"] =
+        R"({"Covers":[{"CoverID":"7","Rating":"4","Official":"0"},{"CoverID":"464","Rating":null,"Official":"1"}]})";
+    server.pages[unity + "Cover.php?size=large&cid=464"] = sleeve;
+    server.pages[unity + "CoverInfo.php?titleid=4D5307E6"] = R"({"Covers":[],"CoversCount":0})";
+    server.pages["https://thumbnails.libretro.com/Microsoft%20-%20Xbox%20360/Named_Boxarts/"] = "";
+    orion::ArtFetcher art(server.get());
+    orion::ArtJob harbor;
+    harbor.id = "rom-0000000000a1";
+    harbor.system = "Microsoft - Xbox 360";
+    harbor.rom_file = "default.xex";
+    harbor.name = "Harbor Lights";
+    harbor.serial = "454107D9";
+    harbor.target = x360 + "/Harbor Lights.png";
+    orion::ArtJob relay = harbor;
+    relay.id = "rom-0000000000a2";
+    relay.rom_file = "Night Relay (USA).iso";
+    relay.serial = "4D5307E6";
+    relay.target = x360 + "/Night Relay (USA).png";
+    ASSERT_TRUE(art.start({harbor, relay}, ""));
+    art.wait();
+    const orion::ArtFetcher::Progress done = art.progress();
+    EXPECT_EQ(done.found, 1);
+    EXPECT_EQ(done.missing, 1);
+    EXPECT_EQ(art.take_missing(), std::vector<std::string>{"rom-0000000000a2@4D5307E6"});
+    std::string bytes;
+    ASSERT_TRUE(save::read_file(harbor.target, &bytes));
+    library::Image cover;
+    ASSERT_TRUE(library::decode_png(bytes, 1024, &cover));
+    EXPECT_EQ(cover.width, 11); // 16 tall, as wide as a case's front
+    EXPECT_EQ(cover.height, 16);
+}
+
 } // namespace
 } // namespace hui
