@@ -128,8 +128,10 @@ if (( ${#pacbrew_packages[@]} > 0 || ${#pacbrew_includes[@]} > 0 || ${#pacbrew_a
     mapfile -d '' -t pacbrew_cflags < <(python3 -c \
         'import json,sys; [print(v, end="\0") for v in json.loads(sys.argv[1])["cflags"]]' \
         "$pacbrew_resolution")
+    # Some ports' pkg-config files put compiler flags among their libraries
+    # (libwebp's -D_THREAD_SAFE), which the linker refuses: only those go.
     mapfile -d '' -t pacbrew_libs < <(python3 -c \
-        'import json,sys; [print(v, end="\0") for v in json.loads(sys.argv[1])["libs"]]' \
+        'import json,sys; [print(v, end="\0") for v in json.loads(sys.argv[1])["libs"] if not v.startswith("-D")]' \
         "$pacbrew_resolution")
     pacbrew_root=$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["root"])' \
         "$pacbrew_resolution")

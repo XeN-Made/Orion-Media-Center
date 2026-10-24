@@ -22,8 +22,9 @@ override APP_INCLUDE_PATHS := $(strip src $(OPENGL_SDK)/include $(APP_INCLUDE_PA
 override APP_STATIC_ARCHIVES := $(strip .deps/ps5-opengl/libps5opengl-group.a $(APP_STATIC_ARCHIVES))
 override APP_IMPORT_STUBS := $(strip $(OPENGL_SDK)/lib/libSceAgc.so \
 	$(OPENGL_SDK)/lib/libSceAgcDriver.so $(APP_IMPORT_STUBS))
-# libcurl (with OpenSSL): ORION downloads box art over HTTPS.
-PACBREW_PACKAGES ?= libcurl
+# libcurl (with OpenSSL): ORION downloads box art over HTTPS. libwebp: case
+# pictures and other art saved as WebP.
+PACBREW_PACKAGES ?= libcurl libwebp
 PACBREW_INCLUDE_PATHS ?=
 PACBREW_STATIC_ARCHIVES ?=
 PS5_HOST ?=
