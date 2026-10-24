@@ -48,14 +48,52 @@ inline float text(gfx::DrawList &list, const FontRef &font, std::string_view val
     return list.text(*font.font, font.texture, value, x, baseline, size, color, align, tracking);
 }
 
-// ASCII upper case, for small tracked labels ("CONTINUE PLAYING").
+// The capital of a lower-case letter the baked faces carry (Latin-1, Latin
+// Extended-A, Greek, Cyrillic), else the letter itself. Latin Extended-A
+// pairs capital and small as even and odd code points, except where a run
+// starts on an odd one (Ĺ ... ň, Ź ... ž).
+constexpr char32_t upper_letter(char32_t c)
+{
+    if ((c >= U'a' && c <= U'z') || (c >= 0xE0 && c <= 0xFE && c != 0xF7) ||
+        (c >= 0x3B1 && c <= 0x3CB && c != 0x3C2) || (c >= 0x430 && c <= 0x44F))
+        return c - 0x20;
+    if (c == 0xFF)
+        return 0x178; // ÿ
+    if (c == 0x3C2)
+        return 0x3A3; // final sigma
+    if (c >= 0x450 && c <= 0x45F)
+        return c - 0x50;
+    const bool odd_run = (c >= 0x139 && c <= 0x148) || (c >= 0x179 && c <= 0x17E);
+    if (odd_run)
+        return c % 2 == 0 ? c - 1 : c;
+    if ((c >= 0x100 && c <= 0x137) || (c >= 0x14A && c <= 0x177))
+        return c % 2 == 1 ? c - 1 : c;
+    return c;
+}
+
+// Upper case, for small tracked labels ("CONTINUE PLAYING", "KÖNYVTÁR"): the
+// letters above; anything else, and text that is not UTF-8, is kept as it is.
 inline std::string upper(std::string_view value)
 {
-    std::string result(value);
-    for (char &c : result)
+    std::string result;
+    result.reserve(value.size());
+    for (std::size_t i = 0; i < value.size();)
     {
-        if (c >= 'a' && c <= 'z')
-            c = static_cast<char>(c - 'a' + 'A');
+        const auto byte = static_cast<unsigned char>(value[i]);
+        // Two-byte sequences hold every letter upper_letter changes beyond ASCII.
+        if (byte >= 0xC2 && byte <= 0xDF && i + 1 < value.size() &&
+            (static_cast<unsigned char>(value[i + 1]) & 0xC0) == 0x80)
+        {
+            const char32_t c = (static_cast<char32_t>(byte & 0x1F) << 6) |
+                               (static_cast<unsigned char>(value[i + 1]) & 0x3F);
+            const char32_t up = upper_letter(c);
+            result += static_cast<char>(0xC0 | (up >> 6));
+            result += static_cast<char>(0x80 | (up & 0x3F));
+            i += 2;
+            continue;
+        }
+        result += byte < 0x80 ? static_cast<char>(upper_letter(byte)) : value[i];
+        ++i;
     }
     return result;
 }

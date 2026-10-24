@@ -150,4 +150,23 @@ TEST(Paragraph, EmptyTextIsOneEmptyLine)
     EXPECT_FALSE(m.truncated);
 }
 
+// Small tracked labels are drawn in capitals in every language the faces
+// carry, accented letters included; what has no capital stays as it is.
+TEST(Upper, CapitalisesAccentedLetters)
+{
+    using hui::ui::upper;
+    EXPECT_EQ(upper("continue playing"), "CONTINUE PLAYING");
+    EXPECT_EQ(upper("könyvtár"), "KÖNYVTÁR");
+    EXPECT_EQ(upper("lőpor és tűz"), "LŐPOR ÉS TŰZ"); // ő and ű: Latin Extended-A
+    EXPECT_EQ(upper("música"), "MÚSICA");
+    EXPECT_EQ(upper("configurações"), "CONFIGURAÇÕES");
+    EXPECT_EQ(upper("łódź žluť ĺň"), "ŁÓDŹ ŽLUŤ ĹŇ"); // the runs that start odd
+    EXPECT_EQ(upper("straße ÿ"), "STRAßE Ÿ");
+    EXPECT_EQ(upper("ελλάς μουσική"), "ΕΛΛάΣ ΜΟΥΣΙΚή"); // accented Greek stays
+    EXPECT_EQ(upper("ςσ"), "ΣΣ");
+    EXPECT_EQ(upper("музыка ёж"), "МУЗЫКА ЁЖ");
+    EXPECT_EQ(upper("ÉCOLE 3DS ✓"), "ÉCOLE 3DS ✓");
+    EXPECT_EQ(upper(std::string_view("\xC3", 1)), std::string("\xC3", 1)); // cut short
+}
+
 } // namespace
