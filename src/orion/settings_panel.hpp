@@ -102,7 +102,7 @@ class SettingsPanel
         storage,
         sound,
         appearance,
-        system, // the language, autoboot, rest mode, returning after a game, usage
+        system, // the language, autoboot, rest mode, returning after a game
         about,  // the version, updates, where things are
     };
 

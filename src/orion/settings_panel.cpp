@@ -39,7 +39,6 @@ enum : int
     kAskPlayer,
     kAutostart,
     kReopenAfterRest,
-    kShareUsage,
     kPayloadInfo,
     kPayloadFolder,
     kRunSetup,
@@ -544,9 +543,6 @@ void SettingsPanel::build_system(const LibraryPrefs &prefs)
     const std::size_t slash = payload_.rfind('/');
     form_.add_value(kPayloadInfo, tr("Autoboot payload"), payload_.substr(slash + 1));
     form_.add_value(kPayloadFolder, tr("In the folder"), payload_.substr(0, slash));
-    form_.add_toggle(kShareUsage, tr("Share anonymous usage"), prefs.share_usage).description =
-        tr("While ORION is open, a random ID and its version, to count the consoles that use "
-           "it. What was sent: /data/orion/usage.txt");
     ui::FormRow &setup = form_.add_action(kRunSetup, tr("Run setup again"));
     setup.chevron = true;
     setup.description = tr("The first-run steps: look, emulators, box art, autostart");
@@ -1428,9 +1424,6 @@ SettingsPanel::Change SettingsPanel::handle(const InputFrame &input, ui::Feedbac
         return Change::prefs;
     case kReopenAfterRest:
         prefs->reopen_after_rest = form_.toggle_value(kReopenAfterRest);
-        return Change::prefs;
-    case kShareUsage:
-        prefs->share_usage = form_.toggle_value(kShareUsage);
         return Change::prefs;
     case kTitleMusic:
         prefs->title_music = form_.toggle_value(kTitleMusic);

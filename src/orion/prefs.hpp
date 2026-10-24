@@ -111,7 +111,6 @@ struct Placement
 //     "setup_done": true,
 //     "autostart": false,
 //     "reopen_after_rest": false,
-//     "share_usage": true,
 //     "title_music": true,
 //     "every_version": false,
 //     "language": "es",
@@ -169,10 +168,6 @@ struct LibraryPrefs
     // (payload/resume). On writes <state_dir>/reopen-after-rest, which the
     // watcher looks for; off by default, like autostart.
     bool reopen_after_rest = false;
-    // Anonymous check-ins while ORION is open (orion/usage.hpp): a random ID
-    // and ORION's version, to count the consoles that use it. On until turned
-    // off in Settings, System, whose row says what is sent.
-    bool share_usage = true;
     // The Hidden tab is off the tab bar until the player shows it (Settings,
     // Tabs, its page): a hidden title is meant to be out of the way. Kept
     // apart from tab_prefs, where an entry at its defaults is not saved.

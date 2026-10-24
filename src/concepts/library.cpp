@@ -37,7 +37,6 @@
 #include "orion/drives.hpp"
 #include "orion/title_details.hpp"
 #include "orion/updates.hpp"
-#include "orion/usage.hpp"
 #include "platform/ps5/system.hpp"
 #include "ui/components/carousel.hpp"
 #include "ui/components/grid.hpp"
@@ -3913,17 +3912,6 @@ class Library final : public app::Concept
             update_asked_ = true;
             check_for_updates(false);
         }
-        // The anonymous check-in: a little after the update check, then every
-        // five minutes while ORION is open (Settings, System turns it off).
-        if (age_ >= usage_next_)
-        {
-            usage_next_ = age_ + orion::kUsageEvery;
-            const std::string &state = context_.library.state_dir;
-            if (prefs_.share_usage && sys::on_console() && !context_.version.empty())
-                usage_.send([](const std::string &url, const std::string &body, std::string *error)
-                            { return sys::http_post(url, body, error); }, orion::kUsageUrl, state,
-                            {orion::usage_id(state), context_.version}, std::time(nullptr));
-        }
         if (!updates_->take_finished())
             return;
         const orion::Release latest = updates_->latest();
@@ -6114,17 +6102,15 @@ class Library final : public app::Concept
         { return sys::http_get(url, limit, body, error); },
         [](const std::string &url, const std::string &path, std::size_t limit, std::string *error)
         { return sys::http_download(url, path, limit, error); }};
-    bool update_waiting_ = false; // an update is ready: ask when nothing else is open
-    bool dialog_update_ = false;  // the dialog asks about the update, not a removal
-    bool dialog_info_ = false;    // the dialog only tells something (OK)
-    orion::UsageSender usage_;
+    bool update_waiting_ = false;      // an update is ready: ask when nothing else is open
+    bool dialog_update_ = false;       // the dialog asks about the update, not a removal
+    bool dialog_info_ = false;         // the dialog only tells something (OK)
     orion::TitleDetails details_;      // a title's page (Details… in its menu)
     float drive_space_asked_ = -1.0f;  // clock_ when the helper was sent for the drives' space
     std::time_t drive_space_time_ = 0; // when the answer shown was written
     float last_dt_ = 0.0f;
-    std::string details_id_;  // the title it shows
-    float usage_next_ = 6.0f; // age_ at the next check-in
-    std::string info_title_;  // a message waiting to be shown
+    std::string details_id_; // the title it shows
+    std::string info_title_; // a message waiting to be shown
     std::string info_body_;
 };
 

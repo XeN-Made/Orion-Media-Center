@@ -322,7 +322,6 @@ struct Target
     std::string *body = nullptr; // or
     int fd = -1;
     const std::vector<std::string> *headers = nullptr; // for the first address only
-    const std::string *post = nullptr;                 // a JSON body: POST, no redirects
     std::size_t limit = 0;
     std::size_t written = 0;
     bool over = false;
@@ -417,13 +416,6 @@ std::string fetch(std::string url, Target *target, long whole)
                 headers = curl_slist_append(headers, header.c_str());
             curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
         }
-        if (target->post != nullptr)
-        {
-            headers = curl_slist_append(headers, "Content-Type: application/json");
-            curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
-            curl_easy_setopt(curl, CURLOPT_POSTFIELDS, target->post->data());
-            curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, static_cast<long>(target->post->size()));
-        }
         art_trace(("perform " + url).c_str());
         const CURLcode code = curl_easy_perform(curl);
         if (headers != nullptr)
@@ -439,8 +431,6 @@ std::string fetch(std::string url, Target *target, long whole)
             return target->over     ? std::string("too large")
                    : target->failed ? std::string("could not write the file (disk full?)")
                                     : std::string(curl_easy_strerror(code));
-        if (target->post != nullptr)
-            return status >= 200 && status < 300 ? std::string() : "HTTP " + std::to_string(status);
         if (status >= 300 && status < 400 && !next.empty())
         {
             url = next;
@@ -504,22 +494,6 @@ bool http_download(const std::string &url, const std::string &path, std::size_t 
 bool http_get(const std::string &url, std::size_t limit, std::string *body, std::string *error)
 {
     return http_get(url, {}, limit, body, error);
-}
-
-bool http_post(const std::string &url, const std::string &json, std::string *error)
-{
-    std::string answer;
-    Target target;
-    target.body = &answer;
-    target.limit = 64u << 10;
-    target.post = &json;
-    const std::string why = fetch(url, &target, 20L);
-    if (!why.empty())
-    {
-        *error = why;
-        return false;
-    }
-    return true;
 }
 
 bool http_get(const std::string &url, const std::vector<std::string> &headers, std::size_t limit,

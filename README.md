@@ -322,30 +322,6 @@ you chose for it.
   one into `/data/orion/hover-music` named after the game or its title ID.
   Settings, Sound, **Title music** turns it off.
 
-## Anonymous usage
-
-To help improve future updates, ORION sends a small anonymous check-in when it
-opens and then every five minutes while it stays open. It tells us how many
-consoles run ORION and which versions they are on, so we know which versions
-to keep fixing and testing first. This is all of it:
-
-```json
-{"id": "3f9c0d27a1b84e6c9d5e2f7a8b1c4d03", "version": "01.104.000"}
-```
-
-- **`id`**: 32 random characters, made once on your console and kept in
-  `/data/orion/usage-id.txt`. It is not your console's ID, your account or
-  anything taken from them. Delete the file and ORION makes a new one.
-- **`version`**: the ORION version you run.
-
-Nothing else is sent: no account, no games, no play times, no console details.
-The counter ([stats/worker](stats/worker)) keeps the ID, the version, when it
-last checked in and the days it did. It does not keep IP addresses, and it
-deletes everything older than 400 days. What ORION sent last, when and where
-to, is in `/data/orion/usage.txt`.
-
-It is on unless you turn it off: Settings, System, **Share anonymous usage**.
-
 ## If something goes wrong
 
 Ask on the [ORION Discord](https://discord.gg/SS7N7ukzQv), or report a bug there in
