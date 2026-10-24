@@ -28,6 +28,8 @@
 #include "platform/ps5/display_egl.hpp"
 #include "platform/ps5/pad.hpp"
 #include "platform/ps5/system.hpp"
+
+#include <csignal>
 #include "ui/fonts.hpp"
 
 #include <cstring>
@@ -180,6 +182,11 @@ void boot_step(const char *step)
 int main()
 {
     using namespace hui;
+    // A write to a socket whose other end has gone (the ELF loader, the FTP
+    // server, ShadowMountPlus, a download) is an error to handle, not the end
+    // of ORION: by default it raises SIGPIPE, which the system reports as the
+    // app crashing.
+    std::signal(SIGPIPE, SIG_IGN);
     boot_step("entry");
     sys::log("[HUI] entry");
     sys::log("[HUI] storage dir=%d", save::ensure_directory(kDataRoot) ? 1 : 0);

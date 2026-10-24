@@ -134,6 +134,10 @@ int send_payload(const std::string &elf, int port)
     const int fd = ::socket(AF_INET, SOCK_STREAM, 0);
     if (fd < 0)
         return errno != 0 ? errno : EIO;
+    // A loader that accepts but does not read (busy with another payload)
+    // must not hold ORION: the send gives up after this long.
+    timeval timeout{10, 0};
+    ::setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
     sockaddr_in address = {};
     address.sin_family = AF_INET;
     address.sin_port = htons(static_cast<std::uint16_t>(port));
@@ -147,7 +151,7 @@ int send_payload(const std::string &elf, int port)
     std::size_t sent = 0;
     while (sent < elf.size())
     {
-        const ssize_t wrote = ::send(fd, elf.data() + sent, elf.size() - sent, 0);
+        const ssize_t wrote = ::send(fd, elf.data() + sent, elf.size() - sent, MSG_NOSIGNAL);
         if (wrote <= 0)
         {
             const int error = errno != 0 ? errno : EIO;

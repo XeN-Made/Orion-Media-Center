@@ -100,7 +100,8 @@ bool shadowmount_request(int port, std::string_view path, std::string_view json,
     std::size_t sent = 0;
     while (sent < request.size())
     {
-        const ssize_t wrote = ::send(fd, request.data() + sent, request.size() - sent, 0);
+        const ssize_t wrote =
+            ::send(fd, request.data() + sent, request.size() - sent, MSG_NOSIGNAL);
         if (wrote <= 0)
         {
             ::close(fd);

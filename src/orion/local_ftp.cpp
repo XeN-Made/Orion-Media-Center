@@ -47,7 +47,7 @@ bool send_all(int fd, std::string_view text)
 {
     while (!text.empty())
     {
-        const ssize_t sent = ::send(fd, text.data(), text.size(), 0);
+        const ssize_t sent = ::send(fd, text.data(), text.size(), MSG_NOSIGNAL);
         if (sent <= 0)
             return false;
         text.remove_prefix(static_cast<std::size_t>(sent));
