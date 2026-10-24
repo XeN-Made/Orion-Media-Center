@@ -26,6 +26,7 @@ src/gfx/draw_list.cpp
 src/gfx/font.cpp
 src/gfx/triangulate.cpp
 src/library/art_match.cpp
+src/library/case_templates.cpp
 src/library/emulators.cpp
 src/library/favourites.cpp
 src/library/icon.cpp

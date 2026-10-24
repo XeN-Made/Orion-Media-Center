@@ -511,6 +511,11 @@ int main(int argc, char **argv)
         const int icons = hui::library::load_icons(titles, renderer.batch());
         std::fprintf(stderr, "library: %zu titles, %d icons from %s\n", titles.titles.size(), icons,
                      base.c_str());
+        // HUI_CASES: a folder of case pictures to try (as <state_dir>/cases).
+        const char *cases = std::getenv("HUI_CASES");
+        hui::library::load_case_templates(
+            titles, cases != nullptr ? std::string(cases) : titles.state_dir + "/cases",
+            renderer.batch());
     }
     hui::app::Shell shell(fonts, catalog, titles, data_root, renderer.glass_texture());
     shell.set_version("host");

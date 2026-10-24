@@ -298,6 +298,14 @@ you chose for it.
   after the game (`Chrono Trigger.png`) or its title ID (`PPSA01234.jpg`);
   case and punctuation do not matter. **Use its own picture** puts the
   original back.
+- **Case pictures for Cases view**: put a PNG of an empty case in
+  `/data/orion/cases`, with a **transparent window** where the cover goes, and
+  Cases view draws each cover inside it. Name it for what it holds: `ps5.png`,
+  `ps4.png`, `homebrew.png`, `media.png`, or a system's short name for its
+  games (`ps2.png`, `ps1.png`, `psp.png`, `wii.png`, `wiiu.png`, `ngc.png` or
+  `gc.png` for GameCube, `3ds.png`, `ds.png`, `switch.png`, `gba.png`,
+  `snes.png`...). Any size works; a case's shape (about 4:5) looks best. ORION
+  reads them when it opens; a kind with no picture keeps ORION's own case.
 - **SteamGridDB**: with a key of your own (free: steamgriddb.com, your
   profile, Preferences, API), games no other source has a cover for get one
   from SteamGridDB, and Options on any title, **Find other art…**, shows up to

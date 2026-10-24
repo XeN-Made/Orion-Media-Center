@@ -4,9 +4,11 @@
 
 #include "core/save_file.hpp"
 #include "gfx/gl_batch.hpp"
+#include "library/case_templates.hpp"
 #include "library/icon.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <string>
 
 namespace hui::library
@@ -94,6 +96,47 @@ int load_sharp_icons(Library &library, const std::vector<std::string> &ids, gfx:
         ++uploaded;
     }
     return uploaded;
+}
+
+int load_case_templates(Library &library, const std::string &folder, gfx::GlBatch &batch)
+{
+    for (const CaseTemplate &shell : library.cases)
+    {
+        if (shell.texture != 0)
+            batch.delete_texture(shell.texture);
+    }
+    library.cases.clear();
+    for (const save::DirectoryEntry &entry : save::list_directory(folder))
+    {
+        const std::string &name = entry.name;
+        if (entry.directory || name.size() < 5 || library.cases.size() >= 32)
+            continue;
+        std::string extension = name.substr(name.size() - 4);
+        for (char &c : extension)
+            c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        if (extension != ".png")
+            continue;
+        std::string bytes;
+        Image picture;
+        CaseWindow window;
+        if (!save::read_file(folder + "/" + name, &bytes, kMaxFile) ||
+            !decode_png(bytes, kSharpSize, &picture) || !find_case_window(picture, &window))
+            continue;
+        CaseTemplate shell;
+        for (const char c : name.substr(0, name.size() - 4))
+            shell.key += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        shell.texture = batch.create_texture(picture.width, picture.height, picture.rgba.data());
+        if (shell.texture == 0)
+            continue;
+        shell.width = picture.width;
+        shell.height = picture.height;
+        shell.window_x = window.x;
+        shell.window_y = window.y;
+        shell.window_w = window.w;
+        shell.window_h = window.h;
+        library.cases.push_back(std::move(shell));
+    }
+    return static_cast<int>(library.cases.size());
 }
 
 int load_wide_icons(Library &library, const std::vector<std::string> &ids,

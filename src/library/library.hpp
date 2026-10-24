@@ -152,9 +152,25 @@ struct Emulator
 };
 
 // What the designs receive: the titles found at start-up.
+// A picture of a case from <state_dir>/cases/<key>.png (library/case_templates.hpp),
+// uploaded: Cases view draws a cover in its window, then the picture over it.
+struct CaseTemplate
+{
+    std::string key; // "ps5", "ps4", "ps2", "homebrew", ...
+    std::uint32_t texture = 0;
+    int width = 0;
+    int height = 0;
+    float window_x = 0.0f; // the cover's window, as fractions of the picture
+    float window_y = 0.0f;
+    float window_w = 0.0f;
+    float window_h = 0.0f;
+};
+
 struct Library
 {
     std::vector<Title> titles;
+    // The player's case pictures, uploaded at start (load_case_templates).
+    std::vector<CaseTemplate> cases;
     // True once a scan ran (an empty list then means "nothing installed").
     bool scanned = false;
     // Where ORION keeps what the player chooses (favourites, ...); empty

@@ -16,6 +16,7 @@
 #include "core/save_file.hpp"
 #include "core/tween.hpp"
 #include "library/art_match.hpp"
+#include "library/case_templates.hpp"
 #include "library/emulators.hpp"
 #include "library/favourites.hpp"
 #include "library/json.hpp"
@@ -5342,12 +5343,104 @@ class Library final : public app::Concept
         return {Color::rgb(0x16171c), Color::rgb(0x4b3fa6), Color::rgb(0xffffff), name};
     }
 
+    // A cover filled into drawn (trimmed evenly at the edges that differ), or
+    // its colours and monogram centred in cover when it has no picture yet.
+    void draw_cover_art(ui::Canvas &canvas, const Rect &drawn, const Rect &cover,
+                        const ui::CardItem &item, const Title &title, float radius) const
+    {
+        gfx::DrawList &list = canvas.list;
+        const bool sharp = title.sharp_texture != 0 && title.sharp_height > 0;
+        const std::uint32_t texture = sharp ? title.sharp_texture : item.texture;
+        if (texture == 0)
+        {
+            list.gradient_rect(drawn, radius, item.top, item.bottom);
+            const std::string letters = monogram(item.title);
+            ui::text(list, canvas.fonts.display, letters.c_str(), cover.cx(),
+                     cover.y + cover.h * 0.5f + cover.h * 0.12f, cover.h * 0.3f,
+                     Color::rgb(0xffffff, 0.9f), gfx::Align::center);
+            return;
+        }
+        const float picture =
+            sharp ? static_cast<float>(title.sharp_width) / static_cast<float>(title.sharp_height)
+                  : std::max(0.2f, item.image_aspect);
+        const float shape = drawn.w / std::max(drawn.h, 1.0f);
+        Rect uv = sharp ? Rect{0.0f, 0.0f, 1.0f, 1.0f} : item.uv;
+        if (picture > shape)
+        {
+            const float keep = shape / picture;
+            uv.x += uv.w * (1.0f - keep) * 0.5f;
+            uv.w *= keep;
+        }
+        else
+        {
+            const float keep = picture / shape;
+            uv.y += uv.h * (1.0f - keep) * 0.5f;
+            uv.h *= keep;
+        }
+        list.image(texture, drawn, uv, Color::rgb(0xffffff), radius);
+    }
+
+    // The player's picture of this title's case (<state_dir>/cases), if any.
+    const library::CaseTemplate *case_template(const Title &title) const
+    {
+        if (context_.library.cases.empty())
+            return nullptr;
+        std::string alias;
+        const std::string key = library::case_key(title, &alias);
+        for (const library::CaseTemplate &shell : context_.library.cases)
+        {
+            if (shell.key == key || (!alias.empty() && shell.key == alias))
+                return &shell;
+        }
+        return nullptr;
+    }
+
+    // A game in the player's case picture: the cover in its clear window,
+    // the picture over it, both stretched to the case's cell (a case's
+    // shape; a picture of another shape is drawn to this one).
+    void draw_case_template(ui::Canvas &canvas, const Rect &art, const ui::CardItem &item,
+                            const Title &title, const library::CaseTemplate &shell,
+                            float focus) const
+    {
+        gfx::DrawList &list = canvas.list;
+        constexpr float kRadius = 7.0f;
+        const bool aurora = shown_.chrome.focus == orion::FocusRing::aurora && focus > 0.01f;
+        if (aurora)
+        {
+            const float time = context_.settings.reduced_motion ? 0.0f : clock_;
+            const Color light = hsv(std::fmod(time * 0.05f, 1.0f), 0.55f, 1.0f);
+            list.glow(art, kRadius, 30.0f * focus, light.with_alpha(0.5f * focus));
+        }
+        const Rect window{art.x + shell.window_x * art.w, art.y + shell.window_y * art.h,
+                          shell.window_w * art.w, shell.window_h * art.h};
+        list.push_clip(window);
+        draw_cover_art(canvas, window, window, item, title, 0.0f);
+        list.pop_clip();
+        list.image(shell.texture, art, gfx::kFullUv, Color::rgb(0xffffff));
+        if (favourite_of(title.id))
+        {
+            const float r = std::max(16.0f, art.w * 0.06f);
+            const float cx = window.x + window.w - r - 12.0f;
+            const float cy = window.y + r + 12.0f;
+            list.circle(cx, cy, r, Color::rgb(0x0b0e20, 0.72f));
+            list.star(cx, cy, r * 0.72f, Color::rgb(0xffc94a));
+        }
+        if (aurora)
+            draw_aurora_ring(list, art, kRadius, focus);
+    }
+
     // A game in Cases view. The picture is the sharp copy when the app has
-    // made one (Context::sharp_icons), else the grid's small one.
+    // made one (Context::sharp_icons), else the grid's small one. With the
+    // player's picture of its case, the cover goes in that instead.
     void draw_case(ui::Canvas &canvas, const Rect &art, const ui::CardItem &item, float focus) const
     {
         gfx::DrawList &list = canvas.list;
         const Title &title = titles()[static_cast<std::size_t>(item.tag)];
+        if (const library::CaseTemplate *shell = case_template(title))
+        {
+            draw_case_template(canvas, art, item, title, *shell, focus);
+            return;
+        }
         const CaseBand band = case_band(title);
         // A console's case is squarer than the drawn ones for other systems.
         const float kRadius = band.console ? 7.0f : 14.0f;
@@ -5394,39 +5487,8 @@ class Library final : public app::Concept
         // Drawn a corner taller and clipped flat: a straight edge under the
         // header, round corners at the bottom.
         const Rect drawn{cover.x, cover.y - kInner, cover.w, cover.h + kInner};
-        const bool sharp = title.sharp_texture != 0 && title.sharp_height > 0;
-        const std::uint32_t texture = sharp ? title.sharp_texture : item.texture;
         list.push_clip(cover);
-        if (texture != 0)
-        {
-            // Filled, trimmed evenly at the edges that differ.
-            const float picture = sharp ? static_cast<float>(title.sharp_width) /
-                                              static_cast<float>(title.sharp_height)
-                                        : std::max(0.2f, item.image_aspect);
-            const float shape = drawn.w / std::max(drawn.h, 1.0f);
-            Rect uv = sharp ? Rect{0.0f, 0.0f, 1.0f, 1.0f} : item.uv;
-            if (picture > shape)
-            {
-                const float keep = shape / picture;
-                uv.x += uv.w * (1.0f - keep) * 0.5f;
-                uv.w *= keep;
-            }
-            else
-            {
-                const float keep = picture / shape;
-                uv.y += uv.h * (1.0f - keep) * 0.5f;
-                uv.h *= keep;
-            }
-            list.image(texture, drawn, uv, Color::rgb(0xffffff), kInner);
-        }
-        else
-        {
-            list.gradient_rect(drawn, kInner, item.top, item.bottom);
-            const std::string letters = monogram(item.title);
-            ui::text(list, canvas.fonts.display, letters.c_str(), cover.cx(),
-                     cover.y + cover.h * 0.5f + cover.h * 0.12f, cover.h * 0.3f,
-                     Color::rgb(0xffffff, 0.9f), gfx::Align::center);
-        }
+        draw_cover_art(canvas, drawn, cover, item, title, kInner);
         list.pop_clip();
         if (band.rule.a > 0.0f)
             list.rounded_rect({sleeve.x, cover.y - 2.0f, sleeve.w, 3.0f}, 0.0f, band.rule);

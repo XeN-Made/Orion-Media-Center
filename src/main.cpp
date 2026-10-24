@@ -349,6 +349,7 @@ int main()
         library::apply_names(titles, orion::load_prefs(titles.state_dir).title_names);
         library::apply_custom_art(titles, titles.state_dir + "/custom-art");
         const int icons = library::load_icons(titles, renderer.batch());
+        library::load_case_templates(titles, titles.state_dir + "/cases", renderer.batch());
         char summary[128];
         std::snprintf(summary, sizeof(summary), "titles=%zu icons=%d in %lld ms",
                       titles.titles.size(), icons,
@@ -402,6 +403,7 @@ int main()
     // And the folders a player fills over FTP: pictures and music per title.
     save::ensure_directory("/data/orion/custom-art");
     save::ensure_directory("/data/orion/hover-music");
+    save::ensure_directory("/data/orion/cases"); // the player's case pictures
     const int tracks = music.init(
         mixer, std::vector<std::string>{std::string(kAssets) + "/audio/music", "/data/orion/music"},
         static_cast<std::uint64_t>(sys::monotonic_us()));
