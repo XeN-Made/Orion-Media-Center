@@ -41,6 +41,11 @@
 //                              stage, refresh the home screen's pictures, and
 //                              say how it went in result.txt (orion/updates.hpp)
 //
+// A request of "@space" alone is no launch: the helper writes each drive's
+// size and free space to /data/orion/drives-space.txt ("<mount>\t<bytes>\t
+// <free bytes>" a line) and ends. ORION cannot ask itself: inside its sandbox
+// the system refuses statfs (EPERM).
+//
 // The helper stays until the title closes when it has something to watch
 // for, and ends at once otherwise.
 
@@ -56,6 +61,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <sys/mount.h>
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <time.h>
@@ -857,6 +863,51 @@ static int update_allowed(const char *title, const char *stage, const char *targ
            (strncmp(target, "/data/homebrew/", 15) == 0 || strncmp(target, "/mnt/", 5) == 0);
 }
 
+#define SPACE_PATH "/data/orion/drives-space.txt"
+
+// @space: every drive that answers, as Settings, Storage shows them.
+static int write_space(void)
+{
+    static const char *const mounts[] = {"/user",      "/mnt/ext0", "/mnt/ext1", "/mnt/usb0",
+                                         "/mnt/usb1",  "/mnt/usb2", "/mnt/usb3", "/mnt/usb4",
+                                         "/mnt/usb5",  "/mnt/usb6", "/mnt/usb7"};
+    static char text[2048];
+    size_t used = 0;
+    for (size_t i = 0; i < sizeof(mounts) / sizeof(mounts[0]); ++i)
+    {
+        struct statfs info;
+        memset(&info, 0, sizeof(info));
+        if (statfs(mounts[i], &info) != 0 || info.f_blocks == 0)
+            continue;
+        const unsigned long long unit = (unsigned long long)info.f_bsize;
+        const unsigned long long available = info.f_bavail > 0 ? (unsigned long long)info.f_bavail : 0;
+        // The console's own storage is /data to ORION; /user is the same partition.
+        const char *name = i == 0 ? "/data" : mounts[i];
+        const int wrote = snprintf(text + used, sizeof(text) - used, "%s\t%llu\t%llu\n", name,
+                                   (unsigned long long)info.f_blocks * unit, available * unit);
+        if (wrote < 0 || (size_t)wrote >= sizeof(text) - used)
+            break;
+        used += (size_t)wrote;
+    }
+    const char *part = SPACE_PATH ".part";
+    const int fd = open(part, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+    if (fd < 0)
+    {
+        say("@space: cannot write " SPACE_PATH " (errno %d)", errno);
+        return 1;
+    }
+    const ssize_t written = write(fd, text, used);
+    fchmod(fd, 0666);
+    close(fd);
+    if (written != (ssize_t)used || rename(part, SPACE_PATH) != 0)
+    {
+        say("@space: cannot finish " SPACE_PATH " (errno %d)", errno);
+        return 1;
+    }
+    say("@space: %zu bytes about the drives", used);
+    return 0;
+}
+
 int main(void)
 {
     // The helper may not remove ORION's request after reading it, so an old
@@ -879,6 +930,9 @@ int main(void)
         return 1;
     // A request is used once.
     remove(REQUEST_PATH);
+    if (strncmp(request, "@space", 6) == 0 && (request[6] == '\0' || request[6] == '\n' ||
+                                                request[6] == '\r'))
+        return write_space();
 
     static launch_job_t job;
     memset(&job, 0, sizeof(job));

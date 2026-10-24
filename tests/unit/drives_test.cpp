@@ -67,6 +67,28 @@ TEST(Drives, ListsTheDrivesThatAnswerWithTheirTitles)
     EXPECT_TRUE(orion::find_drives(titles, {}).empty());
 }
 
+// The launch helper's answer (drives-space.txt): a line per drive; a broken
+// line, or more free than there is, says nothing.
+TEST(Drives, ReadsTheHelpersAnswer)
+{
+    const orion::SpaceOf space = orion::space_from_report(
+        "/data\t825000000000\t312000000000\n/mnt/usb1\t2000000000000\t1460000000000\n"
+        "/mnt/usb0\tbroken\n/mnt/ext0\t100\t200\n");
+    orion::DriveSpace got;
+    ASSERT_TRUE(space("/data", &got));
+    EXPECT_EQ(got.capacity, 825 * kGb);
+    EXPECT_EQ(got.free, 312 * kGb);
+    EXPECT_TRUE(space("/mnt/usb1", &got));
+    EXPECT_FALSE(space("/mnt/usb0", &got));
+    EXPECT_FALSE(space("/mnt/ext0", &got));
+    EXPECT_FALSE(space("/mnt/usb2", &got));
+    const std::vector<orion::Drive> drives =
+        orion::find_drives({at("/mnt/usb1/homebrew/a")}, space);
+    ASSERT_EQ(drives.size(), 2u);
+    EXPECT_EQ(drives[1].titles, 1);
+    EXPECT_FALSE(orion::space_from_report("")("/data", &got));
+}
+
 TEST(Drives, WritesSizesAsDrivesAreSold)
 {
     EXPECT_EQ(orion::format_bytes(512ull * 1000 * 1000), "512 MB");

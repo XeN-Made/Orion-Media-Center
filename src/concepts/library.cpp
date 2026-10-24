@@ -982,6 +982,8 @@ class Library final : public app::Concept
         dialog_.update(dt);
         settings_.update(dt);
         details_.update(dt);
+        follow_drive_space();
+        last_dt_ = dt;
         follow_preview();
         setup_.update(dt);
         if (launch_exit_ > 0.0f)
@@ -1749,17 +1751,59 @@ class Library final : public app::Concept
         settings_.set_version(context_.version);
         settings_.set_storage(context_.library.self_path,
                               orion::count_files(backdrop_folder(), ".png"));
-        // How full each drive is, asked again each time (it is cheap), and
-        // what each step returned, in drives.txt.
-        std::string note;
-        const orion::SpaceOf ask = [&note](const std::string &path, orion::DriveSpace *space)
-        { return orion::statfs_space(path, space, &note); };
-        settings_.set_drives(
-            orion::find_drives(titles(), sys::on_console() ? ask : orion::SpaceOf(preview_space)));
-        if (sys::on_console() && !context_.library.state_dir.empty())
-            save::write_atomic(context_.library.state_dir + "/drives.txt", note);
+        // How full each drive is: the helper's last answer now, a fresh one
+        // asked for (follow_drive_space shows it when it comes).
+        show_drive_space();
+        ask_drive_space();
         settings_.set_current_tab(active_key());
         settings_.open(look_, prefs_, feedback);
+    }
+
+    // The drives as the launch helper last saw them (drives-space.txt); on a
+    // PC, the invented ones.
+    void show_drive_space()
+    {
+        std::string report;
+        struct stat info = {};
+        const std::string file = context_.library.state_dir + "/drives-space.txt";
+        if (sys::on_console() && ::stat(file.c_str(), &info) == 0)
+        {
+            drive_space_time_ = info.st_mtime;
+            save::read_file(file, &report, 64u << 10);
+        }
+        settings_.set_drives(orion::find_drives(titles(), sys::on_console()
+                                                              ? orion::space_from_report(report)
+                                                              : orion::SpaceOf(preview_space)));
+    }
+
+    // The helper (payload/launcher, "@space") asks the system, which refuses
+    // ORION: on a thread of its own, so a busy loader never holds Settings.
+    void ask_drive_space()
+    {
+        const std::string &dir = context_.library.state_dir;
+        std::string elf;
+        if (!sys::on_console() || data_missing_ || dir.empty() || launch_pending_ > 0.0f ||
+            !save::read_file(kLauncherPath, &elf, 4u << 20) || elf.empty() ||
+            !save::write_atomic(dir + "/launch-request.txt", "@space\n").empty())
+            return;
+        drive_space_asked_ = clock_;
+        std::thread([elf = std::move(elf)]() { sys::send_payload(elf, kLoaderPort); }).detach();
+    }
+
+    // The helper's answer, once it is written: Storage shows it.
+    void follow_drive_space()
+    {
+        if (drive_space_asked_ < 0.0f || clock_ - drive_space_asked_ > 15.0f ||
+            static_cast<int>(clock_ * 2.0f) == static_cast<int>((clock_ - last_dt_) * 2.0f))
+            return;
+        struct stat info = {};
+        const std::string file = context_.library.state_dir + "/drives-space.txt";
+        if (::stat(file.c_str(), &info) != 0 || info.st_mtime == drive_space_time_)
+            return;
+        drive_space_asked_ = -1.0f;
+        show_drive_space();
+        if (settings_.is_open() && settings_.section() == orion::SettingsPanel::Section::storage)
+            settings_.refresh(look_, prefs_);
     }
 
     // The PC preview has no console drives: two invented ones, so its
@@ -5948,10 +5992,13 @@ class Library final : public app::Concept
     bool dialog_update_ = false;  // the dialog asks about the update, not a removal
     bool dialog_info_ = false;    // the dialog only tells something (OK)
     orion::UsageSender usage_;
-    orion::TitleDetails details_; // a title's page (Details… in its menu)
-    std::string details_id_;      // the title it shows
-    float usage_next_ = 6.0f;     // age_ at the next check-in
-    std::string info_title_;      // a message waiting to be shown
+    orion::TitleDetails details_;      // a title's page (Details… in its menu)
+    float drive_space_asked_ = -1.0f;  // clock_ when the helper was sent for the drives' space
+    std::time_t drive_space_time_ = 0; // when the answer shown was written
+    float last_dt_ = 0.0f;
+    std::string details_id_;  // the title it shows
+    float usage_next_ = 6.0f; // age_ at the next check-in
+    std::string info_title_;  // a message waiting to be shown
     std::string info_body_;
 };
 

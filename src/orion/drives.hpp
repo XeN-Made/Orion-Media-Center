@@ -30,9 +30,10 @@ struct DriveSpace
 // How full the file system holding path is; false when it cannot be asked
 // (not mounted, not reachable).
 using SpaceOf = std::function<bool(const std::string &path, DriveSpace *space)>;
-// The system's answer (statfs). note, when given, gets a line saying what
-// each step returned, for <state_dir>/drives.txt.
-bool statfs_space(const std::string &path, DriveSpace *space, std::string *note = nullptr);
+// The space the launch helper wrote (payload/launcher, "@space"): a line per
+// drive, "<mount>\t<bytes>\t<free bytes>". ORION cannot ask itself: inside
+// its sandbox the system refuses statfs (EPERM).
+SpaceOf space_from_report(const std::string &report);
 
 struct Drive
 {
