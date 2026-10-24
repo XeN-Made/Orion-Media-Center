@@ -57,6 +57,10 @@ class Shell
     {
         return std::exchange(context_.wanted_icons, {});
     }
+    const std::vector<std::string> &wide_icons() const
+    {
+        return context_.wide_icons;
+    }
     // Titles the designs show large now (Context::sharp_icons).
     const std::vector<std::string> &sharp_icons() const
     {

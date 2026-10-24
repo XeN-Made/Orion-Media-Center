@@ -25,6 +25,7 @@
 #include "orion/languages.hpp"
 #include "orion/registered_titles.hpp"
 #include "orion/steamgriddb.hpp"
+#include "orion/wide_copies.hpp"
 #include "orion/look.hpp"
 #include "orion/playtime.hpp"
 #include "orion/prefs.hpp"
@@ -953,6 +954,7 @@ class Library final : public app::Concept
         continue_.set_active(continue_focus_ && !header_focus_);
         continue_.update(dt);
         update_cases(dt);
+        update_wide();
         sort_.set_active(header_focus_ && !header_on_view_);
         sort_.update(dt);
         view_pick_.set_active(header_focus_ && header_on_view_);
@@ -1232,6 +1234,100 @@ class Library final : public app::Concept
             break;
         }
         grid_.set_bounds({kMargin, top, width, room});
+    }
+
+    // A tab the player gave wide covers (Landscape) in the grid: console
+    // titles there show their 16:9 home-screen picture, not the square icon.
+    bool wide_tab() const
+    {
+        return view() == View::grid &&
+               prefs_.tab_cover(active_key()) == orion::CoverShape::landscape;
+    }
+
+    // Each frame in a wide tab: the covers near the focus want their wide
+    // copies (made once, orion/wide_copies.hpp) and wear them once loaded;
+    // any other tab lets them go.
+    void update_wide()
+    {
+        std::vector<std::string> wanted;
+        std::vector<std::pair<std::string, std::string>> make;
+        if (wide_tab() && grid_.count() > 0)
+        {
+            const std::string folder = context_.library.state_dir + "/wide";
+            const int columns = std::max(1, grid_.style.columns);
+            const int focus = grid_.focus();
+            const int first = std::max(0, focus - focus % columns - 2 * columns);
+            const int last = std::min(grid_.count(), focus + 4 * columns);
+            for (int i = first; i < last; ++i)
+            {
+                ui::CardItem &item = grid_.item(i);
+                const Title &title = titles()[static_cast<std::size_t>(item.tag)];
+                if (title.is_rom())
+                    continue;
+                wanted.push_back(title.id);
+                if (title.wide_texture != 0 && item.texture != title.wide_texture)
+                {
+                    // Cropped to the tile's shape from the middle, so it fills it
+                    // (16:9 in a 7:5 tile loses a tenth at each side).
+                    const float picture = static_cast<float>(title.wide_width) /
+                                          static_cast<float>(std::max(1, title.wide_height));
+                    const float tile = std::max(0.2f, grid_.style.card.art_aspect);
+                    item.texture = title.wide_texture;
+                    item.uv = gfx::kFullUv;
+                    if (picture > tile)
+                    {
+                        const float keep = tile / picture;
+                        item.uv.x = (1.0f - keep) * 0.5f;
+                        item.uv.w = keep;
+                    }
+                    item.image_aspect = std::min(picture, tile);
+                    item.bare = false;
+                }
+            }
+            // Every title of the tab gets its copy (from its own folder, else
+            // the copy of the system's picture the backgrounds use), so
+            // scrolling meets them made; each title is looked at once.
+            for (int i = 0; i < grid_.count() && !wide_copies_.running(); ++i)
+            {
+                const Title &title = titles()[static_cast<std::size_t>(grid_.item(i).tag)];
+                if (title.is_rom() || !wide_asked_.insert(title.id).second)
+                    continue;
+                struct stat info = {};
+                if (::stat((folder + "/" + title.id + ".tga").c_str(), &info) == 0 ||
+                    still_none(folder + "/" + title.id + ".none"))
+                    continue;
+                for (const std::string &file : {title.path + "/sce_sys/pic0.png",
+                                                backdrop_folder() + "/" + title.id + ".png"})
+                {
+                    if (::stat(file.c_str(), &info) == 0)
+                    {
+                        make.emplace_back(title.id, file);
+                        break;
+                    }
+                }
+            }
+            if (!make.empty())
+                wide_copies_.start(std::move(make), folder);
+        }
+        else if (!context_.wide_icons.empty())
+        {
+            // Back to the square icons.
+            for (int i = 0; i < grid_.count(); ++i)
+            {
+                ui::CardItem &item = grid_.item(i);
+                const Title &title = titles()[static_cast<std::size_t>(item.tag)];
+                if (title.wide_texture != 0 && item.texture == title.wide_texture)
+                {
+                    item.texture = title.texture;
+                    item.uv = gfx::kFullUv;
+                    if (title.icon_width > 0 && title.icon_height > 0)
+                        item.image_aspect = static_cast<float>(title.icon_width) /
+                                            static_cast<float>(title.icon_height);
+                }
+            }
+        }
+        if (wanted != context_.wide_icons)
+            context_.wide_icons = std::move(wanted);
     }
 
     // Cases view each frame: the shelf follows the grid's focus (a jump, a
@@ -3584,11 +3680,14 @@ class Library final : public app::Concept
     // The covers on screen take the textures the shell has uploaded since.
     void refresh_covers()
     {
+        const bool wide = wide_tab();
         for (int i = 0; i < grid_.count(); ++i)
         {
             ui::CardItem &item = grid_.item(i);
             const Title &title = titles()[static_cast<std::size_t>(item.tag)];
-            if (item.texture == title.texture)
+            // A wide tab's covers keep their wide pictures (update_wide).
+            if (item.texture == title.texture ||
+                (wide && title.wide_texture != 0 && item.texture == title.wide_texture))
                 continue;
             item.texture = title.texture;
             if (title.icon_width > 0 && title.icon_height > 0)
@@ -3740,7 +3839,8 @@ class Library final : public app::Concept
         // notification too, which shows over Settings and anything else.
         const std::string note =
             release.zip_size > 0
-                ? trf("Downloading ORION {0} ({1}). Keep ORION open; it asks before it installs.",
+                ? trf("Downloading ORION {0} ({1}). Keep ORION open; it asks before it "
+                      "installs.",
                       {release.version, megabytes(release.zip_size)})
                 : trf("Downloading ORION {0}. Keep ORION open; it asks before it installs.",
                       {release.version});
@@ -3850,7 +3950,8 @@ class Library final : public app::Concept
             std::remove((state + "/move-pending.txt").c_str());
             info_title_ = tr("This is the new ORION");
             info_body_ = trf(
-                "Delete the old ORION ({0}) from the home screen: Options on its tile, Delete.\n"
+                "Delete the old ORION ({0}) from the home screen: Options on its tile, "
+                "Delete.\n"
                 "Your settings, favourites, tabs, themes and box art are all here.\n"
                 "Autoboot: point your autoloader at {1}",
                 {old_id.empty() ? std::string("PPSA99061") : old_id, autoboot_payload_for(self)});
@@ -5660,6 +5761,9 @@ class Library final : public app::Concept
     std::string music_focus_;
     float music_dwell_ = 0.0f;
     orion::BackdropCopies sound_copies_;
+    // Wide covers: the copies being made, and the titles already asked for.
+    orion::WideCopies wide_copies_;
+    std::unordered_set<std::string> wide_asked_;
     bool picking_music_ = false; // the browser lists music, not pictures
     // Find other art: the title looked through, its picture before, the
     // covers so far, the one shown, and whether the full one is coming.

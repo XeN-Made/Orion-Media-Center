@@ -572,6 +572,8 @@ int main()
             library::load_wanted_icons(titles, &icon_queue, renderer.batch(), 3);
         // Sharp copies for what is shown large: one new one a frame.
         library::load_sharp_icons(titles, shell.sharp_icons(), renderer.batch(), 1);
+        library::load_wide_icons(titles, shell.wide_icons(), titles.state_dir + "/wide",
+                                 renderer.batch(), 2);
         // Box art ORION downloaded: loaded as the scan's icons were (a
         // game's picture waits until it is wanted).
         if (auto icons = shell.take_new_icons(); !icons.empty())

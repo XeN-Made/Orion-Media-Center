@@ -663,6 +663,8 @@ int main(int argc, char **argv)
         if (auto wanted = shell.take_wanted_icons(); !wanted.empty())
             hui::library::load_wanted_icons(titles, &wanted, renderer.batch(), 1 << 20);
         hui::library::load_sharp_icons(titles, shell.sharp_icons(), renderer.batch(), 1);
+        hui::library::load_wide_icons(titles, shell.wide_icons(), titles.state_dir + "/wide",
+                                      renderer.batch(), 2);
         ++frames;
         if (!tour.capture().empty())
         {

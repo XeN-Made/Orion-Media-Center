@@ -58,5 +58,8 @@ constexpr int kSharpSize = 1024;
 // over frames, scrolling stays smooth). Returns how many it uploaded.
 int load_sharp_icons(Library &library, const std::vector<std::string> &ids, gfx::GlBatch &batch,
                      int budget);
+// The same for the wide copies in <folder>/<ID>.tga, for wide covers.
+int load_wide_icons(Library &library, const std::vector<std::string> &ids,
+                    const std::string &folder, gfx::GlBatch &batch, int budget);
 
 } // namespace hui::library

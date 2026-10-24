@@ -96,4 +96,35 @@ int load_sharp_icons(Library &library, const std::vector<std::string> &ids, gfx:
     return uploaded;
 }
 
+int load_wide_icons(Library &library, const std::vector<std::string> &ids,
+                    const std::string &folder, gfx::GlBatch &batch, int budget)
+{
+    int uploaded = 0;
+    for (Title &title : library.titles)
+    {
+        const bool wanted = std::find(ids.begin(), ids.end(), title.id) != ids.end();
+        if (!wanted)
+        {
+            if (title.wide_texture != 0)
+                batch.delete_texture(title.wide_texture);
+            title.wide_texture = 0;
+            if (title.wide_width > 0)
+                title.wide_width = title.wide_height = 0;
+            continue;
+        }
+        if (title.wide_texture != 0 || title.wide_width < 0 || uploaded >= budget)
+            continue;
+        std::string bytes;
+        Image image;
+        if (!save::read_file(folder + "/" + title.id + ".tga", &bytes, kMaxFile) ||
+            !decode_png(bytes, 1024, &image))
+            continue; // not made yet: asked again next frame
+        title.wide_texture = batch.create_texture(image.width, image.height, image.rgba.data());
+        title.wide_width = title.wide_texture != 0 ? image.width : -1;
+        title.wide_height = image.height;
+        ++uploaded;
+    }
+    return uploaded;
+}
+
 } // namespace hui::library

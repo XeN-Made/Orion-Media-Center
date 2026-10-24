@@ -80,6 +80,9 @@ struct Context
     // Titles a design shows large right now (ids): the app keeps sharp
     // copies of their pictures, and only theirs (library::load_sharp_icons).
     std::vector<std::string> sharp_icons = {};
+    // Titles a tab of wide covers shows now: their wide copies
+    // (library::load_wide_icons), and only theirs.
+    std::vector<std::string> wide_icons = {};
     // This app's version (param.json's contentVersion, "01.000.010"); empty
     // when unknown (a PC).
     std::string version = {};

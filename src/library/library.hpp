@@ -67,6 +67,12 @@ struct Title
     // large, then released (load_sharp_icons). sharp_width < 0: it could not
     // be read; not tried again.
     std::uint32_t sharp_texture = 0;
+    // A wide copy of its home-screen picture (orion/wide_copies.hpp), for
+    // tabs with wide covers, kept only while such a tab shows it
+    // (load_wide_icons). wide_width < 0: there is none to load.
+    std::uint32_t wide_texture = 0;
+    int wide_width = 0;
+    int wide_height = 0;
     int sharp_width = 0;
     int sharp_height = 0;
     // A game for an emulator (library/emulators.hpp): the system it is for
