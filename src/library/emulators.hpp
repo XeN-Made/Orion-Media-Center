@@ -98,9 +98,27 @@ int attach_emulator_covers(std::vector<Title> &roms, const std::string &pcsx2_di
 // Returns how many there are. Unless every_version, a game RetroArch plays
 // shows once (keep_best_versions). step, when given, hears each stage as it
 // begins (the start-up's breadcrumbs).
+// A game kept on a server (orion/romm.hpp), listed with the others before
+// it is on the console: its system's folder name on the server ("gba"),
+// where its file goes once downloaded, and where it comes from.
+struct RemoteGame
+{
+    std::string system_folder;
+    std::string name;
+    std::string path;   // the file on the console, there or not yet
+    std::string remote; // its address on the server
+    std::string icon;   // a cover already here, or empty
+};
+
 int add_emulator_games(Library &library, const std::vector<GameFolder> &folders,
                        const std::string &art_dir, bool every_version = false,
-                       const std::function<void(const char *)> &step = {});
+                       const std::function<void(const char *)> &step = {},
+                       const std::vector<RemoteGame> &remote = {});
+// Server games onto the systems their folders name (a system ORION does not
+// know, or a game already listed from the same file, is left out). They
+// play in RetroArch. Returns how many joined.
+int add_remote_games(Emulator &emulator, const std::vector<RemoteGame> &games,
+                     std::vector<Title> *roms);
 // Full ROM sets hold many files of one game: bad dumps ([b1]), overdumps
 // ([o1]), hacks ([h1], (Hack)), pirates ([p1]), trainers ([t1]), fixes
 // ([f1]), alternates ([a1]), translations ([T+Eng]), betas and demos, other

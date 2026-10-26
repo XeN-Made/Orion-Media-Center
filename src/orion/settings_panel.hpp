@@ -91,6 +91,9 @@ class SettingsPanel
         check_updates,  // "Check now" (Library, updates)
         install_update, // "Install ORION <version>": the screen hands it to the helper
         language,       // the Language row changed (prefs.language)
+        type_romm_url,  // "RomM server" was chosen: the screen asks for the address
+        type_romm_code, // "Pair with RomM" was chosen: the screen asks for the code
+        romm_sync,      // "Sync RomM games" was chosen
     };
 
     enum class Section : std::uint8_t
@@ -136,6 +139,14 @@ class SettingsPanel
     void set_grid_key(bool given)
     {
         grid_key_ = given;
+    }
+    // RomM (orion/romm.hpp): the server's address (empty: none), whether
+    // ORION has a token for it, and what the last sync did.
+    void set_romm(std::string address, bool paired, std::string status)
+    {
+        romm_address_ = std::move(address);
+        romm_paired_ = paired;
+        romm_status_ = std::move(status);
     }
     // Where the key page answers ("http://192.168.4.41:9062"), or empty
     // while it does not (orion/key_page.hpp).
@@ -333,6 +344,9 @@ class SettingsPanel
     bool grid_key_ =
         false; // a SteamGridDB key is in keys.txt // empty until a scan reports: what a scan finds
     std::string key_page_; // the key page address, or empty
+    std::string romm_address_;
+    bool romm_paired_ = false;
+    std::string romm_status_;
     std::string update_status_ = "Not checked yet";
     std::string update_ready_;
     std::string version_;

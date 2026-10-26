@@ -130,6 +130,47 @@ TEST(Romm, PairsWithACode)
     EXPECT_EQ(orion::romm_pair(post, "", "AB12CD", &token), "no RomM address");
 }
 
+// A game fetched the first time it is played: its folders made, the
+// server's answer reported.
+TEST(Romm, DownloadsAGame)
+{
+    const std::string dir = ::testing::TempDir() + "orion-romm-download";
+    std::string seen;
+    std::vector<std::string> keys;
+    bool works = true;
+    orion::FileDownload download(
+        [&](const std::string &url, const std::vector<std::string> &headers,
+            const std::string &path, std::size_t, std::string *error)
+        {
+            seen = url;
+            keys = headers;
+            if (!works)
+            {
+                *error = "HTTP 404";
+                return false;
+            }
+            return save::write_atomic(path, "rom").empty();
+        });
+    const std::string path = dir + "/games/gba/Moon Garden.gba";
+    std::remove(path.c_str());
+    ASSERT_TRUE(download.start("http://nas:3000/api/roms/10/content/a.gba",
+                               orion::romm_headers("rmm_token"), path));
+    download.wait();
+    EXPECT_TRUE(download.take_finished());
+    EXPECT_EQ(download.error(), "");
+    EXPECT_EQ(seen, "http://nas:3000/api/roms/10/content/a.gba");
+    EXPECT_EQ(keys, orion::romm_headers("rmm_token"));
+    std::string bytes;
+    ASSERT_TRUE(save::read_file(path, &bytes));
+    EXPECT_EQ(bytes, "rom");
+
+    works = false;
+    ASSERT_TRUE(download.start("http://nas:3000/x", {}, dir + "/games/gba/b.gba"));
+    download.wait();
+    EXPECT_TRUE(download.take_finished());
+    EXPECT_EQ(download.error(), "HTTP 404");
+}
+
 // The whole catalogue, a page at a time, then the covers it lacks.
 TEST(Romm, SyncsTheCatalogueAndItsCovers)
 {

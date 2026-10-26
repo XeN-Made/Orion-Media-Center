@@ -85,6 +85,9 @@ struct Title
     // GameTDB's ID for it, where its emulator keeps one ("ALZE01"): its box
     // art is fetched by it (orion/art_fetcher.hpp).
     std::string serial;
+    // A game kept on a server (RomM): where its file comes from, downloaded
+    // to `path` the first time it is played. Empty for a file on the console.
+    std::string remote;
     bool is_rom() const
     {
         return !system.empty();

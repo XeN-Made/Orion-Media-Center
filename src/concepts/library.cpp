@@ -26,6 +26,7 @@
 #include "orion/languages.hpp"
 #include "orion/registered_titles.hpp"
 #include "orion/key_page.hpp"
+#include "orion/romm.hpp"
 #include "orion/steamgriddb.hpp"
 #include "orion/wide_copies.hpp"
 #include "orion/look.hpp"
@@ -58,7 +59,9 @@
 #include <cstdio>
 #include <cstring>
 #include <ctime>
+#include <atomic>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <thread>
 #include <unordered_map>
@@ -166,6 +169,8 @@ enum class Typing : std::uint8_t
     rom_folder,   // from Settings > Storage > Add a ROM folder
     grid_key,     // from Settings > Box art > SteamGridDB key
     art_name,     // from a title's menu: the name SteamGridDB is asked for
+    romm_url,     // from Settings > Emulators > RomM server
+    romm_code,    // from Settings > Emulators > Pair with RomM
 };
 
 // Tags of the menu items.
@@ -712,6 +717,7 @@ class Library final : public app::Concept
         if (!own_title_id().empty())
             settings_.set_title_id(own_title_id());
         settings_.set_grid_key(!grid_key().empty());
+        show_romm_state();
         // The key page: the SteamGridDB key typed on a phone or PC.
         if (sys::on_console() && !data_missing_ && !context_.library.state_dir.empty() &&
             key_page_.start(context_.library.state_dir))
@@ -1015,6 +1021,7 @@ class Library final : public app::Concept
         details_.update(dt);
         follow_drive_space();
         follow_system_play_time();
+        follow_romm(feedback);
         if (key_page_.take_saved())
         {
             grid_key_ = orion::read_service_key(context_.library.state_dir, orion::kSteamGridDb);
@@ -2125,6 +2132,18 @@ class Library final : public app::Concept
         case orion::SettingsPanel::Change::art_folder:
             art_folder_changed();
             break;
+        case orion::SettingsPanel::Change::type_romm_url:
+            start_typing(Typing::romm_url,
+                         orion::read_service_key(context_.library.state_dir, orion::kRommUrl));
+            feedback.play(audio::Cue::modal_open);
+            break;
+        case orion::SettingsPanel::Change::type_romm_code:
+            start_typing(Typing::romm_code, "");
+            feedback.play(audio::Cue::modal_open);
+            break;
+        case orion::SettingsPanel::Change::romm_sync:
+            sync_romm(feedback, true);
+            break;
         case orion::SettingsPanel::Change::type_grid_key:
             start_typing(Typing::grid_key, grid_key());
             feedback.play(audio::Cue::modal_open);
@@ -2231,7 +2250,8 @@ class Library final : public app::Concept
     {
         return typing == Typing::search ? kMaxQuery
                : typing == Typing::art_folder || typing == Typing::rom_folder ||
-                       typing == Typing::grid_key
+                       typing == Typing::grid_key || typing == Typing::romm_url ||
+                       typing == Typing::romm_code
                    ? kMaxPath
                : typing == Typing::rename_title || typing == Typing::art_name ? orion::kMaxTitleName
                                                                               : kMaxName;
@@ -2290,6 +2310,16 @@ class Library final : public app::Concept
         if (typing == Typing::art_name)
         {
             find_other_art(feedback, name_);
+            return;
+        }
+        if (typing == Typing::romm_url)
+        {
+            set_romm_address(name_, feedback);
+            return;
+        }
+        if (typing == Typing::romm_code)
+        {
+            pair_romm(name_, feedback);
             return;
         }
         if (typing == Typing::grid_key)
@@ -2428,6 +2458,215 @@ class Library final : public app::Concept
         show_note(true, trf("Looking on SteamGridDB for {0}…", {preview_query_}));
         feedback.play(audio::Cue::select);
     }
+
+    // ---- RomM (orion/romm.hpp) ----
+
+    std::string romm_base() const
+    {
+        return orion::romm_base(
+            orion::read_service_key(context_.library.state_dir, orion::kRommUrl));
+    }
+
+    std::string romm_token() const
+    {
+        return orion::read_service_key(context_.library.state_dir, orion::kRommToken);
+    }
+
+    static bool file_exists(const std::string &path)
+    {
+        struct stat info = {};
+        return !path.empty() && ::stat(path.c_str(), &info) == 0 && S_ISREG(info.st_mode);
+    }
+
+    void show_romm_state()
+    {
+        settings_.set_romm(romm_base(), !romm_token().empty(), romm_status_);
+        if (settings_.is_open())
+            settings_.refresh(look_, prefs_);
+    }
+
+    void set_romm_address(const std::string &typed, app::Feedback &feedback)
+    {
+        const std::string base = orion::romm_base(typed);
+        if (!typed.empty() && base.empty())
+        {
+            show_note(false, trf("{0} is not an address RomM can be reached at", {typed}));
+            feedback.play(audio::Cue::error);
+            return;
+        }
+        const std::string &state = context_.library.state_dir;
+        // Another server: the old one's token means nothing there.
+        if (base != romm_base())
+            orion::write_service_key(state, orion::kRommToken, "");
+        const std::string failed = orion::write_service_key(state, orion::kRommUrl, base);
+        show_romm_state();
+        show_note(failed.empty(), !failed.empty() ? trf("Could not save it: {0}", {failed})
+                                  : base.empty()
+                                      ? tr("RomM server removed")
+                                      : trf("RomM server: {0}. Now pair with it", {base}));
+        feedback.play(failed.empty() ? audio::Cue::saved : audio::Cue::error);
+    }
+
+    // The code exchanged for a token beside the screen; follow_romm takes the answer.
+    void pair_romm(const std::string &code, app::Feedback &feedback)
+    {
+        const std::string base = romm_base();
+        if (base.empty() || !sys::on_console() || romm_pairing_ != nullptr)
+        {
+            show_note(false, base.empty()         ? tr("Set the RomM server first")
+                             : !sys::on_console() ? tr("Pairing is done on the console")
+                                                  : tr("Still pairing: a moment"));
+            feedback.play(audio::Cue::error);
+            return;
+        }
+        auto pairing = std::make_shared<RommPairing>();
+        romm_pairing_ = pairing;
+        std::thread(
+            [pairing, base, code]()
+            {
+                std::string token;
+                std::string error = orion::romm_pair(
+                    [](const std::string &url, const std::vector<std::string> &headers,
+                       const std::string &body, std::size_t limit, std::string *answer,
+                       std::string *why)
+                    { return sys::http_post(url, headers, body, limit, answer, why); },
+                    base, code, &token);
+                {
+                    std::lock_guard<std::mutex> lock(pairing->mutex);
+                    pairing->token = std::move(token);
+                    pairing->error = std::move(error);
+                }
+                pairing->done = true;
+            })
+            .detach();
+        show_note(true, tr("Pairing with RomM…"));
+        feedback.play(audio::Cue::select);
+    }
+
+    void sync_romm(app::Feedback &feedback, bool asked)
+    {
+        const std::string base = romm_base();
+        const std::string token = romm_token();
+        if (!sys::on_console() || base.empty() || token.empty() || romm_sync_.running())
+        {
+            if (asked)
+            {
+                show_note(false, base.empty()           ? tr("Set the RomM server first")
+                                 : token.empty()        ? tr("Pair with RomM first")
+                                 : romm_sync_.running() ? tr("Already syncing RomM")
+                                                        : tr("RomM is synced on the console"));
+                feedback.play(audio::Cue::error);
+            }
+            return;
+        }
+        romm_sync_.start(base, token, context_.library.state_dir);
+        romm_status_ = tr("Asking RomM for its games…");
+        show_romm_state();
+        if (asked)
+        {
+            show_note(true, tr("Syncing RomM games…"));
+            feedback.play(audio::Cue::select);
+        }
+    }
+
+    void download_romm_game(const Title &title, app::Feedback &feedback)
+    {
+        if (romm_download_.running())
+        {
+            show_note(false, trf("Still downloading {0}", {romm_downloading_name_}));
+            feedback.play(audio::Cue::error);
+            return;
+        }
+        if (!sys::on_console() ||
+            !romm_download_.start(title.remote, orion::romm_headers(romm_token()), title.path))
+        {
+            show_note(false, trf("Could not download {0}", {title.name}));
+            feedback.play(audio::Cue::error);
+            return;
+        }
+        romm_downloading_id_ = title.id;
+        romm_downloading_name_ = title.name;
+        show_note(true, trf("Downloading {0} from RomM…", {title.name}));
+        feedback.play(audio::Cue::select);
+    }
+
+    // Pairing's answer, the sync's progress and a download's end.
+    void follow_romm(app::Feedback &feedback)
+    {
+        // A sync at start, a little after the rest, while paired.
+        if (!romm_auto_synced_ && clock_ > 12.0f && launch_pending_ <= 0.0f)
+        {
+            romm_auto_synced_ = true;
+            sync_romm(feedback, false);
+        }
+        if (romm_pairing_ != nullptr && romm_pairing_->done.load())
+        {
+            std::string token;
+            std::string error;
+            {
+                std::lock_guard<std::mutex> lock(romm_pairing_->mutex);
+                token = romm_pairing_->token;
+                error = romm_pairing_->error;
+            }
+            romm_pairing_.reset();
+            if (error.empty())
+                error =
+                    orion::write_service_key(context_.library.state_dir, orion::kRommToken, token);
+            show_romm_state();
+            show_note(error.empty(), error.empty() ? tr("Paired with RomM")
+                                                   : trf("Could not pair with RomM: {0}", {error}));
+            feedback.play(error.empty() ? audio::Cue::saved : audio::Cue::error);
+            if (error.empty())
+                sync_romm(feedback, false);
+        }
+        if (romm_sync_.running())
+        {
+            const orion::RommSync::Progress now = romm_sync_.progress();
+            romm_status_ = trf("{0} games on {1} systems so far…",
+                               {std::to_string(now.games), std::to_string(now.platforms)});
+            if (settings_.is_open() &&
+                static_cast<int>(clock_ * 2.0f) != static_cast<int>((clock_ - last_dt_) * 2.0f))
+                show_romm_state();
+        }
+        if (romm_sync_.take_finished())
+        {
+            const orion::RommSync::Progress done = romm_sync_.progress();
+            romm_status_ = done.error.empty()
+                               ? trf("Last sync: {0} games on {1} systems",
+                                     {std::to_string(done.games), std::to_string(done.platforms)})
+                               : trf("Last sync failed: {0}", {done.error});
+            show_romm_state();
+            if (done.error.empty())
+                context_.rescan_requested = true; // the library lists them again
+            else
+                show_note(false, trf("RomM: {0}", {done.error}));
+        }
+        if (romm_download_.running() &&
+            static_cast<int>(clock_ * 2.0f) != static_cast<int>((clock_ - last_dt_) * 2.0f))
+            show_note(true,
+                      trf("Downloading {0} from RomM: {1}",
+                          {romm_downloading_name_, orion::format_bytes(romm_download_.written())}));
+        if (romm_download_.take_finished())
+        {
+            const std::string error = romm_download_.error();
+            if (error.empty())
+                launch(romm_downloading_id_, feedback);
+            else
+            {
+                show_note(false,
+                          trf("Could not download {0}: {1}", {romm_downloading_name_, error}));
+                feedback.play(audio::Cue::error);
+            }
+        }
+    }
+
+    struct RommPairing
+    {
+        std::atomic<bool> done{false};
+        std::mutex mutex;
+        std::string token;
+        std::string error;
+    };
 
     // The player's SteamGridDB key, as keys.txt last gave it.
     std::string grid_key()
@@ -3634,6 +3873,12 @@ class Library final : public app::Concept
         if (title->source == library::Source::payload)
         {
             send_program(*title, feedback);
+            return;
+        }
+        // A RomM game not on the console yet: fetched first, then started.
+        if (!title->remote.empty() && !file_exists(title->path))
+        {
+            download_romm_game(*title, feedback);
             return;
         }
         const std::string &dir = context_.library.state_dir;
@@ -6192,6 +6437,8 @@ class Library final : public app::Concept
             : typing_ == Typing::rom_folder   ? tr("A folder of games, like /mnt/usb0/roms")
             : typing_ == Typing::grid_key     ? tr("Your SteamGridDB API key; empty removes it")
             : typing_ == Typing::art_name     ? tr("The name to look for on SteamGridDB")
+            : typing_ == Typing::romm_url     ? tr("Your RomM address, like 192.168.4.115")
+            : typing_ == Typing::romm_code    ? tr("The pairing code RomM shows")
                                               : tr("Name the new tab");
         const bool empty = text.empty();
         ui::text(list, fonts.regular, empty ? placeholder.c_str() : text.c_str(), field.x + 28,
@@ -6315,6 +6562,22 @@ class Library final : public app::Concept
     bool preview_asked_ = false; // false: waiting for the picker to be free
     std::string grid_key_;       // keys.txt's, as last read
     orion::KeyPage key_page_;    // the key typed on a phone or PC (http://<console>:9062)
+    // RomM: the sync, a game being downloaded, a pairing under way.
+    orion::RommSync romm_sync_{[](const std::string &url, const std::vector<std::string> &headers,
+                                  std::size_t limit, std::string *body, std::string *error)
+                               { return sys::http_get(url, headers, limit, body, error); },
+                               [](const std::string &url, const std::vector<std::string> &headers,
+                                  const std::string &path, std::size_t limit, std::string *error)
+                               { return sys::http_download(url, headers, path, limit, error); }};
+    orion::FileDownload romm_download_{
+        [](const std::string &url, const std::vector<std::string> &headers, const std::string &path,
+           std::size_t limit, std::string *error)
+        { return sys::http_download(url, headers, path, limit, error); }};
+    std::string romm_downloading_id_;
+    std::string romm_downloading_name_;
+    std::shared_ptr<RommPairing> romm_pairing_;
+    std::string romm_status_;
+    bool romm_auto_synced_ = false;
     std::vector<std::string> preview_files_;
     int preview_index_ = 0;
     bool keeping_ = false;

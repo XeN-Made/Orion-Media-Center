@@ -97,6 +97,9 @@ enum : int
     kBrowseUp,
     kBrowseType,
     kScanEmulators,
+    kRommServer,
+    kRommPair,
+    kRommSync,
     kEveryVersion,
     kAppInfo,
     kAppStarts,
@@ -734,6 +737,24 @@ void SettingsPanel::build_emulators(const LibraryPrefs &prefs)
     form_.add_toggle(kEveryVersion, tr("Every version of a game"), prefs.every_version)
         .description = tr("Bad dumps, hacks, translations and other regions as covers of their "
                           "own; off shows the best one");
+    form_.add_header("RomM");
+    ui::FormRow &server = form_.add_action(kRommServer, tr("RomM server"));
+    server.chevron = true;
+    server.text = romm_address_.empty() ? tr("Not set") : romm_address_;
+    server.description =
+        key_page_.empty()
+            ? tr("Your RomM address, like 192.168.4.115 or https://games.example.com")
+            : trf("Your RomM address, like 192.168.4.115; or type it on a phone or PC at {0}",
+                  {key_page_});
+    ui::FormRow &pair = form_.add_action(kRommPair, tr("Pair with RomM"));
+    pair.chevron = true;
+    pair.text = romm_paired_ ? tr("Paired") : tr("Not paired");
+    pair.description = tr("In RomM: your profile, Client tokens, a new token, Pair; then type the "
+                          "code here");
+    form_.add_action(kRommSync, tr("Sync RomM games")).description =
+        romm_status_.empty() ? tr("Lists the server's games on their systems' tabs; each one "
+                                  "downloads the first time you play it")
+                             : romm_status_;
     if (emulator_ == nullptr || emulator_->systems.empty())
         return;
     form_.add_header(tr("Systems"));
@@ -1332,6 +1353,12 @@ SettingsPanel::Change SettingsPanel::handle(const InputFrame &input, ui::Feedbac
             return Change::install_update;
         if (id == kScanEmulators)
             return Change::scan_emulators;
+        if (id == kRommServer)
+            return Change::type_romm_url;
+        if (id == kRommPair)
+            return Change::type_romm_code;
+        if (id == kRommSync)
+            return Change::romm_sync;
         if (emulator_ != nullptr && id >= kEmulatorRow &&
             id - kEmulatorRow < static_cast<int>(emulator_->apps.size()))
         {

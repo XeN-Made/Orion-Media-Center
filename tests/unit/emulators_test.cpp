@@ -318,6 +318,39 @@ TEST(Emulators, TellsRetroArchsLauncherWhichGame)
               "/app0/content/Nintendo - Game Boy Advance/007 - Nightfire (UE) (M3) [!].gba\n");
 }
 
+// Games kept on a server join their systems' tabs before they are on the
+// console, play in RetroArch, and a file listed already is not listed twice.
+TEST(Emulators, ListsServerGamesOnTheirSystems)
+{
+    const library::Title title = retroarch();
+    std::vector<library::Title> roms;
+    library::Emulator emulator = library::scan_retroarch(title, &roms);
+    const std::size_t before = roms.size();
+    std::vector<library::RemoteGame> games(3);
+    games[0].system_folder = "gba";
+    games[0].name = "Moon Garden";
+    games[0].path = "/data/orion/romm/games/gba/Moon Garden (USA).gba";
+    games[0].remote = "http://nas:3000/api/roms/10/content/Moon%20Garden%20%28USA%29.gba";
+    games[0].icon = "/data/orion/romm/covers/10.png";
+    games[1].system_folder = "not-a-system";
+    games[1].name = "Nowhere";
+    games[1].path = "/data/orion/romm/games/x/y.bin";
+    games[2] = games[0]; // the same file again
+    EXPECT_EQ(library::add_remote_games(emulator, games, &roms), 1);
+    ASSERT_EQ(roms.size(), before + 1);
+    const library::Title &moon = roms.back();
+    EXPECT_EQ(moon.system, "Nintendo - Game Boy Advance");
+    EXPECT_EQ(moon.name, "Moon Garden");
+    EXPECT_EQ(moon.rom, games[0].path);
+    EXPECT_EQ(moon.remote, games[0].remote);
+    EXPECT_EQ(moon.icon, games[0].icon);
+    EXPECT_EQ(moon.launcher, title.id);
+    EXPECT_TRUE(moon.is_rom());
+    const std::vector<library::Player> players = library::players_for(emulator, moon);
+    ASSERT_FALSE(players.empty());
+    EXPECT_EQ(players[0].rom, games[0].path); // RetroArch reads it where it lands
+}
+
 TEST(Emulators, ReadsThePlayersOwnRomFolders)
 {
     const library::Title title = retroarch();

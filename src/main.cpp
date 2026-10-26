@@ -24,6 +24,7 @@
 #include "library/icon.hpp"
 #include "library/library.hpp"
 #include "orion/prefs.hpp"
+#include "orion/romm.hpp"
 #include "platform/ps5/audio_out.hpp"
 #include "platform/ps5/display_egl.hpp"
 #include "platform/ps5/pad.hpp"
@@ -304,9 +305,19 @@ int main()
     const auto scan_emulators = [&titles](bool starting)
     {
         const orion::LibraryPrefs prefs = orion::load_prefs(titles.state_dir);
+        // RomM's games, as the last sync listed them (orion/romm.hpp).
+        std::vector<library::RemoteGame> remote;
+        std::string catalogue;
+        const std::string base =
+            orion::romm_base(orion::read_service_key(titles.state_dir, orion::kRommUrl));
+        if (!base.empty() &&
+            save::read_file(titles.state_dir + "/romm-games.tsv", &catalogue, 32u << 20))
+            remote = orion::romm_remote_games(orion::read_romm_catalogue(catalogue), base,
+                                              titles.state_dir);
         return library::add_emulator_games(
             titles, orion::game_folders(prefs), orion::art_folder(prefs, titles.state_dir),
-            prefs.every_version, starting ? boot_step : std::function<void(const char *)>());
+            prefs.every_version, starting ? boot_step : std::function<void(const char *)>(),
+            remote);
     };
     {
         library::ScanOptions scan = library::console_defaults();

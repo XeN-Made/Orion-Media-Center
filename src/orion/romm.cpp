@@ -52,6 +52,14 @@ long long as_id(const json::Value &value)
     return number > 0.0 ? static_cast<long long>(number) : 0;
 }
 
+// A folder and the ones above it, as needed.
+bool make_folders(const std::string &path)
+{
+    for (std::size_t at = path.find('/', 1); at != std::string::npos; at = path.find('/', at + 1))
+        save::ensure_directory(path.substr(0, at));
+    return save::ensure_directory(path);
+}
+
 bool is_file(const std::string &path)
 {
     struct stat info = {};
@@ -276,6 +284,101 @@ std::string romm_game_path(const std::string &folder, const RommGame &game)
     return folder + "/" + game.fs_slug + "/" + game.fs_name + (game.multi ? ".zip" : "");
 }
 
+std::string romm_folder(const std::string &state_dir)
+{
+    return state_dir + "/romm";
+}
+
+std::vector<library::RemoteGame> romm_remote_games(const std::vector<RommGame> &games,
+                                                   const std::string &base,
+                                                   const std::string &state_dir)
+{
+    std::vector<library::RemoteGame> out;
+    const std::string folder = romm_folder(state_dir);
+    for (const RommGame &game : games)
+    {
+        library::RemoteGame remote;
+        remote.system_folder = game.fs_slug;
+        remote.name = game.name;
+        remote.path = romm_game_path(folder + "/games", game);
+        remote.remote = romm_content_url(base, game);
+        const std::string url = romm_cover_url(base, game);
+        if (!url.empty())
+        {
+            const std::string cover =
+                folder + "/covers/" + std::to_string(game.id) + picture_extension(url);
+            if (is_file(cover))
+                remote.icon = cover;
+        }
+        out.push_back(std::move(remote));
+    }
+    return out;
+}
+
+FileDownload::FileDownload(HttpDownloadWith download) : download_(std::move(download))
+{
+}
+
+FileDownload::~FileDownload()
+{
+    wait();
+}
+
+void FileDownload::wait()
+{
+    if (worker_.joinable())
+        worker_.join();
+}
+
+std::string FileDownload::error() const
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    return error_;
+}
+
+std::uint64_t FileDownload::written() const
+{
+    std::string part;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        part = path_ + ".part";
+    }
+    struct stat info = {};
+    return ::stat(part.c_str(), &info) == 0 ? static_cast<std::uint64_t>(info.st_size) : 0;
+}
+
+bool FileDownload::start(std::string url, std::vector<std::string> headers, std::string path)
+{
+    if (running_.load())
+        return false;
+    const std::size_t slash = path.rfind('/');
+    if (slash == std::string::npos || !make_folders(path.substr(0, slash)))
+        return false;
+    wait();
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        error_.clear();
+        path_ = path;
+    }
+    running_ = true;
+    worker_ = std::thread(
+        [this, url = std::move(url), headers = std::move(headers), path = std::move(path)]()
+        {
+            // A game can be several gigabytes (a PS2 disc): the limit is only
+            // there so a server answering forever cannot fill the drive.
+            constexpr std::size_t kMaxGame = static_cast<std::size_t>(32) << 30;
+            std::string error;
+            if (!download_(url, headers, path, kMaxGame, &error))
+            {
+                std::lock_guard<std::mutex> lock(mutex_);
+                error_ = error.empty() ? std::string("the download failed") : error;
+            }
+            running_ = false;
+            finished_ = true;
+        });
+    return true;
+}
+
 RommSync::RommSync(HttpGetWith get, HttpDownloadWith download)
     : get_(std::move(get)), download_(std::move(download))
 {
@@ -368,8 +471,8 @@ void RommSync::run(std::string base, std::string token, std::string state_dir)
         if (!written.empty())
             return fail(written);
         // Covers last: the games are listed already while they come.
-        const std::string covers = state_dir + "/romm/covers";
-        save::ensure_directory(state_dir + "/romm");
+        const std::string covers = romm_folder(state_dir) + "/covers";
+        save::ensure_directory(romm_folder(state_dir));
         save::ensure_directory(covers);
         for (const RommGame &game : games)
         {

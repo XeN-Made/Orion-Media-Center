@@ -1996,9 +1996,42 @@ int keep_best_versions(std::vector<Title> &roms, const std::string &launcher)
     return dropped;
 }
 
+int add_remote_games(Emulator &emulator, const std::vector<RemoteGame> &games,
+                     std::vector<Title> *roms)
+{
+    const EmulatorApp *retroarch = emulator.app("retroarch");
+    std::unordered_set<std::string> listed;
+    for (const Title &rom : *roms)
+        listed.insert(rom.id);
+    std::vector<Title> found;
+    for (const RemoteGame &game : games)
+    {
+        const std::string system = system_of_folder(game.system_folder, emulator);
+        if (system.empty() || game.path.empty())
+            continue;
+        Title rom;
+        rom.rom = game.path;
+        rom.id = rom_id(rom.rom);
+        if (!listed.insert(rom.id).second)
+            continue;
+        rom.system = system;
+        rom.name = game.name;
+        rom.path = game.path;
+        rom.remote = game.remote;
+        rom.icon = game.icon;
+        rom.launcher = retroarch != nullptr ? retroarch->title_id : std::string();
+        rom.category = Category::game;
+        rom.platform = Platform::unknown;
+        rom.source = Source::image;
+        found.push_back(std::move(rom));
+    }
+    return place_games(emulator, found, roms);
+}
+
 int add_emulator_games(Library &library, const std::vector<GameFolder> &folders,
                        const std::string &art_dir, bool every_version,
-                       const std::function<void(const char *)> &step)
+                       const std::function<void(const char *)> &step,
+                       const std::vector<RemoteGame> &remote)
 {
     const auto at = [&step](const char *stage)
     {
@@ -2008,6 +2041,16 @@ int add_emulator_games(Library &library, const std::vector<GameFolder> &folders,
     std::erase_if(library.titles, [](const Title &title) { return title.is_rom(); });
     std::vector<Title> roms;
     library.emulator = scan_emulators(library.titles, folders, &roms);
+    if (!remote.empty())
+    {
+        const int added = add_remote_games(library.emulator, remote, &roms);
+        for (EmulatorApp &app : library.emulator.apps)
+        {
+            if (app.key == "retroarch")
+                app.games += added; // they play in RetroArch
+        }
+        sort_systems(library.emulator);
+    }
     at("emulator games found");
     if (const EmulatorApp *retroarch = library.emulator.app("retroarch");
         !every_version && retroarch != nullptr && keep_best_versions(roms, retroarch->title_id) > 0)

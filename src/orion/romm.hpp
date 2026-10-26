@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "library/emulators.hpp"
 #include "orion/steamgriddb.hpp"
 
 #include <atomic>
@@ -138,8 +139,57 @@ class RommSync
     Progress progress_;
 };
 
+// One file fetched on a thread of its own: a game from RomM the first time
+// it is played. The file grows at <path>.part until it is whole.
+//
+//   FileDownload download(http_download_with);
+//   download.start(url, headers, "/data/orion/romm/games/gba/Moon Garden.gba");
+//   ...every frame: if (download.take_finished()) download.error() or play it
+class FileDownload
+{
+  public:
+    explicit FileDownload(HttpDownloadWith download);
+    ~FileDownload();
+    FileDownload(const FileDownload &) = delete;
+    FileDownload &operator=(const FileDownload &) = delete;
+
+    // False while one is running, or when the folder cannot be made.
+    bool start(std::string url, std::vector<std::string> headers, std::string path);
+    bool running() const
+    {
+        return running_.load();
+    }
+    bool take_finished()
+    {
+        return finished_.exchange(false);
+    }
+    // Empty when the last one worked.
+    std::string error() const;
+    // The bytes written so far (the .part file's size).
+    std::uint64_t written() const;
+    void wait();
+
+  private:
+    HttpDownloadWith download_;
+    std::thread worker_;
+    std::atomic<bool> running_{false};
+    std::atomic<bool> finished_{false};
+    mutable std::mutex mutex_;
+    std::string error_;
+    std::string path_;
+};
+
 // Where a game is kept once downloaded: <folder>/<system folder>/<file>
 // (a multi-file game as <file>.zip, which RetroArch opens).
 std::string romm_game_path(const std::string &folder, const RommGame &game);
+
+// Where ORION keeps what comes from RomM: <state>/romm (games/, covers/).
+std::string romm_folder(const std::string &state_dir);
+
+// The catalogue's games as the library lists them (library::add_remote_games),
+// with the covers the last sync brought.
+std::vector<library::RemoteGame> romm_remote_games(const std::vector<RommGame> &games,
+                                                   const std::string &base,
+                                                   const std::string &state_dir);
 
 } // namespace hui::orion
