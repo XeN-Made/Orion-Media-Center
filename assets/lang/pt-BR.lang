@@ -205,7 +205,6 @@ author = ORION
 "Add your SteamGridDB key first: Settings, Box art" = "Adicione antes sua chave do SteamGridDB: Configurações, Capas"
 "Still looking: try again in a moment" = "Ainda procurando: tente de novo daqui a pouco"
 "Looking on SteamGridDB for {0}…" = "Procurando {0} no SteamGridDB…"
-"SteamGridDB has no covers for {0}" = "O SteamGridDB não tem capas para {0}"
 "Downloading the cover…" = "Baixando a capa…"
 "Cover {0} of {1}  ·  Left and Right to look, Cross keeps it, Circle puts the old one back" = "Capa {0} de {1}  ·  Esquerda e Direita para ver, X fica com ela, Círculo volta à anterior"
 "Find other art…" = "Procurar outra capa…"
@@ -567,3 +566,7 @@ author = ORION
 "Last played" = "Última vez jogado"
 "Added" = "Adicionado"
 "System" = "Sistema"
+
+"Find art by name…" = "Buscar arte pelo nome…"
+"The name to look for on SteamGridDB" = "O nome a procurar no SteamGridDB"
+"SteamGridDB has no covers for {0}: try Find art by name…" = "O SteamGridDB não tem capas de {0}: tente Buscar arte pelo nome…"

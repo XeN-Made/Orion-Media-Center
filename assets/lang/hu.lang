@@ -183,7 +183,6 @@ author = ORION
 "Square" = "Négyzet"
 "Starred titles collect here and keep their star." = "A csillagozott címek itt gyűlnek, és megtartják a csillagukat."
 "Starting {0}…" = "{0} indítása…"
-"SteamGridDB has no covers for {0}" = "A SteamGridDB-n nincs borító ehhez: {0}"
 "SteamGridDB key removed" = "SteamGridDB-kulcs eltávolítva"
 "SteamGridDB key saved" = "SteamGridDB-kulcs mentve"
 "Still looking: try again in a moment" = "Még keres: próbáld újra egy pillanat múlva"
@@ -562,3 +561,7 @@ author = ORION
 "Last played" = "Utoljára játszott"
 "Added" = "Hozzáadva"
 "System" = "Rendszer"
+
+"Find art by name…" = "Borító keresése név alapján…"
+"The name to look for on SteamGridDB" = "A SteamGridDB-n keresendő név"
+"SteamGridDB has no covers for {0}: try Find art by name…" = "A SteamGridDB-n nincs borító ehhez: {0}. Próbáld a Borító keresése név alapján…"

@@ -162,6 +162,7 @@ enum class Typing : std::uint8_t
     art_folder,   // from Settings > Box art > Your own folder
     rom_folder,   // from Settings > Storage > Add a ROM folder
     grid_key,     // from Settings > Box art > SteamGridDB key
+    art_name,     // from a title's menu: the name SteamGridDB is asked for
 };
 
 // Tags of the menu items.
@@ -189,6 +190,7 @@ enum : int
     kItemPickLess,        // its page before
     kItemMoveMenu,        // Move to tab…: the list of tabs
     kItemDetails,         // Details…: the title's page
+    kItemFindArtName,     // Find art by name… (SteamGridDB)
     kItemMove = 100,      // + the tab's index
     kItemPlayer = 300,    // 0: the default, then 1 + an index in library::players_for
     kItemPickPlace = 500, // + an index in pick_places_
@@ -2190,8 +2192,8 @@ class Library final : public app::Concept
                : typing == Typing::art_folder || typing == Typing::rom_folder ||
                        typing == Typing::grid_key
                    ? kMaxPath
-               : typing == Typing::rename_title ? orion::kMaxTitleName
-                                                : kMaxName;
+               : typing == Typing::rename_title || typing == Typing::art_name ? orion::kMaxTitleName
+                                                                              : kMaxName;
     }
 
     std::string &buffer()
@@ -2242,6 +2244,11 @@ class Library final : public app::Concept
         if (typing == Typing::rename_title)
         {
             rename_title(feedback);
+            return;
+        }
+        if (typing == Typing::art_name)
+        {
+            find_other_art(feedback, name_);
             return;
         }
         if (typing == Typing::grid_key)
@@ -2346,7 +2353,8 @@ class Library final : public app::Concept
         return !preview_id_.empty() && !preview_files_.empty();
     }
 
-    void find_other_art(app::Feedback &feedback)
+    // query: the name to look for; empty, the title's own.
+    void find_other_art(app::Feedback &feedback, const std::string &query = {})
     {
         const Title *title = find_title(menu_title_);
         std::string why;
@@ -2366,7 +2374,9 @@ class Library final : public app::Concept
         }
         preview_id_ = title->id;
         preview_name_ = title->name;
-        preview_query_ = title->own_name.empty() ? title->name : title->own_name;
+        preview_query_ = !orion::grid_query(query).empty() ? query
+                         : title->own_name.empty()         ? title->name
+                                                           : title->own_name;
         preview_was_ = title->icon;
         preview_files_.clear();
         preview_index_ = 0;
@@ -2374,7 +2384,7 @@ class Library final : public app::Concept
         // this one starts as soon as it has (poll_preview).
         preview_asked_ = picker_.search(grid_key_, preview_query_,
                                         context_.library.state_dir + "/art/picks", title->id);
-        show_note(true, trf("Looking on SteamGridDB for {0}…", {title->name}));
+        show_note(true, trf("Looking on SteamGridDB for {0}…", {preview_query_}));
         feedback.play(audio::Cue::select);
     }
 
@@ -2436,7 +2446,8 @@ class Library final : public app::Concept
         if (preview_files_.empty())
         {
             show_note(false, picker_.error().empty()
-                                 ? trf("SteamGridDB has no covers for {0}", {preview_name_})
+                                 ? trf("SteamGridDB has no covers for {0}: try Find art by name…",
+                                       {preview_query_})
                                  : trf("Could not get box art: {0}", {picker_.error()}));
             feedback.play(audio::Cue::error);
             end_preview();
@@ -2869,6 +2880,9 @@ class Library final : public app::Concept
         other.tag = kItemFindArt;
         other.shortcut = "SteamGridDB";
         items.push_back(other);
+        ui::MenuItem by_name = menu_item(tr("Find art by name…"));
+        by_name.tag = kItemFindArtName;
+        items.push_back(by_name);
         if (!title.own_icon.empty())
         {
             ui::MenuItem own = menu_item(tr("Use its own picture"));
@@ -3365,6 +3379,15 @@ class Library final : public app::Concept
         if (tag == kItemFindArt)
         {
             find_other_art(feedback);
+            return;
+        }
+        if (tag == kItemFindArtName)
+        {
+            const Title *title = find_title(menu_title_);
+            if (title == nullptr)
+                return;
+            start_typing(Typing::art_name, title->own_name.empty() ? title->name : title->own_name);
+            feedback.play(audio::Cue::modal_open);
             return;
         }
         if (tag == kItemPickUp || tag == kItemPickMore || tag == kItemPickLess ||
@@ -5985,6 +6008,7 @@ class Library final : public app::Concept
             : typing_ == Typing::art_folder   ? tr("A folder under /data or /mnt")
             : typing_ == Typing::rom_folder   ? tr("A folder of games, like /mnt/usb0/roms")
             : typing_ == Typing::grid_key     ? tr("Your SteamGridDB API key; empty removes it")
+            : typing_ == Typing::art_name     ? tr("The name to look for on SteamGridDB")
                                               : tr("Name the new tab");
         const bool empty = text.empty();
         ui::text(list, fonts.regular, empty ? placeholder.c_str() : text.c_str(), field.x + 28,
