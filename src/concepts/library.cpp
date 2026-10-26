@@ -758,7 +758,7 @@ class Library final : public app::Concept
             request_icons();
         // Installed packages and images mounted from elsewhere.
         if (sys::on_console() && !state.empty())
-            registered_.start(state, kFtpPort);
+            registered_.start(state, ftp_port());
     }
 
     // ---- sharper pictures for the console's titles ----
@@ -801,7 +801,7 @@ class Library final : public app::Concept
             !orion::make_directories(icon_folder()))
             return false;
         icon_ids_ = ids;
-        return icon_copies_.start(std::move(ids), icon_folder(), kFtpPort, {"/icon0.png"});
+        return icon_copies_.start(std::move(ids), icon_folder(), ftp_port(), {"/icon0.png"});
     }
 
     // Starts the waiting run when the FTP server is free; reports what a run
@@ -885,7 +885,7 @@ class Library final : public app::Concept
         }
         if (!ids.empty() && orion::make_directories(folder) &&
             save::write_atomic(marker, "").empty())
-            backdrop_copies_.start(std::move(ids), folder, kFtpPort);
+            backdrop_copies_.start(std::move(ids), folder, ftp_port());
     }
 
     const app::ConceptInfo &info() const override
@@ -2687,6 +2687,13 @@ class Library final : public app::Concept
         std::string error;
     };
 
+    // The console's FTP server: where the last look for installed titles
+    // found one (orion/registered_titles.hpp), else the usual 2121.
+    int ftp_port() const
+    {
+        return orion::ftp_port_of(context_.library.state_dir, kFtpPort);
+    }
+
     // The player's SteamGridDB key, as keys.txt last gave it.
     std::string grid_key()
     {
@@ -2999,7 +3006,7 @@ class Library final : public app::Concept
             {
                 // Asked of the system once; the answer comes on a later frame.
                 if (sys::on_console() && !sound_copies_.running())
-                    sound_copies_.start({title.id}, folder, kFtpPort, {"/snd0.at9"}, ".at9");
+                    sound_copies_.start({title.id}, folder, ftp_port(), {"/snd0.at9"}, ".at9");
                 return {};
             }
         }

@@ -23,12 +23,23 @@ namespace hui::orion
 // mounts or found installed, so its backups show here with no FTP server.
 // On a thread of its own this writes them all to <state>/registered.tsv
 // (library::merge_registered reads it), and copies each one's picture to
-// <state>/icons/<ID>.png once.
+// <state>/icons/<ID>.png once. The FTP server is looked for on the port
+// given, then on the other usual ones (kFtpPorts); the one that answered is
+// kept in <state>/ftp-port.txt for the next start (ftp_port_of), and each
+// run says what it found in <state>/registered.txt.
 //
 //   RegisteredTitles registered;
 //   registered.start("/data/orion", 2121);
 //   ...every frame:
 //   if (registered.take_finished() && registered.result().changed) merge();
+// The ports console FTP servers listen on: ftpsrv and most payloads 2121,
+// etaHEN 1337, a few the standard 21.
+inline constexpr int kFtpPorts[] = {2121, 1337, 21};
+
+// The port the last run found an FTP server on (<state>/ftp-port.txt), else
+// `fallback`.
+int ftp_port_of(const std::string &state_dir, int fallback);
+
 class RegisteredTitles
 {
   public:
@@ -38,6 +49,7 @@ class RegisteredTitles
         int icons = 0;        // pictures copied this run
         bool server = false;  // ShadowMountPlus or an FTP server answered
         bool changed = false; // the cache is not what it was
+        int ftp_port = 0;     // the port an FTP server answered on; 0: none did
     };
 
     RegisteredTitles() = default;
