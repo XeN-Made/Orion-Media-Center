@@ -277,14 +277,17 @@ TEST(Emulators, FindsBoxArtWhereRetroArchAndEsDeKeepIt)
         }
         return std::string("missing");
     };
-    // No ORION art folder: RetroArch's thumbnails, then ES-DE's covers.
-    EXPECT_EQ(library::attach_rom_art(roms, title.path, ""), 2);
+    // No ORION art folder: RetroArch's thumbnails, its PS5 library folder,
+    // then ES-DE's covers.
+    EXPECT_EQ(library::attach_rom_art(roms, title.path, ""), 3);
     EXPECT_EQ(icon_of("Starfall Racer"),
               title.path +
                   "/thumbnails/Nintendo - Game Boy Advance/Named_Boxarts/Starfall Racer (USA).png");
     EXPECT_EQ(icon_of("Moon Garden"),
               title.path + "/es-de/ES-DE/downloaded_media/nds/covers/Moon Garden (Japan).png");
-    EXPECT_EQ(icon_of("Comet Post"), "");
+    EXPECT_EQ(icon_of("Comet Post"),
+              title.path +
+                  "/library/Nintendo - Game Boy Advance/Comet Post (Europe) (En,Fr,De) [!].png");
 
     // ORION's own folder comes first, named after the ROM file itself.
     const std::filesystem::path art = std::filesystem::temp_directory_path() / "hui-emulators-art";

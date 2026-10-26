@@ -335,6 +335,14 @@ int attach_rom_art(std::vector<Title> &roms, const std::string &root, const std:
             candidates.push_back(art_dir + "/" + rom.system + "/" + stem + ".png");
         candidates.push_back(root + "/thumbnails/" + rom.system + "/Named_Boxarts/" +
                              thumbnail_name(stem) + ".png");
+        // The PS5 port's own library folder, a folder per system, with or
+        // without RetroArch's Named_Boxarts inside.
+        for (const std::string &inner : {std::string("/Named_Boxarts/"), std::string("/")})
+        {
+            candidates.push_back(root + "/library/" + rom.system + inner + thumbnail_name(stem) +
+                                 ".png");
+            candidates.push_back(root + "/library/" + rom.system + inner + stem + ".png");
+        }
         if (!es.empty())
             candidates.push_back(root + "/es-de/ES-DE/downloaded_media/" + es + "/covers/" + stem +
                                  ".png");
