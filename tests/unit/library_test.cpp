@@ -12,6 +12,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cstdio>
 #include <string>
 #include <vector>
@@ -233,6 +234,38 @@ TEST(Library, RecognisesTitleIds)
     EXPECT_FALSE(library::is_title_id("PPSA012345"));
     EXPECT_FALSE(library::is_title_id("ppsa01234"));
     EXPECT_FALSE(library::is_title_id("PPS101234"));
+}
+
+// ELF programs in a payloads folder are Homebrew titles, named for their
+// files, with a picture of the same name; anything else there is left out.
+TEST(Library, ListsElfProgramsAsHomebrew)
+{
+    const std::string folder = ::testing::TempDir() + "orion-payloads";
+    ASSERT_TRUE(save::ensure_directory(folder));
+    ASSERT_TRUE(save::write_atomic(folder + "/Web_File_Manager.elf", "\x7f"
+                                                                     "ELF")
+                    .empty());
+    ASSERT_TRUE(save::write_atomic(folder + "/Web_File_Manager.png", "png").empty());
+    ASSERT_TRUE(save::write_atomic(folder + "/Uploader.ELF", "\x7f"
+                                                             "ELF")
+                    .empty());
+    ASSERT_TRUE(save::write_atomic(folder + "/notes.txt", "not a program").empty());
+
+    std::vector<library::Title> programs =
+        library::scan_payloads({folder, folder, folder + "/missing"});
+    ASSERT_EQ(programs.size(), 2u); // the same folder twice lists each once
+    std::sort(programs.begin(), programs.end(),
+              [](const library::Title &a, const library::Title &b) { return a.name < b.name; });
+    EXPECT_EQ(programs[0].name, "Uploader");
+    EXPECT_TRUE(programs[0].icon.empty());
+    const library::Title &manager = programs[1];
+    EXPECT_EQ(manager.name, "Web File Manager");
+    EXPECT_EQ(manager.icon, folder + "/Web_File_Manager.png");
+    EXPECT_EQ(manager.source, library::Source::payload);
+    EXPECT_EQ(library::shelf_of(manager), library::Shelf::homebrew);
+    EXPECT_TRUE(library::is_item_id(manager.id)); // it can be a favourite, or moved
+    EXPECT_EQ(manager.id.rfind("elf-", 0), 0u);
+    EXPECT_NE(programs[0].id, manager.id);
 }
 
 // The system's registered titles, through their cache: the ones the scan

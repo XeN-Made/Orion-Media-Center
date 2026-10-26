@@ -565,3 +565,7 @@ author = ORION
 "Find art by name…" = "Borító keresése név alapján…"
 "The name to look for on SteamGridDB" = "A SteamGridDB-n keresendő név"
 "SteamGridDB has no covers for {0}: try Find art by name…" = "A SteamGridDB-n nincs borító ehhez: {0}. Próbáld a Borító keresése név alapján…"
+"ELF program" = "ELF program"
+"Programs are sent on the console" = "A programokat a konzolon küldi el"
+"{0} is not an ELF program ORION can read" = "{0} nem olyan ELF program, amelyet az ORION be tud olvasni"
+"{0} is sent to the ELF loader" = "{0} elküldve az ELF betöltőnek"

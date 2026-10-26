@@ -36,6 +36,7 @@ enum class Source : std::uint8_t
     folder,
     image,
     installed, // registered with the system, nowhere ORION looks (see merge_registered)
+    payload,   // an ELF for the console's ELF loader, from a payloads folder (scan_payloads)
 };
 
 struct Title
@@ -252,9 +253,14 @@ int merge_registered(Library &library, std::string_view cache, const std::string
 
 // "PPSA01234" style: four capital letters and five digits.
 bool is_title_id(std::string_view text);
-// A title ID or an emulated game's ID ("rom-" and twelve hex digits): what
-// favourites and placements may name.
+// A title ID, an emulated game's ID ("rom-" and twelve hex digits) or an
+// ELF program's ("elf-" and twelve): what favourites and placements may name.
 bool is_item_id(std::string_view text);
+
+// The ELF programs in these folders (file managers, uploaders...: payloads
+// the ELF loader runs, nothing installed), as Homebrew titles. Each is named
+// for its file; a PNG or JPEG of the same name beside it is its picture.
+std::vector<Title> scan_payloads(const std::vector<std::string> &folders);
 
 // The parts of a title that come from its metadata file. Exposed for tests.
 bool read_param_json(std::string_view text, Title *title);

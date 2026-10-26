@@ -478,6 +478,7 @@ std::string describe(const Title &title, const std::string &emulator)
         text += "  ·  ";
     text += title.source == library::Source::image       ? tr("Image")
             : title.source == library::Source::installed ? tr("Installed")
+            : title.source == library::Source::payload   ? tr("ELF program")
                                                          : tr("Folder");
     return text;
 }
@@ -2965,6 +2966,9 @@ class Library final : public app::Concept
     // emulator other games play with is not, while it has them.
     bool removable(const Title &title) const
     {
+        // An ELF program is a file the player put there: they take it away.
+        if (title.source == library::Source::payload)
+            return false;
         if (title.is_rom())
             return !title.path.empty();
         if (title.path.empty())
@@ -3554,6 +3558,31 @@ class Library final : public app::Concept
         feedback.play(audio::Cue::place);
     }
 
+    // An ELF program goes to the console's ELF loader, as a jailbreak's
+    // payloads do; it runs beside ORION, which stays open.
+    void send_program(const Title &title, app::Feedback &feedback)
+    {
+        std::string elf;
+        if (!sys::on_console())
+        {
+            show_note(false, tr("Programs are sent on the console"));
+            feedback.play(audio::Cue::error);
+            return;
+        }
+        if (!save::read_file(title.path, &elf, 64u << 20) || elf.size() < 4 ||
+            elf.compare(0, 4,
+                        "\x7f"
+                        "ELF") != 0)
+        {
+            show_note(false, trf("{0} is not an ELF program ORION can read", {title.name}));
+            feedback.play(audio::Cue::error);
+            return;
+        }
+        std::thread([elf = std::move(elf)]() { sys::send_payload(elf, kLoaderPort); }).detach();
+        show_note(true, trf("{0} is sent to the ELF loader", {title.name}));
+        feedback.play(audio::Cue::select);
+    }
+
     // A title cannot start while ORION is in front (the system refuses with
     // 0x8094000f), so the launch is handed over: the title goes into
     // <state_dir>/launch-request.txt, the launch helper (payload/launcher)
@@ -3576,6 +3605,11 @@ class Library final : public app::Concept
         {
             menu_title_ = title->id;
             open_player_menu(feedback, true);
+            return;
+        }
+        if (title->source == library::Source::payload)
+        {
+            send_program(*title, feedback);
             return;
         }
         const std::string &dir = context_.library.state_dir;
@@ -4736,6 +4770,7 @@ class Library final : public app::Concept
             facts.plays_with = library::platform_name(title->platform);
             facts.kept_as = title->source == library::Source::image       ? tr("Image")
                             : title->source == library::Source::installed ? tr("Installed")
+                            : title->source == library::Source::payload   ? tr("ELF program")
                                                                           : tr("Folder");
             facts.folder = title->source == library::Source::folder;
         }

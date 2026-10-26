@@ -342,6 +342,10 @@ int main()
                 library::merge_registered(titles, cache, titles.state_dir + "/icons",
                                           titles.self_id);
         }
+        // ELF programs the player keeps for the loader (library::scan_payloads).
+        for (library::Title &program :
+             library::scan_payloads({titles.state_dir + "/payloads", "/data/payloads"}))
+            titles.titles.push_back(std::move(program));
         titles.themes_dir = std::string(kAssets) + "/themes";
         titles.offer_setup = true;
         library::prefer_saved_icons(titles, titles.state_dir + "/icons");
@@ -406,7 +410,8 @@ int main()
     // And the folders a player fills over FTP: pictures and music per title.
     save::ensure_directory("/data/orion/custom-art");
     save::ensure_directory("/data/orion/hover-music");
-    save::ensure_directory("/data/orion/cases"); // the player's case pictures
+    save::ensure_directory("/data/orion/cases");    // the player's case pictures
+    save::ensure_directory("/data/orion/payloads"); // the player's ELF programs
     const int tracks = music.init(
         mixer, std::vector<std::string>{std::string(kAssets) + "/audio/music", "/data/orion/music"},
         static_cast<std::uint64_t>(sys::monotonic_us()));

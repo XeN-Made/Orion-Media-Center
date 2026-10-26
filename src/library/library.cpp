@@ -158,7 +158,7 @@ bool is_item_id(std::string_view text)
 {
     if (is_title_id(text))
         return true;
-    if (text.size() != 16 || text.substr(0, 4) != "rom-")
+    if (text.size() != 16 || (text.substr(0, 4) != "rom-" && text.substr(0, 4) != "elf-"))
         return false;
     return std::all_of(text.begin() + 4, text.end(),
                        [](char c) { return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'); });
@@ -605,6 +605,60 @@ std::vector<Title> scan(const ScanOptions &options)
                   return fa != fb ? fa < fb : a.id < b.id;
               });
     return titles;
+}
+
+std::vector<Title> scan_payloads(const std::vector<std::string> &folders)
+{
+    std::vector<Title> found;
+    for (const std::string &folder : folders)
+    {
+        const std::vector<save::DirectoryEntry> entries = save::list_directory(folder);
+        const auto has = [&](const std::string &name)
+        {
+            return std::any_of(entries.begin(), entries.end(), [&](const save::DirectoryEntry &e)
+                               { return !e.directory && e.name == name; });
+        };
+        for (const save::DirectoryEntry &entry : entries)
+        {
+            const std::size_t dot = entry.name.rfind('.');
+            if (entry.directory || dot == std::string::npos || dot == 0)
+                continue;
+            std::string extension = entry.name.substr(dot + 1);
+            for (char &c : extension)
+                c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+            if (extension != "elf")
+                continue;
+            Title title;
+            title.path = folder + "/" + entry.name;
+            // Its ID by its path, as an emulated game's is.
+            std::uint64_t hash = 1469598103934665603ull;
+            for (const char c : title.path)
+                hash = (hash ^ static_cast<unsigned char>(c)) * 1099511628211ull;
+            char id[24];
+            std::snprintf(id, sizeof(id), "elf-%012llx",
+                          static_cast<unsigned long long>(hash & 0xffffffffffffull));
+            title.id = id;
+            if (std::any_of(found.begin(), found.end(),
+                            [&](const Title &t) { return t.id == title.id; }))
+                continue;
+            const std::string stem = entry.name.substr(0, dot);
+            for (const char c : stem)
+                title.name += c == '_' ? ' ' : c;
+            for (const char *kind : {".png", ".jpg", ".jpeg"})
+            {
+                if (title.icon.empty() && has(stem + kind))
+                    title.icon = folder + "/" + stem + kind;
+            }
+            title.category = Category::app;
+            title.homebrew = true;
+            title.source = Source::payload;
+            struct stat info = {};
+            if (::stat(title.path.c_str(), &info) == 0)
+                title.added = static_cast<std::int64_t>(info.st_mtime);
+            found.push_back(std::move(title));
+        }
+    }
+    return found;
 }
 
 Shelf shelf_of(const Title &title)

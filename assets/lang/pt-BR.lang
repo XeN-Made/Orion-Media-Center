@@ -570,3 +570,7 @@ author = ORION
 "Find art by name…" = "Buscar arte pelo nome…"
 "The name to look for on SteamGridDB" = "O nome a procurar no SteamGridDB"
 "SteamGridDB has no covers for {0}: try Find art by name…" = "O SteamGridDB não tem capas de {0}: tente Buscar arte pelo nome…"
+"ELF program" = "Programa ELF"
+"Programs are sent on the console" = "Os programas são enviados no console"
+"{0} is not an ELF program ORION can read" = "{0} não é um programa ELF que o ORION consiga ler"
+"{0} is sent to the ELF loader" = "{0} foi enviado ao carregador ELF"

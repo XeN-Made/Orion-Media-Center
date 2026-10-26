@@ -48,6 +48,10 @@ most played.
   its row once ORION finds a game for it.
 - Favourites, Continue playing (what you played last, over the All tab),
   hidden titles, search.
+- **ELF programs** (file managers, uploaders, cheat tools): put the `.elf` in
+  `/data/orion/payloads` (or `/data/payloads`), with a PNG of the same name
+  for its picture if you like. It shows on the Homebrew tab after ORION
+  restarts; Cross sends it to the ELF loader and ORION stays open.
 - Play time for every game, and when you last played it: the console's own
   count where it has one (system software 10 and later), so games played
   without ORION count too.
