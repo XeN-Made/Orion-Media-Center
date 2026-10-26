@@ -570,3 +570,6 @@ author = ORION
 "{0} is not an ELF program ORION can read" = "{0} nem olyan ELF program, amelyet az ORION be tud olvasni"
 "{0} is sent to the ELF loader" = "{0} elküldve az ELF betöltőnek"
 "Free at steamgriddb.com: your profile, Preferences, API. Or paste it on a phone or PC at {0}" = "Ingyenes a steamgriddb.com oldalon: profil, Preferences, API. Vagy illeszd be telefonról vagy PC-ről itt: {0}"
+"No games for your emulators yet" = "Még nincs játék az emulátoraidhoz"
+"Put games in the folders Settings, Emulators lists for each emulator," = "Tegyél játékokat a mappákba, amelyeket a Beállítások, Emulátorok mutat,"
+"or add a folder of your own there; then Scan for emulators." = "vagy adj hozzá ott egy saját mappát; aztán Emulátorok keresése."

@@ -575,3 +575,6 @@ author = ORION
 "{0} is not an ELF program ORION can read" = "{0} no es un programa ELF que ORION pueda leer"
 "{0} is sent to the ELF loader" = "{0} se ha enviado al cargador ELF"
 "Free at steamgriddb.com: your profile, Preferences, API. Or paste it on a phone or PC at {0}" = "Gratis en steamgriddb.com: tu perfil, Preferences, API. O pégala desde un móvil o PC en {0}"
+"No games for your emulators yet" = "Aún no hay juegos para tus emuladores"
+"Put games in the folders Settings, Emulators lists for each emulator," = "Pon juegos en las carpetas que Ajustes, Emuladores indica para cada emulador,"
+"or add a folder of your own there; then Scan for emulators." = "o añade allí una carpeta tuya; luego Buscar emuladores."

@@ -1869,7 +1869,8 @@ class Library final : public app::Concept
         std::vector<orion::TabEntry> tabs;
         for (const Shelf &shelf : kShelves)
             tabs.push_back({shelf.key, tab_label(shelf.key, tr(shelf.name))});
-        if (prefs_.group_systems && !context_.library.emulator.systems.empty())
+        if (prefs_.group_systems &&
+            (!context_.library.emulator.systems.empty() || !context_.library.emulator.apps.empty()))
             tabs.push_back({kEmulatorsTab, tab_label(kEmulatorsTab, tr("Emulators"))});
         for (const library::System &system : context_.library.emulator.systems)
             tabs.push_back(
@@ -5024,7 +5025,10 @@ class Library final : public app::Concept
             systems.push_back(std::move(item));
             sub_keys_.push_back("sys:" + system.name);
         }
-        const bool grouped = prefs_.group_systems && !sub_keys_.empty();
+        // Emulators found and no games for them yet: the tab is there all the
+        // same, and says where games go (draw_empty).
+        const bool grouped =
+            prefs_.group_systems && (!sub_keys_.empty() || !context_.library.emulator.apps.empty());
         if (grouped && !prefs_.tab_hidden(kEmulatorsTab))
             add(kEmulatorsTab, tab_label(kEmulatorsTab, tr("Emulators")));
         else
@@ -5985,6 +5989,12 @@ class Library final : public app::Concept
             title = tr("No favourites yet");
             first = tr("Press Square on any title to star it.");
             second = tr("Starred titles collect here and keep their star.");
+        }
+        else if (key == kEmulatorsTab)
+        {
+            title = tr("No games for your emulators yet");
+            first = tr("Put games in the folders Settings, Emulators lists for each emulator,");
+            second = tr("or add a folder of your own there; then Scan for emulators.");
         }
         else if (!titles().empty() && key.rfind("tab:", 0) == 0)
         {

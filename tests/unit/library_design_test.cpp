@@ -60,6 +60,27 @@ TEST_F(LibraryDesign, ANewConsoleStartsOnTheSetupAndCanSkipIt)
     EXPECT_TRUE(played(Cue::tab));
 }
 
+// Emulators found and no games for them yet: the Emulators tab is there all
+// the same, after the five shelves, saying where games go.
+TEST_F(LibraryDesign, TheEmulatorsTabShowsBeforeAnyGame)
+{
+    hui::library::EmulatorApp app;
+    app.key = "eden";
+    app.name = "ProsperoEden";
+    app.title_id = "PPSA90171";
+    library_.emulator.apps.push_back(app);
+    ASSERT_TRUE(library_.emulator.systems.empty());
+    auto design = hui::concepts::make_library(context_);
+    for (int i = 0; i < 5; ++i)
+    {
+        send(*design, press(hui::Action::page_next));
+        EXPECT_TRUE(played(Cue::tab)) << i;
+    }
+    expect_drawable(*design); // the empty tab's note
+    send(*design, press(hui::Action::page_next));
+    EXPECT_FALSE(played(Cue::tab)); // the last tab
+}
+
 TEST_F(LibraryDesign, TheSetupWalksThroughEveryStep)
 {
     const std::string dir = ::testing::TempDir() + "orion-design-setup-walk";
