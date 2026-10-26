@@ -5,6 +5,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <vector>
 #include <string_view>
@@ -24,6 +25,7 @@ struct FtpEntry
 {
     std::string name;
     bool folder = false;
+    std::uint64_t size = 0; // its size= fact; 0 when the server gives none
 };
 
 class LocalFtp

@@ -215,6 +215,9 @@ std::vector<FtpEntry> parse_mlsd(std::string_view text)
         for (char &c : lowered)
             c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
         entry.folder = lowered.find("type=dir;") != std::string::npos;
+        if (const std::size_t at = lowered.find("size=");
+            at != std::string::npos && (at == 0 || lowered[at - 1] == ';'))
+            entry.size = std::strtoull(lowered.c_str() + at + 5, nullptr, 10);
         if (lowered.find("type=cdir;") != std::string::npos ||
             lowered.find("type=pdir;") != std::string::npos)
             continue;

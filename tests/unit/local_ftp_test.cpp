@@ -48,6 +48,7 @@ TEST(LocalFtp, ReadsAFolderListing)
     EXPECT_TRUE(entries[0].folder);
     EXPECT_EQ(entries[1].name, "Quiet Bay (USA).iso");
     EXPECT_FALSE(entries[1].folder);
+    EXPECT_EQ(entries[1].size, 12u); // how a replaced picture is noticed
     EXPECT_EQ(entries[2].name, "CUSA90151");
     EXPECT_TRUE(entries[2].folder);
 }

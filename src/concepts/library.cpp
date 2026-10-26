@@ -765,8 +765,11 @@ class Library final : public app::Concept
         for (const Title &title : titles())
         {
             struct stat info = {};
-            if (title.is_rom() || title.icon.find("/icon-cache/") == std::string::npos ||
-                ::stat((folder + "/" + title.id + ".png").c_str(), &info) == 0 ||
+            // A copy made before is in the run too: it is fetched again when
+            // the system's picture changed (orion/backdrop_copies.hpp).
+            const bool copied = ::stat((folder + "/" + title.id + ".png").c_str(), &info) == 0;
+            if (title.is_rom() ||
+                (!copied && title.icon.find("/icon-cache/") == std::string::npos) ||
                 ::stat((folder + "/" + title.id + ".none").c_str(), &info) == 0)
                 continue;
             ids.push_back(title.id);
@@ -849,8 +852,7 @@ class Library final : public app::Concept
                 (exists(title.path + "/sce_sys/pic0.png") ||
                  exists(title.path + "/sce_sys/pic1.png")))
                 continue;
-            if (exists(folder + "/" + title.id + ".png") ||
-                still_none(folder + "/" + title.id + ".none"))
+            if (still_none(folder + "/" + title.id + ".none"))
                 continue;
             ids.push_back(title.id);
         }

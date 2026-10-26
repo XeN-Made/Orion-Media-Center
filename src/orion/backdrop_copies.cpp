@@ -8,8 +8,11 @@
 #include "orion/art_fetcher.hpp"
 #include "orion/local_ftp.hpp"
 
+#include <cstdint>
 #include <cstdio>
 #include <utility>
+
+#include <sys/stat.h>
 
 namespace hui::orion
 {
@@ -69,10 +72,31 @@ void BackdropCopies::run(std::vector<std::string> ids, std::string folder, int p
             break;
         std::string bytes;
         bool got = false;
+        // A copy made before is fetched again only when the system's picture
+        // is another size now: a tool like Art Swap replaced it.
+        const std::string copy = folder + "/" + id + extension;
+        struct stat info = {};
+        if (::stat(copy.c_str(), &info) == 0)
+        {
+            std::vector<FtpEntry> entries;
+            if (!ftp.list("/user/appmeta/" + id, &entries))
+                continue;
+            std::uint64_t now = 0;
+            for (const std::string &name : pictures)
+            {
+                for (const FtpEntry &entry : entries)
+                {
+                    if (now == 0 && "/" + entry.name == name)
+                        now = entry.size;
+                }
+            }
+            if (now == 0 || now == static_cast<std::uint64_t>(info.st_size))
+                continue;
+        }
         for (const std::string &name : pictures)
         {
             if (!got && ftp.get("/user/appmeta/" + id + name, kMaxPicture, &bytes))
-                got = save::write_atomic(folder + "/" + id + extension, bytes).empty();
+                got = save::write_atomic(copy, bytes).empty();
         }
         if (got)
             ++result.copied;
