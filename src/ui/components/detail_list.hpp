@@ -146,6 +146,9 @@ class DetailList
     int focus_ = -1;
     bool active_ = true;
     bool settle_ = true; // the next layout places the highlight without a glide
+    // Scrolled on past the focused pair (up and down with nothing more to
+    // focus): the view stays where it was read to until the focus moves.
+    bool reading_ = false;
     float age_ = 10.0f;
     Direction exit_ = Direction::none;
     Highlight highlight_;

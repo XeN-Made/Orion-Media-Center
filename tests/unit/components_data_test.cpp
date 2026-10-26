@@ -229,6 +229,33 @@ TEST_F(ComponentsData, DetailListFocusesOnlyWhatCanBeActivated)
     const hui::gfx::Rect row = details.item_rect(5);
     EXPECT_LE(row.y + row.h, 300.0f + 0.5f);
 
+    // Past the last pair that takes the focus, down reads on: the list
+    // scrolls, stays there, and up goes back to the pairs above.
+    {
+        hui::ui::DetailList sheet;
+        std::vector<hui::ui::DetailItem> rows(12);
+        for (std::size_t i = 0; i < rows.size(); ++i)
+        {
+            rows[i].label = "Fact " + std::to_string(i);
+            rows[i].value = "value";
+        }
+        rows[0].focusable = true;
+        rows[1].focusable = true;
+        sheet.set_items(rows);
+        sheet.set_bounds({100.0f, 100.0f, 520.0f, 200.0f});
+        sheet.measure(fonts_);
+        EXPECT_EQ(send(sheet, nav(Direction::down)), Event::moved);
+        EXPECT_EQ(sheet.focus(), 1);
+        const float before = sheet.item_rect(11).y;
+        EXPECT_EQ(send(sheet, nav(Direction::down)), Event::moved);
+        for (int frame = 0; frame < 60; ++frame)
+            sheet.update(1.0f / 60.0f);
+        EXPECT_LT(sheet.item_rect(11).y, before - 1.0f);
+        EXPECT_EQ(sheet.focus(), 1);
+        EXPECT_EQ(send(sheet, nav(Direction::up)), Event::moved);
+        EXPECT_EQ(sheet.focus(), 0);
+    }
+
     // A wrapped value makes its pair taller than a one-line one.
     EXPECT_GT(details.item_rect(2).h, details.item_rect(4).h);
 

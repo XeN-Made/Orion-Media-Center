@@ -53,6 +53,7 @@ void DetailList::set_items(std::vector<DetailItem> items)
     relayout();
     retarget(true);
     settle_ = true;
+    reading_ = false;
 }
 
 void DetailList::set_bounds(const Rect &bounds)
@@ -61,6 +62,7 @@ void DetailList::set_bounds(const Rect &bounds)
     relayout();
     retarget(true);
     settle_ = true;
+    reading_ = false;
 }
 
 void DetailList::set_focus(int index, bool snap)
@@ -122,6 +124,7 @@ void DetailList::measure(const Fonts &fonts)
     relayout();
     retarget(true);
     settle_ = true;
+    reading_ = false;
 }
 
 void DetailList::relayout()
@@ -191,7 +194,8 @@ void DetailList::retarget(bool snap)
         // Reveal the section title above the first pair of a section too.
         const bool under_header = focus_ > 0 && items_[static_cast<std::size_t>(focus_ - 1)].header;
         const float top = under_header ? rects_[static_cast<std::size_t>(focus_ - 1)].y : r.y;
-        scroll_.reveal(top, r.y + r.h, in.h, 6.0f, content_);
+        if (!reading_)
+            scroll_.reveal(top, r.y + r.h, in.h, 6.0f, content_);
         highlight_.target(r);
         if (snap)
             highlight_.snap(r);
@@ -273,9 +277,10 @@ Event DetailList::handle(const InputFrame &input, Feedback &feedback)
             }
             return refuse(feedback, style, input, highlight_.refusal(), x);
         };
-        if (focus_ < 0)
+        // Up and down read the sheet by scrolling it where nothing (more)
+        // takes the focus: past the last action, the facts below it.
+        const auto read_on = [&]()
         {
-            // Nothing to focus: up and down read the sheet by scrolling it.
             if (input.nav != Direction::up && input.nav != Direction::down)
                 return leave();
             const float limit = std::max(content_ - inner().h, 0.0f);
@@ -286,13 +291,17 @@ Event DetailList::handle(const InputFrame &input, Feedback &feedback)
             if (std::fabs(wanted - scroll_.position.target) < 1.0f)
                 return leave();
             scroll_.position.target = wanted;
+            reading_ = focus_ >= 0;
             play_cue(feedback, style, style.sounds.move, x, 1.0f, 0.7f);
             return Event::moved;
-        }
+        };
+        if (focus_ < 0)
+            return read_on();
         const int next = neighbour(input.nav);
         if (next < 0)
-            return leave();
+            return read_on();
         focus_ = next;
+        reading_ = false;
         retarget(false);
         const float along =
             content_ > 0.0f ? rects_[static_cast<std::size_t>(focus_)].y / content_ : 0.0f;

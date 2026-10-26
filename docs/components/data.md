@@ -201,8 +201,10 @@ if (about.handle(input, feedback) == ui::Event::activated)
 
 The focus visits only the focusable pairs, by position: up and down in every
 layout, left and right too in the grid. A list with nothing focusable scrolls
-with up and down instead. Focusable pairs carry a small "two squares" mark
-that flashes when confirmed.
+with up and down instead, and so does one past its first or last focusable
+pair: down reads on through the pairs below the last action, and the view
+stays there until the focus moves. Focusable pairs carry a small "two
+squares" mark that flashes when confirmed.
 
 `DetailItem`: `label`, `value`, `header` (a section title), `focusable`,
 `numeric` (the value in the number face, one line), `color` (the value's
