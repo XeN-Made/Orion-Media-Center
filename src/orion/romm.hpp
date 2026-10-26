@@ -23,6 +23,9 @@ namespace hui::orion
 // the server's address and the client token pairing gave.
 inline constexpr const char *kRommUrl = "romm_url";
 inline constexpr const char *kRommToken = "romm_token";
+// A pairing code typed on the key page (orion/key_page.hpp), waiting for
+// ORION to exchange it; removed once it has.
+inline constexpr const char *kRommPairCode = "romm_pair_code";
 
 // A system on the server: its folder name there ("gba", "psx") is what
 // ORION knows it by (library::system_of_folder).

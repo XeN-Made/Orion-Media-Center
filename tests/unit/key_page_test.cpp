@@ -5,6 +5,7 @@
 #include "orion/key_page.hpp"
 
 #include "core/save_file.hpp"
+#include "orion/romm.hpp"
 #include "orion/steamgriddb.hpp"
 
 #include <gtest/gtest.h>
@@ -83,6 +84,38 @@ TEST(KeyPage, SavesTheKeyFromTheForm)
                   .rfind("HTTP/1.1 400", 0),
               0u);
     EXPECT_FALSE(saved);
+}
+
+// RomM from a phone: the address saved (made a base address), a code left
+// for ORION to pair with, a new server forgetting the old token.
+TEST(KeyPage, TakesRommsAddressAndPairingCode)
+{
+    const std::string dir = ::testing::TempDir() + "orion-key-page-romm";
+    ASSERT_TRUE(save::ensure_directory(dir));
+    std::remove((dir + "/keys.txt").c_str());
+    bool saved = false;
+    std::string page = orion::answer_key_request(
+        "POST /romm HTTP/1.1\r\n\r\nromm_url=192.168.4.115&romm_code=AB12CD", dir, &saved);
+    EXPECT_TRUE(saved);
+    EXPECT_NE(page.find("pairing now"), std::string::npos);
+    EXPECT_EQ(orion::read_service_key(dir, orion::kRommUrl), "http://192.168.4.115");
+    EXPECT_EQ(orion::read_service_key(dir, orion::kRommPairCode), "AB12CD");
+    EXPECT_NE(orion::answer_key_request("GET / HTTP/1.1\r\n\r\n", dir, &saved)
+                  .find("http://192.168.4.115, not paired yet."),
+              std::string::npos);
+
+    ASSERT_TRUE(orion::write_service_key(dir, orion::kRommToken, "rmm_token").empty());
+    orion::answer_key_request("POST /romm HTTP/1.1\r\n\r\nromm_url=https%3A%2F%2Fgames.example.com",
+                              dir, &saved);
+    EXPECT_EQ(orion::read_service_key(dir, orion::kRommUrl), "https://games.example.com");
+    EXPECT_EQ(orion::read_service_key(dir, orion::kRommToken), ""); // another server
+
+    page = orion::answer_key_request("POST /romm HTTP/1.1\r\n\r\nromm_url=not%20an%20address", dir,
+                                     &saved);
+    EXPECT_NE(page.find("not an address"), std::string::npos);
+    EXPECT_EQ(orion::answer_key_request("POST /romm HTTP/1.1\r\n\r\nromm_url=", dir, &saved)
+                  .rfind("HTTP/1.1 400", 0),
+              0u);
 }
 
 int connect_to(int port)

@@ -1024,14 +1024,33 @@ class Library final : public app::Concept
         follow_romm(feedback);
         if (key_page_.take_saved())
         {
-            grid_key_ = orion::read_service_key(context_.library.state_dir, orion::kSteamGridDb);
-            settings_.set_grid_key(!grid_key_.empty());
-            if (settings_.is_open())
-                settings_.refresh(look_, prefs_);
-            arm_grid();
-            show_note(true, grid_key_.empty() ? tr("SteamGridDB key removed")
-                                              : tr("SteamGridDB key saved"));
-            feedback.play(audio::Cue::saved);
+            // Either form: the SteamGridDB key, or RomM's address and a code
+            // to pair with (exchanged here, where the network calls are).
+            const std::string &state = context_.library.state_dir;
+            const std::string key = orion::read_service_key(state, orion::kSteamGridDb);
+            const std::string code = orion::read_service_key(state, orion::kRommPairCode);
+            show_romm_state();
+            if (key != grid_key_)
+            {
+                grid_key_ = key;
+                settings_.set_grid_key(!grid_key_.empty());
+                if (settings_.is_open())
+                    settings_.refresh(look_, prefs_);
+                arm_grid();
+                show_note(true, grid_key_.empty() ? tr("SteamGridDB key removed")
+                                                  : tr("SteamGridDB key saved"));
+                feedback.play(audio::Cue::saved);
+            }
+            else if (!code.empty())
+            {
+                orion::write_service_key(state, orion::kRommPairCode, "");
+                pair_romm(code, feedback);
+            }
+            else
+            {
+                show_note(true, trf("RomM server: {0}. Now pair with it", {romm_base()}));
+                feedback.play(audio::Cue::saved);
+            }
         }
         last_dt_ = dt;
         follow_preview();

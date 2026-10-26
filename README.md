@@ -293,6 +293,23 @@ PSwanStation or RetroArch; Switch games in ProsperoEden or PS5-ECAM; Wii U and
 3DS games straight in PS5-ECAM; Xbox 360 games straight in PS5X360; every other system in RetroArch with the core
 you chose for it.
 
+### Games on a RomM server
+
+ORION lists the games on your [RomM](https://romm.app) server (5.0 or later)
+on their systems' tabs, with RomM's covers, and downloads a game the first
+time you play it (to `/data/orion/romm/games`). They play in RetroArch.
+
+1. Settings, Emulators, **RomM server**: its address, like `192.168.4.115` or
+   `https://games.example.com`. Plain `http` is used only for an address on your
+   own network.
+2. In RomM's web page: your profile, **Client tokens**, make a token, **Pair**.
+   It shows a short code.
+3. Settings, Emulators, **Pair with RomM**: type the code. ORION syncs the games
+   by itself, then each time it opens; **Sync RomM games** asks again.
+
+Steps 1 and 3 can also be done on a phone or PC at `http://<console IP>:9062`
+while ORION is open.
+
 ## Box art and music
 
 - Box art downloads as the covers scroll into view and is kept in

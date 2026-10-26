@@ -4,6 +4,7 @@
 
 #include "orion/key_page.hpp"
 
+#include "orion/romm.hpp"
 #include "orion/steamgriddb.hpp"
 
 #include <algorithm>
@@ -38,7 +39,43 @@ std::string response(std::string_view status, std::string_view body)
 }
 
 // The form; `note` says what just happened (empty: nothing yet).
-std::string page(bool has_key, std::string_view note, bool good)
+// What the page shows of ORION's settings: never a key itself.
+struct Shown
+{
+    bool grid_key = false;
+    std::string romm; // the RomM address, or empty
+    bool paired = false;
+};
+
+Shown shown(const std::string &state_dir)
+{
+    Shown out;
+    out.grid_key = !read_service_key(state_dir, kSteamGridDb).empty();
+    out.romm = romm_base(read_service_key(state_dir, kRommUrl));
+    out.paired = !read_service_key(state_dir, kRommToken).empty();
+    return out;
+}
+
+std::string escaped(std::string_view text)
+{
+    std::string out;
+    for (const char c : text)
+    {
+        if (c == '<')
+            out += "&lt;";
+        else if (c == '>')
+            out += "&gt;";
+        else if (c == '&')
+            out += "&amp;";
+        else if (c == '"')
+            out += "&quot;";
+        else
+            out += c;
+    }
+    return out;
+}
+
+std::string page(const Shown &now, std::string_view note, bool good)
 {
     std::string html =
         "<!doctype html><html><head><meta charset=\"utf-8\">"
@@ -59,11 +96,23 @@ std::string page(bool has_key, std::string_view note, bool good)
     if (!note.empty())
         html += std::string("<div class=\"note ") + (good ? "good" : "bad") + "\">" +
                 std::string(note) + "</div>";
-    html += std::string("<p>Now: ") + (has_key ? "a key is set." : "no key yet.") + "</p>";
+    html += std::string("<p>Now: ") + (now.grid_key ? "a key is set." : "no key yet.") + "</p>";
     html += "<form method=\"post\" action=\"/key\"><input name=\"steamgriddb\" "
             "autocomplete=\"off\" autocapitalize=\"off\" spellcheck=\"false\" "
             "placeholder=\"Paste the key here; empty removes it\"><button>Save</button>"
-            "</form></main></body></html>";
+            "</form>";
+    html +=
+        "<h1 style=\"margin-top:2rem\">RomM</h1><p>Your RomM server, and the code RomM "
+        "shows to pair a device (your profile, Client tokens, a new token, Pair). Its games "
+        "then show on their systems' tabs.</p><p>Now: " +
+        (now.romm.empty() ? std::string("no server.")
+                          : escaped(now.romm) + (now.paired ? ", paired." : ", not paired yet.")) +
+        "</p><form method=\"post\" action=\"/romm\"><input name=\"romm_url\" "
+        "autocomplete=\"off\" autocapitalize=\"off\" spellcheck=\"false\" "
+        "placeholder=\"Address, like 192.168.4.115 (empty keeps it)\">"
+        "<input name=\"romm_code\" style=\"margin-top:.6rem\" autocomplete=\"off\" "
+        "autocapitalize=\"characters\" spellcheck=\"false\" placeholder=\"Pairing code\">"
+        "<button>Save and pair</button></form></main></body></html>";
     return html;
 }
 
@@ -131,28 +180,66 @@ std::string answer_key_request(std::string_view request, const std::string &stat
     // Nothing asked (a connection the browser opened and closed): nothing said.
     if (request.empty())
         return {};
-    const bool has_key = !read_service_key(state_dir, kSteamGridDb).empty();
     const std::size_t line_end = request.find("\r\n");
     const std::string_view line = request.substr(0, line_end);
     if (line.rfind("GET ", 0) == 0)
-        return line.rfind("GET / ", 0) == 0 || line.rfind("GET /key ", 0) == 0
-                   ? response("200 OK", page(has_key, "", true))
+        return line.rfind("GET / ", 0) == 0 || line.rfind("GET /key ", 0) == 0 ||
+                       line.rfind("GET /romm ", 0) == 0
+                   ? response("200 OK", page(shown(state_dir), "", true))
                    : response("404 Not Found", "<p>Not here: try the address alone.</p>");
-    if (line.rfind("POST /key ", 0) != 0)
+    const bool grid = line.rfind("POST /key ", 0) == 0;
+    const bool romm = line.rfind("POST /romm ", 0) == 0;
+    if (!grid && !romm)
         return response("405 Method Not Allowed", "<p>Only the form is taken.</p>");
     const std::size_t head_end = request.find("\r\n\r\n");
+    const std::string_view body =
+        head_end == std::string_view::npos ? std::string_view() : request.substr(head_end + 4);
+    if (romm)
+    {
+        std::string address;
+        std::string code;
+        const bool has_address = form_value(body, "romm_url", &address) && !address.empty();
+        const bool has_code = form_value(body, "romm_code", &code) && !code.empty();
+        if (!has_address && !has_code)
+            return response("400 Bad Request", page(shown(state_dir), "Nothing was sent.", false));
+        if (has_address)
+        {
+            const std::string base = romm_base(address);
+            if (base.empty())
+                return response("200 OK",
+                                page(shown(state_dir),
+                                     "That is not an address RomM can be reached at.", false));
+            // Another server: the old one's token means nothing there.
+            if (base != romm_base(read_service_key(state_dir, kRommUrl)))
+                write_service_key(state_dir, kRommToken, "");
+            const std::string failed = write_service_key(state_dir, kRommUrl, base);
+            if (!failed.empty())
+                return response("200 OK",
+                                page(shown(state_dir), "Could not save it: " + failed, false));
+        }
+        // The code is exchanged by ORION itself (it has the network calls):
+        // it waits here for it, once.
+        if (has_code)
+            write_service_key(state_dir, kRommPairCode, code);
+        *saved = true;
+        return response(
+            "200 OK",
+            page(shown(state_dir),
+                 has_code ? "Saved. ORION is pairing now: watch the console." : "Saved.", true));
+    }
     std::string key;
-    if (head_end == std::string_view::npos ||
-        !form_value(request.substr(head_end + 4), "steamgriddb", &key))
-        return response("400 Bad Request", page(has_key, "Nothing was sent.", false));
+    if (!form_value(body, "steamgriddb", &key))
+        return response("400 Bad Request", page(shown(state_dir), "Nothing was sent.", false));
     const std::string failed = write_service_key(state_dir, kSteamGridDb, key);
     if (!failed.empty())
-        return response("200 OK", page(has_key, "Could not save the key: " + failed, false));
+        return response("200 OK",
+                        page(shown(state_dir), "Could not save the key: " + failed, false));
     *saved = true;
-    const bool now = !read_service_key(state_dir, kSteamGridDb).empty();
-    return response(
-        "200 OK",
-        page(now, now ? "Saved. ORION uses it from now on." : "The key is removed.", true));
+    const Shown now = shown(state_dir);
+    return response("200 OK",
+                    page(now,
+                         now.grid_key ? "Saved. ORION uses it from now on." : "The key is removed.",
+                         true));
 }
 
 std::string local_address()
