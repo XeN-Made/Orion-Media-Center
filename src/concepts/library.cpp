@@ -704,8 +704,7 @@ class Library final : public app::Concept
         take_new_title_id();
         if (!own_title_id().empty())
             settings_.set_title_id(own_title_id());
-        settings_.set_grid_key(
-            !orion::read_service_key(context_.library.state_dir, orion::kSteamGridDb).empty());
+        settings_.set_grid_key(!grid_key().empty());
         rebuild_tabs(start);
         restyle();
         rebuild();
@@ -2084,8 +2083,7 @@ class Library final : public app::Concept
             art_folder_changed();
             break;
         case orion::SettingsPanel::Change::type_grid_key:
-            start_typing(Typing::grid_key,
-                         orion::read_service_key(context_.library.state_dir, orion::kSteamGridDb));
+            start_typing(Typing::grid_key, grid_key());
             feedback.play(audio::Cue::modal_open);
             break;
         case orion::SettingsPanel::Change::type_art_folder:
@@ -2250,8 +2248,8 @@ class Library final : public app::Concept
         {
             const std::string failed =
                 orion::write_service_key(context_.library.state_dir, orion::kSteamGridDb, name_);
-            const bool given =
-                !orion::read_service_key(context_.library.state_dir, orion::kSteamGridDb).empty();
+            grid_key_ = orion::read_service_key(context_.library.state_dir, orion::kSteamGridDb);
+            const bool given = !grid_key_.empty();
             settings_.set_grid_key(given);
             settings_.refresh(look_, prefs_);
             if (!failed.empty())
@@ -2351,16 +2349,14 @@ class Library final : public app::Concept
     void find_other_art(app::Feedback &feedback)
     {
         const Title *title = find_title(menu_title_);
-        const std::string key =
-            orion::read_service_key(context_.library.state_dir, orion::kSteamGridDb);
         std::string why;
         if (title == nullptr)
             return;
         if (!sys::on_console())
             why = tr("Pictures are downloaded on the console");
-        else if (key.empty())
+        else if (grid_key().empty())
             why = tr("Add your SteamGridDB key first: Settings, Box art");
-        else if (picker_.busy() || !preview_id_.empty())
+        else if (!preview_id_.empty())
             why = tr("Still looking: try again in a moment");
         if (!why.empty())
         {
@@ -2368,15 +2364,28 @@ class Library final : public app::Concept
             feedback.play(audio::Cue::error);
             return;
         }
-        const std::string name = title->own_name.empty() ? title->name : title->own_name;
         preview_id_ = title->id;
         preview_name_ = title->name;
+        preview_query_ = title->own_name.empty() ? title->name : title->own_name;
         preview_was_ = title->icon;
         preview_files_.clear();
         preview_index_ = 0;
-        picker_.search(key, name, context_.library.state_dir + "/art/picks", title->id);
+        // A search put back with Circle may still be ending its download:
+        // this one starts as soon as it has (poll_preview).
+        preview_asked_ = picker_.search(grid_key_, preview_query_,
+                                        context_.library.state_dir + "/art/picks", title->id);
         show_note(true, trf("Looking on SteamGridDB for {0}…", {title->name}));
         feedback.play(audio::Cue::select);
+    }
+
+    // The player's SteamGridDB key, as keys.txt last gave it.
+    std::string grid_key()
+    {
+        const std::string read =
+            orion::read_service_key(context_.library.state_dir, orion::kSteamGridDb);
+        if (!read.empty())
+            grid_key_ = read;
+        return grid_key_;
     }
 
     // The covers as they arrive; the first one shows on the tile at once.
@@ -2384,6 +2393,14 @@ class Library final : public app::Concept
     {
         if (preview_id_.empty())
             return;
+        if (!preview_asked_)
+        {
+            if (!picker_.busy())
+                preview_asked_ =
+                    picker_.search(grid_key_, preview_query_,
+                                   context_.library.state_dir + "/art/picks", preview_id_);
+            return;
+        }
         for (auto &[index, path] : picker_.take_ready())
         {
             (void)index;
@@ -2481,6 +2498,7 @@ class Library final : public app::Concept
         if (input.is_pressed(Action::back))
         {
             context_.new_icons.emplace_back(preview_id_, preview_was_);
+            picker_.cancel();
             end_preview();
             feedback.play(audio::Cue::back);
         }
@@ -2490,6 +2508,7 @@ class Library final : public app::Concept
     {
         preview_id_.clear();
         preview_files_.clear();
+        preview_asked_ = false;
         keeping_ = false;
         launch_shown_ = std::min(launch_shown_, 4.0f);
     }
@@ -2497,8 +2516,7 @@ class Library final : public app::Concept
     // SteamGridDB for the box art downloader: the player's key, as it is now.
     void arm_grid()
     {
-        art_.set_grid_source(
-            orion::read_service_key(context_.library.state_dir, orion::kSteamGridDb), grid_http());
+        art_.set_grid_source(grid_key(), grid_http());
     }
 
     static orion::HttpGetWith grid_http()
@@ -6085,7 +6103,10 @@ class Library final : public app::Concept
     orion::GridPicker picker_{grid_http()};
     std::string preview_id_;
     std::string preview_name_;
+    std::string preview_query_; // the name searched for
     std::string preview_was_;
+    bool preview_asked_ = false; // false: waiting for the picker to be free
+    std::string grid_key_;       // keys.txt's, as last read
     std::vector<std::string> preview_files_;
     int preview_index_ = 0;
     bool keeping_ = false;

@@ -263,6 +263,7 @@ bool GridPicker::search(std::string key, std::string name, std::string folder, s
         kept_.clear();
         finished_ = false;
     }
+    cancelled_ = false;
     begin(
         [this, key = std::move(key), name = std::move(name), folder = std::move(folder),
          id = std::move(id)]
@@ -277,7 +278,7 @@ bool GridPicker::search(std::string key, std::string name, std::string folder, s
                     error_ = error;
             }
             save::ensure_directory(folder);
-            for (std::size_t i = 0; i < covers.size(); ++i)
+            for (std::size_t i = 0; i < covers.size() && !cancelled_.load(); ++i)
             {
                 std::string bytes;
                 if (!get_(covers[i].thumb, {}, kMaxPicture, &bytes, &error) || !is_picture(bytes))
@@ -305,6 +306,7 @@ bool GridPicker::keep(std::size_t index, std::string target_stem)
         kept_.clear();
         finished_ = false;
     }
+    cancelled_ = false;
     begin(
         [this, cover = std::move(cover), target_stem = std::move(target_stem)]
         {

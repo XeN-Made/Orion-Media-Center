@@ -92,6 +92,12 @@ class GridPicker
     {
         return running_.load();
     }
+    // Stops a search after the download under way: the player has gone on
+    // (each small copy can take a minute on a slow line).
+    void cancel()
+    {
+        cancelled_ = true;
+    }
     // Small copies written since the last call: (index, path).
     std::vector<std::pair<std::size_t, std::string>> take_ready();
     // The covers the search found (0 until it has an answer).
@@ -110,6 +116,7 @@ class GridPicker
     HttpGetWith get_;
     std::thread worker_;
     std::atomic<bool> running_{false};
+    std::atomic<bool> cancelled_{false};
     mutable std::mutex mutex_;
     std::vector<GridCover> covers_;
     std::vector<std::pair<std::size_t, std::string>> ready_;
