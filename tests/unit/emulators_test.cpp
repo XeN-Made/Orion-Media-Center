@@ -331,11 +331,12 @@ TEST(Emulators, ReadsThePlayersOwnRomFolders)
         std::ofstream(file) << "x";
     };
     touch(drive / "roms/gba/Lunar Lift (USA).gba");
-    touch(drive / "roms/gba/notes.txt"); // no core takes .txt
+    touch(drive / "roms/gba/notes.txt");             // no core takes .txt
+    touch(drive / "roms/gba/Zipped Zone (USA).zip"); // RetroArch unpacks it for mGBA
     touch(drive / "roms/nds/Paper Moon (Europe).nds");
     touch(drive / "roms/unknown-system/whatever.bin"); // not a system: ignored
-    EXPECT_EQ(library::scan_rom_folder(emulator, (drive / "roms").string(), "", &roms), 2);
-    ASSERT_EQ(roms.size(), content + 2);
+    EXPECT_EQ(library::scan_rom_folder(emulator, (drive / "roms").string(), "", &roms), 3);
+    ASSERT_EQ(roms.size(), content + 3);
     const library::Title &lunar = roms[content];
     EXPECT_EQ(lunar.name, "Lunar Lift");
     EXPECT_EQ(lunar.system, "Nintendo - Game Boy Advance");
@@ -345,8 +346,9 @@ TEST(Emulators, ReadsThePlayersOwnRomFolders)
     for (const library::System &system : emulator.systems)
     {
         if (system.short_name == "GBA")
-            EXPECT_EQ(system.games, 3);
+            EXPECT_EQ(system.games, 4);
     }
+    EXPECT_EQ(roms[content + 1].name, "Zipped Zone");
 
     // The same folder again adds nothing; a single system's folder by its
     // short name works too, and a system can be named outright.
@@ -701,6 +703,11 @@ TEST(Emulators, ListsPSwanStationAndProsperoEdenGames)
     const fs::path switch_games = root / "switch";
     write_file(switch_games / "Moon Garden [0100AAAA00000000][v0][US].xci", "xci");
     write_file(switch_games / "readme.txt", "no");
+    // Its update and add-ons are installed, not played (by ID, by tag, by folder).
+    write_file(switch_games / "Moon Garden [0100AAAA00000800][v65536].nsp", "nsp");
+    write_file(switch_games / "Moon Garden Seeds [0100AAAA00001001][v0].nsp", "nsp");
+    write_file(switch_games / "Moon Garden [DLC] Night Pack.nsp", "nsp");
+    write_file(switch_games / "dlc/Moon Garden Extra [0100AAAA00000000].nsp", "nsp");
     const fs::path eden_data = root / "prosperoeden";
     write_file(eden_data / "covers/0a1b2c3d.name", "Moon Garden");
     write_file(eden_data / "covers/0a1b2c3d.tga", "tga");

@@ -408,10 +408,12 @@ static int add_system_folder(Emulator &emulator, const std::string &name, const 
             system.games + static_cast<int>(found.size()) >= static_cast<int>(kMaxRomsPerSystem))
             continue;
         // With a core for the system, only what a core takes is a game;
-        // without one, every file is listed (the core may come later).
+        // without one, every file is listed (the core may come later). A
+        // zipped game is every core's: RetroArch unpacks it for a core that
+        // does not open archives itself.
         const std::string ext = extension_of(entry.name);
         const bool taken =
-            system.cores.empty() ||
+            system.cores.empty() || ext == "zip" || ext == "7z" ||
             std::any_of(emulator.cores.begin(), emulator.cores.end(),
                         [&](const Core &core)
                         {
@@ -731,6 +733,44 @@ bool eden_takes(const std::string &ext)
     return ext == "xci" || ext == "nsp" || ext == "nro";
 }
 
+// A Switch update or add-on kept beside the games (it is installed into the
+// emulator, not played). Dumps name them by their 16-digit title ID, which
+// ends in 000 only for a game itself ([0100ABCD12345800] is its update), or
+// by a tag.
+bool switch_add_on(std::string_view file)
+{
+    const std::string name = lower(file);
+    for (const char *tag :
+         {"[dlc", "(dlc", "[upd", "(upd", "[update", "(update", "[addon", "[add-on", "[patch"})
+    {
+        if (name.find(tag) != std::string::npos)
+            return true;
+    }
+    for (std::size_t at = name.find('['); at != std::string::npos; at = name.find('[', at + 1))
+    {
+        if (at + 17 >= name.size() || name[at + 17] != ']')
+            continue;
+        const std::string_view id = std::string_view(name).substr(at + 1, 16);
+        if (std::all_of(id.begin(), id.end(),
+                        [](char c) { return std::isxdigit(static_cast<unsigned char>(c)) != 0; }))
+            return id.substr(13) != "000";
+    }
+    return false;
+}
+
+// A folder of Switch updates or add-ons, by its name.
+bool switch_add_on_folder(std::string_view folder)
+{
+    const std::string name = lower(folder);
+    for (const char *known : {"dlc", "dlcs", "update", "updates", "upd", "patches", "addons",
+                              "add-ons", "nand", "keys", "cache", "config", "covers", "shaders"})
+    {
+        if (name == known)
+            return true;
+    }
+    return false;
+}
+
 // An Xbox 360 executable's header is a few kilobytes; its execution info is
 // in the first 64.
 constexpr std::size_t kXexHead = 64u << 10;
@@ -975,7 +1015,8 @@ int add_file_folder(Emulator &emulator, std::size_t app_index, const std::string
     {
         const std::string ext = extension_of(entry.name);
         if (entry.directory || entry.name.front() == '.' ||
-            !(swan ? swan_takes(ext) && !later_disc(entry.name) : eden_takes(ext)))
+            !(swan ? swan_takes(ext) && !later_disc(entry.name)
+                   : eden_takes(ext) && !switch_add_on(entry.name)))
             continue;
         const std::string path = dir + "/" + entry.name;
         Title rom;
@@ -1152,7 +1193,8 @@ int add_app_tree(Emulator &emulator, std::size_t app_index, const std::string &p
     const std::vector<std::string> plays = known_systems(emulator, emulator.apps[app_index].key);
     for (const save::DirectoryEntry &entry : save::list_directory(path))
     {
-        if (!entry.directory || entry.name.front() == '.')
+        if (!entry.directory || entry.name.front() == '.' ||
+            (emulator.apps[app_index].key == "eden" && switch_add_on_folder(entry.name)))
             continue;
         std::string inner = system;
         const std::string named = system_of_folder(entry.name, emulator);
@@ -1181,8 +1223,13 @@ void add_eden_games(Emulator &emulator, std::size_t index, const std::string &da
     if (save::read_file(data + "/config/prosperoeden.json", &text, kMaxInfo) &&
         json::parse(text, &root) && root.is_object())
     {
-        const std::string files = root["game_files"].string_or("");
-        if (!files.empty())
+        std::string files = root["game_files"].string_or("");
+        while (files.size() > 1 && files.back() == '/')
+            files.pop_back();
+        // Its data folder as the game folder holds everything it keeps (its
+        // add-ons, its system files): only roms in it are games, and those
+        // are listed already.
+        if (!files.empty() && files != data && files != folders.front())
             folders.insert(folders.begin(), files);
     }
     for (const std::string &folder : folders)
