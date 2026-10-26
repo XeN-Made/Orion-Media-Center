@@ -574,7 +574,7 @@ void SettingsPanel::build_tabs(const LibraryPrefs &prefs)
     add.chevron = true;
     add.description = tr("A shelf of your own: move any game into it from its menu");
     form_.add_toggle(kGroupSystems, tr("Group emulator tabs"), prefs.group_systems).description =
-        tr("One Emulators tab, with a row for each system under it: L2 and R2 change system");
+        tr("One Emulators tab, with a row for each system that has games: L2 and R2 change system");
     for (std::size_t i = 0; i < tabs_.size(); ++i)
     {
         const TabEntry &tab = tabs_[i];

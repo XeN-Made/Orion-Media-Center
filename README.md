@@ -44,7 +44,8 @@ most played.
 
 **Yours to arrange**
 - Tabs: All, Games, Homebrew, Media, Favourites, one Emulators tab with a
-  row per system (or a tab per system), and tabs of your own.
+  row per system (or a tab per system), and tabs of your own. A system gets
+  its row once ORION finds a game for it.
 - Favourites, Continue playing (what you played last, over the All tab),
   hidden titles, search.
 - Play time for every game, and when you last played it.
@@ -248,7 +249,7 @@ PS5SX2, PSwanStation, ProsperoEden, PS5-ECAM and PS5X360 and the games they
 can see:
 
 - **RetroArch**: games in its own `content/<system>/` folders and every game in
-  its playlists, wherever the files are.
+  its playlists, wherever the files are. Zipped games (`.zip`, `.7z`) count.
 - **Porpoise**: GameCube and Wii discs in its `porpoise/games` folder,
   `/data/porpoise/games`, `/data/games`, `/data/roms` and `/data/iso`.
 - **PS5SX2**: PS2 discs (`.iso`, `.chd`, `.cso`, `.zso`) in `/data/PCSX2/games`,
@@ -259,6 +260,8 @@ can see:
   several discs shows once. Its covers are used.
 - **ProsperoEden**: Switch games (`.xci`, `.nsp`, `.nro`) in the game folder
   set in its settings and in `/data/prosperoeden/roms`. Its covers are used.
+  Updates and add-ons beside them (a title ID not ending in `000`, `[DLC]` or
+  `[UPD]` in the name, a `dlc` or `updates` folder) are left out.
 - **PS5-ECAM**: every game in its own library (Wii U, 3DS, DS and Switch), and
   the games folders set in its Settings: Wii U games as `.wua`, `.wud`, `.wux`,
   `.rpx` or a folder of NUS files (`title.tmd`), 3DS as `.3ds`, `.cci`, `.cia`,
