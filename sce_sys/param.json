@@ -15,7 +15,7 @@
   "conceptId": "99062",
   "contentBadgeType": 1,
   "contentId": "UP9000-PPSA99062_00-ORIONMEDIACENTER",
-  "contentVersion": "01.104.000",
+  "contentVersion": "01.105.000",
   "downloadDataSize": 256,
   "kernel": {
     "cpuPageTableSize": 268435456,
