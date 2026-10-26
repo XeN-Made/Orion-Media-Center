@@ -201,7 +201,7 @@ struct Library
 enum class Shelf : std::uint8_t
 {
     games,    // retail titles in the Games area
-    homebrew, // DRM-free apps in the Games area
+    homebrew, // DRM-free apps in the Games area, and titles with no retail ID
     media,    // anything in the Media area
 };
 Shelf shelf_of(const Title &title);

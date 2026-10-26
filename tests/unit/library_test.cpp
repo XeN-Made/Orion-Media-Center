@@ -198,6 +198,13 @@ TEST(Library, ShelvesFollowTheMetadata)
     EXPECT_EQ(shelf("PPSA90102"), library::Shelf::media); // the Media area wins
     EXPECT_EQ(shelf("CUSA90106"), library::Shelf::games); // PS4 titles are games
     EXPECT_EQ(shelf("PPSA90104"), library::Shelf::games); // so are images
+    // A payload's tile with no DRM type and no retail ID is homebrew.
+    Title tool;
+    tool.id = "PSUP00001";
+    tool.category = library::Category::app;
+    EXPECT_EQ(library::shelf_of(tool), library::Shelf::homebrew);
+    tool.category = library::Category::media;
+    EXPECT_EQ(library::shelf_of(tool), library::Shelf::media); // the Media area still wins
     EXPECT_FALSE(find(titles, "PPSA90101")->homebrew);
     EXPECT_TRUE(find(titles, "PPSA90108")->homebrew);
     for (const Title &title : titles)
