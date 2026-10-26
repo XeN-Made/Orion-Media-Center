@@ -61,11 +61,13 @@ TEST(ArtMatch, ReadsAnIndexPageAndEncodesUrls)
     EXPECT_EQ(library::url_encode("A&B (USA).png"), "A%26B%20%28USA%29.png");
 }
 
-// A server that answers from a map, counting what it was asked.
+// A server that answers from a map, counting what it was asked; offline,
+// nothing reaches it.
 struct FakeServer
 {
     std::map<std::string, std::string> pages;
     std::vector<std::string> asked;
+    bool offline = false;
 
     orion::HttpGet get()
     {
@@ -73,6 +75,11 @@ struct FakeServer
             [this](const std::string &url, std::size_t limit, std::string *body, std::string *error)
         {
             asked.push_back(url);
+            if (offline)
+            {
+                *error = "Could not connect to server";
+                return false;
+            }
             const auto page = pages.find(url);
             if (page == pages.end())
             {
@@ -187,7 +194,8 @@ TEST(ArtFetcher, AsksSteamGridDbForWhatTheOthersLack)
 TEST(ArtFetcher, StopsAskingWhenTheNetworkIsGone)
 {
     const std::string dir = ::testing::TempDir() + "hui-art-offline";
-    FakeServer server; // knows nothing: every request fails
+    FakeServer server;
+    server.offline = true; // every request fails
     orion::ArtFetcher art(server.get());
     std::vector<orion::ArtJob> jobs;
     const char *systems[] = {"A - One", "B - Two", "C - Three", "D - Four", "E - Five"};
@@ -201,9 +209,33 @@ TEST(ArtFetcher, StopsAskingWhenTheNetworkIsGone)
     art.wait();
     const orion::ArtFetcher::Progress done = art.progress();
     EXPECT_EQ(done.failed, 5);
-    EXPECT_EQ(done.error, "HTTP 404");
+    EXPECT_EQ(done.error, "Could not connect to server");
     EXPECT_EQ(server.asked.size(), 3u);      // then it gives up
     EXPECT_TRUE(art.take_missing().empty()); // failures are worth another try
+}
+
+// A system libretro keeps no covers for answers 404: no picture there, not a
+// failure (the network works), and SteamGridDB is asked instead.
+TEST(ArtFetcher, TakesAMissingIndexAsNoPictures)
+{
+    const std::string dir = ::testing::TempDir() + "hui-art-no-index";
+    FakeServer server; // knows no page: every one is a 404
+    orion::ArtFetcher art(server.get());
+    std::vector<orion::ArtJob> jobs;
+    const char *systems[] = {"A - One", "B - Two", "C - Three", "D - Four", "E - Five"};
+    for (const char *system : systems)
+    {
+        orion::ArtJob next = job("rom-00000000000b", "Game (USA).bin", dir);
+        next.system = system;
+        jobs.push_back(next);
+    }
+    ASSERT_TRUE(art.start(std::move(jobs), ""));
+    art.wait();
+    const orion::ArtFetcher::Progress done = art.progress();
+    EXPECT_EQ(done.failed, 0);
+    EXPECT_EQ(done.missing, 5);
+    EXPECT_TRUE(done.error.empty());
+    EXPECT_EQ(server.asked.size(), 5u); // each system's index, none given up on
 }
 
 // GameTDB: covers by a game's ID, its region first; Switch games by name,

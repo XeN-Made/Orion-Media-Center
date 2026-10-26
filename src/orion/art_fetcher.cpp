@@ -66,6 +66,13 @@ constexpr const char *kXbox360 = "Microsoft - Xbox 360";
 constexpr const char *kSwitchList = "https://www.gametdb.com/switchtdb.zip?LANG=EN";
 constexpr std::size_t kMaxSwitchIndex = 4u << 20;
 
+// The server answered that it has no such page (404, 403...): the network
+// works, the source has nothing there.
+bool not_there(const std::string &error)
+{
+    return error.rfind("HTTP 4", 0) == 0;
+}
+
 } // namespace
 
 std::string pick_xboxunity_cover(std::string_view json)
@@ -389,6 +396,13 @@ void ArtFetcher::run(std::vector<ArtJob> jobs, std::string log_path)
                 indexes[job.system] = library::parse_art_index(page);
                 failures_in_a_row = 0;
             }
+            else if (not_there(error))
+            {
+                // libretro keeps no covers for this system: an empty index.
+                append_line(log_path, job.system + ": libretro has no covers (" + error + ")");
+                indexes[job.system] = {};
+                failures_in_a_row = 0;
+            }
             else
             {
                 index_errors[job.system] = error.empty() ? std::string("no index") : error;
@@ -411,6 +425,13 @@ void ArtFetcher::run(std::vector<ArtJob> jobs, std::string log_path)
         std::string error;
         if (!get_(folder + library::url_encode(picture), kMaxPicture, &bytes, &error))
         {
+            if (not_there(error))
+            {
+                failures_in_a_row = 0;
+                if (!from_grid(job))
+                    settle(job, &Progress::missing, picture + ": " + error, "");
+                continue;
+            }
             ++failures_in_a_row;
             settle(job, &Progress::failed, picture + ": " + error, error);
             continue;
