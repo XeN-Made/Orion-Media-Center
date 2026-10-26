@@ -776,8 +776,13 @@ void SettingsPanel::build_art(const LibraryPrefs &prefs)
     form_.add_action(kArtNow, tr("Find box art now")).description = art_status_;
     ui::FormRow &grid = form_.add_action(kGridKey, tr("SteamGridDB key"));
     grid.text = grid_key_ ? tr("Set") : tr("Not set");
-    grid.description = tr("Free at steamgriddb.com: your profile, Preferences, API. Or a line in "
-                          "/data/orion/keys.txt");
+    grid.description =
+        key_page_.empty()
+            ? tr("Free at steamgriddb.com: your profile, Preferences, API. Or a line in "
+                 "/data/orion/keys.txt")
+            : trf("Free at steamgriddb.com: your profile, Preferences, API. Or paste it on a "
+                  "phone or PC at {0}",
+                  {key_page_});
     form_.add_value(kStateInfo, tr("Box art folder"), art_folder(prefs, state_dir_)).description =
         tr("Chosen under Storage");
 }

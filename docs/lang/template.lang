@@ -384,6 +384,7 @@ author =
 "Folders" = ""
 "For games with no picture of their own: their cover, blurred. Off keeps the sky for them" = ""
 "Free at steamgriddb.com: your profile, Preferences, API. Or a line in /data/orion/keys.txt" = ""
+"Free at steamgriddb.com: your profile, Preferences, API. Or paste it on a phone or PC at {0}" = ""
 "Game background copies" = ""
 "Game backgrounds" = ""
 "Game folders" = ""

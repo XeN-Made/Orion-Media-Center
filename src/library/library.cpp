@@ -668,8 +668,8 @@ Shelf shelf_of(const Title &title)
     // Retail titles are PPSA (PS5) or CUSA (PS4). Tools a payload installs
     // as a tile (PSUP00001, PLDM00001, WKAL00001...) often declare no DRM
     // type at all, so their ID is what tells them from games.
-    const bool retail_id = !is_title_id(title.id) || title.id.rfind("PPSA", 0) == 0 ||
-                           title.id.rfind("CUSA", 0) == 0;
+    const bool retail_id =
+        !is_title_id(title.id) || title.id.rfind("PPSA", 0) == 0 || title.id.rfind("CUSA", 0) == 0;
     return title.homebrew || !retail_id ? Shelf::homebrew : Shelf::games;
 }
 

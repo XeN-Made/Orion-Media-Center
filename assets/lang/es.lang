@@ -574,3 +574,4 @@ author = ORION
 "Programs are sent on the console" = "Los programas se envían en la consola"
 "{0} is not an ELF program ORION can read" = "{0} no es un programa ELF que ORION pueda leer"
 "{0} is sent to the ELF loader" = "{0} se ha enviado al cargador ELF"
+"Free at steamgriddb.com: your profile, Preferences, API. Or paste it on a phone or PC at {0}" = "Gratis en steamgriddb.com: tu perfil, Preferences, API. O pégala desde un móvil o PC en {0}"

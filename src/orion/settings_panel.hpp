@@ -137,6 +137,12 @@ class SettingsPanel
     {
         grid_key_ = given;
     }
+    // Where the key page answers ("http://192.168.4.41:9062"), or empty
+    // while it does not (orion/key_page.hpp).
+    void set_key_page(std::string address)
+    {
+        key_page_ = std::move(address);
+    }
     // ORION's folder as the launch helper sees it, and what its backdrops
     // folder holds (shown under Storage).
     void set_storage(std::string self_path, int backdrops)
@@ -326,6 +332,7 @@ class SettingsPanel
     std::string scan_status_;
     bool grid_key_ =
         false; // a SteamGridDB key is in keys.txt // empty until a scan reports: what a scan finds
+    std::string key_page_; // the key page address, or empty
     std::string update_status_ = "Not checked yet";
     std::string update_ready_;
     std::string version_;

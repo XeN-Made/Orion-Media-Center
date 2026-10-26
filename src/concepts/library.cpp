@@ -25,6 +25,7 @@
 #include "orion/backdrop_copies.hpp"
 #include "orion/languages.hpp"
 #include "orion/registered_titles.hpp"
+#include "orion/key_page.hpp"
 #include "orion/steamgriddb.hpp"
 #include "orion/wide_copies.hpp"
 #include "orion/look.hpp"
@@ -711,6 +712,15 @@ class Library final : public app::Concept
         if (!own_title_id().empty())
             settings_.set_title_id(own_title_id());
         settings_.set_grid_key(!grid_key().empty());
+        // The key page: the SteamGridDB key typed on a phone or PC.
+        if (sys::on_console() && !data_missing_ && !context_.library.state_dir.empty() &&
+            key_page_.start(context_.library.state_dir))
+        {
+            const std::string address = orion::local_address();
+            if (!address.empty())
+                settings_.set_key_page("http://" + address + ":" +
+                                       std::to_string(orion::kKeyPagePort));
+        }
         rebuild_tabs(start);
         restyle();
         rebuild();
@@ -1005,6 +1015,17 @@ class Library final : public app::Concept
         details_.update(dt);
         follow_drive_space();
         follow_system_play_time();
+        if (key_page_.take_saved())
+        {
+            grid_key_ = orion::read_service_key(context_.library.state_dir, orion::kSteamGridDb);
+            settings_.set_grid_key(!grid_key_.empty());
+            if (settings_.is_open())
+                settings_.refresh(look_, prefs_);
+            arm_grid();
+            show_note(true, grid_key_.empty() ? tr("SteamGridDB key removed")
+                                              : tr("SteamGridDB key saved"));
+            feedback.play(audio::Cue::saved);
+        }
         last_dt_ = dt;
         follow_preview();
         setup_.update(dt);
@@ -6283,6 +6304,7 @@ class Library final : public app::Concept
     std::string preview_was_;
     bool preview_asked_ = false; // false: waiting for the picker to be free
     std::string grid_key_;       // keys.txt's, as last read
+    orion::KeyPage key_page_;    // the key typed on a phone or PC (http://<console>:9062)
     std::vector<std::string> preview_files_;
     int preview_index_ = 0;
     bool keeping_ = false;

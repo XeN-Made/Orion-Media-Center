@@ -569,3 +569,4 @@ author = ORION
 "Programs are sent on the console" = "A programokat a konzolon küldi el"
 "{0} is not an ELF program ORION can read" = "{0} nem olyan ELF program, amelyet az ORION be tud olvasni"
 "{0} is sent to the ELF loader" = "{0} elküldve az ELF betöltőnek"
+"Free at steamgriddb.com: your profile, Preferences, API. Or paste it on a phone or PC at {0}" = "Ingyenes a steamgriddb.com oldalon: profil, Preferences, API. Vagy illeszd be telefonról vagy PC-ről itt: {0}"
