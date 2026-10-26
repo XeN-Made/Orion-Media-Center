@@ -95,13 +95,13 @@ TEST(KeyPage, TakesRommsAddressAndPairingCode)
     std::remove((dir + "/keys.txt").c_str());
     bool saved = false;
     std::string page = orion::answer_key_request(
-        "POST /romm HTTP/1.1\r\n\r\nromm_url=192.168.4.115&romm_code=AB12CD", dir, &saved);
+        "POST /romm HTTP/1.1\r\n\r\nromm_url=192.168.1.20%3A8080&romm_code=AB12CD", dir, &saved);
     EXPECT_TRUE(saved);
     EXPECT_NE(page.find("pairing now"), std::string::npos);
-    EXPECT_EQ(orion::read_service_key(dir, orion::kRommUrl), "http://192.168.4.115");
+    EXPECT_EQ(orion::read_service_key(dir, orion::kRommUrl), "http://192.168.1.20:8080");
     EXPECT_EQ(orion::read_service_key(dir, orion::kRommPairCode), "AB12CD");
     EXPECT_NE(orion::answer_key_request("GET / HTTP/1.1\r\n\r\n", dir, &saved)
-                  .find("http://192.168.4.115, not paired yet."),
+                  .find("http://192.168.1.20:8080, not paired yet."),
               std::string::npos);
 
     ASSERT_TRUE(orion::write_service_key(dir, orion::kRommToken, "rmm_token").empty());

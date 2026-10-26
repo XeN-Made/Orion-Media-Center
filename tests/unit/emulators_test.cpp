@@ -336,7 +336,7 @@ TEST(Emulators, ListsServerGamesOnTheirSystems)
     games[1].name = "Nowhere";
     games[1].path = "/data/orion/romm/games/x/y.bin";
     games[2] = games[0]; // the same file again
-    EXPECT_EQ(library::add_remote_games(emulator, games, &roms), 1);
+    EXPECT_EQ(library::add_remote_games(emulator, games, &roms, false), 1);
     ASSERT_EQ(roms.size(), before + 1);
     const library::Title &moon = roms.back();
     EXPECT_EQ(moon.system, "Nintendo - Game Boy Advance");
@@ -349,6 +349,28 @@ TEST(Emulators, ListsServerGamesOnTheirSystems)
     const std::vector<library::Player> players = library::players_for(emulator, moon);
     ASSERT_FALSE(players.empty());
     EXPECT_EQ(players[0].rom, games[0].path); // RetroArch reads it where it lands
+
+    // Only the ones the console lacks: a game it has by the same file, or by
+    // the same name on the same system, is left out.
+    roms.resize(before);
+    library::Emulator again = library::scan_retroarch(title, &roms);
+    ASSERT_EQ(roms.size(), before);
+    const library::Title &mine = roms.front(); // one of RetroArch's own games
+    std::vector<library::RemoteGame> server(3);
+    const std::string folder = mine.system == "Nintendo - Nintendo DS" ? "nds" : "gba";
+    server[0].system_folder = folder; // the same file
+    server[0].name = "Another Name";
+    server[0].path =
+        "/data/orion/romm/games/" + folder + "/" + mine.path.substr(mine.path.rfind('/') + 1);
+    server[1].system_folder = folder; // the same name
+    server[1].name = mine.name;
+    server[1].path = "/data/orion/romm/games/" + folder + "/Other File.bin";
+    server[2].system_folder = folder; // one it lacks
+    server[2].name = "Brand New";
+    server[2].path = "/data/orion/romm/games/" + folder + "/Brand New.bin";
+    EXPECT_EQ(library::add_remote_games(again, server, &roms, true), 1);
+    EXPECT_EQ(roms.back().name, "Brand New");
+    EXPECT_EQ(library::add_remote_games(again, server, &roms, false), 2); // all: the other two
 }
 
 TEST(Emulators, ReadsThePlayersOwnRomFolders)

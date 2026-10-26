@@ -6456,9 +6456,9 @@ class Library final : public app::Concept
             : typing_ == Typing::rom_folder   ? tr("A folder of games, like /mnt/usb0/roms")
             : typing_ == Typing::grid_key     ? tr("Your SteamGridDB API key; empty removes it")
             : typing_ == Typing::art_name     ? tr("The name to look for on SteamGridDB")
-            : typing_ == Typing::romm_url     ? tr("Your RomM address, like 192.168.4.115")
-            : typing_ == Typing::romm_code    ? tr("The pairing code RomM shows")
-                                              : tr("Name the new tab");
+            : typing_ == Typing::romm_url  ? tr("Its address with the port, like 192.168.1.20:8080")
+            : typing_ == Typing::romm_code ? tr("The pairing code RomM shows")
+                                           : tr("Name the new tab");
         const bool empty = text.empty();
         ui::text(list, fonts.regular, empty ? placeholder.c_str() : text.c_str(), field.x + 28,
                  field.y + 37, 25, empty ? Color::rgb(0xffffff, 0.66f) : Color::rgb(0xffffff));

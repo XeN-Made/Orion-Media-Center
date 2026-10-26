@@ -109,7 +109,7 @@ std::string page(const Shown &now, std::string_view note, bool good)
                           : escaped(now.romm) + (now.paired ? ", paired." : ", not paired yet.")) +
         "</p><form method=\"post\" action=\"/romm\"><input name=\"romm_url\" "
         "autocomplete=\"off\" autocapitalize=\"off\" spellcheck=\"false\" "
-        "placeholder=\"Address, like 192.168.4.115 (empty keeps it)\">"
+        "placeholder=\"Address with the port, like 192.168.1.20:8080 (empty keeps it)\">"
         "<input name=\"romm_code\" style=\"margin-top:.6rem\" autocomplete=\"off\" "
         "autocapitalize=\"characters\" spellcheck=\"false\" placeholder=\"Pairing code\">"
         "<button>Save and pair</button></form></main></body></html>";

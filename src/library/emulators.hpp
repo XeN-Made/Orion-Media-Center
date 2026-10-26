@@ -113,12 +113,14 @@ struct RemoteGame
 int add_emulator_games(Library &library, const std::vector<GameFolder> &folders,
                        const std::string &art_dir, bool every_version = false,
                        const std::function<void(const char *)> &step = {},
-                       const std::vector<RemoteGame> &remote = {});
+                       const std::vector<RemoteGame> &remote = {}, bool remote_missing_only = true);
 // Server games onto the systems their folders name (a system ORION does not
-// know, or a game already listed from the same file, is left out). They
-// play in RetroArch. Returns how many joined.
+// know, or a game already listed from the same file, is left out). With
+// missing_only, so is one the console has already: a file of the same name,
+// or a game of the same name, on the same system. They play in RetroArch.
+// Returns how many joined.
 int add_remote_games(Emulator &emulator, const std::vector<RemoteGame> &games,
-                     std::vector<Title> *roms);
+                     std::vector<Title> *roms, bool missing_only = true);
 // Full ROM sets hold many files of one game: bad dumps ([b1]), overdumps
 // ([o1]), hacks ([h1], (Hack)), pirates ([p1]), trainers ([t1]), fixes
 // ([f1]), alternates ([a1]), translations ([T+Eng]), betas and demos, other

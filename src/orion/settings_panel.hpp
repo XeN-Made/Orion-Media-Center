@@ -105,6 +105,7 @@ class SettingsPanel
         storage,
         sound,
         appearance,
+        romm,   // the RomM server: its address, pairing, which games show
         system, // the language, autoboot, rest mode, returning after a game
         about,  // the version, updates, where things are
     };
@@ -148,7 +149,7 @@ class SettingsPanel
         romm_paired_ = paired;
         romm_status_ = std::move(status);
     }
-    // Where the key page answers ("http://192.168.4.41:9062"), or empty
+    // Where the key page answers ("http://192.168.1.30:9062"), or empty
     // while it does not (orion/key_page.hpp).
     void set_key_page(std::string address)
     {
@@ -280,6 +281,7 @@ class SettingsPanel
   private:
     void build(const Look &look, const LibraryPrefs &prefs);
     void build_library(const LibraryPrefs &prefs);
+    void build_romm(const LibraryPrefs &prefs);
     void build_system(const LibraryPrefs &prefs);
     void build_tabs(const LibraryPrefs &prefs);
     void build_tab_page(const LibraryPrefs &prefs);

@@ -29,7 +29,7 @@ bool request_complete(std::string_view request);
 // when the field is not there.
 bool form_value(std::string_view body, std::string_view name, std::string *value);
 
-// The console's address on the local network ("192.168.4.41"), or empty.
+// The console's address on the local network ("192.168.1.30"), or empty.
 // Asked of the system's routing (a UDP socket aimed outward sends nothing).
 std::string local_address();
 

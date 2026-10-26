@@ -564,6 +564,9 @@ LibraryPrefs load_prefs(const std::string &state_dir)
     prefs.hidden_tab_shown = root["hidden_tab_shown"].bool_or(prefs.hidden_tab_shown);
     prefs.title_music = root["title_music"].bool_or(prefs.title_music);
     prefs.every_version = root["every_version"].bool_or(prefs.every_version);
+    if (const std::string show = root["romm_show"].string_or("");
+        show == "missing" || show == "all" || show == "off")
+        prefs.romm_show = show;
     if (const std::string language = root["language"].string_or("");
         language.size() <= 16 &&
         std::all_of(language.begin(), language.end(),
@@ -616,6 +619,7 @@ bool save_prefs(const std::string &state_dir, const LibraryPrefs &prefs)
     text += std::string("  \"hidden_tab_shown\": ") + (prefs.hidden_tab_shown ? "true" : "false") +
             ",\n";
     text += std::string("  \"every_version\": ") + (prefs.every_version ? "true" : "false") + ",\n";
+    text += "  \"romm_show\": " + json::quote(prefs.romm_show) + ",\n";
     text += "  \"language\": " + json::quote(prefs.language) + ",\n";
     text += std::string("  \"moved_leave_shelf\": ") +
             (prefs.moved_leave_shelf ? "true" : "false") + ",\n";

@@ -100,6 +100,9 @@ enum : int
     kRommServer,
     kRommPair,
     kRommSync,
+    kRommShow,
+    kRommPage,
+    kRommFolder,
     kEveryVersion,
     kAppInfo,
     kAppStarts,
@@ -156,6 +159,8 @@ const char *section_name(SettingsPanel::Section section)
         return i18n::marked("Storage");
     case SettingsPanel::Section::sound:
         return i18n::marked("Sound");
+    case SettingsPanel::Section::romm:
+        return "RomM";
     case SettingsPanel::Section::system:
         return i18n::marked("System");
     case SettingsPanel::Section::about:
@@ -343,7 +348,7 @@ void SettingsPanel::refresh(const Look &look, const LibraryPrefs &prefs)
 void SettingsPanel::build_nav()
 {
     // Emulators always, so Scan for emulators is there before one is found.
-    sections_ = {Section::library, Section::tabs, Section::emulators};
+    sections_ = {Section::library, Section::tabs, Section::emulators, Section::romm};
     if (emulator_ != nullptr && !emulator_->systems.empty())
         sections_.push_back(Section::art);
     sections_.push_back(Section::storage);
@@ -488,6 +493,9 @@ void SettingsPanel::build(const Look &look, const LibraryPrefs &prefs)
     case Section::appearance:
         build_appearance(look, prefs);
         break;
+    case Section::romm:
+        build_romm(prefs);
+        break;
     case Section::system:
         build_system(prefs);
         break;
@@ -495,6 +503,40 @@ void SettingsPanel::build(const Look &look, const LibraryPrefs &prefs)
         build_about(prefs);
         break;
     }
+}
+
+void SettingsPanel::build_romm(const LibraryPrefs &prefs)
+{
+    form_.add_header("RomM");
+    if (!key_page_.empty())
+        form_.add_value(kRommPage, tr("Set it up from a phone or PC"), key_page_).description =
+            tr("Open this address on a phone or PC on the same network: it takes the server's "
+               "address and the pairing code");
+    ui::FormRow &server = form_.add_action(kRommServer, tr("RomM server"));
+    server.chevron = true;
+    server.text = romm_address_.empty() ? tr("Not set") : romm_address_;
+    server.description = tr("Its address with the port, like 192.168.1.20:8080 or "
+                            "https://romm.example.com");
+    ui::FormRow &pair = form_.add_action(kRommPair, tr("Pair with RomM"));
+    pair.chevron = true;
+    pair.text = romm_paired_ ? tr("Paired") : tr("Not paired");
+    pair.description = tr("In RomM: your profile, Client tokens, a new token, Pair; then type the "
+                          "code here");
+    form_.add_header(tr("Games"));
+    static const char *const kShowNames[] = {i18n::marked("Only ones not on the console"),
+                                             i18n::marked("All of them"), i18n::marked("None")};
+    const int show = prefs.romm_show == "all" ? 1 : prefs.romm_show == "off" ? 2 : 0;
+    form_
+        .add_choice(kRommShow, tr("RomM games in the library"),
+                    i18n::tr_range(kShowNames, kShowNames + 3), show)
+        .description = tr("A game already on the console (the same file, or the same name on the "
+                          "same system) shows once, from the console");
+    form_.add_action(kRommSync, tr("Refresh RomM's game list")).description =
+        romm_status_.empty() ? tr("Asks RomM which games it has and fetches their covers. Nothing "
+                                  "is downloaded until you play a game")
+                             : romm_status_;
+    form_.add_value(kRommFolder, tr("Downloaded games"), "/data/orion/romm/games").description =
+        tr("A RomM game is kept here once you have played it");
 }
 
 void SettingsPanel::build_library(const LibraryPrefs &prefs)
@@ -737,24 +779,6 @@ void SettingsPanel::build_emulators(const LibraryPrefs &prefs)
     form_.add_toggle(kEveryVersion, tr("Every version of a game"), prefs.every_version)
         .description = tr("Bad dumps, hacks, translations and other regions as covers of their "
                           "own; off shows the best one");
-    form_.add_header("RomM");
-    ui::FormRow &server = form_.add_action(kRommServer, tr("RomM server"));
-    server.chevron = true;
-    server.text = romm_address_.empty() ? tr("Not set") : romm_address_;
-    server.description =
-        key_page_.empty()
-            ? tr("Your RomM address, like 192.168.4.115 or https://games.example.com")
-            : trf("Your RomM address, like 192.168.4.115; or type it on a phone or PC at {0}",
-                  {key_page_});
-    ui::FormRow &pair = form_.add_action(kRommPair, tr("Pair with RomM"));
-    pair.chevron = true;
-    pair.text = romm_paired_ ? tr("Paired") : tr("Not paired");
-    pair.description = tr("In RomM: your profile, Client tokens, a new token, Pair; then type the "
-                          "code here");
-    form_.add_action(kRommSync, tr("Sync RomM games")).description =
-        romm_status_.empty() ? tr("Lists the server's games on their systems' tabs; each one "
-                                  "downloads the first time you play it")
-                             : romm_status_;
     if (emulator_ == nullptr || emulator_->systems.empty())
         return;
     form_.add_header(tr("Systems"));
@@ -1463,6 +1487,13 @@ SettingsPanel::Change SettingsPanel::handle(const InputFrame &input, ui::Feedbac
     case kAskPlayer:
         prefs->ask_player = form_.toggle_value(kAskPlayer);
         return Change::prefs;
+    case kRommShow:
+    {
+        // The games are listed again, with RomM's as now asked.
+        static constexpr const char *kShowKeys[] = {"missing", "all", "off"};
+        prefs->romm_show = kShowKeys[std::clamp(form_.choice_index(kRommShow), 0, 2)];
+        return Change::scan_emulators;
+    }
     case kEveryVersion:
         // The games are listed again, with or without the other versions.
         prefs->every_version = form_.toggle_value(kEveryVersion);

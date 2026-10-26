@@ -181,6 +181,9 @@ struct LibraryPrefs
     // Every file of a game RetroArch plays has a cover (bad dumps, hacks,
     // other regions); off, only the best of them (library::keep_best_versions).
     bool every_version = false;
+    // Which of RomM's games the library lists (orion/romm.hpp): "missing",
+    // the ones not on the console already; "all"; or "off".
+    std::string romm_show = "missing";
     // The language ORION is shown in: a code ("es", "pt-BR"), or empty for
     // the console's own (orion/languages.hpp).
     std::string language;

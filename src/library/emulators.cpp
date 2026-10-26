@@ -1997,18 +1997,45 @@ int keep_best_versions(std::vector<Title> &roms, const std::string &launcher)
 }
 
 int add_remote_games(Emulator &emulator, const std::vector<RemoteGame> &games,
-                     std::vector<Title> *roms)
+                     std::vector<Title> *roms, bool missing_only)
 {
     const EmulatorApp *retroarch = emulator.app("retroarch");
     std::unordered_set<std::string> listed;
+    // What the console has: by system, its files' names and its games' names.
+    const auto file_of = [](const std::string &path)
+    {
+        const std::size_t slash = path.rfind('/');
+        return lower(slash == std::string::npos ? path : path.substr(slash + 1));
+    };
+    std::unordered_set<std::string> owned;
     for (const Title &rom : *roms)
+    {
         listed.insert(rom.id);
+        if (!rom.is_rom() || !rom.remote.empty())
+            continue;
+        const std::string shelf = shelf_system(rom.system);
+        owned.insert(shelf + "\n" + file_of(rom.path));
+        owned.insert(shelf + "\t" + art_key(rom.name));
+    }
     std::vector<Title> found;
     for (const RemoteGame &game : games)
     {
         const std::string system = system_of_folder(game.system_folder, emulator);
         if (system.empty() || game.path.empty())
             continue;
+        if (missing_only)
+        {
+            const std::string shelf = shelf_system(system);
+            std::string file = file_of(game.path);
+            // A game of several files arrives as <name>.zip; the console may
+            // keep it as the folder or the disc itself.
+            if (file.size() > 4 && file.compare(file.size() - 4, 4, ".zip") == 0)
+                file.resize(file.size() - 4);
+            if (owned.count(shelf + "\n" + file_of(game.path)) != 0 ||
+                owned.count(shelf + "\n" + file) != 0 ||
+                owned.count(shelf + "\t" + art_key(game.name)) != 0)
+                continue;
+        }
         Title rom;
         rom.rom = game.path;
         rom.id = rom_id(rom.rom);
@@ -2031,7 +2058,7 @@ int add_remote_games(Emulator &emulator, const std::vector<RemoteGame> &games,
 int add_emulator_games(Library &library, const std::vector<GameFolder> &folders,
                        const std::string &art_dir, bool every_version,
                        const std::function<void(const char *)> &step,
-                       const std::vector<RemoteGame> &remote)
+                       const std::vector<RemoteGame> &remote, bool remote_missing_only)
 {
     const auto at = [&step](const char *stage)
     {
@@ -2043,7 +2070,7 @@ int add_emulator_games(Library &library, const std::vector<GameFolder> &folders,
     library.emulator = scan_emulators(library.titles, folders, &roms);
     if (!remote.empty())
     {
-        const int added = add_remote_games(library.emulator, remote, &roms);
+        const int added = add_remote_games(library.emulator, remote, &roms, remote_missing_only);
         for (EmulatorApp &app : library.emulator.apps)
         {
             if (app.key == "retroarch")

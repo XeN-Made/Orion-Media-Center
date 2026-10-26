@@ -299,13 +299,19 @@ ORION lists the games on your [RomM](https://romm.app) server (5.0 or later)
 on their systems' tabs, with RomM's covers, and downloads a game the first
 time you play it (to `/data/orion/romm/games`). They play in RetroArch.
 
-1. Settings, Emulators, **RomM server**: its address, like `192.168.4.115` or
-   `https://games.example.com`. Plain `http` is used only for an address on your
-   own network.
+1. Settings, RomM, **RomM server**: its address with the port, like
+   `192.168.1.20:8080` or `https://romm.example.com`. Plain `http` is used only
+   for an address on your own network.
 2. In RomM's web page: your profile, **Client tokens**, make a token, **Pair**.
    It shows a short code.
-3. Settings, Emulators, **Pair with RomM**: type the code. ORION syncs the games
-   by itself, then each time it opens; **Sync RomM games** asks again.
+3. Settings, RomM, **Pair with RomM**: type the code. ORION asks RomM for its
+   list of games (not the games themselves) by itself, then each time it opens;
+   **Refresh RomM's game list** asks again. A game is downloaded only when you
+   play it.
+
+**RomM games in the library** (Settings, RomM) chooses which show: only the
+ones not on the console already (the default: a game you have, by its file or
+its name on the same system, shows once), all of them, or none.
 
 Steps 1 and 3 can also be done on a phone or PC at `http://<console IP>:9062`
 while ORION is open.

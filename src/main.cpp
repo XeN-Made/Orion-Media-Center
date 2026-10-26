@@ -310,14 +310,14 @@ int main()
         std::string catalogue;
         const std::string base =
             orion::romm_base(orion::read_service_key(titles.state_dir, orion::kRommUrl));
-        if (!base.empty() &&
+        if (!base.empty() && prefs.romm_show != "off" &&
             save::read_file(titles.state_dir + "/romm-games.tsv", &catalogue, 32u << 20))
             remote = orion::romm_remote_games(orion::read_romm_catalogue(catalogue), base,
                                               titles.state_dir);
         return library::add_emulator_games(
             titles, orion::game_folders(prefs), orion::art_folder(prefs, titles.state_dir),
-            prefs.every_version, starting ? boot_step : std::function<void(const char *)>(),
-            remote);
+            prefs.every_version, starting ? boot_step : std::function<void(const char *)>(), remote,
+            prefs.romm_show != "all");
     };
     {
         library::ScanOptions scan = library::console_defaults();
