@@ -60,7 +60,7 @@ most played.
 **Made for the controller**
 - Every setting in one place, Settings (R3), with a first-run setup that
   walks through the language, the look, emulators, box art and autoboot.
-- In English, Spanish, Portuguese (Brazil) or Hungarian, following the console's language
+- In English, Spanish, Portuguese (Brazil), Hungarian or Swedish, following the console's language
   or the one you pick; other languages can be added as files.
 - Themes and a look of your own: colours, the galaxy sky, glass, corners,
   focus ring, per tab if you like.
