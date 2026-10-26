@@ -266,8 +266,8 @@ TEST_F(LibraryDesign, CrossMovesATitleToACustomTabAndItIsRemembered)
 
     // Options opens the menu on Ciel Ouvert: Launch, Details, Favourite, Hide,
     // Rename, Choose picture, Find other art, Find art by name, Choose music,
-    // then Move to tab…, which lists the player's tabs (RPGs first) and New
-    // tab… after them.
+    // then Move to tab…, which lists the built-in shelves (Games, where it
+    // is, then Homebrew and Media), the player's tabs and New tab….
     send(*design, press(hui::Action::menu));
     EXPECT_FALSE(last_cues_.empty());
     for (int i = 0; i < 9; ++i)
@@ -275,6 +275,8 @@ TEST_F(LibraryDesign, CrossMovesATitleToACustomTabAndItIsRemembered)
     send(*design, press(hui::Action::confirm));
     expect_drawable(*design);
     EXPECT_EQ(hui::orion::load_prefs(dir).placement("PPSA90108"), nullptr); // not yet
+    for (int i = 0; i < 3; ++i) // past Games (here), Homebrew and Media to RPGs
+        send(*design, nav(Direction::down));
     send(*design, press(hui::Action::confirm));
     expect_drawable(*design);
     const hui::orion::LibraryPrefs saved = hui::orion::load_prefs(dir);

@@ -677,12 +677,12 @@ void SettingsPanel::build_tab_page(const LibraryPrefs &prefs)
         form_.add_choice(kPageCore, tr("Core"), std::move(cores), core).description =
             tr("The RetroArch core these games start with");
     }
+    form_.add_action(kPageLeft, tr("Move left")).description = tr("Earlier on the tab bar");
+    form_.add_action(kPageRight, tr("Move right")).description = tr("Later on the tab bar");
     if (page_.rfind("tab:", 0) == 0)
     {
         ui::FormRow &rename = form_.add_action(kPageRename, tr("Rename"));
         rename.chevron = true;
-        form_.add_action(kPageLeft, tr("Move left")).description = tr("Earlier on the tab bar");
-        form_.add_action(kPageRight, tr("Move right")).description = tr("Later on the tab bar");
         ui::FormRow &remove = form_.add_action(kPageDelete, tr("Delete tab"));
         remove.danger = true;
         remove.description = tr("Its games go back to their shelves");
@@ -1545,8 +1545,13 @@ SettingsPanel::Change SettingsPanel::edit_tab_page(int id, LibraryPrefs *prefs)
         return Change::rename_tab;
     case kPageLeft:
     case kPageRight:
-        return !custom.empty() && prefs->move_tab(custom, id == kPageLeft ? -1 : 1) ? Change::prefs
-                                                                                    : Change::none;
+    {
+        std::vector<std::string> keys;
+        for (const TabEntry &tab : tabs_)
+            keys.push_back(tab.key);
+        return prefs->move_tab_key(page_, id == kPageLeft ? -1 : 1, keys) ? Change::prefs
+                                                                          : Change::none;
+    }
     case kPageDelete:
         if (custom.empty() || !prefs->remove_tab(custom))
             return Change::none;

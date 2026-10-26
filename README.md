@@ -222,6 +222,9 @@ within 30 minutes. Every step it took is written to
   own.
 - **Continue playing**: the titles you played last, over the All tab.
 - **Tabs of your own**, a theme per tab, hidden titles: Settings, Tabs.
+  Every tab, the built-in ones too, moves along the tab bar (its page, *Move
+  left* and *Move right*) or hides (*Show this tab* off). Options on a title,
+  *Move to tab…*, also moves it onto Games, Homebrew or Media.
   Every tab, the built-in ones too (All, Games, Emulators, each system), can
   be **renamed** or **hidden** from its page there.
 - **Wide covers**: give a tab the Landscape cover shape (Settings, Tabs, its

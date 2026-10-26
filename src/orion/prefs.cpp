@@ -76,9 +76,29 @@ const CustomTab *LibraryPrefs::placement(const std::string &title) const
     return nullptr;
 }
 
+namespace
+{
+
+bool is_shelf_key(const std::string &key)
+{
+    return key == "games" || key == "homebrew" || key == "media";
+}
+
+} // namespace
+
+std::string LibraryPrefs::placed_shelf(const std::string &title) const
+{
+    for (const Placement &placement : placements)
+    {
+        if (placement.title == title)
+            return is_shelf_key(placement.tab) ? placement.tab : std::string();
+    }
+    return {};
+}
+
 bool LibraryPrefs::place(const std::string &title, const std::string &tab_id)
 {
-    if (tab(tab_id) == nullptr || !library::is_item_id(title))
+    if ((tab(tab_id) == nullptr && !is_shelf_key(tab_id)) || !library::is_item_id(title))
         return false;
     unplace(title);
     placements.push_back({title, tab_id});
@@ -124,6 +144,50 @@ bool LibraryPrefs::remove_tab(const std::string &id)
     std::erase_if(placements, [&](const Placement &p) { return p.tab == id; });
     if (last_tab == "tab:" + id)
         last_tab = "all";
+    return true;
+}
+
+std::vector<std::string> LibraryPrefs::ordered_tabs(const std::vector<std::string> &tabs) const
+{
+    std::vector<std::string> out;
+    for (const std::string &key : tab_order)
+    {
+        if (std::find(tabs.begin(), tabs.end(), key) != tabs.end() &&
+            std::find(out.begin(), out.end(), key) == out.end())
+            out.push_back(key);
+    }
+    // A tab the order does not name (new since) goes after its neighbour.
+    for (std::size_t i = 0; i < tabs.size(); ++i)
+    {
+        if (std::find(out.begin(), out.end(), tabs[i]) != out.end())
+            continue;
+        auto at = out.begin();
+        for (std::size_t before = i; before > 0; --before)
+        {
+            const auto found = std::find(out.begin(), out.end(), tabs[before - 1]);
+            if (found != out.end())
+            {
+                at = found + 1;
+                break;
+            }
+        }
+        out.insert(at, tabs[i]);
+    }
+    return out;
+}
+
+bool LibraryPrefs::move_tab_key(const std::string &key, int direction,
+                                const std::vector<std::string> &tabs)
+{
+    std::vector<std::string> order = ordered_tabs(tabs);
+    const auto found = std::find(order.begin(), order.end(), key);
+    if (found == order.end())
+        return false;
+    const std::size_t i = static_cast<std::size_t>(found - order.begin());
+    if ((direction < 0 && i == 0) || (direction > 0 && i + 1 >= order.size()))
+        return false;
+    std::swap(order[i], order[direction < 0 ? i - 1 : i + 1]);
+    tab_order = std::move(order);
     return true;
 }
 
@@ -448,6 +512,12 @@ LibraryPrefs load_prefs(const std::string &state_dir)
     }
     for (const auto &member : root["placements"].members())
         prefs.place(member.first, member.second.string_or(""));
+    for (const json::Value &value : root["tab_order"].elements())
+    {
+        const std::string key = value.string_or("");
+        if (!key.empty() && key.size() <= 96 && prefs.tab_order.size() < 128)
+            prefs.tab_order.push_back(key);
+    }
     for (const json::Value &value : root["hidden_titles"].elements())
         prefs.set_title_hidden(value.string_or(""), true);
     for (const auto &member : root["game_players"].members())
@@ -587,6 +657,10 @@ bool save_prefs(const std::string &state_dir, const LibraryPrefs &prefs)
                 json::quote(prefs.placements[i].tab);
     }
     text += prefs.placements.empty() ? "},\n" : "\n  },\n";
+    text += "  \"tab_order\": [";
+    for (std::size_t i = 0; i < prefs.tab_order.size(); ++i)
+        text += (i == 0 ? "" : ", ") + json::quote(prefs.tab_order[i]);
+    text += "],\n";
     text += "  \"hidden_titles\": [";
     for (std::size_t i = 0; i < prefs.hidden_titles.size(); ++i)
         text += (i == 0 ? "" : ", ") + json::quote(prefs.hidden_titles[i]);

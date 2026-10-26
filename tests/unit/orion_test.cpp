@@ -300,6 +300,36 @@ TEST(OrionPrefs, RemovingATabSendsItsTitlesHome)
     EXPECT_FALSE(prefs.remove_tab(a));
 }
 
+// Built-in tabs move like the player's own, and a title can move onto a
+// built-in shelf (a homebrew app with the games).
+TEST(OrionPrefs, BuiltInTabsMoveAndTakeTitles)
+{
+    const std::string dir = fresh_dir("orion-prefs-order");
+    orion::LibraryPrefs prefs;
+    const std::vector<std::string> tabs = {"all", "games", "homebrew", "media", "tab:t1"};
+    EXPECT_EQ(prefs.ordered_tabs(tabs), tabs); // ORION's own order to begin with
+    EXPECT_TRUE(prefs.move_tab_key("tab:t1", -1, tabs));
+    EXPECT_TRUE(prefs.move_tab_key("tab:t1", -1, tabs));
+    EXPECT_TRUE(prefs.move_tab_key("games", 1, tabs));
+    EXPECT_FALSE(prefs.move_tab_key("all", -1, tabs)); // already first
+    EXPECT_FALSE(prefs.move_tab_key("tab:gone", 1, tabs));
+    const std::vector<std::string> moved = {"all", "tab:t1", "games", "homebrew", "media"};
+    EXPECT_EQ(prefs.ordered_tabs(tabs), moved);
+    // A tab the order has not seen goes after the tab before it.
+    EXPECT_EQ(
+        prefs.ordered_tabs({"all", "games", "favourites", "homebrew", "media", "tab:t1"}),
+        (std::vector<std::string>{"all", "tab:t1", "games", "favourites", "homebrew", "media"}));
+
+    EXPECT_TRUE(prefs.place("PPSA01234", "games"));
+    EXPECT_FALSE(prefs.place("PPSA01235", "favourites")); // not a shelf
+    EXPECT_EQ(prefs.placed_shelf("PPSA01234"), "games");
+    EXPECT_EQ(prefs.placement("PPSA01234"), nullptr); // no tab of the player's
+    ASSERT_TRUE(orion::save_prefs(dir, prefs));
+    const orion::LibraryPrefs back = orion::load_prefs(dir);
+    EXPECT_EQ(back.ordered_tabs(tabs), moved);
+    EXPECT_EQ(back.placed_shelf("PPSA01234"), "games");
+}
+
 TEST(OrionPrefs, BrokenOrHandEditedFilesAreForgiven)
 {
     const std::string dir = fresh_dir("orion-prefs-edited");

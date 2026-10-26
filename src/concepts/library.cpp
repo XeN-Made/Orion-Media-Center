@@ -194,6 +194,7 @@ enum : int
     kItemDetails,         // Details…: the title's page
     kItemFindArtName,     // Find art by name… (SteamGridDB)
     kItemMove = 100,      // + the tab's index
+    kItemShelf = 250,     // + a built-in shelf's index in kShelves
     kItemPlayer = 300,    // 0: the default, then 1 + an index in library::players_for
     kItemPickPlace = 500, // + an index in pick_places_
     kItemPickDir = 1000,  // + an index in pick_dirs_
@@ -1855,7 +1856,19 @@ class Library final : public app::Concept
         // the others.
         if (any_hidden())
             tabs.push_back({kHiddenTab, tab_label(kHiddenTab, tr("Hidden"))});
-        return tabs;
+        std::vector<std::string> keys;
+        for (const orion::TabEntry &tab : tabs)
+            keys.push_back(tab.key);
+        std::vector<orion::TabEntry> ordered;
+        for (const std::string &key : prefs_.ordered_tabs(keys))
+        {
+            for (const orion::TabEntry &tab : tabs)
+            {
+                if (tab.key == key)
+                    ordered.push_back(tab);
+            }
+        }
+        return ordered;
     }
 
     bool any_hidden() const
@@ -3219,6 +3232,23 @@ class Library final : public app::Concept
     {
         const orion::CustomTab *placed = prefs_.placement(menu_title_);
         std::vector<ui::MenuItem> items;
+        // The built-in shelves first: a homebrew app can sit with the games.
+        const Title *title = find_title(menu_title_);
+        std::string shelf_now = prefs_.placed_shelf(menu_title_);
+        if (shelf_now.empty() && placed == nullptr && title != nullptr)
+            shelf_now = shelf_key_of(*title);
+        for (std::size_t i = 0; i < std::size(kShelves); ++i)
+        {
+            const std::string key = kShelves[i].key;
+            if (key != "games" && key != "homebrew" && key != "media")
+                continue;
+            const bool here = key == shelf_now;
+            ui::MenuItem item = menu_item(tab_label(key, tr(kShelves[i].name)));
+            item.tag = kItemShelf + static_cast<int>(i);
+            item.disabled = here;
+            item.shortcut = here ? tr("Here") : "";
+            items.push_back(item);
+        }
         for (std::size_t i = 0; i < prefs_.tabs.size() && i < kPickPage; ++i)
         {
             const bool here = placed != nullptr && placed->id == prefs_.tabs[i].id;
@@ -3508,6 +3538,16 @@ class Library final : public app::Concept
             prefs_.unplace(menu_title_);
         else if (tag >= kItemMove && tag - kItemMove < static_cast<int>(prefs_.tabs.size()))
             prefs_.place(menu_title_, prefs_.tabs[static_cast<std::size_t>(tag - kItemMove)].id);
+        else if (tag >= kItemShelf && tag - kItemShelf < static_cast<int>(std::size(kShelves)))
+        {
+            // Its own shelf: back where it belongs, no move kept.
+            const std::string key = kShelves[static_cast<std::size_t>(tag - kItemShelf)].key;
+            const Title *title = find_title(menu_title_);
+            if (title != nullptr && key == shelf_key_of(*title))
+                prefs_.unplace(menu_title_);
+            else
+                prefs_.place(menu_title_, key);
+        }
         save_prefs();
         rebuild_tabs(active_key());
         rebuild();
@@ -4854,13 +4894,31 @@ class Library final : public app::Concept
         const orion::CustomTab *placed = prefs_.placement(title.id);
         if (key.rfind("tab:", 0) == 0)
             return placed != nullptr && key.compare(4, std::string::npos, placed->id) == 0;
-        // A built-in shelf; a moved title may have left it.
+        // A built-in shelf; a moved title may have left it, or been moved
+        // to another.
+        if (const std::string shelf = prefs_.placed_shelf(title.id); !shelf.empty())
+            return key == shelf;
         if (placed != nullptr && prefs_.moved_leave_shelf)
             return false;
         const library::Shelf shelf = library::shelf_of(title);
         return (key == "games" && shelf == library::Shelf::games) ||
                (key == "homebrew" && shelf == library::Shelf::homebrew) ||
                (key == "media" && shelf == library::Shelf::media);
+    }
+
+    // The built-in shelf a title belongs on by itself.
+    static std::string shelf_key_of(const Title &title)
+    {
+        switch (library::shelf_of(title))
+        {
+        case library::Shelf::games:
+            return "games";
+        case library::Shelf::homebrew:
+            return "homebrew";
+        case library::Shelf::media:
+            return "media";
+        }
+        return {};
     }
 
     int focus_index() const
@@ -4931,6 +4989,18 @@ class Library final : public app::Concept
         // brings the others back).
         if (tab_keys_.empty())
             add("all", tab_label("all", tr("All")));
+        // The player's order (Settings, Tabs, a tab's page, Move left/right).
+        {
+            const std::vector<std::string> order = prefs_.ordered_tabs(tab_keys_);
+            std::vector<ui::TabItem> sorted;
+            for (const std::string &key : order)
+            {
+                const auto at = std::find(tab_keys_.begin(), tab_keys_.end(), key);
+                sorted.push_back(tabs[static_cast<std::size_t>(at - tab_keys_.begin())]);
+            }
+            tab_keys_ = order;
+            tabs = std::move(sorted);
+        }
         tabs_.set_tabs(std::move(tabs));
         subtabs_.set_tabs(std::move(systems));
         // A system asked for while grouped is the Emulators tab and its row.

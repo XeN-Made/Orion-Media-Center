@@ -144,6 +144,9 @@ struct LibraryPrefs
 {
     std::vector<CustomTab> tabs;
     std::vector<Placement> placements;
+    // The tab bar in the player's order, by key ("games", "tab:t1"...);
+    // empty: ORION's own order.
+    std::vector<std::string> tab_order;
     std::vector<SystemPref> systems;
     std::vector<RomFolder> rom_folders;
     std::vector<TabPrefs> tab_prefs;
@@ -217,6 +220,17 @@ struct LibraryPrefs
     bool remove_tab(const std::string &id);
     // Swaps a tab with its neighbour (-1 left, 1 right). False at an end.
     bool move_tab(const std::string &id, int direction);
+    // The tabs in the player's order: those tab_order names first, as it
+    // has them; any other keeps its place after the tab before it in
+    // `tabs`, the order ORION builds them in.
+    std::vector<std::string> ordered_tabs(const std::vector<std::string> &tabs) const;
+    // Moves any tab, a built-in one too, one place along `tabs` as
+    // ordered_tabs shows them (-1 left, 1 right), and keeps the order. False
+    // at an end or for a tab not there.
+    bool move_tab_key(const std::string &key, int direction, const std::vector<std::string> &tabs);
+    // The built-in shelf a title was moved to ("games", "homebrew",
+    // "media"), or empty. place() takes a shelf's key as well as a tab id.
+    std::string placed_shelf(const std::string &title) const;
 
     bool system_enabled(const std::string &system) const;
     // The chosen core's file, or empty for "the first that plays it".
