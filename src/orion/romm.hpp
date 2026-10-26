@@ -51,8 +51,8 @@ struct RommGame
     bool multi = false; // several files: RomM sends them as one ZIP
 };
 
-// "192.168.4.20:3000", "http://nas:3000/" or "https://romm.example.com" as
-// a base address ("http://192.168.4.20:3000"); empty when it is none.
+// "192.168.1.20:3000", "http://nas:3000/" or "https://romm.example.com" as
+// a base address ("http://192.168.1.20:3000"); empty when it is none.
 // Without a scheme, http is assumed for a local address and https for
 // anything else.
 std::string romm_base(std::string_view typed);

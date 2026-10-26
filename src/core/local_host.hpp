@@ -61,8 +61,8 @@ inline bool is_local_host(std::string_view host)
     return false;
 }
 
-// The host of an http:// or https:// URL ("192.168.4.20" of
-// "http://192.168.4.20:8080/api"), lowercased; empty for anything else.
+// The host of an http:// or https:// URL ("192.168.1.20" of
+// "http://192.168.1.20:8080/api"), lowercased; empty for anything else.
 inline std::string url_host(std::string_view url)
 {
     std::size_t start = 0;

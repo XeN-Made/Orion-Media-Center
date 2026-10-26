@@ -20,7 +20,7 @@ namespace
 
 TEST(Romm, MakesABaseAddressOfWhatWasTyped)
 {
-    EXPECT_EQ(orion::romm_base("192.168.4.20:3000"), "http://192.168.4.20:3000");
+    EXPECT_EQ(orion::romm_base("192.168.1.20:3000"), "http://192.168.1.20:3000");
     EXPECT_EQ(orion::romm_base(" http://nas:3000/ "), "http://nas:3000");
     EXPECT_EQ(orion::romm_base("https://romm.example.com/api"), "https://romm.example.com");
     EXPECT_EQ(orion::romm_base("romm.example.com"), "https://romm.example.com");
