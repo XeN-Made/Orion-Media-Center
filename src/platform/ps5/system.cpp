@@ -4,6 +4,8 @@
 
 #include "platform/ps5/system.hpp"
 
+#include "core/local_host.hpp"
+
 #include "platform/ps5/ca_bundle.hpp"
 
 #include <arpa/inet.h>
@@ -322,6 +324,7 @@ struct Target
     std::string *body = nullptr; // or
     int fd = -1;
     const std::vector<std::string> *headers = nullptr; // for the first address only
+    const std::string *post = nullptr;                 // a POST's body; nullptr: a GET
     std::size_t limit = 0;
     std::size_t written = 0;
     bool over = false;
@@ -376,10 +379,15 @@ std::string fetch(std::string url, Target *target, long whole)
     curl_ready();
     for (int hop = 0; hop <= kMaxHops; ++hop)
     {
+        // Plain http only to a server at home (net::is_local_host); the
+        // internet is asked over https.
+        const bool plain = url.rfind("http://", 0) == 0;
+        if (plain && !net::is_local_host(net::url_host(url)))
+            return "plain http is only for servers on the local network";
         std::string host;
         const std::string entry = resolve_entry(url, &host);
         if (entry.empty())
-            return host.empty() ? "not an https address" : "cannot find " + host;
+            return host.empty() ? "not a web address" : "cannot find " + host;
         CURL *curl = curl_easy_init();
         if (curl == nullptr)
             return "curl did not start";
@@ -396,7 +404,7 @@ std::string fetch(std::string url, Target *target, long whole)
         curl_easy_setopt(curl, CURLOPT_CAINFO_BLOB, &certificates);
         curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 0L); // followed here
 #if LIBCURL_VERSION_NUM >= 0x075500
-        curl_easy_setopt(curl, CURLOPT_PROTOCOLS_STR, "https");
+        curl_easy_setopt(curl, CURLOPT_PROTOCOLS_STR, plain ? "http" : "https");
 #endif
         curl_easy_setopt(curl, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
         curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 10L);
@@ -416,6 +424,12 @@ std::string fetch(std::string url, Target *target, long whole)
                 headers = curl_slist_append(headers, header.c_str());
             curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
         }
+        if (target->post != nullptr)
+        {
+            curl_easy_setopt(curl, CURLOPT_POSTFIELDS, target->post->data());
+            curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE_LARGE,
+                             static_cast<curl_off_t>(target->post->size()));
+        }
         art_trace(("perform " + url).c_str());
         const CURLcode code = curl_easy_perform(curl);
         if (headers != nullptr)
@@ -431,7 +445,7 @@ std::string fetch(std::string url, Target *target, long whole)
             return target->over     ? std::string("too large")
                    : target->failed ? std::string("could not write the file (disk full?)")
                                     : std::string(curl_easy_strerror(code));
-        if (status >= 300 && status < 400 && !next.empty())
+        if (status >= 300 && status < 400 && !next.empty() && target->post == nullptr)
         {
             url = next;
             continue;
@@ -465,6 +479,12 @@ void notify(const std::string &text)
 bool http_download(const std::string &url, const std::string &path, std::size_t limit,
                    std::string *error)
 {
+    return http_download(url, {}, path, limit, error);
+}
+
+bool http_download(const std::string &url, const std::vector<std::string> &headers,
+                   const std::string &path, std::size_t limit, std::string *error)
+{
     const std::string part = path + ".part";
     const int fd = ::open(part.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0666);
     if (fd < 0)
@@ -475,6 +495,7 @@ bool http_download(const std::string &url, const std::string &path, std::size_t 
     Target target;
     target.fd = fd;
     target.limit = limit;
+    target.headers = &headers;
     // No limit on the whole but 15 minutes: a slow line takes a while.
     std::string why = fetch(url, &target, 15L * 60L);
     const bool closed = ::fsync(fd) == 0 && ::close(fd) == 0;
@@ -503,6 +524,23 @@ bool http_get(const std::string &url, const std::vector<std::string> &headers, s
     target.body = body;
     target.limit = limit;
     target.headers = &headers;
+    const std::string why = fetch(url, &target, 60L);
+    if (!why.empty())
+    {
+        *error = why;
+        return false;
+    }
+    return true;
+}
+
+bool http_post(const std::string &url, const std::vector<std::string> &headers,
+               const std::string &body, std::size_t limit, std::string *answer, std::string *error)
+{
+    Target target;
+    target.body = answer;
+    target.limit = limit;
+    target.headers = &headers;
+    target.post = &body;
     const std::string why = fetch(url, &target, 60L);
     if (!why.empty())
     {

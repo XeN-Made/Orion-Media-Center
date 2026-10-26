@@ -65,8 +65,8 @@ void notify(const std::string &text);
 // Nothing on a PC.
 void art_trace(const char *step, bool reset = false);
 
-// Fetches an https:// URL into *body (at most limit bytes), verifying the
-// server against the CA list shipped in assets/certs. False with *error set
+// Fetches an https:// URL (or http:// on the local network) into *body (at most limit bytes),
+// verifying the server against the CA list shipped in assets/certs. False with *error set
 // otherwise, a page that is not 200 included. Blocking: call it from a
 // worker thread. On a PC it always says there is no network.
 bool http_get(const std::string &url, std::size_t limit, std::string *body, std::string *error);
@@ -81,5 +81,16 @@ bool http_get(const std::string &url, const std::vector<std::string> &headers, s
 // does not fit beside everything else.
 bool http_download(const std::string &url, const std::string &path, std::size_t limit,
                    std::string *error);
+// The same with request headers (to the first address only).
+bool http_download(const std::string &url, const std::vector<std::string> &headers,
+                   const std::string &path, std::size_t limit, std::string *error);
+
+// A POST of `body` (its Content-Type among the headers); the answer in
+// *answer. Redirects are not followed.
+bool http_post(const std::string &url, const std::vector<std::string> &headers,
+               const std::string &body, std::size_t limit, std::string *answer, std::string *error);
+
+// Plain http:// is allowed only to a server on the local network
+// (core/local_host.hpp: a RomM server at home); anything else is https.
 
 } // namespace hui::sys
