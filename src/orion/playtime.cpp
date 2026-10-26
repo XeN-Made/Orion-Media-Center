@@ -55,6 +55,58 @@ PlayLog read_play_log(std::string_view text)
     return log;
 }
 
+std::int64_t parse_date_time(std::string_view text)
+{
+    if (text.size() < 19 || text[4] != '-' || text[7] != '-' ||
+        (text[10] != 'T' && text[10] != ' ') || text[13] != ':' || text[16] != ':')
+        return 0;
+    std::int64_t year = 0;
+    std::int64_t month = 0;
+    std::int64_t day = 0;
+    std::int64_t hour = 0;
+    std::int64_t minute = 0;
+    std::int64_t second = 0;
+    if (!number(text.substr(0, 4), &year) || !number(text.substr(5, 2), &month) ||
+        !number(text.substr(8, 2), &day) || !number(text.substr(11, 2), &hour) ||
+        !number(text.substr(14, 2), &minute) || !number(text.substr(17, 2), &second) ||
+        year < 1970 || month < 1 || month > 12 || day < 1 || day > 31 || hour > 23 || minute > 59 ||
+        second > 60)
+        return 0;
+    // Days from the civil date (Howard Hinnant's days_from_civil).
+    const std::int64_t y = month <= 2 ? year - 1 : year;
+    const std::int64_t era = y / 400;
+    const std::int64_t of_era = y - era * 400;
+    const std::int64_t of_year = (153 * (month + (month > 2 ? -3 : 9)) + 2) / 5 + day - 1;
+    const std::int64_t of_cycle = of_era * 365 + of_era / 4 - of_era / 100 + of_year;
+    const std::int64_t days = era * 146097 + of_cycle - 719468;
+    return days * 86400 + hour * 3600 + minute * 60 + second;
+}
+
+void merge_system_play_time(std::string_view text, PlayLog *log)
+{
+    std::size_t start = 0;
+    while (start < text.size())
+    {
+        std::size_t end = text.find('\n', start);
+        if (end == std::string_view::npos)
+            end = text.size();
+        const std::string_view line = text.substr(start, end - start);
+        start = end + 1;
+        const std::size_t first = line.find('\t');
+        const std::size_t second =
+            first == std::string_view::npos ? first : line.find('\t', first + 1);
+        std::int64_t seconds = 0;
+        const std::string id(line.substr(0, first));
+        if (second == std::string_view::npos ||
+            !number(line.substr(first + 1, second - first - 1), &seconds) || seconds <= 0 ||
+            !library::is_title_id(id))
+            continue;
+        PlayRecord &record = (*log)[id];
+        record.seconds = std::max(record.seconds, seconds);
+        record.last = std::max(record.last, parse_date_time(line.substr(second + 1)));
+    }
+}
+
 std::string play_time_text(std::int64_t seconds)
 {
     if (seconds < 60)

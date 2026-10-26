@@ -149,6 +149,13 @@ Makefile) to download box art over HTTPS and to read WebP pictures:
 | [zstd](https://github.com/facebook/zstd) | 1.5.x | BSD-3-Clause (dual-licensed with GPL-2.0) |
 | [zlib](https://zlib.net/) | 1.3.2 | zlib license |
 | [libwebp](https://chromium.googlesource.com/webm/libwebp) | 1.x | BSD-3-Clause |
+| [SQLite](https://sqlite.org/) | 3.x | Public domain |
+
+SQLite is linked only into the play time payload
+(`assets/payloads/orion-playtime.elf`, `payload/playtime/`), which reads the
+console's own play time. Where that time is kept and how its tables are laid
+out was learned from [PlayTime](https://github.com/ghost1372/PlayTime) by
+ghost1372 (MIT); no code of it is included.
 
 `assets/certs/cacert.pem` is Mozilla's CA certificate list as Ubuntu's
 `ca-certificates` package bundles it, used to verify the box art server. It is

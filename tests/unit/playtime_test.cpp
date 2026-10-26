@@ -28,6 +28,37 @@ TEST(Playtime, AddsUpSessionsPerGame)
     EXPECT_EQ(log.at("PPSA99505").sessions, 1);
 }
 
+// The system's time counts every session, ORION's own too: the larger time
+// and the later date win.
+TEST(Playtime, TakesTheSystemsOwnPlayTime)
+{
+    EXPECT_EQ(orion::parse_date_time("1970-01-01T00:00:00"), 0);
+    EXPECT_EQ(orion::parse_date_time("2026-10-12T13:44:10.000Z"), 1791812650);
+    EXPECT_EQ(orion::parse_date_time("2000-02-29 12:00:00"), 951825600);
+    EXPECT_EQ(orion::parse_date_time("yesterday"), 0);
+    EXPECT_EQ(orion::parse_date_time("2026-13-01T00:00:00"), 0);
+
+    orion::PlayLog log = orion::read_play_log("1000 4600 PPSA02343\n");
+    orion::merge_system_play_time("PPSA02343\t9000\t2026-10-12T13:44:10\n"
+                                  "CUSA00001\t60\t\n"                   // no date
+                                  "PPSA02344\t0\t2026-10-12T13:44:10\n" // never played
+                                  "rom-0123456789ab\t100\t\n"           // not the system's
+                                  "garbage\n"
+                                  "PPSA99505\t120\t2026-10-01T00:00:00",
+                                  &log);
+    ASSERT_EQ(log.size(), 3u);
+    EXPECT_EQ(log.at("PPSA02343").seconds, 9000);
+    EXPECT_EQ(log.at("PPSA02343").last, 1791812650);
+    EXPECT_EQ(log.at("PPSA02343").sessions, 1);
+    EXPECT_EQ(log.at("CUSA00001").seconds, 60);
+    EXPECT_EQ(log.at("CUSA00001").last, 0);
+    EXPECT_EQ(log.at("PPSA99505").seconds, 120);
+
+    // ORION's own record stays when it is the larger.
+    orion::merge_system_play_time("PPSA02343\t10\t1970-01-01T00:00:00\n", &log);
+    EXPECT_EQ(log.at("PPSA02343").seconds, 9000);
+}
+
 TEST(Playtime, SaysHowLongAndHowLately)
 {
     EXPECT_EQ(orion::play_time_text(30), "Under a minute");

@@ -269,6 +269,9 @@ bash "$root/payload/launcher/build.sh" "$sdk_root" "$app/assets/payloads/orion-l
 bash "$root/payload/autostart/build.sh" "$sdk_root" "$app/assets/payloads/orion-autostart.elf"
 # And the rest-mode watcher ORION starts itself (payload/resume/main.c).
 bash "$root/payload/resume/build.sh" "$sdk_root" "$app/assets/payloads/orion-resume.elf"
+# And the reader of the system's play time, with PacBrew's SQLite (payload/playtime/main.c).
+bash "$root/payload/playtime/build.sh" "$sdk_root" "$pacbrew_root" \
+    "$app/assets/payloads/orion-playtime.elf"
 # Directory listing returns nothing under /app0 on the console, so each
 # audio folder carries an index of its files (read by save::list_files).
 for dir in "$app/assets/audio/music" "$app"/assets/audio/sfx/*/; do

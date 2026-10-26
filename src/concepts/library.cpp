@@ -109,6 +109,8 @@ constexpr const char *kLauncherPath = "/app0/assets/payloads/orion-launcher.elf"
 constexpr int kLoaderPort = 9021;
 // The rest-mode watcher, which ORION sends itself (payload/resume).
 constexpr const char *kResumePath = "/app0/assets/payloads/orion-resume.elf";
+// The reader of the system's play time, sent once as ORION starts (payload/playtime).
+constexpr const char *kPlaytimePath = "/app0/assets/payloads/orion-playtime.elf";
 constexpr float kHoldToDelete = 1.5f; // seconds of Cross on Delete
 // The launch helper reads a request of 4 KiB; a game's path is one line of it.
 constexpr std::size_t kMaxRequestPath = 1024;
@@ -998,6 +1000,7 @@ class Library final : public app::Concept
         settings_.update(dt);
         details_.update(dt);
         follow_drive_space();
+        follow_system_play_time();
         last_dt_ = dt;
         follow_preview();
         setup_.update(dt);
@@ -4431,7 +4434,8 @@ class Library final : public app::Concept
     }
 
     // The play records: what the launch helper wrote in ORION's folder
-    // (/app0/play-log.txt), and, for the PC preview, one in the state folder.
+    // (/app0/play-log.txt), and, for the PC preview, one in the state folder;
+    // then the system's own time where it has more (system-playtime.txt).
     static orion::PlayLog load_plays(const std::string &state_dir)
     {
         std::string text;
@@ -4439,7 +4443,48 @@ class Library final : public app::Concept
         save::read_file("/app0/play-log.txt", &text, 4u << 20);
         if (!state_dir.empty() && save::read_file(state_dir + "/play-log.txt", &more, 4u << 20))
             text += "\n" + more;
-        return orion::read_play_log(text);
+        orion::PlayLog log = orion::read_play_log(text);
+        std::string system;
+        if (!state_dir.empty() &&
+            save::read_file(state_dir + "/system-playtime.txt", &system, 1u << 20))
+            orion::merge_system_play_time(system, &log);
+        return log;
+    }
+
+    // The system's play time, read by a payload (its database is outside
+    // ORION's sandbox): sent once, a few seconds in, so it does not meet the
+    // rest-mode watcher at the loader; its answer is read when it is written.
+    void follow_system_play_time()
+    {
+        const std::string &state = context_.library.state_dir;
+        if (!sys::on_console() || data_missing_ || state.empty())
+            return;
+        const std::string file = state + "/system-playtime.txt";
+        if (playtime_asked_ < 0.0f)
+        {
+            std::string elf;
+            if (clock_ < 5.0f || launch_pending_ > 0.0f)
+                return;
+            playtime_asked_ = clock_;
+            struct stat info = {};
+            if (::stat(file.c_str(), &info) == 0)
+                playtime_time_ = info.st_mtime;
+            if (!save::read_file(kPlaytimePath, &elf, 8u << 20) || elf.empty())
+                return;
+            std::thread([elf = std::move(elf)]() { sys::send_payload(elf, kLoaderPort); }).detach();
+            return;
+        }
+        if (clock_ - playtime_asked_ > 30.0f ||
+            static_cast<int>(clock_ * 2.0f) == static_cast<int>((clock_ - last_dt_) * 2.0f))
+            return;
+        struct stat info = {};
+        if (::stat(file.c_str(), &info) != 0 || info.st_mtime == playtime_time_)
+            return;
+        playtime_time_ = info.st_mtime;
+        plays_ = load_plays(state);
+        const Sort sort = sort_of(sort_key());
+        if (sort == Sort::played || sort == Sort::most_played)
+            rebuild();
     }
 
     const orion::PlayRecord &played(const Title &title) const
@@ -6155,6 +6200,8 @@ class Library final : public app::Concept
     orion::TitleDetails details_;      // a title's page (Details… in its menu)
     float drive_space_asked_ = -1.0f;  // clock_ when the helper was sent for the drives' space
     std::time_t drive_space_time_ = 0; // when the answer shown was written
+    float playtime_asked_ = -1.0f;     // clock_ when the play time reader was sent
+    std::time_t playtime_time_ = 0;    // when the system's play time read was written
     float last_dt_ = 0.0f;
     std::string details_id_; // the title it shows
     std::string info_title_; // a message waiting to be shown

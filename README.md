@@ -48,7 +48,9 @@ most played.
   its row once ORION finds a game for it.
 - Favourites, Continue playing (what you played last, over the All tab),
   hidden titles, search.
-- Play time for every game, and when you last played it.
+- Play time for every game, and when you last played it: the console's own
+  count where it has one (system software 10 and later), so games played
+  without ORION count too.
 - Remove a title from the home screen, or delete it, from ORION.
 
 **Made for the controller**

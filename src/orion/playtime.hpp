@@ -27,6 +27,17 @@ using PlayLog = std::map<std::string, PlayRecord>;
 // "<start> <end> <id>". Lines that do not read as one are skipped.
 PlayLog read_play_log(std::string_view text);
 
+// The system's own play time (system-playtime.txt, which payload/playtime
+// writes from the console's database: "<title ID>\t<seconds>\t<last played>"
+// a line, the date as "2026-10-12T13:44:10..."), merged into *log. It counts
+// every session, those started from ORION too: a title takes the larger
+// time and the later date.
+void merge_system_play_time(std::string_view text, PlayLog *log);
+
+// "2026-10-12T13:44:10" or "2026-10-12 13:44:10" (UTC, anything after the
+// seconds ignored) in seconds since 1970; 0 when it does not read as one.
+std::int64_t parse_date_time(std::string_view text);
+
 // "Under a minute", "45 m", "3 h 20 m", "120 h".
 std::string play_time_text(std::int64_t seconds);
 // "today", "yesterday", "3 days ago", "2 weeks ago", "5 months ago", "a year ago".
