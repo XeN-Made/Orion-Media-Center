@@ -327,7 +327,10 @@ you chose for it.
   from SteamGridDB, and Options on any title, **Find other art…**, shows up to
   eight covers on the tile: Left and Right to look, Cross keeps one, Circle
   puts the old one back. **Find art by name…** asks for the name to look for
-  first, for a game SteamGridDB knows by another name. Enter the key in Settings, Box art, or put a line
+  first, for a game SteamGridDB knows by another name.
+  Enter the key in Settings, Box art; or, while ORION is open, on a phone or
+  PC at `http://<console IP>:9062` (Settings, Box art shows the address); or
+  put a line
   `steamgriddb = <your key>` in `/data/orion/keys.txt`.
 - Background music: every `.ogg` in `/data/orion/music` joins ORION's own
   tracks. Settings, Sound sets the volumes and skips a song.
