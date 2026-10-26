@@ -15,7 +15,9 @@
 #include <sys/select.h>
 #include <sys/socket.h>
 #include <sys/time.h>
+#include <time.h>
 #include <unistd.h>
+#include <vector>
 
 namespace hui::orion
 {
@@ -24,6 +26,8 @@ namespace
 {
 
 constexpr std::size_t kMaxRequest = 16u << 10;
+constexpr std::size_t kMaxClients = 8;
+constexpr std::int64_t kQuietMs = 30000; // a connection that long without a request is dropped
 
 std::string response(std::string_view status, std::string_view body)
 {
@@ -73,6 +77,20 @@ int hex_digit(char c)
 
 } // namespace
 
+bool request_complete(std::string_view request)
+{
+    const std::size_t head_end = request.find("\r\n\r\n");
+    if (head_end == std::string_view::npos)
+        return false;
+    std::string head(request.substr(0, head_end));
+    for (char &c : head)
+        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    const std::size_t at = head.find("content-length:");
+    const std::size_t body =
+        at == std::string::npos ? 0 : std::strtoul(head.c_str() + at + 15, nullptr, 10);
+    return request.size() >= head_end + 4 + std::min(body, kMaxRequest);
+}
+
 bool form_value(std::string_view body, std::string_view name, std::string *value)
 {
     std::size_t start = 0;
@@ -110,6 +128,9 @@ bool form_value(std::string_view body, std::string_view name, std::string *value
 std::string answer_key_request(std::string_view request, const std::string &state_dir, bool *saved)
 {
     *saved = false;
+    // Nothing asked (a connection the browser opened and closed): nothing said.
+    if (request.empty())
+        return {};
     const bool has_key = !read_service_key(state_dir, kSteamGridDb).empty();
     const std::size_t line_end = request.find("\r\n");
     const std::string_view line = request.substr(0, line_end);
@@ -199,53 +220,32 @@ void KeyPage::stop()
 
 void KeyPage::serve(int listener, std::string state_dir)
 {
-    while (!stopping_.load())
+    // Browsers open a spare connection or two and send nothing on them for
+    // a while (to have one ready). Read from every open connection at once,
+    // so a quiet one never holds up the request that matters, and close a
+    // quiet one without a word: an answer on it would be read as the answer
+    // to whatever the browser sends there later.
+    struct Client
     {
-        // A short wait, so stop() is never kept waiting.
-        fd_set ready;
-        FD_ZERO(&ready);
-        FD_SET(listener, &ready);
-        timeval wait = {0, 250 * 1000};
-        if (::select(listener + 1, &ready, nullptr, nullptr, &wait) <= 0)
-            continue;
-        const int client = ::accept(listener, nullptr, nullptr);
-        if (client < 0)
-            continue;
-        timeval limit = {5, 0};
-        ::setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, &limit, sizeof(limit));
-        ::setsockopt(client, SOL_SOCKET, SO_SNDTIMEO, &limit, sizeof(limit));
-        // The request: its headers, then as much body as they announce.
+        int fd = -1;
         std::string request;
-        char buffer[2048];
-        std::size_t wanted = 0;
-        while (request.size() < kMaxRequest)
-        {
-            const ssize_t got = ::recv(client, buffer, sizeof(buffer), 0);
-            if (got <= 0)
-                break;
-            request.append(buffer, static_cast<std::size_t>(got));
-            const std::size_t head_end = request.find("\r\n\r\n");
-            if (head_end == std::string::npos)
-                continue;
-            if (wanted == 0)
-            {
-                std::string head = request.substr(0, head_end);
-                for (char &c : head)
-                    c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-                const std::size_t at = head.find("content-length:");
-                const std::size_t body =
-                    at == std::string::npos ? 0 : std::strtoul(head.c_str() + at + 15, nullptr, 10);
-                wanted = head_end + 4 + std::min(body, kMaxRequest);
-            }
-            if (request.size() >= wanted)
-                break;
-        }
+        std::int64_t opened = 0; // monotonic ms
+    };
+    std::vector<Client> clients;
+    const auto now_ms = []()
+    {
+        timespec now = {};
+        ::clock_gettime(CLOCK_MONOTONIC, &now);
+        return static_cast<std::int64_t>(now.tv_sec) * 1000 + now.tv_nsec / 1000000;
+    };
+    const auto finish = [&](Client &client)
+    {
         bool saved = false;
-        const std::string answer = answer_key_request(request, state_dir, &saved);
+        const std::string answer = answer_key_request(client.request, state_dir, &saved);
         std::size_t sent = 0;
         while (sent < answer.size())
         {
-            const ssize_t put = ::send(client, answer.data() + sent, answer.size() - sent,
+            const ssize_t put = ::send(client.fd, answer.data() + sent, answer.size() - sent,
 #ifdef MSG_NOSIGNAL
                                        MSG_NOSIGNAL
 #else
@@ -256,10 +256,75 @@ void KeyPage::serve(int listener, std::string state_dir)
                 break;
             sent += static_cast<std::size_t>(put);
         }
-        ::close(client);
+        ::close(client.fd);
+        client.fd = -1;
         if (saved)
             saved_ = true;
+    };
+    while (!stopping_.load())
+    {
+        fd_set ready;
+        FD_ZERO(&ready);
+        FD_SET(listener, &ready);
+        int top = listener;
+        for (const Client &client : clients)
+        {
+            FD_SET(client.fd, &ready);
+            top = std::max(top, client.fd);
+        }
+        // A short wait, so stop() is never kept waiting.
+        timeval wait = {0, 250 * 1000};
+        const int count = ::select(top + 1, &ready, nullptr, nullptr, &wait);
+        if (count > 0 && FD_ISSET(listener, &ready))
+        {
+            const int fd = ::accept(listener, nullptr, nullptr);
+            if (fd >= 0 && clients.size() >= kMaxClients)
+                ::close(fd);
+            else if (fd >= 0)
+            {
+                timeval limit = {5, 0};
+                ::setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &limit, sizeof(limit));
+                clients.push_back({fd, std::string(), now_ms()});
+            }
+        }
+        for (Client &client : clients)
+        {
+            if (client.fd < 0)
+                continue;
+            if (count > 0 && FD_ISSET(client.fd, &ready))
+            {
+                char buffer[2048];
+                const ssize_t got = ::recv(client.fd, buffer, sizeof(buffer), 0);
+                if (got <= 0)
+                {
+                    // Closed by the browser: an unfinished request is not
+                    // answered either.
+                    ::close(client.fd);
+                    client.fd = -1;
+                    continue;
+                }
+                client.request.append(buffer, static_cast<std::size_t>(got));
+                if (request_complete(client.request) || client.request.size() >= kMaxRequest)
+                {
+                    finish(client);
+                    continue;
+                }
+            }
+            if (now_ms() - client.opened > kQuietMs)
+            {
+                if (client.request.empty())
+                {
+                    ::close(client.fd);
+                    client.fd = -1;
+                }
+                else
+                    finish(client); // half a request: told so
+            }
+        }
+        std::erase_if(clients, [](const Client &client) { return client.fd < 0; });
     }
+    for (const Client &client : clients)
+        ::close(client.fd);
     ::close(listener);
 }
 

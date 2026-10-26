@@ -18,8 +18,12 @@ inline constexpr int kKeyPagePort = 9062;
 // The answer to one HTTP request (the whole response, headers and all).
 // GET shows the form; a POST of "steamgriddb=<key>" to /key saves the key
 // in <state_dir>/keys.txt (orion/steamgriddb.hpp) and sets *saved. The key
-// is never written back into a page. Exposed for tests.
+// is never written back into a page. An empty request gets an empty answer:
+// nothing is sent. Exposed for tests.
 std::string answer_key_request(std::string_view request, const std::string &state_dir, bool *saved);
+
+// Whether a request has its headers and as much body as they announce.
+bool request_complete(std::string_view request);
 
 // One form field's value from an x-www-form-urlencoded body, decoded; false
 // when the field is not there.
@@ -29,8 +33,9 @@ bool form_value(std::string_view body, std::string_view name, std::string *value
 // Asked of the system's routing (a UDP socket aimed outward sends nothing).
 std::string local_address();
 
-// The page's server, on a thread of its own: one request at a time, each
-// with a time limit, so a stuck browser cannot hold it.
+// The page's server, on a thread of its own: every open connection read at
+// once, and one that stays quiet dropped, so a browser's spare connections
+// cannot hold it.
 //
 //   KeyPage page;
 //   page.start("/data/orion");
