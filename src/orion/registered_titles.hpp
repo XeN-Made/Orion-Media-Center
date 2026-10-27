@@ -32,6 +32,11 @@ namespace hui::orion
 //   registered.start("/data/orion", 2121);
 //   ...every frame:
 //   if (registered.take_finished() && registered.result().changed) merge();
+// Where ORION's payload (payload/playtime) leaves what it read of /user/app:
+// <ID>/param.json (or param.sfo) and <ID>/icon0.png, and index.txt listing
+// the IDs installed now. It needs no FTP server.
+inline constexpr const char *kSystemApps = "system-apps";
+
 // The ports console FTP servers listen on: ftpsrv and most payloads 2121,
 // etaHEN 1337, a few the standard 21.
 inline constexpr int kFtpPorts[] = {2121, 1337, 21};

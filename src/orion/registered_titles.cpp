@@ -182,13 +182,49 @@ void RegisteredTitles::run(std::string state_dir, int port)
             save::write_atomic(icon, picture).empty())
             ++result.icons;
     }
-    result.server = listed || asked;
+    // What ORION's payload read of /user/app itself: the titles no FTP
+    // server was there to list.
+    const std::string apps_dir = state_dir + "/" + kSystemApps;
+    std::string index;
+    int from_payload = 0;
+    const bool payload = save::read_file(apps_dir + "/index.txt", &index, 64u << 10);
+    for (std::size_t start = 0; payload && start < index.size();)
+    {
+        std::size_t end = index.find('\n', start);
+        if (end == std::string::npos)
+            end = index.size();
+        const std::string id = index.substr(start, end - start);
+        start = end + 1;
+        if (!library::is_title_id(id) || lines.count(id) != 0)
+            continue;
+        library::Title title;
+        std::string text;
+        const std::string own = apps_dir + "/" + id;
+        const bool known = (save::read_file(own + "/param.json", &text, kMaxParam) &&
+                            library::read_param_json(text, &title)) ||
+                           (save::read_file(own + "/param.sfo", &text, kMaxParam) &&
+                            library::read_param_sfo(text, &title));
+        if (!known || title.id != id || title.name.empty())
+            continue;
+        lines[id] = library::registered_line(title);
+        ++from_payload;
+        const std::string icon = icons + "/" + id + ".png";
+        struct stat info = {};
+        if (::stat(icon.c_str(), &info) != 0 &&
+            save::read_file(own + "/icon0.png", &text, kMaxIcon) &&
+            save::write_atomic(icon, text).empty())
+            ++result.icons;
+    }
+    result.titles += from_payload;
+    result.server = listed || asked || payload;
     append_line(
         state_dir + "/registered.txt",
         "FTP ports " + tried + "; /user/app: " + std::to_string(apps.size()) + " folders, " +
             std::to_string(without_metadata) + " without metadata; ShadowMountPlus: " +
             (asked ? std::to_string(mounted.size()) + " titles" : "no answer (" + error + ")") +
-            "; " + std::to_string(lines.size()) + " titles in all");
+            "; ORION's payload: " +
+            (payload ? std::to_string(from_payload) + " more" : std::string("no list yet")) + "; " +
+            std::to_string(lines.size()) + " titles in all");
     if (result.server)
     {
         std::string cache;

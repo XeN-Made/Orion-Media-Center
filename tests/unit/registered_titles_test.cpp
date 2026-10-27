@@ -47,5 +47,46 @@ TEST(RegisteredTitles, SaysWhatItTried)
     EXPECT_NE(log.find("ShadowMountPlus: "), std::string::npos) << log;
 }
 
+// No FTP server: the titles ORION's payload copied out of /user/app join
+// all the same, with their icons, and only the ones still installed.
+TEST(RegisteredTitles, ListsWhatThePayloadFoundWithoutFtp)
+{
+    const std::string dir = ::testing::TempDir() + "orion-registered-payload";
+    const std::string apps = dir + "/" + orion::kSystemApps;
+    ASSERT_TRUE(save::ensure_directory(dir));
+    ASSERT_TRUE(save::ensure_directory(apps));
+    ASSERT_TRUE(save::ensure_directory(apps + "/PPSA90108"));
+    ASSERT_TRUE(save::ensure_directory(apps + "/PPSA90999"));
+    std::remove((dir + "/registered.tsv").c_str());
+    std::remove((dir + "/icons/PPSA90108.png").c_str());
+    std::string param;
+    ASSERT_TRUE(save::read_file(std::string(HUI_SOURCE_DIR) +
+                                    "/tests/fixtures/library/homebrew/PPSA90108/sce_sys/param.json",
+                                &param));
+    ASSERT_TRUE(save::write_atomic(apps + "/PPSA90108/param.json", param).empty());
+    ASSERT_TRUE(save::write_atomic(apps + "/PPSA90108/icon0.png", "png").empty());
+    // Copied before, uninstalled since: not in the list any more.
+    ASSERT_TRUE(save::write_atomic(apps + "/PPSA90999/param.json", param).empty());
+    ASSERT_TRUE(save::write_atomic(apps + "/index.txt", "PPSA90108\nnot-an-id\n").empty());
+
+    orion::RegisteredTitles registered;
+    ASSERT_TRUE(registered.start(dir, 39999));
+    registered.wait();
+    EXPECT_TRUE(registered.take_finished());
+    const orion::RegisteredTitles::Result result = registered.result();
+    EXPECT_TRUE(result.server);
+    EXPECT_EQ(result.titles, 1);
+    std::string cache;
+    ASSERT_TRUE(save::read_file(dir + "/registered.tsv", &cache));
+    EXPECT_EQ(cache.rfind("PPSA90108\t", 0), 0u) << cache;
+    EXPECT_EQ(cache.find("PPSA90999"), std::string::npos);
+    std::string icon;
+    ASSERT_TRUE(save::read_file(dir + "/icons/PPSA90108.png", &icon));
+    EXPECT_EQ(icon, "png");
+    std::string log;
+    ASSERT_TRUE(save::read_file(dir + "/registered.txt", &log));
+    EXPECT_NE(log.find("ORION's payload: 1 more"), std::string::npos) << log;
+}
+
 } // namespace
 } // namespace hui

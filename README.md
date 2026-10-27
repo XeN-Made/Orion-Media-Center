@@ -85,15 +85,17 @@ The pictures show invented titles: ORION's renderer drew them on a PC
 - An **ELF loader on port 9021** (the usual one that comes with the
   jailbreak). ORION starts games and removes titles through a small helper it
   sends there.
-- An **FTP server on the console** (port 2121, the common `ftpsrv`): to copy
-  ORION over, and optional afterwards (ORION uses it to read the pictures
-  the home screen shows behind a game).
+- An **FTP server on the console** to copy ORION over (`ftpsrv` on port
+  2121, or etaHEN's on 1337). Optional afterwards: ORION reads the installed
+  apps and their pictures through its own helper, and uses an FTP server only
+  when one is running.
 
 Optional, for retro games: **RetroArch**, **Porpoise** (Dolphin for PS5:
 GameCube and Wii), **PS5SX2** (PS2), **PSwanStation** (PS1),
 **ProsperoEden** (Switch), **PS5-ECAM** (Wii U, 3DS, DS and Switch) and
-**PS5X360** (Xbox 360), installed as folder apps too. Installed games beyond
-the homebrew folders are read through the FTP server.
+**PS5X360** (Xbox 360), installed as folder apps too. Installed games and apps
+beyond the homebrew folders (Payload Manager, PS5Upload and the like) are read
+by ORION's helper, no FTP server needed.
 
 ## Install
 

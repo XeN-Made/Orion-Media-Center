@@ -883,6 +883,14 @@ class Library final : public app::Concept
             sys::art_trace("background copies skipped: the last run did not finish");
             return;
         }
+        if (!ids.empty())
+        {
+            // ORION's payload copies them too, with no FTP server.
+            std::string want;
+            for (const std::string &id : ids)
+                want += "pic0 " + id + "\n";
+            save::write_atomic(context_.library.state_dir + "/system-want.txt", want);
+        }
         if (!ids.empty() && orion::make_directories(folder) &&
             save::write_atomic(marker, "").empty())
             backdrop_copies_.start(std::move(ids), folder, ftp_port());
@@ -4838,6 +4846,9 @@ class Library final : public app::Concept
             struct stat info = {};
             if (::stat(file.c_str(), &info) == 0)
                 playtime_time_ = info.st_mtime;
+            const std::string apps = state + "/" + orion::kSystemApps + "/index.txt";
+            if (::stat(apps.c_str(), &info) == 0)
+                apps_time_ = info.st_mtime;
             if (!save::read_file(kPlaytimePath, &elf, 8u << 20) || elf.empty())
                 return;
             std::thread([elf = std::move(elf)]() { sys::send_payload(elf, kLoaderPort); }).detach();
@@ -4847,6 +4858,15 @@ class Library final : public app::Concept
             static_cast<int>(clock_ * 2.0f) == static_cast<int>((clock_ - last_dt_) * 2.0f))
             return;
         struct stat info = {};
+        // The installed apps it listed: the titles are looked for again,
+        // and what is new joins the library.
+        const std::string apps = state + "/" + orion::kSystemApps + "/index.txt";
+        if (::stat(apps.c_str(), &info) == 0 && info.st_mtime != apps_time_)
+        {
+            apps_time_ = info.st_mtime;
+            if (!registered_.running())
+                registered_.start(state, ftp_port());
+        }
         if (::stat(file.c_str(), &info) != 0 || info.st_mtime == playtime_time_)
             return;
         playtime_time_ = info.st_mtime;
@@ -6630,6 +6650,7 @@ class Library final : public app::Concept
     std::time_t drive_space_time_ = 0; // when the answer shown was written
     float playtime_asked_ = -1.0f;     // clock_ when the play time reader was sent
     std::time_t playtime_time_ = 0;    // when the system's play time read was written
+    std::time_t apps_time_ = 0;        // when the payload's list of installed apps was
     float last_dt_ = 0.0f;
     std::string details_id_; // the title it shows
     std::string info_title_; // a message waiting to be shown

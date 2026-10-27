@@ -1,4 +1,4 @@
-// ORION Media Center - Reads the console's own play time for ORION.
+// ORION Media Center - Reads what the system knows for ORION: installed apps, play time.
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
@@ -12,7 +12,17 @@
 // user) and ends.
 //
 // The idea and the table's layout come from PlayTime by ghost1372 (MIT).
+//
+// Before that, the apps the system has installed: ORION's sandbox cannot see
+// /user/app either, and asking a console FTP server for it (what ORION did
+// alone before) needs one to be running. For each app this copies its
+// metadata (param.json, or a PS4 title's param.sfo) and its icon into
+// /data/orion/system-apps/<ID>/, once, and lists the IDs in index.txt
+// (orion/registered_titles.hpp reads them). Then the home-screen pictures
+// ORION asks for in /data/orion/system-want.txt ("pic0 <ID>" a line) go to
+// /data/orion/backdrops/<ID>.png. On every system software, app.db or not.
 
+#include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <sqlite3.h>
@@ -26,7 +36,12 @@
 #define APP_DB "/system_data/priv/mms/app.db"
 #define OUT_PATH "/data/orion/system-playtime.txt"
 #define LOG_PATH "/data/orion/launcher.txt"
+#define APPS_DIR "/data/orion/system-apps"
+#define WANT_PATH "/data/orion/system-want.txt"
+#define BACKDROPS_DIR "/data/orion/backdrops"
 #define MAX_TABLES 16
+#define MAX_APPS 2048
+#define MAX_COPY (32u << 20) // a home-screen picture is 8 to 12 MB
 #define MAX_TITLES 4096
 
 typedef struct
@@ -55,6 +70,184 @@ static void say(const char *format, ...)
         return;
     write(fd, line, (size_t)length);
     close(fd);
+}
+
+// Copies a file whole, through <to>.part; nothing when `from` is missing or
+// larger than `limit`. 1 when it was copied.
+static int copy_file(const char *from, const char *to, size_t limit)
+{
+    struct stat info;
+    if (stat(from, &info) != 0 || !S_ISREG(info.st_mode) || info.st_size <= 0 ||
+        (size_t)info.st_size > limit)
+        return 0;
+    const int in = open(from, O_RDONLY);
+    if (in < 0)
+        return 0;
+    char part[512];
+    snprintf(part, sizeof(part), "%s.part", to);
+    const int out = open(part, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+    if (out < 0)
+    {
+        close(in);
+        return 0;
+    }
+    static char buffer[64 << 10];
+    int ok = 1;
+    for (;;)
+    {
+        const ssize_t got = read(in, buffer, sizeof(buffer));
+        if (got == 0)
+            break;
+        if (got < 0 || write(out, buffer, (size_t)got) != got)
+        {
+            ok = 0;
+            break;
+        }
+    }
+    fchmod(out, 0666);
+    close(in);
+    close(out);
+    if (!ok || rename(part, to) != 0)
+    {
+        unlink(part);
+        return 0;
+    }
+    return 1;
+}
+
+static int exists(const char *path)
+{
+    struct stat info;
+    return stat(path, &info) == 0;
+}
+
+// Any title ID the system uses: four capitals and five digits (PPSA01234,
+// and payloads' own, like PSUP00001).
+static int is_title_id(const char *id)
+{
+    if (id == NULL || strlen(id) != 9)
+        return 0;
+    for (int i = 0; i < 9; ++i)
+    {
+        const char c = id[i];
+        if (i < 4 ? (c < 'A' || c > 'Z') : (c < '0' || c > '9'))
+            return 0;
+    }
+    return 1;
+}
+
+// /user/app's titles: their metadata and icon, copied once, and the list.
+static void list_apps(void)
+{
+    mkdir(APPS_DIR, 0777);
+    DIR *apps = opendir("/user/app");
+    if (apps == NULL)
+    {
+        say("cannot list /user/app (errno %d)", errno);
+        return;
+    }
+    static char index[MAX_APPS * 10 + 1];
+    size_t used = 0;
+    int count = 0;
+    int copied = 0;
+    struct dirent *entry;
+    while ((entry = readdir(apps)) != NULL && count < MAX_APPS)
+    {
+        const char *id = entry->d_name;
+        if (!is_title_id(id))
+            continue;
+        char from[256];
+        char to[256];
+        char dir[256];
+        snprintf(dir, sizeof(dir), APPS_DIR "/%s", id);
+        mkdir(dir, 0777);
+        // PS5: the home screen's copy, or the app's own (a payload's tile
+        // has no appmeta); PS4: its param.sfo.
+        snprintf(to, sizeof(to), "%s/param.json", dir);
+        char sfo[256];
+        snprintf(sfo, sizeof(sfo), "%s/param.sfo", dir);
+        if (!exists(to) && !exists(sfo))
+        {
+            snprintf(from, sizeof(from), "/user/appmeta/%s/param.json", id);
+            int got = copy_file(from, to, 1u << 20);
+            if (!got)
+            {
+                snprintf(from, sizeof(from), "/user/app/%s/sce_sys/param.json", id);
+                got = copy_file(from, to, 1u << 20);
+            }
+            if (!got)
+            {
+                snprintf(from, sizeof(from), "/system_data/priv/appmeta/%s/param.sfo", id);
+                got = copy_file(from, sfo, 1u << 20);
+            }
+            copied += got;
+        }
+        snprintf(to, sizeof(to), "%s/icon0.png", dir);
+        if (!exists(to))
+        {
+            snprintf(from, sizeof(from), "/user/appmeta/%s/icon0.png", id);
+            if (!copy_file(from, to, 8u << 20))
+            {
+                snprintf(from, sizeof(from), "/user/app/%s/sce_sys/icon0.png", id);
+                copy_file(from, to, 8u << 20);
+            }
+        }
+        memcpy(index + used, id, 9);
+        index[used + 9] = '\n';
+        used += 10;
+        ++count;
+    }
+    closedir(apps);
+    // The list last: ORION reads it as "what is installed now".
+    const char *part = APPS_DIR "/index.txt.part";
+    const int fd = open(part, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+    if (fd < 0)
+        return;
+    const ssize_t written = write(fd, index, used);
+    fchmod(fd, 0666);
+    close(fd);
+    if (written == (ssize_t)used)
+        rename(part, APPS_DIR "/index.txt");
+    say("%d installed apps, %d with new metadata", count, copied);
+}
+
+// The home-screen pictures ORION asked for, as its backgrounds.
+static void copy_wanted(void)
+{
+    char text[16384];
+    const int fd = open(WANT_PATH, O_RDONLY);
+    if (fd < 0)
+        return;
+    const ssize_t got = read(fd, text, sizeof(text) - 1);
+    close(fd);
+    unlink(WANT_PATH); // asked once
+    if (got <= 0)
+        return;
+    text[got] = '\0';
+    mkdir(BACKDROPS_DIR, 0777);
+    int copied = 0;
+    for (char *line = strtok(text, "\n"); line != NULL; line = strtok(NULL, "\n"))
+    {
+        if (strncmp(line, "pic0 ", 5) != 0 || !is_title_id(line + 5))
+            continue;
+        const char *id = line + 5;
+        char to[256];
+        char from[256];
+        snprintf(to, sizeof(to), BACKDROPS_DIR "/%s.png", id);
+        if (exists(to))
+            continue;
+        static const char *const kPictures[] = {"pic0.png", "pic1.png"};
+        for (int i = 0; i < 2; ++i)
+        {
+            snprintf(from, sizeof(from), "/user/appmeta/%s/%s", id, kPictures[i]);
+            if (copy_file(from, to, MAX_COPY))
+            {
+                ++copied;
+                break;
+            }
+        }
+    }
+    say("%d home-screen pictures copied", copied);
 }
 
 // A PS5 or PS4 game's title ID: four capitals, five digits.
@@ -162,7 +355,7 @@ static int write_out(void)
     return 0;
 }
 
-int main(void)
+static int read_play_time(void)
 {
     struct stat info;
     if (stat(APP_DB, &info) != 0)
@@ -204,4 +397,11 @@ int main(void)
         return 1;
     }
     return write_out();
+}
+
+int main(void)
+{
+    list_apps();
+    copy_wanted();
+    return read_play_time();
 }
