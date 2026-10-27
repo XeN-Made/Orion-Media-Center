@@ -620,3 +620,4 @@ author = ORION
 "Refresh RomM's game list" = "Actualizar la lista de juegos de RomM"
 "RomM games in the library" = "Juegos de RomM en la biblioteca"
 "Set it up from a phone or PC" = "Configúralo desde un móvil o PC"
+"{0} games on {1} systems so far, going on from {2} read before…" = "{0} juegos en {1} sistemas por ahora, siguiendo desde {2} leídos antes…"

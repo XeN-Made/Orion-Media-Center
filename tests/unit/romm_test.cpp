@@ -232,6 +232,25 @@ TEST(Romm, SyncsTheCatalogueAndItsCovers)
     sync.wait();
     EXPECT_TRUE(fetched.empty());
 
+    // A sync that stopped part way goes on from the systems it had read.
+    ASSERT_TRUE(save::write_atomic(dir + "/romm-sync-done.txt", "http://nas:3000\n1\n").empty());
+    ASSERT_TRUE(save::write_atomic(dir + "/romm-sync-games.tsv", text).empty());
+    asked.clear();
+    ASSERT_TRUE(sync.start("http://nas:3000", "rmm_token", dir));
+    sync.wait();
+    EXPECT_EQ(sync.progress().resumed, 1);
+    EXPECT_EQ(asked.size(), 1u); // the systems only: the one read before is not asked again
+    EXPECT_EQ(sync.progress().games, 2);
+    std::string none;
+    EXPECT_FALSE(save::read_file(dir + "/romm-sync-done.txt", &none)); // whole now: gone
+    // Another server's progress is not used.
+    ASSERT_TRUE(save::write_atomic(dir + "/romm-sync-done.txt", "http://other:3000\n1\n").empty());
+    asked.clear();
+    ASSERT_TRUE(sync.start("http://nas:3000", "rmm_token", dir));
+    sync.wait();
+    EXPECT_EQ(sync.progress().resumed, 0);
+    EXPECT_EQ(asked.size(), 2u);
+
     // A system that cannot be read now keeps the games the last sync had.
     pages.erase(orion::romm_games_url("http://nas:3000", 1, 0, 50));
     ASSERT_TRUE(sync.start("http://nas:3000", "rmm_token", dir));

@@ -2649,8 +2649,13 @@ class Library final : public app::Concept
         if (romm_sync_.running())
         {
             const orion::RommSync::Progress now = romm_sync_.progress();
-            romm_status_ = trf("{0} games on {1} systems so far…",
-                               {std::to_string(now.games), std::to_string(now.platforms)});
+            romm_status_ =
+                now.resumed > 0
+                    ? trf("{0} games on {1} systems so far, going on from {2} read before…",
+                          {std::to_string(now.games), std::to_string(now.platforms),
+                           std::to_string(now.resumed)})
+                    : trf("{0} games on {1} systems so far…",
+                          {std::to_string(now.games), std::to_string(now.platforms)});
             if (settings_.is_open() &&
                 static_cast<int>(clock_ * 2.0f) != static_cast<int>((clock_ - last_dt_) * 2.0f))
                 show_romm_state();

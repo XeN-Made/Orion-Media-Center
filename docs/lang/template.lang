@@ -255,6 +255,7 @@ author =
 "{0} emulators" = ""
 "{0} game" = ""
 "{0} games" = ""
+"{0} games on {1} systems so far, going on from {2} read before…" = ""
 "{0} games on {1} systems so far…" = ""
 "{0} has its own music again" = ""
 "{0} has its own name again: {1}" = ""

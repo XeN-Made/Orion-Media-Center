@@ -9,8 +9,11 @@
 #include "library/art_match.hpp"
 #include "library/json.hpp"
 
+#include <algorithm>
 #include <cctype>
+#include <cstdio>
 #include <cstdlib>
+#include <ctime>
 
 #include <sys/stat.h>
 
@@ -449,11 +452,60 @@ void RommSync::run(std::string base, std::string token, std::string state_dir)
         std::string old_text;
         save::read_file(state_dir + "/romm-games.tsv", &old_text, 32u << 20);
         const std::vector<RommGame> old = read_romm_catalogue(old_text);
+        // A sync that stopped part way (ORION closed, the server went away)
+        // goes on from the systems it had read: a large library is not read
+        // again from the start. Its progress is the systems done and their
+        // games, kept for two days and for this server only.
+        const std::string done_path = state_dir + "/romm-sync-done.txt";
+        const std::string part_path = state_dir + "/romm-sync-games.tsv";
+        std::vector<long long> done;
+        {
+            std::string text;
+            struct stat info = {};
+            if (save::read_file(done_path, &text, 1u << 20) &&
+                ::stat(done_path.c_str(), &info) == 0 &&
+                std::time(nullptr) - info.st_mtime < 2 * 24 * 3600 &&
+                text.rfind(base + "\n", 0) == 0)
+            {
+                for (std::size_t at = text.find('\n') + 1; at < text.size();)
+                {
+                    std::size_t end = text.find('\n', at);
+                    if (end == std::string::npos)
+                        end = text.size();
+                    const long long id = std::atoll(text.substr(at, end - at).c_str());
+                    if (id > 0)
+                        done.push_back(id);
+                    at = end + 1;
+                }
+                std::string part;
+                save::read_file(part_path, &part, 32u << 20);
+                for (RommGame &game : read_romm_catalogue(part))
+                {
+                    if (std::find(done.begin(), done.end(), game.platform_id) != done.end())
+                        games.push_back(std::move(game));
+                }
+            }
+        }
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            progress_.resumed = static_cast<int>(done.size());
+            progress_.games = static_cast<int>(games.size());
+        }
+        const auto keep_progress = [&]()
+        {
+            std::string text = base + "\n";
+            for (const long long id : done)
+                text += std::to_string(id) + "\n";
+            save::write_atomic(part_path, romm_catalogue_text(games));
+            save::write_atomic(done_path, text);
+        };
         for (const RommPlatform &platform : platforms)
         {
-            if (platform.rom_count == 0)
+            if (platform.rom_count == 0 ||
+                std::find(done.begin(), done.end(), platform.id) != done.end())
                 continue;
             const std::size_t first = games.size();
+            bool read = true;
             for (int offset = 0; !cancel_.load(); offset += kPage)
             {
                 long long total = -1;
@@ -470,6 +522,7 @@ void RommSync::run(std::string base, std::string token, std::string state_dir)
                         if (game.platform_id == platform.id)
                             games.push_back(game);
                     }
+                    read = false;
                     break;
                 }
                 {
@@ -481,9 +534,17 @@ void RommSync::run(std::string base, std::string token, std::string state_dir)
                 if (got < kPage || (total >= 0 && offset + got >= total))
                     break;
             }
+            if (read && !cancel_.load())
+            {
+                done.push_back(platform.id);
+                keep_progress();
+            }
         }
         if (cancel_.load())
             return fail("stopped");
+        // Whole: the progress is not needed any more.
+        std::remove(done_path.c_str());
+        std::remove(part_path.c_str());
         const std::string written =
             save::write_atomic(state_dir + "/romm-games.tsv", romm_catalogue_text(games));
         if (!written.empty())

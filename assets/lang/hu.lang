@@ -615,3 +615,4 @@ author = ORION
 "Refresh RomM's game list" = "A RomM játéklistájának frissítése"
 "RomM games in the library" = "RomM-játékok a könyvtárban"
 "Set it up from a phone or PC" = "Beállítás telefonról vagy PC-ről"
+"{0} games on {1} systems so far, going on from {2} read before…" = "Eddig {0} játék {1} rendszeren, folytatva a korábban beolvasott {2} után…"
