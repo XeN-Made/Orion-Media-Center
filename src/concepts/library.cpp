@@ -127,6 +127,8 @@ constexpr std::size_t kMaxRequestPath = 1024;
 constexpr int kFtpPort = 2121;
 // Continue's config for one start, as RetroArch sees it (its folder is /app0).
 constexpr const char *kContinueConfig = "/app0/orion-continue.cfg";
+// Games without box art a run looks for by itself (Find box art now: all).
+constexpr std::size_t kArtPerRun = 300;
 // How long Circle is held to close ORION.
 constexpr float kHoldToExit = 1.2f;
 // The search panel sits under the first row of covers, so the results of
@@ -2743,7 +2745,12 @@ class Library final : public app::Concept
                                          "Downloading {0} games from RomM"));
             feedback.play(audio::Cue::select);
             for (orion::RommEntry &entry : picked)
+            {
+                const std::string id = library::rom_id(entry.path);
+                if (find_title(id) == nullptr)
+                    romm_needs_rescan_ = true;
                 romm_queue_.push_back(std::move(entry));
+            }
             break;
         }
         case orion::RommBrowser::Choice::search:
@@ -3012,15 +3019,19 @@ class Library final : public app::Concept
             }
             else if (romm_launch_after_)
                 launch(romm_downloading_id_, feedback);
-            // The last picked game in: the library lists them as the
-            // console's own now.
+            // The last picked game in. A game the library lists already plays
+            // from where it landed (its file is there now): no rebuild, which
+            // on a large library was heavy enough to end ORION. One it does
+            // not list yet (past its cap) needs one.
             if (romm_queue_.empty() && romm_queued_done_ > 0)
             {
                 show_note(true, i18n::plural(romm_queued_done_, "{0} game downloaded from RomM",
                                              "{0} games downloaded from RomM"));
                 feedback.play(audio::Cue::saved);
                 romm_queued_done_ = 0;
-                context_.rescan_requested = true;
+                if (std::exchange(romm_needs_rescan_, false))
+                    context_.rescan_requested = true;
+                rebuild(); // their subtitles: no longer "On RomM"
             }
         }
         follow_romm_queue();
@@ -4450,16 +4461,29 @@ class Library final : public app::Concept
         std::string tried;
         if (!retry)
             save::read_file(state + "/art/tried.txt", &tried, 1u << 20);
-        for (const Title &title : titles())
+        // The tab in view first, then the rest; by itself (not asked for), a
+        // run is a few hundred games: a library of thousands without art took
+        // an hour that looked stuck. The rest come on the next starts, as they
+        // scroll into view, or all at once from Settings, Box art.
+        std::vector<int> order(view_.begin(), view_.end());
+        std::unordered_set<int> seen(order.begin(), order.end());
+        for (int i = 0; i < static_cast<int>(titles().size()); ++i)
         {
+            if (seen.insert(i).second)
+                order.push_back(i);
+        }
+        for (const int index : order)
+        {
+            const Title &title = titles()[static_cast<std::size_t>(index)];
             // A server's game (RomM) is not on the console: its cover comes
-            // when it is about to be seen (want_icons), not with the rest. A
-            // large library would otherwise fetch thousands at once.
+            // when it is about to be seen (want_icons), not with the rest.
             if (!title.is_rom() || !title.icon.empty() || !title.remote.empty() ||
                 !prefs_.system_enabled(library::shelf_system(title.system)) ||
                 tried.find(title.id + "\n") != std::string::npos)
                 continue;
             jobs.push_back(art_job(title));
+            if (!retry && jobs.size() >= kArtPerRun)
+                break;
         }
         return jobs;
     }
@@ -7052,9 +7076,10 @@ class Library final : public app::Concept
     bool art_paused_for_romm_ = false;        // a box art run stopped for a RomM game
     std::unordered_set<std::string> romm_save_checked_;   // games whose RomM save was looked at
     std::unordered_map<std::string, long long> romm_ids_; // RomM's ids by file name
-    std::string romm_save_target_; // a save being brought from RomM: where it goes
-    bool continue_next_ = false;   // the next launch continues from the last state
-    int romm_queued_done_ = 0;     // picked games fetched in this run of the queue
+    std::string romm_save_target_;   // a save being brought from RomM: where it goes
+    bool continue_next_ = false;     // the next launch continues from the last state
+    int romm_queued_done_ = 0;       // picked games fetched in this run of the queue
+    bool romm_needs_rescan_ = false; // a picked game the library does not list yet
     std::vector<std::string> preview_files_;
     int preview_index_ = 0;
     bool keeping_ = false;
