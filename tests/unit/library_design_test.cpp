@@ -305,12 +305,12 @@ TEST_F(LibraryDesign, CrossMovesATitleToACustomTabAndItIsRemembered)
     auto design = with_fixture();
 
     // Options opens the menu on Ciel Ouvert: Launch, Details, Favourite, Hide,
-    // Rename, Choose picture, Find other art, Find art by name, Choose music,
+    // Rename, Label, Choose picture, Find other art, Find art by name, Choose music,
     // then Move to tab…, which lists the built-in shelves (Games, where it
     // is, then Homebrew and Media), the player's tabs and New tab….
     send(*design, press(hui::Action::menu));
     EXPECT_FALSE(last_cues_.empty());
-    for (int i = 0; i < 9; ++i)
+    for (int i = 0; i < 10; ++i)
         send(*design, nav(Direction::down));
     send(*design, press(hui::Action::confirm));
     expect_drawable(*design);
@@ -462,11 +462,11 @@ TEST_F(LibraryDesign, DeletingAGameFileWantsCrossHeld)
     // All, Games, Homebrew, Media, Favourites, Emulators: Doomed alone.
     for (int i = 0; i < 5; ++i)
         send(*design, press(hui::Action::page_next));
-    // Options: Launch, Details, Favourite, Hide, Rename, Choose picture, Find
-    // other art, Find art by name, Choose music, Download box art again, Move
-    // to a new tab, Remove….
+    // Options: Launch, Details, Favourite, Hide, Rename, Label, Choose picture,
+    // Find other art, Find art by name, Choose music, Download box art again,
+    // Move to a new tab, Remove….
     send(*design, press(hui::Action::menu));
-    for (int i = 0; i < 11; ++i)
+    for (int i = 0; i < 12; ++i)
         send(*design, nav(Direction::down));
     send(*design, press(hui::Action::confirm)); // Remove…
     send(*design, press(hui::Action::confirm)); // Delete the game file…

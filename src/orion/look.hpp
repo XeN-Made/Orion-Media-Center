@@ -80,6 +80,8 @@ struct Swatch
     std::uint32_t second;
 };
 std::span<const Swatch> skies();
+// The colours a label and its text can be (Settings, Labels).
+std::span<const Swatch> label_colours();
 std::span<const Swatch> nebulas();
 std::span<const Swatch> glasses();
 std::span<const Swatch> highlights();

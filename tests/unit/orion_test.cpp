@@ -233,6 +233,45 @@ TEST(OrionPrefs, TitlesKeepThePlayersNames)
     EXPECT_EQ(back.title_names.size(), 1u);
 }
 
+// The player's labels and their changes to ORION's come back from the file;
+// a built-in label put back as it was is not kept, and a label deleted takes
+// its titles with it.
+TEST(OrionPrefs, LabelsKeepTheirTextColoursAndTitles)
+{
+    const std::string dir = fresh_dir("orion-prefs-labels");
+    orion::LibraryPrefs prefs;
+    orion::Label gba;
+    gba.id = "gba";
+    gba.fill = 0xff7aa8;
+    prefs.set_label(gba);
+    const std::string coop = prefs.add_label("  CO-OP  ", 0x3fe0c5, 0x08101c).id;
+    EXPECT_EQ(coop, "l1");
+    prefs.set_title_label("PPSA90180", coop);
+    prefs.set_title_label("PPSA90181", "gba");     // a built-in one is not worn
+    prefs.set_title_label("PPSA90182", "missing"); // nor an unknown one
+    ASSERT_TRUE(orion::save_prefs(dir, prefs));
+
+    orion::LibraryPrefs back = orion::load_prefs(dir);
+    ASSERT_NE(back.label("gba"), nullptr);
+    EXPECT_EQ(back.label("gba")->fill, 0xff7aa8u);
+    EXPECT_EQ(back.label("gba")->ink, orion::kOwnColour);
+    EXPECT_TRUE(back.label("gba")->text.empty());
+    ASSERT_NE(back.label(coop), nullptr);
+    EXPECT_EQ(back.label(coop)->text, "CO-OP");
+    EXPECT_TRUE(back.label(coop)->custom);
+    EXPECT_EQ(back.label(coop)->ink, 0x08101cu);
+    EXPECT_EQ(back.title_label("PPSA90180"), coop);
+    EXPECT_EQ(back.title_labels.size(), 1u);
+
+    gba.fill = orion::kOwnColour; // ORION's again: nothing to keep
+    back.set_label(gba);
+    EXPECT_EQ(back.label("gba"), nullptr);
+    EXPECT_FALSE(back.remove_label("gba"));
+    EXPECT_TRUE(back.remove_label(coop));
+    EXPECT_TRUE(back.title_labels.empty());
+    EXPECT_EQ(back.add_label("", 0, 0).text, "New label");
+}
+
 TEST(OrionPrefs, AutobootAndRestModeAreOffUntilTurnedOn)
 {
     const std::string dir = fresh_dir("orion-prefs-wake");

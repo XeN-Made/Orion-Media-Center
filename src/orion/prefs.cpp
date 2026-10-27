@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdio>
 #include <utility>
 
 namespace hui::orion
@@ -21,6 +22,7 @@ namespace
 constexpr std::size_t kMaxName = 24; // bytes
 constexpr std::size_t kMaxTabs = 32;
 constexpr std::size_t kMaxHidden = 4000; // titles and games hidden
+constexpr std::size_t kMaxLabels = 64;   // the player's labels and changed built-in ones
 
 std::string file_of(const std::string &state_dir)
 {
@@ -28,7 +30,8 @@ std::string file_of(const std::string &state_dir)
 }
 
 // Trimmed, single-line and short; never cut inside a UTF-8 character.
-std::string clean_name(std::string_view name)
+std::string clean_name(std::string_view name, std::size_t most = kMaxName,
+                       const char *fallback = "New tab")
 {
     std::string out;
     for (char c : name)
@@ -37,14 +40,42 @@ std::string clean_name(std::string_view name)
         out.erase(out.begin());
     while (!out.empty() && out.back() == ' ')
         out.pop_back();
-    if (out.size() > kMaxName)
+    if (out.size() > most)
     {
-        std::size_t end = kMaxName;
+        std::size_t end = most;
         while (end > 0 && (static_cast<unsigned char>(out[end]) & 0xc0) == 0x80)
             --end;
         out.resize(end);
     }
-    return out.empty() ? std::string("New tab") : out;
+    return out.empty() ? std::string(fallback) : out;
+}
+
+// "#rrggbb" for a colour, empty for kOwnColour; and back.
+std::string colour_text(std::uint32_t colour)
+{
+    if (colour == kOwnColour)
+        return "";
+    char text[8];
+    std::snprintf(text, sizeof(text), "#%06x", static_cast<unsigned>(colour & 0xffffffu));
+    return text;
+}
+
+std::uint32_t colour_of(std::string_view text)
+{
+    if (text.size() != 7 || text[0] != '#')
+        return kOwnColour;
+    std::uint32_t value = 0;
+    for (const char c : text.substr(1))
+    {
+        const int digit = std::isdigit(static_cast<unsigned char>(c)) != 0 ? c - '0'
+                          : c >= 'a' && c <= 'f'                           ? c - 'a' + 10
+                          : c >= 'A' && c <= 'F'                           ? c - 'A' + 10
+                                                                           : -1;
+        if (digit < 0)
+            return kOwnColour;
+        value = value * 16u + static_cast<std::uint32_t>(digit);
+    }
+    return value;
 }
 
 bool valid_id(std::string_view id)
@@ -428,6 +459,89 @@ std::string LibraryPrefs::title_name(const std::string &id) const
     return "";
 }
 
+const Label *LibraryPrefs::label(const std::string &id) const
+{
+    for (const Label &entry : labels)
+    {
+        if (entry.id == id)
+            return &entry;
+    }
+    return nullptr;
+}
+
+void LibraryPrefs::set_label(const Label &label)
+{
+    if (!valid_id(label.id))
+        return;
+    Label kept = label;
+    if (kept.custom)
+        kept.text = clean_name(kept.text, kMaxLabelText, "New label");
+    else if (!kept.text.empty())
+        kept.text = clean_name(kept.text, kMaxLabelText);
+    for (Label &entry : labels)
+    {
+        if (entry.id != kept.id)
+            continue;
+        if (!entry.custom && kept.text.empty() && kept.fill == kOwnColour && kept.ink == kOwnColour)
+            std::erase_if(labels, [&](const Label &e) { return e.id == kept.id; });
+        else
+        {
+            kept.custom = entry.custom;
+            entry = kept;
+        }
+        return;
+    }
+    if ((kept.custom || !kept.text.empty() || kept.fill != kOwnColour || kept.ink != kOwnColour) &&
+        labels.size() < kMaxLabels)
+        labels.push_back(kept);
+}
+
+const Label &LibraryPrefs::add_label(const std::string &text, std::uint32_t fill, std::uint32_t ink)
+{
+    int number = 1;
+    std::string id;
+    do
+        id = "l" + std::to_string(number++);
+    while (label(id) != nullptr);
+    Label made;
+    made.id = id;
+    made.text = clean_name(text, kMaxLabelText, "New label");
+    made.fill = fill;
+    made.ink = ink;
+    made.custom = true;
+    labels.push_back(made);
+    return labels.back();
+}
+
+bool LibraryPrefs::remove_label(const std::string &id)
+{
+    const Label *found = label(id);
+    if (found == nullptr || !found->custom)
+        return false;
+    std::erase_if(labels, [&](const Label &entry) { return entry.id == id; });
+    std::erase_if(title_labels, [&](const auto &entry) { return entry.second == id; });
+    return true;
+}
+
+std::string LibraryPrefs::title_label(const std::string &id) const
+{
+    for (const auto &[title, label_id] : title_labels)
+    {
+        if (title == id)
+            return label_id;
+    }
+    return "";
+}
+
+void LibraryPrefs::set_title_label(const std::string &id, const std::string &label_id)
+{
+    std::erase_if(title_labels, [&](const auto &entry) { return entry.first == id; });
+    const Label *chosen = label(label_id);
+    if (chosen != nullptr && chosen->custom && library::is_item_id(id) &&
+        title_labels.size() < kMaxHidden)
+        title_labels.emplace_back(id, label_id);
+}
+
 void LibraryPrefs::set_title_name(const std::string &id, const std::string &name)
 {
     std::erase_if(title_names, [&](const auto &entry) { return entry.first == id; });
@@ -524,6 +638,19 @@ LibraryPrefs load_prefs(const std::string &state_dir)
         prefs.set_game_player(member.first, member.second.string_or(""));
     for (const auto &member : root["title_names"].members())
         prefs.set_title_name(member.first, member.second.string_or(""));
+    for (const json::Value &value : root["labels"].elements())
+    {
+        Label entry;
+        entry.id = value["id"].string_or("");
+        entry.text = value["text"].string_or("");
+        entry.fill = colour_of(value["fill"].string_or(""));
+        entry.ink = colour_of(value["ink"].string_or(""));
+        entry.custom = value["custom"].bool_or(false);
+        if (prefs.label(entry.id) == nullptr)
+            prefs.set_label(entry);
+    }
+    for (const auto &member : root["title_labels"].members())
+        prefs.set_title_label(member.first, member.second.string_or(""));
 
     for (const auto &member : root["systems"].members())
     {
@@ -684,6 +811,23 @@ bool save_prefs(const std::string &state_dir, const LibraryPrefs &prefs)
                 json::quote(prefs.title_names[i].first) + ": " +
                 json::quote(prefs.title_names[i].second);
     text += prefs.title_names.empty() ? "},\n" : "\n  },\n";
+    text += "  \"labels\": [";
+    for (std::size_t i = 0; i < prefs.labels.size(); ++i)
+    {
+        const Label &entry = prefs.labels[i];
+        text += std::string(i == 0 ? "\n" : ",\n") + "    {\"id\": " + json::quote(entry.id) +
+                ", \"text\": " + json::quote(entry.text) +
+                ", \"fill\": " + json::quote(colour_text(entry.fill)) +
+                ", \"ink\": " + json::quote(colour_text(entry.ink)) +
+                ", \"custom\": " + (entry.custom ? "true" : "false") + "}";
+    }
+    text += prefs.labels.empty() ? "],\n" : "\n  ],\n";
+    text += "  \"title_labels\": {";
+    for (std::size_t i = 0; i < prefs.title_labels.size(); ++i)
+        text += std::string(i == 0 ? "\n" : ",\n") + "    " +
+                json::quote(prefs.title_labels[i].first) + ": " +
+                json::quote(prefs.title_labels[i].second);
+    text += prefs.title_labels.empty() ? "},\n" : "\n  },\n";
     text += "  \"systems\": {";
     for (std::size_t i = 0; i < prefs.systems.size(); ++i)
     {

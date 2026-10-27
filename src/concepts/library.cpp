@@ -172,15 +172,18 @@ enum class Typing : std::uint8_t
     new_tab,           // from Settings > Tabs > New tab
     new_tab_for_title, // from a title's menu: the title moves into it
     rename_tab,
-    rename_title, // from a title's menu
-    theme_name,   // from Settings > Save as new theme
-    art_folder,   // from Settings > Box art > Your own folder
-    rom_folder,   // from Settings > Storage > Add a ROM folder
-    grid_key,     // from Settings > Box art > SteamGridDB key
-    art_name,     // from a title's menu: the name SteamGridDB is asked for
-    romm_url,     // from Settings > Emulators > RomM server
-    romm_code,    // from Settings > Emulators > Pair with RomM
-    romm_search,  // from the RomM Games screen: words to look for
+    rename_title,        // from a title's menu
+    theme_name,          // from Settings > Save as new theme
+    art_folder,          // from Settings > Box art > Your own folder
+    rom_folder,          // from Settings > Storage > Add a ROM folder
+    grid_key,            // from Settings > Box art > SteamGridDB key
+    art_name,            // from a title's menu: the name SteamGridDB is asked for
+    romm_url,            // from Settings > Emulators > RomM server
+    romm_code,           // from Settings > Emulators > Pair with RomM
+    romm_search,         // from the RomM Games screen: words to look for
+    new_label,           // from Settings > Labels > New label
+    new_label_for_title, // from a title's menu: the title wears it
+    rename_label,        // from a label's page in Settings
 };
 
 // Tags of the menu items.
@@ -210,12 +213,16 @@ enum : int
     kItemDetails,         // Details…: the title's page
     kItemFindArtName,     // Find art by name… (SteamGridDB)
     kItemContinue,        // Continue from the last save state (RetroArch)
+    kItemLabelMenu,       // Label…: ORION's label, then the player's
+    kItemLabelOwn,        // ORION's label again
+    kItemNewLabel,        // New label…: typed, then worn
     kItemMove = 100,      // + the tab's index
     kItemShelf = 250,     // + a built-in shelf's index in kShelves
     kItemPlayer = 300,    // 0: the default, then 1 + an index in library::players_for
     kItemPickPlace = 500, // + an index in pick_places_
     kItemPickDir = 1000,  // + an index in pick_dirs_
     kItemPickFile = 3000, // + an index in pick_files_
+    kItemLabel = 5000,    // + an index in custom_labels()
 };
 
 // The picture browser shows this many folders and pictures at a time: the
@@ -288,6 +295,16 @@ constexpr app::TourStep kTour[] = {
     {0.7f, 0, Direction::none, "settings-tabs"},
     {0.3f, action_bit(Action::confirm)},
     {0.8f, 0, Direction::none, "settings-tab-page"},
+    {0.2f, action_bit(Action::back)},
+    {0.2f, action_bit(Action::back)},
+    // Labels: New label, then every label with how it shows; the first
+    // one's page.
+    {0.3f, action_bit(Action::jump_next)},
+    {0.2f, 0, Direction::right},
+    {0.7f, 0, Direction::none, "settings-labels"},
+    {0.12f, 0, Direction::down},
+    {0.3f, action_bit(Action::confirm)},
+    {0.8f, 0, Direction::none, "settings-label-page"},
     {0.2f, action_bit(Action::back)},
     {0.2f, action_bit(Action::back)},
     // Emulators: Scan, every emulator found, then the first installed one's
@@ -1888,6 +1905,7 @@ class Library final : public app::Concept
     void open_settings(app::Feedback &feedback)
     {
         settings_.set_tabs(every_tab());
+        settings_.set_labels(every_label());
         settings_.set_version(context_.version);
         settings_.set_storage(context_.library.self_path,
                               orion::count_files(backdrop_folder(), ".png"));
@@ -2030,6 +2048,7 @@ class Library final : public app::Concept
         restyle();
         rebuild();
         settings_.set_tabs(every_tab());
+        settings_.set_labels(every_label());
         settings_.set_version(context_.version);
         if (settings_.is_open())
             settings_.rebuild_nav(look_, prefs_);
@@ -2078,6 +2097,7 @@ class Library final : public app::Concept
         restyle();
         rebuild();
         settings_.set_tabs(every_tab());
+        settings_.set_labels(every_label());
         // Titles that joined (installed while ORION ran) get their pictures.
         if (prefs_.game_backgrounds && sys::on_console())
             request_backdrops();
@@ -2091,6 +2111,7 @@ class Library final : public app::Concept
         restyle();
         rebuild();
         settings_.set_tabs(every_tab());
+        settings_.set_labels(every_label());
         settings_.set_version(context_.version);
         if (settings_.is_open())
             settings_.refresh(look_, prefs_);
@@ -2140,6 +2161,7 @@ class Library final : public app::Concept
         save_prefs();
         use_language();
         settings_.set_tabs(every_tab());
+        settings_.set_labels(every_label());
         rebuild_tabs(active_key());
         restyle();
         rebuild();
@@ -2206,6 +2228,18 @@ class Library final : public app::Concept
             start_typing(Typing::new_tab, "");
             feedback.play(audio::Cue::modal_open);
             break;
+        case orion::SettingsPanel::Change::new_label:
+            start_typing(Typing::new_label, "");
+            feedback.play(audio::Cue::modal_open);
+            break;
+        case orion::SettingsPanel::Change::rename_label:
+        {
+            menu_label_ = settings_.label_id();
+            const orion::Label *label = prefs_.label(menu_label_);
+            start_typing(Typing::rename_label, label != nullptr ? label->text : std::string());
+            feedback.play(audio::Cue::modal_open);
+            break;
+        }
         case orion::SettingsPanel::Change::save_theme:
             start_typing(Typing::theme_name, "");
             feedback.play(audio::Cue::modal_open);
@@ -2482,6 +2516,33 @@ class Library final : public app::Concept
             feedback.play(audio::Cue::saved);
             return;
         }
+        if (typing == Typing::new_label || typing == Typing::new_label_for_title)
+        {
+            // A light colour of the palette, a different one each time, with
+            // dark text: readable on any cover.
+            const std::span<const orion::Swatch> colours = orion::label_colours();
+            const std::size_t light = std::min<std::size_t>(10, colours.size());
+            const std::string id =
+                prefs_.add_label(name_, colours[prefs_.labels.size() % light].first, 0x08101c).id;
+            if (typing == Typing::new_label_for_title)
+                prefs_.set_title_label(menu_title_, id);
+            tabs_changed();
+            feedback.play(audio::Cue::saved);
+            return;
+        }
+        if (typing == Typing::rename_label)
+        {
+            orion::Label label;
+            if (const orion::Label *own = prefs_.label(menu_label_))
+                label = *own;
+            else
+                label.id = menu_label_;
+            label.text = name_; // a built-in label's: empty gives ORION's back
+            prefs_.set_label(label);
+            tabs_changed();
+            feedback.play(audio::Cue::saved);
+            return;
+        }
         if (typing == Typing::rename_tab)
         {
             if (prefs_.tab(menu_tab_) != nullptr)
@@ -2489,6 +2550,7 @@ class Library final : public app::Concept
             else
                 prefs_.set_tab_name(menu_tab_, name_); // a built-in tab; empty: its own name
             settings_.set_tabs(every_tab());
+            settings_.set_labels(every_label());
         }
         else
         {
@@ -3638,6 +3700,9 @@ class Library final : public app::Concept
         ui::MenuItem rename = menu_item(tr("Rename…"));
         rename.tag = kItemRename;
         items.push_back(rename);
+        ui::MenuItem label = menu_item(tr("Label…"));
+        label.tag = kItemLabelMenu;
+        items.push_back(label);
         ui::MenuItem picture = menu_item(tr("Choose picture…"));
         picture.tag = kItemPicture;
         items.push_back(picture);
@@ -4119,6 +4184,29 @@ class Library final : public app::Concept
         if (tag == kItemMoveMenu)
         {
             open_tab_menu(feedback);
+            return;
+        }
+        if (tag == kItemLabelMenu)
+        {
+            open_label_menu(feedback);
+            return;
+        }
+        if (tag == kItemNewLabel)
+        {
+            start_typing(Typing::new_label_for_title, "");
+            feedback.play(audio::Cue::modal_open);
+            return;
+        }
+        if (tag == kItemLabelOwn ||
+            (tag >= kItemLabel && tag - kItemLabel < static_cast<int>(custom_labels().size())))
+        {
+            prefs_.set_title_label(
+                menu_title_, tag == kItemLabelOwn
+                                 ? std::string()
+                                 : custom_labels()[static_cast<std::size_t>(tag - kItemLabel)]->id);
+            save_prefs();
+            rebuild();
+            feedback.play(audio::Cue::place);
             return;
         }
         if (tag >= kItemPlayer && tag < kItemPlayer + 100)
@@ -6274,25 +6362,154 @@ class Library final : public app::Concept
     }
 
     // The category on a cover: a small coloured banner in its top-right corner.
-    void draw_banner(ui::Canvas &canvas, const Rect &art, const Title &title) const
+    // ---- labels (orion/prefs.hpp, Label) ----
+
+    // ORION's label for a kind of title: its id, what it is on, its text and
+    // colour (the text is dark on every one).
+    static constexpr std::uint32_t kLabelInk = 0x08101c;
+    orion::LabelEntry builtin_label(const Title &title) const
     {
-        std::string system;
-        std::string label = tr("GAME");
-        Color colour = Color::rgb(0x8fe3ff);
         if (title.is_rom())
         {
-            system = library::short_system_name(title.system);
-            for (char &c : system)
-                c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
-            label = system;
-            colour = Color::rgb(0xcdb6ff);
+            const std::string name = library::short_system_name(title.system);
+            std::string id;
+            std::string text;
+            for (const char c : name)
+            {
+                if (std::isalnum(static_cast<unsigned char>(c)) != 0)
+                    id += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+                text += static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+            }
+            return {id, name, text, 0xcdb6ff, kLabelInk};
         }
-        else if (title.platform == library::Platform::ps4)
-            label = "PS4", colour = Color::rgb(0x8fb0ff);
-        else if (library::shelf_of(title) == library::Shelf::media)
-            label = tr("MEDIA"), colour = Color::rgb(0xffc94a);
-        else if (library::shelf_of(title) == library::Shelf::homebrew)
-            label = tr("HOMEBREW"), colour = Color::rgb(0x86efb4);
+        if (title.platform == library::Platform::ps4)
+            return {"ps4", tr("PS4 games"), "PS4", 0x8fb0ff, kLabelInk};
+        if (library::shelf_of(title) == library::Shelf::media)
+            return {"media", tr("Media"), tr("MEDIA"), 0xffc94a, kLabelInk};
+        if (library::shelf_of(title) == library::Shelf::homebrew)
+            return {"homebrew", tr("Homebrew"), tr("HOMEBREW"), 0x86efb4, kLabelInk};
+        return {"ps5", tr("PS5 games"), tr("GAME"), 0x8fe3ff, kLabelInk};
+    }
+
+    // The player's label on a title: one of their own it wears, else their
+    // changes to ORION's; nullptr for ORION's as it is.
+    const orion::Label *label_for(const Title &title, bool own_only = false) const
+    {
+        if (!own_only)
+        {
+            if (const std::string worn = prefs_.title_label(title.id); !worn.empty())
+                if (const orion::Label *label = prefs_.label(worn))
+                    return label;
+        }
+        return prefs_.label(builtin_label(title).id);
+    }
+
+    // The label a cover wears: ORION's, with the player's text and colours over it.
+    orion::LabelEntry banner_of(const Title &title, bool own_only = false) const
+    {
+        orion::LabelEntry banner = builtin_label(title);
+        if (const orion::Label *label = label_for(title, own_only))
+        {
+            if (!label->text.empty())
+                banner.text = label->text;
+            if (label->fill != orion::kOwnColour)
+                banner.fill = label->fill;
+            if (label->ink != orion::kOwnColour)
+                banner.ink = label->ink;
+        }
+        return banner;
+    }
+
+    // ORION's labels the library has titles for, for Settings: the console's
+    // kinds first, then every system with games.
+    std::vector<orion::LabelEntry> every_label() const
+    {
+        std::vector<orion::LabelEntry> out;
+        const auto add = [&out](orion::LabelEntry entry)
+        {
+            for (const orion::LabelEntry &known : out)
+            {
+                if (known.id == entry.id)
+                    return;
+            }
+            out.push_back(std::move(entry));
+        };
+        for (const Title &title : titles())
+        {
+            if (!title.is_rom())
+                add(builtin_label(title));
+        }
+        std::sort(out.begin(), out.end(),
+                  [](const orion::LabelEntry &a, const orion::LabelEntry &b)
+                  {
+                      const auto rank = [](const std::string &id) {
+                          return id == "ps5" ? 0 : id == "ps4" ? 1 : id == "homebrew" ? 2 : 3;
+                      };
+                      return rank(a.id) < rank(b.id);
+                  });
+        for (const library::System &system : context_.library.emulator.systems)
+        {
+            if (system.games <= 0)
+                continue;
+            Title probe;
+            probe.system = system.name;
+            probe.rom = "x";
+            if (probe.is_rom())
+                add(builtin_label(probe));
+        }
+        return out;
+    }
+
+    std::vector<const orion::Label *> custom_labels() const
+    {
+        std::vector<const orion::Label *> out;
+        for (const orion::Label &label : prefs_.labels)
+        {
+            if (label.custom)
+                out.push_back(&label);
+        }
+        return out;
+    }
+
+    // Label…: ORION's label for it, then the player's (the one it wears
+    // marked Here), then New label…; at most a page: the menu does not scroll.
+    void open_label_menu(app::Feedback &feedback)
+    {
+        const Title *title = find_title(menu_title_);
+        if (title == nullptr)
+            return;
+        const std::string worn = prefs_.title_label(menu_title_);
+        std::vector<ui::MenuItem> items;
+        ui::MenuItem own = menu_item(trf("ORION's ({0})", {banner_of(*title, true).text}));
+        own.tag = kItemLabelOwn;
+        own.disabled = worn.empty();
+        own.shortcut = worn.empty() ? tr("Here") : "";
+        items.push_back(own);
+        const std::vector<const orion::Label *> labels = custom_labels();
+        for (std::size_t i = 0; i < labels.size() && i < kPickPage; ++i)
+        {
+            const bool here = labels[i]->id == worn;
+            ui::MenuItem item = menu_item(labels[i]->text);
+            item.tag = kItemLabel + static_cast<int>(i);
+            item.disabled = here;
+            item.shortcut = here ? tr("Here") : "";
+            items.push_back(item);
+        }
+        ui::MenuItem line;
+        line.separator = true;
+        items.push_back(line);
+        ui::MenuItem fresh = menu_item(tr("New label…"));
+        fresh.tag = kItemNewLabel;
+        items.push_back(fresh);
+        menu_.set_items(std::move(items));
+        menu_.open(grid_.cell_rect(grid_.focus()), feedback);
+    }
+
+    void draw_banner(ui::Canvas &canvas, const Rect &art, const Title &title) const
+    {
+        const orion::LabelEntry banner = banner_of(title);
+        const std::string &label = banner.text;
+        const Color colour = Color::rgb(banner.fill);
         const ui::FontRef &font = canvas.fonts.semibold;
         constexpr float kSize = 14.0f;
         constexpr float kTracking = 1.6f;
@@ -6303,7 +6520,7 @@ class Library final : public app::Concept
                            Color::rgb(0x000000, 0.35f));
         canvas.list.rounded_rect(pill, 13.0f, colour);
         ui::text(canvas.list, font, label.c_str(), pill.cx(), pill.y + 18.5f, kSize,
-                 Color::rgb(0x08101c), gfx::Align::center, kTracking);
+                 Color::rgb(banner.ink), gfx::Align::center, kTracking);
     }
 
     // The focused cover's ring: light whose colour drifts slowly through the
@@ -6337,7 +6554,22 @@ class Library final : public app::Concept
         bool console = false;
         Color rule{0.0f, 0.0f, 0.0f, 0.0f}; // under the header; alpha 0: none
     };
+    // The header as ORION draws it, with the player's label over it.
     CaseBand case_band(const Title &title) const
+    {
+        CaseBand band = case_band_own(title);
+        if (const orion::Label *label = label_for(title))
+        {
+            if (!label->text.empty())
+                band.label = label->text;
+            if (label->fill != orion::kOwnColour)
+                band.fill = Color::rgb(label->fill);
+            if (label->ink != orion::kOwnColour)
+                band.ink = Color::rgb(label->ink);
+        }
+        return band;
+    }
+    CaseBand case_band_own(const Title &title) const
     {
         if (library::shelf_of(title) == library::Shelf::homebrew)
             return {Color::rgb(0x161a3d), Color::rgb(0x0b0e20), theme_.accent, tr("HOMEBREW"),
@@ -7062,8 +7294,11 @@ class Library final : public app::Concept
             : typing_ == Typing::art_name     ? tr("The name to look for on SteamGridDB")
             : typing_ == Typing::romm_url  ? tr("Its address with the port, like 192.168.1.20:8080")
             : typing_ == Typing::romm_code ? tr("The pairing code RomM shows")
-            : typing_ == Typing::romm_search ? tr("A game's name, or part of it")
-                                             : tr("Name the new tab");
+            : typing_ == Typing::romm_search  ? tr("A game's name, or part of it")
+            : typing_ == Typing::rename_label ? tr("The label's text; empty gives it ORION's back")
+            : typing_ == Typing::new_label || typing_ == Typing::new_label_for_title
+                ? tr("Name the new label")
+                : tr("Name the new tab");
         const bool empty = text.empty();
         ui::text(list, fonts.regular, empty ? placeholder.c_str() : text.c_str(), field.x + 28,
                  field.y + 37, 25, empty ? Color::rgb(0xffffff, 0.66f) : Color::rgb(0xffffff));
@@ -7212,6 +7447,7 @@ class Library final : public app::Concept
     std::unordered_set<std::string> romm_save_checked_;   // games whose RomM save was looked at
     std::unordered_map<std::string, long long> romm_ids_; // RomM's ids by file name
     std::string romm_save_target_; // a save being brought from RomM: where it goes
+    std::string menu_label_;       // the label a rename is for
     bool continue_next_ = false;   // the next launch continues from the last state
     int romm_queued_done_ = 0;     // picked games fetched in this run of the queue
     // Picked games the library does not list yet (file, name): added once in.

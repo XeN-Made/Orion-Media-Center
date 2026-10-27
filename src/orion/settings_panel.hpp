@@ -22,6 +22,17 @@
 namespace hui::orion
 {
 
+// A built-in label as Settings lists it (prefs.hpp, Label): what it is on,
+// and how ORION draws it before the player changes it.
+struct LabelEntry
+{
+    std::string id;   // "ps5", "gba"
+    std::string name; // what it is on: "PS5 games", "GBA"
+    std::string text; // ORION's text for it: "GAME", "GBA"
+    std::uint32_t fill = 0;
+    std::uint32_t ink = 0;
+};
+
 // One tab as Settings lists it: hidden tabs too, so they can come back.
 struct TabEntry
 {
@@ -38,6 +49,8 @@ struct TabEntry
 //   Emulators    scan for emulators; every emulator found, each with a page:
 //                its folders and the player's game folders (each with a page:
 //                system, remove); then per system with games: on or off, its core
+//   Labels       new label, then every label (ORION's and the player's),
+//                each with a page: its text, its colour, its text's colour
 //   Box art      find it by itself, find it now
 //   Appearance   theme, background, sky, nebula, glass, colours, chrome
 //
@@ -96,12 +109,15 @@ class SettingsPanel
         type_romm_code, // "Pair with RomM" was chosen: the screen asks for the code
         romm_sync,      // "Sync RomM games" was chosen
         romm_browse,    // "Browse RomM games": the screen opens the RomM Games screen
+        new_label,      // "New label": the screen asks for its text
+        rename_label,   // "Text" on a label's page: label_id() says which
     };
 
     enum class Section : std::uint8_t
     {
         library,
         tabs,
+        labels, // the banners on the covers: their text and colours
         emulators,
         art,
         storage,
@@ -135,6 +151,16 @@ class SettingsPanel
     void set_tabs(std::vector<TabEntry> tabs)
     {
         tabs_ = std::move(tabs);
+    }
+    // The built-in labels the library has titles for.
+    void set_labels(std::vector<LabelEntry> labels)
+    {
+        label_entries_ = std::move(labels);
+    }
+    // The label whose page is open ("gba", "l1"), or empty.
+    const std::string &label_id() const
+    {
+        return label_page_;
     }
     // What the box art row says under itself: the last run, or this one.
     void set_art_status(std::string status);
@@ -287,6 +313,19 @@ class SettingsPanel
     void build_system(const LibraryPrefs &prefs);
     void build_tabs(const LibraryPrefs &prefs);
     void build_tab_page(const LibraryPrefs &prefs);
+    void build_labels(const LibraryPrefs &prefs);
+    void build_label_page(const LibraryPrefs &prefs);
+    Change edit_label_page(int id, LibraryPrefs *prefs);
+    // A label as it shows now: the player's changes over ORION's.
+    struct LabelLook
+    {
+        std::string text;
+        std::uint32_t fill = 0;
+        std::uint32_t ink = 0;
+    };
+    LabelLook label_look(const std::string &id, const LibraryPrefs &prefs) const;
+    const LabelEntry *label_entry(const std::string &id) const;
+    void draw_trailing(ui::Canvas &canvas, const gfx::Rect &control, const ui::FormRow &row) const;
     void build_emulators(const LibraryPrefs &prefs);
     void build_emulator_page(const library::EmulatorApp &app, const LibraryPrefs &prefs);
     void build_browser();
@@ -330,6 +369,10 @@ class SettingsPanel
     const library::Emulator *emulator_ = nullptr;
     std::vector<TabEntry> tabs_;
     std::string tab_id_;
+    std::vector<LabelEntry> label_entries_;
+    std::string label_page_;                       // the label whose page is open; empty: the list
+    std::vector<std::string> label_rows_;          // the list's labels, by row (kLabelRow + i)
+    std::vector<std::pair<int, LabelLook>> pills_; // rows that show a label, and how
     std::string state_dir_ = "/data/orion";
     std::string self_path_;
     int backdrops_ = 0;

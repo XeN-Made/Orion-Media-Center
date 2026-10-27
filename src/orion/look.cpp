@@ -62,6 +62,17 @@ constexpr Swatch kHighlights[] = {
     {i18n::marked("White"), 0xffffff, 0},    {i18n::marked("Teal"), 0x3fe0c5, 0},
     {i18n::marked("Gold"), 0xffc94a, 0},     {i18n::marked("Rose"), 0xff7aa8, 0},
 };
+constexpr Swatch kLabelColours[] = {
+    {i18n::marked("Ice"), 0x8fe3ff, 0},        {i18n::marked("Lavender"), 0xcdb6ff, 0},
+    {i18n::marked("Periwinkle"), 0x8fb0ff, 0}, {i18n::marked("Gold"), 0xffc94a, 0},
+    {i18n::marked("Mint"), 0x86efb4, 0},       {i18n::marked("Teal"), 0x3fe0c5, 0},
+    {i18n::marked("Rose"), 0xff7aa8, 0},       {i18n::marked("Coral"), 0xff8a6a, 0},
+    {i18n::marked("Orange"), 0xffa94d, 0},     {i18n::marked("Lime"), 0xb6f36a, 0},
+    {i18n::marked("Blue"), 0x2f6fe4, 0},       {i18n::marked("Purple"), 0x7c4dde, 0},
+    {i18n::marked("Red"), 0xd8393f, 0},        {i18n::marked("Green"), 0x2e9e5b, 0},
+    {i18n::marked("White"), 0xffffff, 0},      {i18n::marked("Silver"), 0xb8c0cc, 0},
+    {i18n::marked("Charcoal"), 0x2a2e36, 0},   {i18n::marked("Black"), 0x08101c, 0},
+};
 constexpr Swatch kAccents[] = {
     {i18n::marked("Ice"), 0x8fe3ff, 0},      {i18n::marked("Teal"), 0x3fe0c5, 0},
     {i18n::marked("Lavender"), 0xa9b8ff, 0}, {i18n::marked("Gold"), 0xffc94a, 0},
@@ -253,6 +264,11 @@ const char *background_id(BackdropMode mode)
             return kind.id;
     }
     return "gradient";
+}
+
+std::span<const Swatch> label_colours()
+{
+    return kLabelColours;
 }
 
 std::span<const Swatch> skies()

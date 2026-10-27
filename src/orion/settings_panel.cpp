@@ -120,6 +120,13 @@ enum : int
     kPageLeft,
     kPageRight,
     kPageDelete,
+    kNewLabel,
+    kLabelPreview,
+    kLabelText,
+    kLabelFill,
+    kLabelInk,
+    kLabelReset,
+    kLabelDelete,
     kTabRow = 100,       // + the tab's index in tabs_
     kSystemRow = 200,    // + the system's index: on or off
     kCoreRow = 300,      // + the system's index: which core
@@ -129,6 +136,7 @@ enum : int
     kMissingRow = 700,   // + the index of a known emulator that is not installed
     kBrowseRow = 800,    // + the folder's index in browse_folders_ (or in places_)
     kDriveRow = 900,     // + the drive's index in drives_
+    kLabelRow = 1000,    // + the label's index in label_rows_
 };
 
 // The emulator a game folder is for: empty in the prefs is RetroArch.
@@ -154,6 +162,8 @@ const char *section_name(SettingsPanel::Section section)
         return i18n::marked("Library");
     case SettingsPanel::Section::tabs:
         return i18n::marked("Tabs");
+    case SettingsPanel::Section::labels:
+        return i18n::marked("Labels");
     case SettingsPanel::Section::emulators:
         return i18n::marked("Emulators");
     case SettingsPanel::Section::art:
@@ -269,7 +279,32 @@ SettingsPanel::SettingsPanel()
     // The drive rows draw a bar of how full the drive is beside "free of".
     form_.style.trailing_marked = true;
     form_.trailing = [this](ui::Canvas &canvas, const gfx::Rect &control, const ui::FormRow &row,
-                            float) { draw_drive(canvas, control, row); };
+                            float) { draw_trailing(canvas, control, row); };
+}
+
+// A row's own control: a label as it shows (Labels), or a drive's space.
+void SettingsPanel::draw_trailing(ui::Canvas &canvas, const gfx::Rect &control,
+                                  const ui::FormRow &row) const
+{
+    for (const auto &[id, look] : pills_)
+    {
+        if (id != row.id)
+            continue;
+        // As the covers wear it (the library's banner): a pill, its text
+        // set wide.
+        const ui::FontRef &font = canvas.fonts.semibold;
+        constexpr float kSize = 17.0f;
+        constexpr float kTracking = 1.8f;
+        const float width = font.font->measure(look.text, kSize) +
+                            kTracking * static_cast<float>(look.text.size()) + 26.0f;
+        const gfx::Rect pill{control.x + control.w - width, control.y + control.h * 0.5f - 16.0f,
+                             width, 32.0f};
+        canvas.list.rounded_rect(pill, 16.0f, Color::rgb(look.fill));
+        ui::text(canvas.list, font, look.text.c_str(), pill.cx(), pill.y + 22.0f, kSize,
+                 Color::rgb(look.ink), gfx::Align::center, kTracking);
+        return;
+    }
+    draw_drive(canvas, control, row);
 }
 
 // The control of a drive row: how full it is, then what is free of what.
@@ -351,7 +386,8 @@ void SettingsPanel::refresh(const Look &look, const LibraryPrefs &prefs)
 void SettingsPanel::build_nav()
 {
     // Emulators always, so Scan for emulators is there before one is found.
-    sections_ = {Section::library, Section::tabs, Section::emulators, Section::romm};
+    sections_ = {Section::library, Section::tabs, Section::labels, Section::emulators,
+                 Section::romm};
     if (emulator_ != nullptr && !emulator_->systems.empty())
         sections_.push_back(Section::art);
     sections_.push_back(Section::storage);
@@ -405,7 +441,8 @@ void SettingsPanel::layout()
 bool SettingsPanel::previewing() const
 {
     return sheet_.is_open() && in_rows_ &&
-           (section_ == Section::appearance || (section_ == Section::tabs && !page_.empty()));
+           (section_ == Section::appearance || (section_ == Section::tabs && !page_.empty()) ||
+            (section_ == Section::labels && !label_page_.empty()));
 }
 
 std::string SettingsPanel::preview_tab() const
@@ -417,6 +454,7 @@ void SettingsPanel::show(Section section, const Look &look, const LibraryPrefs &
 {
     section_ = section;
     page_.clear();
+    label_page_.clear();
     emulator_page_.clear();
     folder_page_ = -1;
     browsing_ = false;
@@ -454,10 +492,20 @@ void SettingsPanel::build(const Look &look, const LibraryPrefs &prefs)
     form_.style.on_text = on_word_.c_str();
     form_.style.off_text = off_word_.c_str();
     form_.clear();
+    pills_.clear();
     switch (section_)
     {
     case Section::library:
         build_library(prefs);
+        break;
+    case Section::labels:
+        if (!label_page_.empty() && label_entry(label_page_) == nullptr &&
+            (prefs.label(label_page_) == nullptr || !prefs.label(label_page_)->custom))
+            label_page_.clear(); // gone
+        if (label_page_.empty())
+            build_labels(prefs);
+        else
+            build_label_page(prefs);
         break;
     case Section::tabs:
         if (page_.empty())
@@ -742,6 +790,164 @@ void SettingsPanel::build_tab_page(const LibraryPrefs &prefs)
         ui::FormRow &remove = form_.add_action(kPageDelete, tr("Delete tab"));
         remove.danger = true;
         remove.description = tr("Its games go back to their shelves");
+    }
+}
+
+const LabelEntry *SettingsPanel::label_entry(const std::string &id) const
+{
+    for (const LabelEntry &entry : label_entries_)
+    {
+        if (entry.id == id)
+            return &entry;
+    }
+    return nullptr;
+}
+
+SettingsPanel::LabelLook SettingsPanel::label_look(const std::string &id,
+                                                   const LibraryPrefs &prefs) const
+{
+    LabelLook look;
+    if (const LabelEntry *entry = label_entry(id))
+        look = {entry->text, entry->fill, entry->ink};
+    if (const Label *own = prefs.label(id))
+    {
+        if (!own->text.empty())
+            look.text = own->text;
+        if (own->fill != kOwnColour)
+            look.fill = own->fill;
+        if (own->ink != kOwnColour)
+            look.ink = own->ink;
+    }
+    return look;
+}
+
+void SettingsPanel::build_labels(const LibraryPrefs &prefs)
+{
+    form_.add_header(tr("Labels"));
+    ui::FormRow &add = form_.add_action(kNewLabel, tr("New label"));
+    add.chevron = true;
+    add.description = tr("A label of your own: give it to any game from its menu (Label…)");
+    label_rows_.clear();
+    for (const LabelEntry &entry : label_entries_)
+        label_rows_.push_back(entry.id);
+    for (const Label &own : prefs.labels)
+    {
+        if (own.custom)
+            label_rows_.push_back(own.id);
+    }
+    for (std::size_t i = 0; i < label_rows_.size(); ++i)
+    {
+        const std::string &id = label_rows_[i];
+        const LabelEntry *entry = label_entry(id);
+        const int row_id = kLabelRow + static_cast<int>(i);
+        const LabelLook look = label_look(id, prefs);
+        ui::FormRow &row = form_.add_action(row_id, entry != nullptr ? entry->name : look.text);
+        row.chevron = true;
+        row.own_control = true;
+        row.description = entry != nullptr ? tr("ORION's label: its text and colours")
+                                           : tr("Your label: its text and colours");
+        pills_.emplace_back(row_id, look);
+    }
+}
+
+void SettingsPanel::build_label_page(const LibraryPrefs &prefs)
+{
+    const LabelEntry *entry = label_entry(label_page_);
+    const Label *own = prefs.label(label_page_);
+    const bool custom = entry == nullptr;
+    const LabelLook look = label_look(label_page_, prefs);
+    form_.add_header(tr("Labels") + "  ·  " + (custom ? look.text : entry->name));
+    ui::FormRow &preview = form_.add_value(kLabelPreview, tr("Preview"), "");
+    preview.own_control = true;
+    preview.description = custom ? tr("On the covers of the games you give it")
+                                 : tr("On the covers it is for, unless a game wears one of yours");
+    pills_.emplace_back(kLabelPreview, look);
+    ui::FormRow &text = form_.add_action(kLabelText, tr("Text"));
+    text.chevron = true;
+    text.text = look.text;
+    text.description =
+        custom ? tr("What the label says") : tr("What the label says; empty gives it ORION's back");
+    // A colour row: the palette, ORION's own first for a built-in label, and
+    // "Custom" for a colour set by hand in library.json.
+    const std::span<const Swatch> colours = label_colours();
+    const auto add_colour =
+        [&](int id, const std::string &label, std::uint32_t chosen, const std::string &description)
+    {
+        std::vector<std::string> names;
+        if (!custom)
+            names.push_back(tr("ORION's"));
+        int index = -1;
+        for (std::size_t i = 0; i < colours.size(); ++i)
+        {
+            names.push_back(tr(colours[i].name));
+            if (chosen == colours[i].first)
+                index = static_cast<int>(names.size()) - 1;
+        }
+        if (!custom && chosen == kOwnColour)
+            index = 0;
+        if (index < 0)
+        {
+            names.push_back(tr("Custom"));
+            index = static_cast<int>(names.size()) - 1;
+        }
+        form_.add_choice(id, label, std::move(names), index).description = description;
+    };
+    add_colour(kLabelFill, tr("Label colour"), own != nullptr ? own->fill : kOwnColour,
+               tr("The colour of the label itself"));
+    add_colour(kLabelInk, tr("Text colour"), own != nullptr ? own->ink : kOwnColour,
+               tr("The colour of what it says"));
+    if (custom)
+    {
+        ui::FormRow &remove = form_.add_action(kLabelDelete, tr("Delete label"));
+        remove.danger = true;
+        remove.description = tr("Games wearing it go back to ORION's label");
+    }
+    else if (own != nullptr)
+        form_.add_action(kLabelReset, tr("Back to ORION's")).description =
+            tr("Its own text and colours again");
+}
+
+SettingsPanel::Change SettingsPanel::edit_label_page(int id, LibraryPrefs *prefs)
+{
+    Label label;
+    if (const Label *own = prefs->label(label_page_))
+        label = *own;
+    else
+        label.id = label_page_;
+    const bool custom = label.custom;
+    switch (id)
+    {
+    case kLabelText:
+        return Change::rename_label;
+    case kLabelFill:
+    case kLabelInk:
+    {
+        // ORION's own is the first choice of a built-in label's; "Custom"
+        // (past the palette) leaves the colour as it was.
+        const std::span<const Swatch> colours = label_colours();
+        const int index = form_.choice_index(id) - (custom ? 0 : 1);
+        std::uint32_t &colour = id == kLabelFill ? label.fill : label.ink;
+        if (index == -1 && !custom)
+            colour = kOwnColour;
+        else if (index >= 0 && index < static_cast<int>(colours.size()))
+            colour = colours[static_cast<std::size_t>(index)].first;
+        else
+            return Change::none;
+        prefs->set_label(label);
+        return Change::prefs;
+    }
+    case kLabelReset:
+        label.text.clear();
+        label.fill = kOwnColour;
+        label.ink = kOwnColour;
+        prefs->set_label(label);
+        return Change::prefs;
+    case kLabelDelete:
+        prefs->remove_label(label_page_);
+        label_page_.clear();
+        return Change::prefs;
+    default:
+        return Change::none;
     }
 }
 
@@ -1310,6 +1516,18 @@ SettingsPanel::Change SettingsPanel::handle(const InputFrame &input, ui::Feedbac
                     form_.focus_row(kEmulatorRow + static_cast<int>(i));
             }
         }
+        else if (!label_page_.empty())
+        {
+            const std::string was = label_page_;
+            label_page_.clear();
+            build(*look, *prefs);
+            layout();
+            for (std::size_t i = 0; i < label_rows_.size(); ++i)
+            {
+                if (label_rows_[i] == was)
+                    form_.focus_row(kLabelRow + static_cast<int>(i));
+            }
+        }
         else if (!page_.empty())
         {
             const std::string was = page_;
@@ -1341,6 +1559,28 @@ SettingsPanel::Change SettingsPanel::handle(const InputFrame &input, ui::Feedbac
         }
         if (id == kNewTab)
             return Change::new_tab;
+        if (id == kNewLabel)
+            return Change::new_label;
+        if (section_ == Section::labels && label_page_.empty() && id >= kLabelRow &&
+            id - kLabelRow < static_cast<int>(label_rows_.size()))
+        {
+            label_page_ = label_rows_[static_cast<std::size_t>(id - kLabelRow)];
+            build(*look, *prefs);
+            layout();
+            form_.set_focus(0);
+            form_.enter();
+            return Change::none;
+        }
+        if (section_ == Section::labels && !label_page_.empty())
+        {
+            const Change change = edit_label_page(id, prefs);
+            if (change == Change::prefs && label_page_.empty())
+            {
+                build(*look, *prefs); // deleted: back to the list
+                layout();
+            }
+            return change;
+        }
         if (id == kArtNow)
             return Change::fetch_art;
         if (id == kGridKey)
@@ -1440,6 +1680,8 @@ SettingsPanel::Change SettingsPanel::handle(const InputFrame &input, ui::Feedbac
     if (event != ui::Event::changed)
         return Change::none;
 
+    if (section_ == Section::labels && !label_page_.empty())
+        return edit_label_page(id, prefs);
     if (!page_.empty())
         return edit_tab_page(id, prefs);
     if (folder_page_ >= 0)

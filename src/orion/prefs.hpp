@@ -90,6 +90,22 @@ inline constexpr const char *kViewKeys[kViewCount] = {"grid", "cases", "list"};
 inline constexpr const char *kViewNames[kViewCount] = {i18n::marked("Grid"), i18n::marked("Cases"),
                                                        i18n::marked("List")};
 
+// A label: the banner on a cover and the header of a drawn case. A built-in
+// one is ORION's for a kind of title ("ps5", "ps4", "homebrew", "media", or a
+// system's short name in lower case, "gba"), and the player may change its
+// text and colours; one of the player's own ("l1", custom) is worn in place
+// of the built-in one by the titles given it.
+inline constexpr std::uint32_t kOwnColour = 0xffffffffu; // the built-in label's colour
+inline constexpr std::size_t kMaxLabelText = 24;         // bytes
+struct Label
+{
+    std::string id;
+    std::string text;                // empty: the built-in label's own
+    std::uint32_t fill = kOwnColour; // 0xRRGGBB, or kOwnColour
+    std::uint32_t ink = kOwnColour;
+    bool custom = false;
+};
+
 // Where a title was moved to.
 struct Placement
 {
@@ -127,6 +143,10 @@ struct Placement
 //     "hidden_titles": ["CUSA00001", "rom-0123456789ab"],
 //     "game_players": {"rom-0123456789ab": "retroarch:snes9x_libretro.so"},
 //     "title_names": {"CUSA00001": "My name for it"},
+//     "labels": [{"id": "gba", "text": "", "fill": "#ff7aa8", "ink": "", "custom": false},
+//                {"id": "l1", "text": "CO-OP", "fill": "#3fe0c5", "ink": "#08101c",
+//                 "custom": true}],
+//     "title_labels": {"CUSA00001": "l1"},
 //     "systems": {"Nintendo - Game Boy Advance": {"enabled": true, "core": "mgba_libretro.so"}},
 //     "tab_settings": {"sys:Nintendo - Sony - PlayStation 2": {"theme": "sunset-nebula",
 //                      "cover": "portrait", "sort": "recent", "view": "cases",
@@ -287,6 +307,25 @@ struct LibraryPrefs
     std::string title_name(const std::string &id) const;
     // An empty name gives the title its own back.
     void set_title_name(const std::string &id, const std::string &name);
+
+    // The player's labels and their changes to the built-in ones; a
+    // built-in one left as ORION made it is not kept.
+    std::vector<Label> labels;
+    // The label of their own each title wears, by item id.
+    std::vector<std::pair<std::string, std::string>> title_labels;
+    const Label *label(const std::string &id) const;
+    // Keeps a built-in label's changes (dropped when it is back to its own)
+    // or a label of the player's (its text cleaned, never empty).
+    void set_label(const Label &label);
+    // A label of the player's with a fresh id, in the given colours. Names
+    // are trimmed to kMaxLabelText; an empty one becomes "New label".
+    const Label &add_label(const std::string &text, std::uint32_t fill, std::uint32_t ink);
+    // A label of the player's, and every title wearing it, goes.
+    bool remove_label(const std::string &id);
+    // The player's own label a title wears, or empty for its built-in one.
+    std::string title_label(const std::string &id) const;
+    // An empty or unknown label id gives the title its built-in one back.
+    void set_title_label(const std::string &id, const std::string &label_id);
 };
 
 // A folder box art may live in: absolute, under /data/ or /mnt/, no "..",

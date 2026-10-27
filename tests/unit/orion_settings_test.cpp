@@ -56,7 +56,8 @@ TEST_F(OrionSettings, TheFolderBrowserPicksAGameFolder)
     panel.set_emulator(emulator);
     panel.set_browse_places({{"Nowhere", (root / "missing").string()}, {"Test", root.string()}});
     panel.open(look_, prefs_, feedback_);
-    // Library, Tabs, Emulators; into its rows: Scan, then Porpoise.
+    // Library, Tabs, Labels, Emulators; into its rows: Scan, then Porpoise.
+    send_to(panel, press(Action::page_next));
     send_to(panel, press(Action::page_next));
     send_to(panel, press(Action::page_next));
     ASSERT_EQ(panel.section(), SettingsPanel::Section::emulators);
@@ -143,6 +144,40 @@ TEST_F(OrionSettings, AppearanceSetsTheThemeOfTheTabBehindIt)
     // Back to the theme every tab wears.
     EXPECT_EQ(send_to(panel, nav(Direction::left)), SettingsPanel::Change::prefs);
     EXPECT_TRUE(prefs_.tab_theme("games").empty());
+}
+
+// Labels: New label asks for a name; a label's page changes its colour (the
+// first choice of a built-in one is ORION's own) and asks for its text.
+TEST_F(OrionSettings, ALabelsPageChangesItsColours)
+{
+    SettingsPanel panel;
+    hui::orion::LabelEntry gba;
+    gba.id = "gba";
+    gba.name = "GBA";
+    gba.text = "GBA";
+    gba.fill = 0xcdb6ff;
+    gba.ink = 0x08101c;
+    panel.set_labels({gba});
+    panel.open(look_, prefs_, feedback_);
+    send_to(panel, press(Action::page_next));
+    send_to(panel, press(Action::page_next));
+    ASSERT_EQ(panel.section(), SettingsPanel::Section::labels);
+    send_to(panel, nav(Direction::right)); // New label
+    EXPECT_EQ(send_to(panel, press(Action::confirm)), SettingsPanel::Change::new_label);
+    send_to(panel, nav(Direction::down)); // GBA
+    send_to(panel, press(Action::confirm));
+    EXPECT_EQ(panel.label_id(), "gba");
+    // The page opens on Text (the preview above it is not a row to stop on),
+    // then Label colour: one step right, from ORION's to the first colour.
+    EXPECT_EQ(send_to(panel, press(Action::confirm)), SettingsPanel::Change::rename_label);
+    send_to(panel, nav(Direction::down));
+    EXPECT_EQ(send_to(panel, nav(Direction::right)), SettingsPanel::Change::prefs);
+    ASSERT_NE(prefs_.label("gba"), nullptr);
+    EXPECT_EQ(prefs_.label("gba")->fill, hui::orion::label_colours()[0].first);
+    EXPECT_EQ(send_to(panel, nav(Direction::left)), SettingsPanel::Change::prefs);
+    EXPECT_EQ(prefs_.label("gba"), nullptr); // ORION's again
+    send_to(panel, press(Action::back));
+    EXPECT_TRUE(panel.label_id().empty());
 }
 
 } // namespace
