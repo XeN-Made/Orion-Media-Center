@@ -364,10 +364,13 @@ int attach_rom_art(std::vector<Title> &roms, const std::string &root, const std:
 }
 
 std::string retroarch_args(const std::string &core_file, const std::string &rom,
-                           const std::string &token)
+                           const std::string &token, const std::string &append_config)
 {
-    return "# ORION " + token + ": this start only\n-L\n/app0/cores/" + core_file + "\n" + rom +
-           "\n";
+    // --appendconfig: settings for this start over RetroArch's own (Continue
+    // turns savestate_auto_load on).
+    return "# ORION " + token + ": this start only\n-L\n/app0/cores/" + core_file + "\n" +
+           (append_config.empty() ? std::string() : "--appendconfig\n" + append_config + "\n") +
+           rom + "\n";
 }
 
 std::string rom_id(std::string_view path)

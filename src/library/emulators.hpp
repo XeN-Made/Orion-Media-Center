@@ -304,7 +304,7 @@ int attach_rom_art(std::vector<Title> &roms, const std::string &root, const std:
 // token (unique to the start) sits in a comment, so the launch helper can tell
 // this start's file from a later one's.
 std::string retroarch_args(const std::string &core_file, const std::string &rom,
-                           const std::string &token);
+                           const std::string &token, const std::string &append_config = {});
 // Lines RetroArch's launcher reads no longer than this.
 constexpr std::size_t kRetroArchArgMax = 255;
 

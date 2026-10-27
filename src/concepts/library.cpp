@@ -28,6 +28,7 @@
 #include "orion/key_page.hpp"
 #include "orion/romm.hpp"
 #include "orion/romm_browser.hpp"
+#include "orion/romm_saves.hpp"
 #include "orion/steamgriddb.hpp"
 #include "orion/wide_copies.hpp"
 #include "orion/look.hpp"
@@ -124,6 +125,8 @@ constexpr std::size_t kMaxRequestPath = 1024;
 // The FTP server payload players commonly run (ftpsrv): it can read what
 // ORION's sandbox cannot, the system's copies of home-screen pictures.
 constexpr int kFtpPort = 2121;
+// Continue's config for one start, as RetroArch sees it (its folder is /app0).
+constexpr const char *kContinueConfig = "/app0/orion-continue.cfg";
 // How long Circle is held to close ORION.
 constexpr float kHoldToExit = 1.2f;
 // The search panel sits under the first row of covers, so the results of
@@ -203,6 +206,7 @@ enum : int
     kItemMoveMenu,        // Move to tab…: the list of tabs
     kItemDetails,         // Details…: the title's page
     kItemFindArtName,     // Find art by name… (SteamGridDB)
+    kItemContinue,        // Continue from the last save state (RetroArch)
     kItemMove = 100,      // + the tab's index
     kItemShelf = 250,     // + a built-in shelf's index in kShelves
     kItemPlayer = 300,    // 0: the default, then 1 + an index in library::players_for
@@ -2762,6 +2766,130 @@ class Library final : public app::Concept
         art_paused_for_romm_ = true;
     }
 
+    // ---- saves between RomM and RetroArch (orion/romm_saves.hpp) ----
+
+    // RetroArch's folder for a core's saves or states ("savefiles/mGBA"), or
+    // empty when the core is not known.
+    std::string retroarch_folder(const library::Player &player, const char *kind) const
+    {
+        if (player.app == nullptr)
+            return {};
+        for (const library::Core &core : context_.library.emulator.cores)
+        {
+            if (core.file == player.core && !core.name.empty())
+                return player.app->root + "/" + kind + "/" + core.name;
+        }
+        return {};
+    }
+
+    // RomM's id for a game: a RomM game's own, else the one of the same file.
+    long long romm_id_of(const Title &title)
+    {
+        if (const long long id = orion::romm_id_from_url(title.remote); id > 0)
+            return id;
+        if (romm_ids_.empty())
+        {
+            std::string text;
+            save::read_file(context_.library.state_dir + "/romm-games.tsv", &text, 32u << 20);
+            romm_ids_ = orion::romm_ids_by_file(orion::read_romm_catalogue(text));
+        }
+        std::string file = title.path.substr(title.path.rfind('/') + 1);
+        for (char &c : file)
+            c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        const auto found = romm_ids_.find(file);
+        return found == romm_ids_.end() ? 0 : found->second;
+    }
+
+    // Before RetroArch starts a game: when RomM has a newer save of it than
+    // the console (another device played on), that one is brought first and
+    // the game starts after it; the save it replaces is kept beside it
+    // (<save>.orion-backup). Once per game per run of ORION. True when a
+    // download started (the launch comes back when it ends).
+    bool pull_romm_save(const Title &title, const library::Player &player, app::Feedback &feedback)
+    {
+        if (!sys::on_console() || !romm_save_checked_.insert(title.id).second ||
+            romm_download_.running())
+            return false;
+        const std::string base = romm_base();
+        const std::string token = romm_token();
+        const std::string folder = retroarch_folder(player, "savefiles");
+        if (base.empty() || token.empty() || folder.empty())
+            return false;
+        const long long id = romm_id_of(title);
+        std::string text;
+        if (id <= 0 ||
+            !save::read_file(context_.library.state_dir + "/romm-saves.tsv", &text, 8u << 20))
+            return false;
+        const std::vector<orion::RommSave> saves = orion::read_romm_saves(text);
+        const orion::RommSave *save =
+            orion::latest_romm_save(saves, id, orion::retroarch_core_key(player.core), false);
+        if (save == nullptr)
+            return false;
+        const std::string target = folder + "/" + orion::retroarch_stem(player.rom) + ".srm";
+        struct stat info = {};
+        const bool here = ::stat(target.c_str(), &info) == 0;
+        // The console's is as new (a minute either way): nothing to bring.
+        if (here &&
+            static_cast<std::int64_t>(info.st_mtime) + 60 >= orion::parse_date_time(save->updated))
+            return false;
+        if (here)
+            std::rename(target.c_str(), (target + ".orion-backup").c_str());
+        pause_art_for_romm();
+        if (!romm_download_.start(orion::romm_save_content_url(base, *save),
+                                  orion::romm_headers(token), target))
+        {
+            if (here)
+                std::rename((target + ".orion-backup").c_str(), target.c_str());
+            return false;
+        }
+        romm_downloading_id_ = title.id;
+        romm_downloading_name_ = title.name;
+        romm_launch_after_ = true;
+        romm_save_target_ = target;
+        show_note(true, trf("Bringing {0}'s save from RomM…", {title.name}));
+        feedback.play(audio::Cue::select);
+        return true;
+    }
+
+    // The game's newest save state, for Continue; empty when it has none.
+    std::string continue_state(const Title &title)
+    {
+        if (!title.is_rom())
+            return {};
+        const library::Player player = player_of(title);
+        if (player.app == nullptr || player.app->key != "retroarch")
+            return {};
+        const std::string folder = retroarch_folder(player, "savestates");
+        return folder.empty() ? std::string()
+                              : orion::newest_state(folder, orion::retroarch_stem(player.rom));
+    }
+
+    // Continue: the newest state as the one RetroArch loads by itself at the
+    // start (<stem>.state.auto, written where it stays), and a config for
+    // this start only that turns that loading on (put in place by the helper).
+    bool prepare_continue(const library::Player &player, std::string *request)
+    {
+        const std::string folder = retroarch_folder(player, "savestates");
+        const std::string stem = orion::retroarch_stem(player.rom);
+        const std::string newest =
+            folder.empty() ? std::string() : orion::newest_state(folder, stem);
+        if (newest.empty())
+            return false;
+        const std::string automatic = folder + "/" + stem + ".state.auto";
+        if (newest != automatic)
+        {
+            std::string bytes;
+            if (!save::read_file(newest, &bytes, 256u << 20) ||
+                !save::write_atomic(automatic, bytes).empty())
+                return false;
+        }
+        const std::string staged = context_.library.state_dir + "/retroarch-continue.cfg";
+        if (!write_shared(staged, "savestate_auto_load = \"true\"\n"))
+            return false;
+        *request += "@install " + staged + "\t" + player.app->root + "/orion-continue.cfg\n";
+        return true;
+    }
+
     // The picked games, one after another (a launch's download first).
     void follow_romm_queue()
     {
@@ -2868,11 +2996,19 @@ class Library final : public app::Concept
         if (romm_download_.take_finished())
         {
             const std::string error = romm_download_.error();
+            const std::string save = std::exchange(romm_save_target_, std::string());
             if (!error.empty())
             {
                 show_note(false,
                           trf("Could not download {0}: {1}", {romm_downloading_name_, error}));
                 feedback.play(audio::Cue::error);
+                // A save that did not come: the console's own is put back,
+                // and the game starts with it.
+                if (!save.empty())
+                {
+                    std::rename((save + ".orion-backup").c_str(), save.c_str());
+                    launch(romm_downloading_id_, feedback);
+                }
             }
             else if (romm_launch_after_)
                 launch(romm_downloading_id_, feedback);
@@ -3381,6 +3517,12 @@ class Library final : public app::Concept
         launch.tag = kItemLaunch;
         launch.disabled = launch_pending_ > 0.0f;
         items.push_back(launch);
+        if (!continue_state(title).empty())
+        {
+            ui::MenuItem resume = menu_item(tr("Continue from the last save state"));
+            resume.tag = kItemContinue;
+            items.push_back(resume);
+        }
         ui::MenuItem details = menu_item(tr("Details…"));
         details.tag = kItemDetails;
         items.push_back(details);
@@ -3935,6 +4077,13 @@ class Library final : public app::Concept
             find_other_art(feedback);
             return;
         }
+        if (tag == kItemContinue)
+        {
+            continue_next_ = true;
+            launch(menu_title_, feedback);
+            continue_next_ = false;
+            return;
+        }
         if (tag == kItemFindArtName)
         {
             const Title *title = find_title(menu_title_);
@@ -4144,6 +4293,10 @@ class Library final : public app::Concept
         const library::Player player = title->is_rom() ? player_of(*title) : library::Player();
         const library::EmulatorApp *app = player.app;
         const bool retroarch = app != nullptr && app->key == "retroarch";
+        // RomM keeps a newer save of it: that one first, then the start.
+        if (retroarch && pull_romm_save(*title, player, feedback))
+            return;
+        const bool continuing = retroarch && std::exchange(continue_next_, false);
         // RetroArch, as its own ES-DE does: -L <core> <game>.
         const std::string core = retroarch ? player.core : std::string();
         const std::string launcher = app != nullptr ? app->title_id : std::string();
@@ -4202,9 +4355,12 @@ class Library final : public app::Concept
             why = tr("its path is longer than RetroArch reads");
         else if (title->is_rom() && player.rom.size() > kMaxRequestPath)
             why = tr("its path is too long");
-        else if (retroarch &&
-                 !write_shared(staged_args, library::retroarch_args(core, player.rom, token)))
+        else if (retroarch && !write_shared(staged_args, library::retroarch_args(
+                                                             core, player.rom, token,
+                                                             continuing ? kContinueConfig : "")))
             why = trf("could not write {0}", {staged_args});
+        else if (continuing && !prepare_continue(player, &request))
+            why = tr("its last save state could not be made ready");
         else if (retroarch && !write_shared(staged_test_run, "ORION " + token + "\n"))
             why = trf("could not write {0}", {staged_test_run});
         else if (ps5sx2 && !write_shared(staged_note, library::ps5sx2_launch_note(player.rom)))
@@ -6894,7 +7050,11 @@ class Library final : public app::Concept
     std::deque<orion::RommEntry> romm_queue_; // picked games waiting their turn
     bool romm_launch_after_ = false;          // the download is a launch's: start it after
     bool art_paused_for_romm_ = false;        // a box art run stopped for a RomM game
-    int romm_queued_done_ = 0;                // picked games fetched in this run of the queue
+    std::unordered_set<std::string> romm_save_checked_;   // games whose RomM save was looked at
+    std::unordered_map<std::string, long long> romm_ids_; // RomM's ids by file name
+    std::string romm_save_target_; // a save being brought from RomM: where it goes
+    bool continue_next_ = false;   // the next launch continues from the last state
+    int romm_queued_done_ = 0;     // picked games fetched in this run of the queue
     std::vector<std::string> preview_files_;
     int preview_index_ = 0;
     bool keeping_ = false;

@@ -650,3 +650,6 @@ author = Svenska ORION-bidragsgivare
 "{0} on RomM" = "{0} på RomM"
 "No saves on RomM for these games yet" = "Inga sparningar på RomM för de här spelen än"
 "ORION has not read your saves from RomM yet: Settings, RomM shows why" = "ORION har inte läst dina sparningar från RomM än: Inställningar, RomM visar varför"
+"Bringing {0}'s save from RomM…" = "Hämtar sparningen för {0} från RomM…"
+"Continue from the last save state" = "Fortsätt från senaste sparläget"
+"its last save state could not be made ready" = "dess senaste sparläge kunde inte förberedas"

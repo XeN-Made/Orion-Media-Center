@@ -650,3 +650,6 @@ author = ORION
 "{0} on RomM" = "{0} a RomM-on"
 "No saves on RomM for these games yet" = "Ezekhez a játékokhoz még nincs mentés a RomM-on"
 "ORION has not read your saves from RomM yet: Settings, RomM shows why" = "Az ORION még nem olvasta be a RomM-mentéseidet: a Beállítások, RomM megmutatja, miért"
+"Bringing {0}'s save from RomM…" = "{0} mentésének letöltése a RomM-ról…"
+"Continue from the last save state" = "Folytatás az utolsó mentett állapotból"
+"its last save state could not be made ready" = "az utolsó mentett állapotát nem sikerült előkészíteni"

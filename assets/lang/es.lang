@@ -655,3 +655,6 @@ author = ORION
 "{0} on RomM" = "{0} en RomM"
 "No saves on RomM for these games yet" = "Aún no hay partidas en RomM para estos juegos"
 "ORION has not read your saves from RomM yet: Settings, RomM shows why" = "ORION aún no ha leído tus partidas de RomM: Ajustes, RomM indica por qué"
+"Bringing {0}'s save from RomM…" = "Trayendo la partida de {0} desde RomM…"
+"Continue from the last save state" = "Continuar desde el último estado guardado"
+"its last save state could not be made ready" = "no se pudo preparar su último estado guardado"

@@ -317,6 +317,11 @@ TEST(Emulators, TellsRetroArchsLauncherWhichGame)
               "# ORION 1792457611-42: this start only\n-L\n"
               "/app0/cores/mgba_libretro.so\n"
               "/app0/content/Nintendo - Game Boy Advance/007 - Nightfire (UE) (M3) [!].gba\n");
+    // Continue: a config of its own for this start, before the game.
+    EXPECT_EQ(library::retroarch_args("mgba_libretro.so", "/mnt/usb0/gba/a.gba", "1-2",
+                                      "/app0/orion-continue.cfg"),
+              "# ORION 1-2: this start only\n-L\n/app0/cores/mgba_libretro.so\n"
+              "--appendconfig\n/app0/orion-continue.cfg\n/mnt/usb0/gba/a.gba\n");
 }
 
 // Games kept on a server join their systems' tabs before they are on the
