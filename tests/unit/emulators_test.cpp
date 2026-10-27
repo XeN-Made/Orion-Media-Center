@@ -324,6 +324,32 @@ TEST(Emulators, TellsRetroArchsLauncherWhichGame)
               "--appendconfig\n/app0/orion-continue.cfg\n/mnt/usb0/gba/a.gba\n");
 }
 
+// A network drive's files are games only where a core of their system takes
+// them, as in a local folder: notes and pictures beside the games stay out.
+TEST(Emulators, ListsOnlyTheFilesACoreTakesFromANetworkDrive)
+{
+    const library::Title title = retroarch();
+    std::vector<library::Title> roms;
+    library::Emulator emulator = library::scan_retroarch(title, &roms);
+    const std::size_t before = roms.size();
+    std::vector<library::RemoteGame> games(3);
+    for (library::RemoteGame &game : games)
+    {
+        game.system_folder = "gba";
+        game.filtered = true;
+    }
+    games[0].name = "Moon Garden";
+    games[0].path = "/data/orion/shares/s1/gba/Moon Garden.gba";
+    games[1].name = "Read me";
+    games[1].path = "/data/orion/shares/s1/gba/Read me.txt";
+    games[2].name = "Zipped";
+    games[2].path = "/data/orion/shares/s1/gba/Zipped.zip";
+    EXPECT_EQ(library::add_remote_games(emulator, games, &roms, false), 2);
+    ASSERT_EQ(roms.size(), before + 2);
+    for (std::size_t i = before; i < roms.size(); ++i)
+        EXPECT_NE(roms[i].name, "Read me");
+}
+
 // A game just downloaded joins a library already scanned as the console's
 // own; one listed already (a RomM game in its list) is not added twice.
 TEST(Emulators, AddsDownloadedGamesWithoutAScan)

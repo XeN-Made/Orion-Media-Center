@@ -110,6 +110,10 @@ struct RemoteGame
     std::string remote; // its address on the server
     std::string icon;   // a cover already here, used when no emulator has art; or empty
     std::string cover;  // its cover on the server, or empty
+    // Any file in a system's folder (a network drive's): listed only when a
+    // core of its system takes it, as a local folder's are. A server's own
+    // list (RomM) names only games.
+    bool filtered = false;
 };
 
 int add_emulator_games(Library &library, const std::vector<GameFolder> &folders,

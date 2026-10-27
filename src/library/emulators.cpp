@@ -2105,6 +2105,26 @@ bool OwnedGames::has(const std::string &system, const std::string &path,
            keys_.count(shelf + "\t" + art_key(name)) != 0;
 }
 
+// Whether a file in a system's folder is a game: what one of the system's
+// cores takes, or a ZIP or 7z (RetroArch unpacks those for any core); with no
+// core for it yet, any file (the core may come later).
+static bool takes_file(const Emulator &emulator, const std::string &system, const std::string &file)
+{
+    const auto at = std::find_if(emulator.systems.begin(), emulator.systems.end(),
+                                 [&](const System &s) { return s.name == system; });
+    const std::string ext = extension_of(file);
+    if (ext.empty())
+        return false;
+    if (at == emulator.systems.end() || at->cores.empty() || ext == "zip" || ext == "7z")
+        return true;
+    return std::any_of(emulator.cores.begin(), emulator.cores.end(),
+                       [&](const Core &core)
+                       {
+                           return takes(core, ext) && std::find(at->cores.begin(), at->cores.end(),
+                                                                core.file) != at->cores.end();
+                       });
+}
+
 int add_remote_games(Emulator &emulator, const std::vector<RemoteGame> &games,
                      std::vector<Title> *roms, bool missing_only)
 {
@@ -2120,6 +2140,8 @@ int add_remote_games(Emulator &emulator, const std::vector<RemoteGame> &games,
             break;
         const std::string system = system_of_folder(game.system_folder, emulator);
         if (system.empty() || game.path.empty())
+            continue;
+        if (game.filtered && !takes_file(emulator, system, game.path))
             continue;
         if (missing_only && owned.has(system, game.path, game.name))
             continue;
