@@ -87,13 +87,16 @@ std::vector<std::string> romm_entry_systems(const std::vector<RommEntry> &entrie
 }
 
 std::vector<int> romm_view(const std::vector<RommEntry> &entries, const std::string &system,
-                           RommFilter filter)
+                           RommFilter filter, const std::string &query)
 {
     std::vector<int> view;
+    const std::string needle = library::art_key(query);
     for (std::size_t i = 0; i < entries.size(); ++i)
     {
         const RommEntry &entry = entries[i];
-        if (entry.short_name != system)
+        if (!system.empty() && entry.short_name != system)
+            continue;
+        if (!needle.empty() && library::art_key(entry.game.name).find(needle) == std::string::npos)
             continue;
         if (filter == RommFilter::missing && (entry.owned || entry.downloaded))
             continue;
@@ -148,7 +151,16 @@ void RommBrowser::open(std::vector<RommEntry> entries, ui::Feedback &feedback)
     entries_ = std::move(entries);
     systems_ = romm_entry_systems(entries_);
     picked_.clear();
+    query_.clear();
     std::vector<ui::TabItem> tabs;
+    saves_tab_ = std::any_of(entries_.begin(), entries_.end(),
+                             [](const RommEntry &entry) { return entry.saves + entry.states > 0; });
+    if (saves_tab_)
+    {
+        ui::TabItem tab;
+        tab.label = tr("Saves");
+        tabs.push_back(std::move(tab));
+    }
     for (const std::string &system : systems_)
     {
         ui::TabItem tab;
@@ -174,7 +186,8 @@ void RommBrowser::show_system(int index)
         list_.set_items({});
         return;
     }
-    tabs_.set_active(std::clamp(index, 0, static_cast<int>(systems_.size()) - 1), true);
+    tabs_.set_active(std::clamp(index, 0, static_cast<int>(systems_.size()) - (saves_tab_ ? 0 : 1)),
+                     true);
     rebuild_list();
     list_.set_focus(0, true);
 }
@@ -182,9 +195,17 @@ void RommBrowser::show_system(int index)
 void RommBrowser::rebuild_list()
 {
     const int active = std::max(tabs_.active(), 0);
-    view_ = systems_.empty()
+    // Saves: every system's games with one, whatever the filter.
+    if (saves_tab_ && active == 0)
+        view_ = romm_view(entries_, {}, RommFilter::saves, query_);
+    else
+    {
+        const int system = active - (saves_tab_ ? 1 : 0);
+        view_ =
+            system < 0 || system >= static_cast<int>(systems_.size())
                 ? std::vector<int>()
-                : romm_view(entries_, systems_[static_cast<std::size_t>(active)], filter_);
+                : romm_view(entries_, systems_[static_cast<std::size_t>(system)], filter_, query_);
+    }
     std::vector<ui::ListItem> items;
     items.reserve(view_.size());
     for (const int index : view_)
@@ -192,7 +213,8 @@ void RommBrowser::rebuild_list()
         const RommEntry &entry = entries_[static_cast<std::size_t>(index)];
         ui::ListItem item;
         item.title = entry.game.name;
-        item.subtitle = entry.game.fs_name;
+        item.subtitle = saves_tab_ && active == 0 ? entry.short_name + "  ·  " + entry.game.fs_name
+                                                  : entry.game.fs_name;
         item.tag = index;
         item.value = entry.game.size > 0 ? format_bytes(entry.game.size) : std::string();
         if (entry.downloaded)
@@ -249,6 +271,8 @@ RommBrowser::Choice RommBrowser::handle(const InputFrame &input, ui::Feedback &f
         ui::play_cue(feedback, list_.style, list_.style.sounds.change, 960.0f);
         return Choice::none;
     }
+    if (input.is_pressed(Action::menu))
+        return Choice::search;
     if (input.is_pressed(Action::west))
     {
         if (picked_.empty())
@@ -267,6 +291,13 @@ RommBrowser::Choice RommBrowser::handle(const InputFrame &input, ui::Feedback &f
             picked_.insert(entry.game.id);
     }
     return Choice::none;
+}
+
+void RommBrowser::set_query(std::string query)
+{
+    query_ = std::move(query);
+    rebuild_list();
+    list_.set_focus(0, true);
 }
 
 std::vector<RommEntry> RommBrowser::take_picked()
@@ -302,18 +333,24 @@ void RommBrowser::draw_content(ui::Canvas &canvas, const gfx::Rect &area, float)
     const ui::Theme &theme = sheet_.style.theme;
     ui::Painter paint(canvas.list, canvas.fonts, theme);
     const int shown = static_cast<int>(view_.size());
-    paint.body(trf("{0}  ·  {1}", {filter_name(), i18n::plural(shown, "{0} game", "{0} games")}),
-               area.x, area.y + kFilterTop + 20.0f, 22.0f, theme.text_muted);
+    const bool saves = saves_tab_ && tabs_.active() == 0;
+    std::string line = trf("{0}  ·  {1}", {saves ? tr("With saves on RomM") : filter_name(),
+                                           i18n::plural(shown, "{0} game", "{0} games")});
+    if (!query_.empty())
+        line += "  ·  " + trf("Looking for “{0}”", {query_});
+    paint.body(line, area.x, area.y + kFilterTop + 20.0f, 22.0f, theme.text_muted);
     tabs_.draw(canvas);
     if (view_.empty())
         paint.body(systems_.empty() ? tr("Refresh RomM's game list in Settings, RomM first")
-                                    : tr("No games here with this filter: Triangle changes it"),
+                   : !query_.empty()
+                       ? tr("No game here has that in its name: Options searches again")
+                       : tr("No games here with this filter: Triangle changes it"),
                    area.x, area.y + kListTop + 60.0f, 24.0f, theme.text_muted);
     else
         list_.draw(canvas);
     const std::string hints =
-        trf("Cross tick  ·  Square download {0}  ·  Triangle filter  ·  L2 R2 system  ·  "
-            "Circle back",
+        trf("Cross tick  ·  Square download {0}  ·  Triangle filter  ·  Options search  ·  L2 R2 "
+            "system  ·  Circle back",
             {std::to_string(picked_.size())});
     paint.body(hints, area.x, area.y + area.h - 12.0f, 20.0f, theme.text_muted);
 }

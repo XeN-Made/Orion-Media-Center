@@ -174,6 +174,7 @@ enum class Typing : std::uint8_t
     art_name,     // from a title's menu: the name SteamGridDB is asked for
     romm_url,     // from Settings > Emulators > RomM server
     romm_code,    // from Settings > Emulators > Pair with RomM
+    romm_search,  // from the RomM Games screen: words to look for
 };
 
 // Tags of the menu items.
@@ -1170,7 +1171,8 @@ class Library final : public app::Concept
             draw_empty(list, paint);
         // A keyboard Settings asked for (a folder to type) goes over it: the
         // sheet covers the whole screen.
-        const bool over_settings = settings_.visible();
+        // And over the RomM Games screen (its search).
+        const bool over_settings = settings_.visible() || romm_browser_.is_open();
         if (keyboard_shown_.value > 0.01f && !over_settings)
             draw_keyboard(canvas, paint);
         else if (keyboard_shown_.value <= 0.01f)
@@ -2410,6 +2412,11 @@ class Library final : public app::Concept
             pair_romm(name_, feedback);
             return;
         }
+        if (typing == Typing::romm_search)
+        {
+            romm_browser_.set_query(name_);
+            return;
+        }
         if (typing == Typing::grid_key)
         {
             const std::string failed =
@@ -2725,6 +2732,10 @@ class Library final : public app::Concept
                 romm_queue_.push_back(std::move(entry));
             break;
         }
+        case orion::RommBrowser::Choice::search:
+            start_typing(Typing::romm_search, romm_browser_.query());
+            feedback.play(audio::Cue::modal_open);
+            break;
         case orion::RommBrowser::Choice::none:
             break;
         }
@@ -6693,7 +6704,8 @@ class Library final : public app::Concept
             : typing_ == Typing::art_name     ? tr("The name to look for on SteamGridDB")
             : typing_ == Typing::romm_url  ? tr("Its address with the port, like 192.168.1.20:8080")
             : typing_ == Typing::romm_code ? tr("The pairing code RomM shows")
-                                           : tr("Name the new tab");
+            : typing_ == Typing::romm_search ? tr("A game's name, or part of it")
+                                             : tr("Name the new tab");
         const bool empty = text.empty();
         ui::text(list, fonts.regular, empty ? placeholder.c_str() : text.c_str(), field.x + 28,
                  field.y + 37, 25, empty ? Color::rgb(0xffffff, 0.66f) : Color::rgb(0xffffff));
