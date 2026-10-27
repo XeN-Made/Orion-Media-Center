@@ -621,3 +621,5 @@ author = ORION
 "RomM games in the library" = "Juegos de RomM en la biblioteca"
 "Set it up from a phone or PC" = "Configúralo desde un móvil o PC"
 "{0} games on {1} systems so far, going on from {2} read before…" = "{0} juegos en {1} sistemas por ahora, siguiendo desde {2} leídos antes…"
+"Title music volume" = "Volumen de la música de títulos"
+"How loud a focused game's own music plays; 5 is as loud as ORION's songs" = "Qué tan alta suena la música propia del juego enfocado; 5 es tan alto como las canciones de ORION"

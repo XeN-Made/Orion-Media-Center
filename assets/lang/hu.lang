@@ -616,3 +616,5 @@ author = ORION
 "RomM games in the library" = "RomM-játékok a könyvtárban"
 "Set it up from a phone or PC" = "Beállítás telefonról vagy PC-ről"
 "{0} games on {1} systems so far, going on from {2} read before…" = "Eddig {0} játék {1} rendszeren, folytatva a korábban beolvasott {2} után…"
+"Title music volume" = "Címzene hangereje"
+"How loud a focused game's own music plays; 5 is as loud as ORION's songs" = "Milyen hangosan szól a kijelölt játék saját zenéje; az 5 olyan hangos, mint az ORION dalai"

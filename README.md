@@ -363,7 +363,9 @@ while ORION is open.
   plays over ORION's, as on the PS5's home screen. Options on a title,
   **Choose music…**, picks an `.ogg` (or `.at9`) of yours instead; or drop
   one into `/data/orion/hover-music` named after the game or its title ID.
-  Settings, Sound, **Title music** turns it off.
+  Settings, Sound, **Title music** turns it off, and **Title music volume** sets
+  how loud it plays (each game's song is brought to the same loudness first).
+  It keeps playing while Settings or a title's menu is open.
 
 ## If something goes wrong
 

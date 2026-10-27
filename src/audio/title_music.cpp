@@ -22,7 +22,7 @@ namespace
 // A title's song is brought to this loudness (RMS of the samples): the
 // playlist's tracks are mastered at about -18 LUFS and play at 0.4, about
 // 0.05; a little over that.
-constexpr float kTitleLoudness = 0.07f;
+constexpr float kTitleLoudness = 0.09f;
 constexpr float kLeastGain = 0.25f;
 constexpr float kMostGain = 4.0f;
 constexpr float kMostPeak = 0.95f;
@@ -211,6 +211,20 @@ float title_loudness_gain(const float *samples, std::size_t count)
     return gain;
 }
 
+float TitleMusic::effective_gain() const
+{
+    const float gain = gain_ * volume_;
+    // Turned up, still held under clipping by the opening's peak.
+    return peak_ > 0.0f ? std::min(gain, std::max(gain_, kMostPeak / peak_)) : gain;
+}
+
+void TitleMusic::set_volume(float scale)
+{
+    volume_ = std::max(scale, 0.0f);
+    if (mixer_ != nullptr && switching_ <= 0.0f && (at9_ || ogg_))
+        mixer_->set_stream_gain(1, effective_gain(), 0.2f);
+}
+
 void TitleMusic::play(const std::string &path)
 {
     if (mixer_ == nullptr || path == path_)
@@ -252,7 +266,11 @@ bool TitleMusic::open(const std::string &path)
             if (probe.open(data).empty())
                 got = probe.decode(opening.data(), kMeasureFrames);
         }
-        gain_ = title_loudness_gain(opening.data(), static_cast<std::size_t>(std::max(got, 0)) * 2);
+        const std::size_t samples = static_cast<std::size_t>(std::max(got, 0)) * 2;
+        gain_ = title_loudness_gain(opening.data(), samples);
+        peak_ = 0.0f;
+        for (std::size_t i = 0; i < samples; ++i)
+            peak_ = std::max(peak_, std::fabs(opening[i]));
     }
     if (ogg)
     {
@@ -301,7 +319,7 @@ void TitleMusic::pump(float dt)
         }
         if (playlist_ != nullptr)
             playlist_->set_lowered(true);
-        mixer_->set_stream_gain(1, gain_, kFadeIn);
+        mixer_->set_stream_gain(1, effective_gain(), kFadeIn);
     }
     if (!at9_ && !ogg_)
         return;

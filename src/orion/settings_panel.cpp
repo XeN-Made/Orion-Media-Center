@@ -87,6 +87,7 @@ enum : int
     kFolderSystem,
     kFolderRemove,
     kMusicVolume,
+    kTitleVolume,
     kSfxVolume,
     kUiVolume,
     kNowPlaying,
@@ -981,6 +982,11 @@ void SettingsPanel::build_sound(const LibraryPrefs &prefs)
     form_.add_toggle(kTitleMusic, tr("Title music"), prefs.title_music).description =
         tr("A focused game plays its own music, as on the home screen; yours from "
            "/data/orion/hover-music first");
+    form_
+        .add_choice(kTitleVolume, tr("Title music volume"), levels,
+                    std::clamp(app_settings_->title_volume, 0, 10))
+        .description = tr("How loud a focused game's own music plays; 5 is as loud as ORION's "
+                          "songs");
     form_.add_action(kNextSong, tr("Next song")).description =
         tr("Your own songs join when ORION starts: .ogg files, 48 kHz, in the folder below");
     form_.add_value(kMusicFolder, tr("Your music"), "/data/orion/music");
@@ -1463,6 +1469,11 @@ SettingsPanel::Change SettingsPanel::handle(const InputFrame &input, ui::Feedbac
     case kView:
         prefs->view = kViewKeys[std::clamp(form_.choice_index(kView), 0, kViewCount - 1)];
         return Change::prefs;
+    case kTitleVolume:
+        if (app_settings_ == nullptr)
+            return Change::none;
+        app_settings_->title_volume = std::clamp(form_.choice_index(kTitleVolume), 0, 10);
+        return Change::sound;
     case kMusicVolume:
     case kSfxVolume:
     case kUiVolume:

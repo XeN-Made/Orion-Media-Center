@@ -3035,9 +3035,14 @@ class Library final : public app::Concept
     // The focused title's music, once the focus has rested on it a moment.
     void update_title_music(float dt)
     {
+        // Over Settings (R3 on a title), a menu or the keyboard the song
+        // playing goes on: they are about that title. The setup and the
+        // cover preview have their own sound.
+        if (prefs_.title_music && (settings_.is_open() || menu_.is_open() || dialog_.is_open() ||
+                                   details_.is_open() || typing_ != Typing::none))
+            return;
         std::string want;
-        if (prefs_.title_music && !view_.empty() && !settings_.is_open() && !setup_.is_open() &&
-            !menu_.is_open() && typing_ == Typing::none && !previewing())
+        if (prefs_.title_music && !view_.empty() && !setup_.is_open() && !previewing())
         {
             const Title &title = focused();
             if (title.id != music_focus_)

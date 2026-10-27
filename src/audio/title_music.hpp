@@ -89,6 +89,9 @@ class TitleMusic
     // A file to play (.at9 or .ogg), or "" for none. The same path again
     // changes nothing.
     void play(const std::string &path);
+    // The player's volume for titles' songs, over their measured loudness
+    // (1: as measured). Applies at once to a song playing.
+    void set_volume(float scale);
     void pump(float dt);
     const std::string &playing() const
     {
@@ -114,6 +117,9 @@ class TitleMusic
     std::string error_;
     float switching_ = 0.0f; // seconds of silence while the last one fades
     float gain_ = 1.0f;      // the song's own (title_loudness_gain)
+    float peak_ = 0.0f;      // its opening's loudest sample
+    float volume_ = 1.0f;    // the player's (set_volume)
+    float effective_gain() const;
     std::vector<float> buffer_;
 };
 

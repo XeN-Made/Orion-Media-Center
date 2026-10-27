@@ -122,6 +122,7 @@ TEST(Settings, RoundTripsEveryField)
     settings.resolution = 1;
     settings.hint_size = 2;
     settings.concept_index = 7;
+    settings.title_volume = 9;
     hui::Settings read;
     ASSERT_TRUE(hui::decode_settings(hui::encode_settings(settings), &read));
     EXPECT_EQ(read.music_volume, 3);
@@ -135,8 +136,24 @@ TEST(Settings, RoundTripsEveryField)
     EXPECT_EQ(read.resolution, 1);
     EXPECT_EQ(read.hint_size, 2);
     EXPECT_EQ(read.concept_index, 7);
+    EXPECT_EQ(read.title_volume, 9);
     EXPECT_FLOAT_EQ(hui::Settings::gain(10), 1.0f);
     EXPECT_FLOAT_EQ(hui::Settings::gain(0), 0.0f);
+}
+
+// A file from before the title music volume (version 1) still reads, the
+// new volume at its default.
+TEST(Settings, ReadsTheFormatBeforeTitleVolume)
+{
+    hui::Settings settings;
+    settings.music_volume = 3;
+    std::string data = hui::encode_settings(settings);
+    data[0] = 1;     // version 1
+    data.pop_back(); // which had no title volume
+    hui::Settings read;
+    ASSERT_TRUE(hui::decode_settings(data, &read));
+    EXPECT_EQ(read.music_volume, 3);
+    EXPECT_EQ(read.title_volume, hui::Settings{}.title_volume);
 }
 
 TEST(Settings, ClampsOutOfRangeValuesAndRejectsGarbage)
