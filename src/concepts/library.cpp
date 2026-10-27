@@ -27,6 +27,7 @@
 #include "orion/registered_titles.hpp"
 #include "orion/key_page.hpp"
 #include "orion/romm.hpp"
+#include "orion/romm_browser.hpp"
 #include "orion/steamgriddb.hpp"
 #include "orion/wide_copies.hpp"
 #include "orion/look.hpp"
@@ -61,6 +62,7 @@
 #include <cstring>
 #include <ctime>
 #include <atomic>
+#include <deque>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -994,6 +996,8 @@ class Library final : public app::Concept
             update_typing(input, feedback);
         else if (menu_.is_open())
             update_menu(input, feedback);
+        else if (romm_browser_.is_open())
+            update_romm_browser(input, feedback);
         else if (whats_new_.is_open())
         {
             if (whats_new_.handle(input, feedback))
@@ -1034,6 +1038,7 @@ class Library final : public app::Concept
         settings_.update(dt);
         details_.update(dt);
         whats_new_.update(dt);
+        romm_browser_.update(dt);
         // After an update, once: what changed (orion/whats_new.hpp).
         if (!whats_new_checked_ && clock_ > 2.0f && !setup_.is_open() && !dialog_.is_open() &&
             info_title_.empty() && launch_pending_ <= 0.0f)
@@ -1175,6 +1180,7 @@ class Library final : public app::Concept
         details_.draw(canvas);
         settings_.draw(canvas);
         whats_new_.draw(canvas);
+        romm_browser_.draw(canvas);
         setup_.draw(canvas);
         if (keyboard_shown_.value > 0.01f && over_settings)
             draw_keyboard(canvas, paint);
@@ -1239,6 +1245,7 @@ class Library final : public app::Concept
         setup_.set_theme(theme_, reduced_);
         details_.set_theme(theme_, reduced_);
         whats_new_.set_theme(theme_, reduced_);
+        romm_browser_.set_theme(theme_, reduced_);
     }
 
     // The shape of the active tab's covers: the one chosen in Settings, else
@@ -2209,6 +2216,9 @@ class Library final : public app::Concept
         case orion::SettingsPanel::Change::romm_sync:
             sync_romm(feedback, true);
             break;
+        case orion::SettingsPanel::Change::romm_browse:
+            open_romm_browser(feedback);
+            break;
         case orion::SettingsPanel::Change::type_grid_key:
             start_typing(Typing::grid_key, grid_key());
             feedback.play(audio::Cue::modal_open);
@@ -2674,8 +2684,66 @@ class Library final : public app::Concept
         }
         romm_downloading_id_ = title.id;
         romm_downloading_name_ = title.name;
+        romm_launch_after_ = true;
         show_note(true, trf("Downloading {0} from RomM…", {title.name}));
         feedback.play(audio::Cue::select);
+    }
+
+    // The RomM Games screen (orion/romm_browser.hpp), from what the last
+    // sync listed and what the console has.
+    void open_romm_browser(app::Feedback &feedback)
+    {
+        const std::string &state = context_.library.state_dir;
+        std::string games;
+        std::string saves;
+        save::read_file(state + "/romm-games.tsv", &games, 32u << 20);
+        save::read_file(state + "/romm-saves.tsv", &saves, 8u << 20);
+        const library::OwnedGames owned(titles());
+        settings_.close(feedback);
+        romm_browser_.open(orion::romm_entries(orion::read_romm_catalogue(games),
+                                               orion::read_romm_saves(saves),
+                                               context_.library.emulator, owned, romm_base(),
+                                               orion::romm_folder(state) + "/games"),
+                           feedback);
+    }
+
+    void update_romm_browser(const InputFrame &input, app::Feedback &feedback)
+    {
+        switch (romm_browser_.handle(input, feedback))
+        {
+        case orion::RommBrowser::Choice::closed:
+            romm_browser_.close(feedback);
+            break;
+        case orion::RommBrowser::Choice::download:
+        {
+            std::vector<orion::RommEntry> picked = romm_browser_.take_picked();
+            show_note(true, i18n::plural(static_cast<long long>(picked.size()),
+                                         "Downloading {0} game from RomM",
+                                         "Downloading {0} games from RomM"));
+            feedback.play(audio::Cue::select);
+            for (orion::RommEntry &entry : picked)
+                romm_queue_.push_back(std::move(entry));
+            break;
+        }
+        case orion::RommBrowser::Choice::none:
+            break;
+        }
+    }
+
+    // The picked games, one after another (a launch's download first).
+    void follow_romm_queue()
+    {
+        if (romm_queue_.empty() || romm_download_.running() || !sys::on_console())
+            return;
+        const orion::RommEntry entry = romm_queue_.front();
+        romm_queue_.pop_front();
+        if (romm_download_.start(entry.url, orion::romm_headers(romm_token()), entry.path))
+        {
+            romm_downloading_id_.clear();
+            romm_downloading_name_ = entry.game.name;
+            romm_launch_after_ = false;
+            ++romm_queued_done_;
+        }
     }
 
     // Pairing's answer, the sync's progress and a download's end.
@@ -2750,15 +2818,26 @@ class Library final : public app::Concept
         if (romm_download_.take_finished())
         {
             const std::string error = romm_download_.error();
-            if (error.empty())
-                launch(romm_downloading_id_, feedback);
-            else
+            if (!error.empty())
             {
                 show_note(false,
                           trf("Could not download {0}: {1}", {romm_downloading_name_, error}));
                 feedback.play(audio::Cue::error);
             }
+            else if (romm_launch_after_)
+                launch(romm_downloading_id_, feedback);
+            // The last picked game in: the library lists them as the
+            // console's own now.
+            if (romm_queue_.empty() && romm_queued_done_ > 0)
+            {
+                show_note(true, i18n::plural(romm_queued_done_, "{0} game downloaded from RomM",
+                                             "{0} games downloaded from RomM"));
+                feedback.play(audio::Cue::saved);
+                romm_queued_done_ = 0;
+                context_.rescan_requested = true;
+            }
         }
+        follow_romm_queue();
     }
 
     struct RommPairing
@@ -6753,6 +6832,10 @@ class Library final : public app::Concept
     std::string romm_status_;
     bool romm_auto_synced_ = false;
     std::unordered_set<std::string> romm_art_asked_; // RomM games whose cover was asked for
+    orion::RommBrowser romm_browser_;
+    std::deque<orion::RommEntry> romm_queue_; // picked games waiting their turn
+    bool romm_launch_after_ = false;          // the download is a launch's: start it after
+    int romm_queued_done_ = 0;                // picked games fetched in this run of the queue
     std::vector<std::string> preview_files_;
     int preview_index_ = 0;
     bool keeping_ = false;

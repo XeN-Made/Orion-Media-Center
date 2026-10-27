@@ -103,6 +103,7 @@ enum : int
     kRommPair,
     kRommSync,
     kRommShow,
+    kRommBrowse,
     kRommPage,
     kRommFolder,
     kEveryVersion,
@@ -525,6 +526,9 @@ void SettingsPanel::build_romm(const LibraryPrefs &prefs)
     pair.description = tr("In RomM: your profile, Client tokens, a new token, Pair; then type the "
                           "code here");
     form_.add_header(tr("Games"));
+    ui::FormRow &browse = form_.add_action(kRommBrowse, tr("Browse RomM games"));
+    browse.chevron = true;
+    browse.description = tr("A tab per system: tick the games to download, see which have saves");
     static const char *const kShowNames[] = {i18n::marked("Only ones not on the console"),
                                              i18n::marked("All of them"), i18n::marked("None")};
     const int show = prefs.romm_show == "all" ? 1 : prefs.romm_show == "off" ? 2 : 0;
@@ -1397,6 +1401,8 @@ SettingsPanel::Change SettingsPanel::handle(const InputFrame &input, ui::Feedbac
             return Change::type_romm_code;
         if (id == kRommSync)
             return Change::romm_sync;
+        if (id == kRommBrowse)
+            return Change::romm_browse;
         if (emulator_ != nullptr && id >= kEmulatorRow &&
             id - kEmulatorRow < static_cast<int>(emulator_->apps.size()))
         {

@@ -95,6 +95,7 @@ class SettingsPanel
         type_romm_url,  // "RomM server" was chosen: the screen asks for the address
         type_romm_code, // "Pair with RomM" was chosen: the screen asks for the code
         romm_sync,      // "Sync RomM games" was chosen
+        romm_browse,    // "Browse RomM games": the screen opens the RomM Games screen
     };
 
     enum class Section : std::uint8_t
