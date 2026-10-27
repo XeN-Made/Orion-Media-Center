@@ -2037,7 +2037,7 @@ OwnedGames::OwnedGames(const std::vector<Title> &roms)
         // Its file's own name too, whatever system it was put under: a
         // playlist that mixes systems can say the wrong one, and a file named
         // "101-in-1 Megamix [NPEH00068] [PSP].zip" is that game anywhere.
-        keys_.insert("\v" + file_of(rom.path));
+        keys_.insert("*\n" + file_of(rom.path)); // no system is called "*"
     }
 }
 
@@ -2047,7 +2047,7 @@ bool OwnedGames::has(const std::string &system, const std::string &path,
     const std::string shelf = shelf_system(system);
     std::string file = file_of(path);
     const bool zipped = file.size() > 4 && file.compare(file.size() - 4, 4, ".zip") == 0;
-    return keys_.count(shelf + "\n" + file) != 0 || keys_.count("\v" + file) != 0 ||
+    return keys_.count(shelf + "\n" + file) != 0 || keys_.count("*\n" + file) != 0 ||
            (zipped && keys_.count(shelf + "\n" + file.substr(0, file.size() - 4)) != 0) ||
            keys_.count(shelf + "\t" + art_key(name)) != 0;
 }
