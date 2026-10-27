@@ -202,15 +202,7 @@ TEST(Romm, SyncsTheCatalogueAndItsCovers)
         *body = page->second;
         return true;
     };
-    std::vector<std::string> fetched;
-    const orion::HttpDownloadWith download =
-        [&](const std::string &url, const std::vector<std::string> &, const std::string &path,
-            std::size_t, std::string *)
-    {
-        fetched.push_back(url);
-        return save::write_atomic(path, "png").empty();
-    };
-    orion::RommSync sync(get, download);
+    orion::RommSync sync(get);
     ASSERT_TRUE(sync.start("http://nas:3000", "rmm_token", dir));
     sync.wait();
     EXPECT_TRUE(sync.take_finished());
@@ -219,19 +211,13 @@ TEST(Romm, SyncsTheCatalogueAndItsCovers)
     EXPECT_EQ(done.platforms, 2);
     EXPECT_EQ(done.total, 3); // the systems' counts: the progress bar's whole
     EXPECT_EQ(done.games, 2);
-    EXPECT_EQ(done.covers, 1);
-    EXPECT_EQ(asked.size(), 2u); // the systems, then one page: the empty system is not asked
+    // The systems, then one page: the empty system is not asked, and no
+    // cover is (the box art downloader asks for those a game needs).
+    EXPECT_EQ(asked.size(), 2u);
     EXPECT_EQ(keys, (std::vector<std::string>{"Authorization: Bearer rmm_token"}));
-    EXPECT_EQ(fetched, (std::vector<std::string>{"http://nas:3000/c/10.png"}));
     std::string text;
     ASSERT_TRUE(save::read_file(dir + "/romm-games.tsv", &text));
     EXPECT_EQ(orion::read_romm_catalogue(text).size(), 2u);
-
-    // Again: the cover is there already.
-    fetched.clear();
-    ASSERT_TRUE(sync.start("http://nas:3000", "rmm_token", dir));
-    sync.wait();
-    EXPECT_TRUE(fetched.empty());
 
     // A sync that stopped part way goes on from the systems it had read.
     ASSERT_TRUE(save::write_atomic(dir + "/romm-sync-done.txt", "http://nas:3000\n1\n").empty());

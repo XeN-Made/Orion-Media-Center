@@ -21,7 +21,7 @@ struct Settings
     int ui_volume = 7;    // 0..10
     // A focused title's own song, apart from the Music volume: 10 plays it
     // at twice its measured loudness (audio/title_music.hpp).
-    int title_volume = 7; // 0..10
+    int title_volume = 5; // 0..10
     bool reduced_motion = false;
     bool swap_confirm = false; // Circle confirms, Cross goes back
     bool show_fps = false;

@@ -191,6 +191,50 @@ TEST(ArtFetcher, AsksSteamGridDbForWhatTheOthersLack)
     EXPECT_TRUE(searched.empty());
 }
 
+// A RomM game: its server's cover is asked first, with the token; a game
+// it has no cover for goes on to the usual sources.
+TEST(ArtFetcher, AsksTheGamesOwnServerFirst)
+{
+    const std::string dir = ::testing::TempDir() + "hui-art-server";
+    std::remove((dir + "/art/Nintendo - Nintendo DS/Starfall (USA).png").c_str());
+    FakeServer server;
+    server.pages[kDs] = R"(<a href="Comet%20Post%20%28USA%29.png">)";
+    server.pages[kDs + "Comet%20Post%20%28USA%29.png"] = kPng;
+    std::vector<std::string> asked;
+    std::vector<std::string> keys;
+    const orion::HttpGetWith with = [&](const std::string &url,
+                                        const std::vector<std::string> &headers, std::size_t,
+                                        std::string *body, std::string *error)
+    {
+        asked.push_back(url);
+        keys = headers;
+        if (url != "http://nas:3000/c/1.png")
+        {
+            *error = "HTTP 404";
+            return false;
+        }
+        *body = kPng;
+        return true;
+    };
+    orion::ArtFetcher art(server.get());
+    art.set_grid_source("", with);
+    orion::ArtJob starfall = job("rom-000000000011", "Starfall (USA).nds", dir);
+    starfall.first_url = "http://nas:3000/c/1.png";
+    starfall.first_headers = {"Authorization: Bearer rmm_token"};
+    orion::ArtJob comet = job("rom-000000000012", "Comet Post (USA).nds", dir);
+    comet.first_url = "http://nas:3000/c/2.png"; // the server has none
+    ASSERT_TRUE(art.start({starfall, comet}, dir + "/art.txt"));
+    art.wait();
+    EXPECT_EQ(art.progress().found, 2);
+    EXPECT_EQ(asked.size(), 2u);
+    EXPECT_EQ(keys, std::vector<std::string>{}); // the second job had no headers
+    std::string bytes;
+    ASSERT_TRUE(save::read_file(dir + "/art/Nintendo - Nintendo DS/Starfall (USA).png", &bytes));
+    EXPECT_EQ(bytes, kPng);
+    // The libretro index was asked only for the game the server lacked.
+    EXPECT_EQ(std::count(server.asked.begin(), server.asked.end(), kDs), 1);
+}
+
 TEST(ArtFetcher, StopsAskingWhenTheNetworkIsGone)
 {
     const std::string dir = ::testing::TempDir() + "hui-art-offline";

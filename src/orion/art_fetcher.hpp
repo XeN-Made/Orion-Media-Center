@@ -28,6 +28,10 @@ struct ArtJob
     std::string target;   // where the PNG goes: <state>/art/<system>/<rom stem>.png
     std::string name;     // as the library shows it: what a Switch game is matched by
     std::string serial;   // GameTDB's ID, where the emulator knows it ("ALZE01")
+    // Asked before the other sources (with these headers): a RomM game's
+    // own cover on its server. Empty for none.
+    std::string first_url;
+    std::vector<std::string> first_headers;
 };
 
 struct ArtFound

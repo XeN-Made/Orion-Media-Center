@@ -27,7 +27,6 @@ namespace
 // every source's details): 50 of them stay well under the limit, which a
 // page of 200 from a large library passed ("too large").
 constexpr std::size_t kMaxAnswer = 24u << 20;
-constexpr std::size_t kMaxCover = 8u << 20;
 constexpr int kPage = 50;
 
 std::string trimmed(std::string_view text)
@@ -309,6 +308,8 @@ std::vector<library::RemoteGame> romm_remote_games(const std::vector<RommGame> &
         remote.path = romm_game_path(folder + "/games", game);
         remote.remote = romm_content_url(base, game);
         const std::string url = romm_cover_url(base, game);
+        remote.cover = url;
+        // One an older ORION downloaded: used when no emulator has art.
         if (!url.empty())
         {
             const std::string cover =
@@ -385,8 +386,7 @@ bool FileDownload::start(std::string url, std::vector<std::string> headers, std:
     return true;
 }
 
-RommSync::RommSync(HttpGetWith get, HttpDownloadWith download)
-    : get_(std::move(get)), download_(std::move(download))
+RommSync::RommSync(HttpGetWith get) : get_(std::move(get))
 {
 }
 
@@ -552,27 +552,9 @@ void RommSync::run(std::string base, std::string token, std::string state_dir)
             save::write_atomic(state_dir + "/romm-games.tsv", romm_catalogue_text(games));
         if (!written.empty())
             return fail(written);
-        // Covers last: the games are listed already while they come.
-        const std::string covers = romm_folder(state_dir) + "/covers";
-        save::ensure_directory(romm_folder(state_dir));
-        save::ensure_directory(covers);
-        for (const RommGame &game : games)
-        {
-            if (cancel_.load())
-                break;
-            const std::string url = romm_cover_url(base, game);
-            if (url.empty())
-                continue;
-            const std::string path =
-                covers + "/" + std::to_string(game.id) + picture_extension(url);
-            if (is_file(path))
-                continue;
-            if (download_(url, headers, path, kMaxCover, &error))
-            {
-                std::lock_guard<std::mutex> lock(mutex_);
-                ++progress_.covers;
-            }
-        }
+        // No covers here: most of a large library's games are on the
+        // console already, with their emulators' art. The box art downloader
+        // fetches RomM's cover for a game listed without any (ArtJob::first_url).
     };
     work();
     running_ = false;

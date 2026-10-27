@@ -88,6 +88,9 @@ struct Title
     // A game kept on a server (RomM): where its file comes from, downloaded
     // to `path` the first time it is played. Empty for a file on the console.
     std::string remote;
+    // Its cover on the server, for the box art downloader to try first when
+    // no emulator has art for it. Empty for a file on the console.
+    std::string remote_cover;
     bool is_rom() const
     {
         return !system.empty();

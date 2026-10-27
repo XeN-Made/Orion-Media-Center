@@ -319,6 +319,21 @@ void ArtFetcher::run(std::vector<ArtJob> jobs, std::string log_path)
             settle(job, &Progress::failed, "skipped (no network)", "");
             continue;
         }
+        // Its own server's cover first (a RomM game); a miss goes on.
+        if (!job.first_url.empty() && grid_get)
+        {
+            std::string bytes;
+            std::string error;
+            if (grid_get(job.first_url, job.first_headers, kMaxPicture, &bytes, &error) &&
+                is_picture(bytes))
+            {
+                failures_in_a_row = 0;
+                keep(job, bytes, "server: " + job.first_url);
+                continue;
+            }
+            append_line(log_path, job.system + "/" + job.rom_file + ": server cover: " +
+                                      (error.empty() ? std::string("not a picture") : error));
+        }
         // XboxUnity by the Xbox 360 game's title ID; a miss goes on to the
         // other sources.
         if (job.system == kXbox360 && !job.serial.empty())

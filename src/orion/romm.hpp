@@ -90,11 +90,11 @@ using HttpDownloadWith =
 std::string romm_pair(const HttpPost &post, const std::string &base, const std::string &code,
                       std::string *token);
 
-// The whole catalogue, then the covers ORION has not got yet, on a thread
-// of its own; the catalogue goes to <state>/romm-games.tsv, the covers to
-// <state>/romm/covers/<id>.<png|jpg>.
+// The whole catalogue, on a thread of its own, to <state>/romm-games.tsv.
+// Covers are not fetched here (the box art downloader asks RomM for those of
+// the games listed without any).
 //
-//   RommSync sync(get, download);
+//   RommSync sync(get);
 //   sync.start(base, token, "/data/orion");
 //   ...every frame: if (sync.take_finished()) the library lists them again
 class RommSync
@@ -104,13 +104,12 @@ class RommSync
     {
         int platforms = 0;
         int games = 0;
-        int covers = 0;
         int resumed = 0;   // systems an earlier, unfinished sync had read already
         int total = 0;     // games the server counts on all its systems (0: not known yet)
         std::string error; // the first failure; empty when it all worked
     };
 
-    RommSync(HttpGetWith get, HttpDownloadWith download);
+    explicit RommSync(HttpGetWith get);
     ~RommSync();
     RommSync(const RommSync &) = delete;
     RommSync &operator=(const RommSync &) = delete;
@@ -135,7 +134,6 @@ class RommSync
     void run(std::string base, std::string token, std::string state_dir);
 
     HttpGetWith get_;
-    HttpDownloadWith download_;
     std::thread worker_;
     std::atomic<bool> running_{false};
     std::atomic<bool> finished_{false};

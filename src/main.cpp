@@ -43,6 +43,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstdio>
+#include <unordered_set>
 #include <memory>
 #include <span>
 #include <string>
@@ -315,10 +316,26 @@ int main()
             save::read_file(titles.state_dir + "/romm-games.tsv", &catalogue, 32u << 20))
             remote = orion::romm_remote_games(orion::read_romm_catalogue(catalogue), base,
                                               titles.state_dir);
-        return library::add_emulator_games(
+        const int games = library::add_emulator_games(
             titles, orion::game_folders(prefs), orion::art_folder(prefs, titles.state_dir),
             prefs.every_version, starting ? boot_step : std::function<void(const char *)>(), remote,
             prefs.romm_show != "all");
+        // RomM covers an older ORION fetched for every game: the ones no
+        // title shows (its emulator has art, or it is not listed) go.
+        if (!remote.empty())
+        {
+            std::unordered_set<std::string> shown;
+            for (const library::Title &title : titles.titles)
+                shown.insert(title.icon);
+            const std::string covers = orion::romm_folder(titles.state_dir) + "/covers";
+            for (const save::DirectoryEntry &entry : save::list_directory(covers))
+            {
+                const std::string path = covers + "/" + entry.name;
+                if (!entry.directory && shown.count(path) == 0)
+                    std::remove(path.c_str());
+            }
+        }
+        return games;
     };
     {
         library::ScanOptions scan = library::console_defaults();

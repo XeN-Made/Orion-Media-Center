@@ -2045,7 +2045,7 @@ int add_remote_games(Emulator &emulator, const std::vector<RemoteGame> &games,
         rom.name = game.name;
         rom.path = game.path;
         rom.remote = game.remote;
-        rom.icon = game.icon;
+        rom.remote_cover = game.cover;
         rom.launcher = retroarch != nullptr ? retroarch->title_id : std::string();
         rom.category = Category::game;
         rom.platform = Platform::unknown;
@@ -2097,6 +2097,22 @@ int add_emulator_games(Library &library, const std::vector<GameFolder> &folders,
     at("emulator covers");
     const EmulatorApp *retroarch = library.emulator.app("retroarch");
     attach_rom_art(roms, retroarch != nullptr ? retroarch->root : std::string(), art_dir);
+    // A server game with no emulator art: a cover kept from its server.
+    if (!remote.empty())
+    {
+        std::unordered_map<std::string, std::string> kept;
+        for (const RemoteGame &game : remote)
+        {
+            if (!game.icon.empty())
+                kept.emplace(game.path, game.icon);
+        }
+        for (Title &rom : roms)
+        {
+            if (rom.icon.empty() && !rom.remote.empty())
+                if (const auto found = kept.find(rom.path); found != kept.end())
+                    rom.icon = found->second;
+        }
+    }
     at("box art found");
     const int count = static_cast<int>(roms.size());
     for (Title &rom : roms)

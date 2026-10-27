@@ -107,7 +107,8 @@ struct RemoteGame
     std::string name;
     std::string path;   // the file on the console, there or not yet
     std::string remote; // its address on the server
-    std::string icon;   // a cover already here, or empty
+    std::string icon;   // a cover already here, used when no emulator has art; or empty
+    std::string cover;  // its cover on the server, or empty
 };
 
 int add_emulator_games(Library &library, const std::vector<GameFolder> &folders,

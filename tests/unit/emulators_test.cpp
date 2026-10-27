@@ -332,6 +332,7 @@ TEST(Emulators, ListsServerGamesOnTheirSystems)
     games[0].path = "/data/orion/romm/games/gba/Moon Garden (USA).gba";
     games[0].remote = "http://nas:3000/api/roms/10/content/Moon%20Garden%20%28USA%29.gba";
     games[0].icon = "/data/orion/romm/covers/10.png";
+    games[0].cover = "http://nas:3000/assets/romm/resources/10.png";
     games[1].system_folder = "not-a-system";
     games[1].name = "Nowhere";
     games[1].path = "/data/orion/romm/games/x/y.bin";
@@ -343,7 +344,10 @@ TEST(Emulators, ListsServerGamesOnTheirSystems)
     EXPECT_EQ(moon.name, "Moon Garden");
     EXPECT_EQ(moon.rom, games[0].path);
     EXPECT_EQ(moon.remote, games[0].remote);
-    EXPECT_EQ(moon.icon, games[0].icon);
+    // No picture yet: an emulator's art is looked for first (attach_rom_art),
+    // the server's cover is for the downloader when there is none.
+    EXPECT_EQ(moon.icon, "");
+    EXPECT_EQ(moon.remote_cover, games[0].cover);
     EXPECT_EQ(moon.launcher, title.id);
     EXPECT_TRUE(moon.is_rom());
     const std::vector<library::Player> players = library::players_for(emulator, moon);

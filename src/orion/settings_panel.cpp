@@ -534,9 +534,11 @@ void SettingsPanel::build_romm(const LibraryPrefs &prefs)
         .description = tr("A game already on the console (the same file, or the same name on the "
                           "same system) shows once, from the console");
     form_.add_action(kRommSync, tr("Refresh RomM's game list")).description =
-        romm_status_.empty() ? tr("Asks RomM which games it has and fetches their covers. Nothing "
-                                  "is downloaded until you play a game")
-                             : romm_status_;
+        romm_status_.empty()
+            ? tr("Asks RomM which games it has. A cover is fetched only for a game "
+                 "your emulators have no art for, and a game only when you play "
+                 "it")
+            : romm_status_;
     form_.add_value(kRommFolder, tr("Downloaded games"), "/data/orion/romm/games").description =
         tr("A RomM game is kept here once you have played it");
 }

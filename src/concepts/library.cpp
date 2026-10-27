@@ -4139,6 +4139,11 @@ class Library final : public app::Concept
         job.serial = library::cover_id(title);
         job.target = orion::art_folder(prefs_, context_.library.state_dir) + "/" + title.system +
                      "/" + library::art_stem(title.rom) + ".png";
+        if (!title.remote_cover.empty())
+        {
+            job.first_url = title.remote_cover;
+            job.first_headers = orion::romm_headers(romm_token());
+        }
         return job;
     }
 
@@ -6724,10 +6729,7 @@ class Library final : public app::Concept
     // RomM: the sync, a game being downloaded, a pairing under way.
     orion::RommSync romm_sync_{[](const std::string &url, const std::vector<std::string> &headers,
                                   std::size_t limit, std::string *body, std::string *error)
-                               { return sys::http_get(url, headers, limit, body, error); },
-                               [](const std::string &url, const std::vector<std::string> &headers,
-                                  const std::string &path, std::size_t limit, std::string *error)
-                               { return sys::http_download(url, headers, path, limit, error); }};
+                               { return sys::http_get(url, headers, limit, body, error); }};
     orion::FileDownload romm_download_{
         [](const std::string &url, const std::vector<std::string> &headers, const std::string &path,
            std::size_t limit, std::string *error)
