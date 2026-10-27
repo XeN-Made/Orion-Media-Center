@@ -20,9 +20,12 @@ namespace hui::orion
 namespace
 {
 
-constexpr std::size_t kMaxAnswer = 8u << 20; // a page of games, with their metadata
+// A page of games comes with all their metadata (summaries, screenshots,
+// every source's details): 50 of them stay well under the limit, which a
+// page of 200 from a large library passed ("too large").
+constexpr std::size_t kMaxAnswer = 24u << 20;
 constexpr std::size_t kMaxCover = 8u << 20;
-constexpr int kPage = 200;
+constexpr int kPage = 50;
 
 std::string trimmed(std::string_view text)
 {
@@ -441,19 +444,34 @@ void RommSync::run(std::string base, std::string token, std::string state_dir)
             progress_.platforms = static_cast<int>(platforms.size());
         }
         std::vector<RommGame> games;
+        // A system that cannot be read keeps what the last sync had of it;
+        // the others go on.
+        std::string old_text;
+        save::read_file(state_dir + "/romm-games.tsv", &old_text, 32u << 20);
+        const std::vector<RommGame> old = read_romm_catalogue(old_text);
         for (const RommPlatform &platform : platforms)
         {
             if (platform.rom_count == 0)
                 continue;
+            const std::size_t first = games.size();
             for (int offset = 0; !cancel_.load(); offset += kPage)
             {
                 long long total = -1;
                 const std::size_t before = games.size();
-                if (!get_(romm_games_url(base, platform.id, offset, kPage), headers, kMaxAnswer,
-                          &body, &error))
-                    return fail(error);
-                if (!parse_romm_games(body, platforms, &games, &total))
-                    return fail("the server's answer is not a list of games");
+                const bool got_page = get_(romm_games_url(base, platform.id, offset, kPage),
+                                           headers, kMaxAnswer, &body, &error);
+                if (!got_page || !parse_romm_games(body, platforms, &games, &total))
+                {
+                    fail(platform.name + ": " +
+                         (got_page ? std::string("the answer is not a list of games") : error));
+                    games.resize(first);
+                    for (const RommGame &game : old)
+                    {
+                        if (game.platform_id == platform.id)
+                            games.push_back(game);
+                    }
+                    break;
+                }
                 {
                     std::lock_guard<std::mutex> lock(mutex_);
                     progress_.games = static_cast<int>(games.size());

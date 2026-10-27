@@ -180,7 +180,7 @@ TEST(Romm, SyncsTheCatalogueAndItsCovers)
     std::remove((dir + "/romm/covers/10.png").c_str());
     std::map<std::string, std::string> pages;
     pages["http://nas:3000/api/platforms"] = kPlatforms;
-    pages[orion::romm_games_url("http://nas:3000", 1, 0, 200)] =
+    pages[orion::romm_games_url("http://nas:3000", 1, 0, 50)] =
         R"({"items": [{"id": 10, "platform_id": 1, "name": "Moon Garden", "fs_name": "a.gba",
                        "path_cover_large": "/c/10.png"},
                       {"id": 11, "platform_id": 1, "name": "Comet Post", "fs_name": "b.gba"}],
@@ -231,6 +231,14 @@ TEST(Romm, SyncsTheCatalogueAndItsCovers)
     ASSERT_TRUE(sync.start("http://nas:3000", "rmm_token", dir));
     sync.wait();
     EXPECT_TRUE(fetched.empty());
+
+    // A system that cannot be read now keeps the games the last sync had.
+    pages.erase(orion::romm_games_url("http://nas:3000", 1, 0, 50));
+    ASSERT_TRUE(sync.start("http://nas:3000", "rmm_token", dir));
+    sync.wait();
+    EXPECT_EQ(sync.progress().error, "Game Boy Advance: HTTP 404");
+    ASSERT_TRUE(save::read_file(dir + "/romm-games.tsv", &text));
+    EXPECT_EQ(orion::read_romm_catalogue(text).size(), 2u);
 
     // No token, no start; a server that does not answer is reported.
     EXPECT_FALSE(sync.start("http://nas:3000", "", dir));
