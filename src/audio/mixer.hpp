@@ -59,6 +59,9 @@ struct PlayParams
 
 // The game thread posts commands; the audio thread renders. Posting never
 // blocks or allocates; if the queue is full the command is dropped.
+// The most a stream is turned up (set_stream_gain).
+inline constexpr float kMostStreamGain = 8.0f;
+
 class Mixer
 {
   public:
@@ -75,16 +78,23 @@ class Mixer
     bool set_bus_gain(Bus bus, float gain);
     bool set_master_gain(float gain);
     bool stop_all();
-    // Attach before the audio thread starts; streams play on the music bus.
-    void attach_stream(std::size_t slot, StreamRing *ring)
+    // Attach before the audio thread starts. A stream plays on the music bus
+    // (the Music volume scales it) unless on_music is false: a title's own
+    // song has a volume of its own.
+    void attach_stream(std::size_t slot, StreamRing *ring, bool on_music = true)
     {
         if (slot < kStreams)
+        {
             streams_[slot] = ring;
+            stream_on_music_[slot] = on_music;
+        }
     }
     // Switches a slot to another ring on the audio thread; the caller keeps
     // the old ring alive for a few grains.
     bool swap_stream(std::size_t slot, StreamRing *ring);
-    // Ramps a stream's gain to gain over seconds (0 = at once).
+    // Ramps a stream's gain to gain over seconds (0 = at once). Up to
+    // kMostStreamGain: a quiet song can be brought up; the output's limiter
+    // keeps its peaks.
     bool set_stream_gain(std::size_t slot, float gain, float seconds);
 
     // ---- audio thread ----
@@ -164,6 +174,7 @@ class Mixer
     std::atomic<int> active_{0};
     std::atomic<std::uint64_t> dropped_{0};
     std::array<StreamRing *, kStreams> streams_{};
+    std::array<bool, kStreams> stream_on_music_{true, true};
     std::array<float, kStreams> stream_gain_{};
     std::array<float, kStreams> stream_target_{};
     std::array<float, kStreams> stream_step_{};

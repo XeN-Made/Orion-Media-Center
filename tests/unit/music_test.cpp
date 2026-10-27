@@ -108,6 +108,23 @@ TEST(Mixer, StreamsPlayOnTheMusicBusAndRampGain)
     EXPECT_GT(mixer.stream_underruns(), 0u); // the ring ran dry along the way
 }
 
+// A title's own song: off the music bus (the Music volume does not touch
+// it), and turned up past 1 for a quiet one.
+TEST(Mixer, AStreamOfItsOwnIgnoresTheMusicVolumeAndCanBeTurnedUp)
+{
+    Mixer mixer;
+    StreamRing ring(4096);
+    mixer.attach_stream(1, &ring, false);
+    std::vector<float> quiet(2048 * 2, 0.1f);
+    ring.write(quiet.data(), 2048);
+    mixer.set_bus_gain(Bus::music, 0.0f);
+    mixer.set_stream_gain(1, 3.0f, 0.0f);
+    std::vector<std::int16_t> out(256 * 2);
+    for (int i = 0; i < 3; ++i) // the music fader ramps to zero meanwhile
+        mixer.render(out.data(), 256);
+    EXPECT_NEAR(peak(out), 0.3, 0.03);
+}
+
 TEST(MusicPlayer, PlaysEverySongInTurnThenStartsOver)
 {
     Mixer mixer;

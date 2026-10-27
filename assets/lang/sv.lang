@@ -617,4 +617,4 @@ author = Svenska ORION-bidragsgivare
 "Set it up from a phone or PC" = "Ställ in det från en telefon eller dator"
 "{0} games on {1} systems so far, going on from {2} read before…" = "{0} spel på {1} system hittills, fortsätter från {2} som lästs tidigare…"
 "Title music volume" = "Volym för titelmusik"
-"How loud a focused game's own music plays; 5 is as loud as ORION's songs" = "Hur högt det markerade spelets egen musik spelas; 5 är lika högt som ORION:s låtar"
+"How loud a focused game's own music plays, apart from the Music volume" = "Hur högt det markerade spelets egen musik spelas, oberoende av musikvolymen"

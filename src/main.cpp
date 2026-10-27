@@ -431,9 +431,9 @@ int main()
     // A focused title's own song, on the second music deck over the playlist.
     audio::TitleMusic title_music;
     title_music.init(mixer, music);
-    // 5 is the measured loudness; each step either way the same curve as
-    // the other volumes.
-    const auto title_scale = [](int volume) { return Settings::gain(volume) / Settings::gain(5); };
+    // Apart from the Music volume: 10 is twice the measured loudness, each
+    // step the same curve as the other volumes.
+    const auto title_scale = [](int volume) { return 2.0f * Settings::gain(volume); };
 
     ps5::AudioOut audio_out;
     audio_out.start(mixer);

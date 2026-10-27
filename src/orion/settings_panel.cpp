@@ -985,8 +985,8 @@ void SettingsPanel::build_sound(const LibraryPrefs &prefs)
     form_
         .add_choice(kTitleVolume, tr("Title music volume"), levels,
                     std::clamp(app_settings_->title_volume, 0, 10))
-        .description = tr("How loud a focused game's own music plays; 5 is as loud as ORION's "
-                          "songs");
+        .description = tr("How loud a focused game's own music plays, apart from the Music "
+                          "volume");
     form_.add_action(kNextSong, tr("Next song")).description =
         tr("Your own songs join when ORION starts: .ogg files, 48 kHz, in the folder below");
     form_.add_value(kMusicFolder, tr("Your music"), "/data/orion/music");

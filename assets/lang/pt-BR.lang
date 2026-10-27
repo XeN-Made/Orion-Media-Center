@@ -622,4 +622,4 @@ author = ORION
 "Set it up from a phone or PC" = "Configure por um celular ou PC"
 "{0} games on {1} systems so far, going on from {2} read before…" = "{0} jogos em {1} sistemas até agora, continuando a partir de {2} lidos antes…"
 "Title music volume" = "Volume da música dos títulos"
-"How loud a focused game's own music plays; 5 is as loud as ORION's songs" = "O volume da música própria do jogo em foco; 5 é tão alto quanto as músicas do ORION"
+"How loud a focused game's own music plays, apart from the Music volume" = "O volume da música própria do jogo em foco, à parte do volume da música"

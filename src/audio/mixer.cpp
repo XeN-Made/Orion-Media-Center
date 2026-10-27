@@ -161,7 +161,7 @@ void Mixer::apply(const Command &command)
         break;
     case CommandType::stream_gain:
     {
-        const float target = std::clamp(command.value, 0.0f, 1.0f);
+        const float target = std::clamp(command.value, 0.0f, kMostStreamGain);
         stream_target_[command.slot] = target;
         const float distance = std::fabs(target - stream_gain_[command.slot]);
         stream_step_[command.slot] =
@@ -315,8 +315,9 @@ void Mixer::render_chunk(std::int16_t *out, int frames)
                                      : std::max(target, gain - stream_step_[s]);
             if (gain <= 0.0f)
                 continue;
-            left += stream_buffer_[s][static_cast<std::size_t>(frame) * 2] * gain * music;
-            right += stream_buffer_[s][static_cast<std::size_t>(frame) * 2 + 1] * gain * music;
+            const float bus = stream_on_music_[s] ? music : 1.0f;
+            left += stream_buffer_[s][static_cast<std::size_t>(frame) * 2] * gain * bus;
+            right += stream_buffer_[s][static_cast<std::size_t>(frame) * 2 + 1] * gain * bus;
         }
         left = limit(left * master_gain_);
         right = limit(right * master_gain_);

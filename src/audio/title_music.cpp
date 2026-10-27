@@ -188,7 +188,9 @@ void TitleMusic::init(Mixer &mixer, MusicPlayer &playlist)
 {
     mixer_ = &mixer;
     playlist_ = &playlist;
-    mixer.attach_stream(1, &ring_);
+    // Its own volume (Settings, Sound, Title music volume), not the Music
+    // one: turned down for the playlist, a game's song was hardly heard.
+    mixer.attach_stream(1, &ring_, false);
     mixer.set_stream_gain(1, 0.0f, 0.0f);
 }
 
@@ -214,8 +216,8 @@ float title_loudness_gain(const float *samples, std::size_t count)
 float TitleMusic::effective_gain() const
 {
     const float gain = gain_ * volume_;
-    // Turned up, still held under clipping by the opening's peak.
-    return peak_ > 0.0f ? std::min(gain, std::max(gain_, kMostPeak / peak_)) : gain;
+    // Turned up, its peaks are left to the output's limiter, within reason.
+    return peak_ > 0.0f ? std::min(gain, std::max(gain_, 1.6f * kMostPeak / peak_)) : gain;
 }
 
 void TitleMusic::set_volume(float scale)
