@@ -28,6 +28,9 @@ namespace
 
 using gfx::Color;
 
+// The height kept under the rows for a QR code (Box art, RomM).
+constexpr float kCodeRoom = 232.0f;
+
 enum : int
 {
     kLanguage = 1,
@@ -78,6 +81,7 @@ enum : int
     kBlurredCovers,
     kBackgroundStrength,
     kArtNow,
+    kArtKeyPage,
     kGridKey,
     kArtFolder,
     kAddRomFolder,
@@ -435,7 +439,9 @@ void SettingsPanel::layout()
     const float left = area.x + (nav_.style.expanded_width + 56.0f) * wide_;
     const float width = std::min(area.x + area.w - left, 1180.0f);
     form_.style.control_width = 340.0f + 80.0f * wide_;
-    form_.set_bounds({left, area.y, width, area.h - kHints});
+    // Box art and RomM keep room under their rows for the key page's code.
+    const bool code = (section_ == Section::art || section_ == Section::romm) && key_qr_.size > 0;
+    form_.set_bounds({left, area.y, width, area.h - kHints - (code ? kCodeRoom : 0.0f)});
 }
 
 bool SettingsPanel::previewing() const
@@ -1036,15 +1042,17 @@ void SettingsPanel::build_art(const LibraryPrefs &prefs)
     form_.add_toggle(kArtAuto, tr("Find box art by itself"), prefs.auto_art).description =
         tr("When ORION starts, new games get covers from the internet");
     form_.add_action(kArtNow, tr("Find box art now")).description = art_status_;
+    if (!key_page_.empty())
+        form_.add_value(kArtKeyPage, tr("Enter the key on a phone or PC"), key_page_).description =
+            tr("Scan the code below, or open this address on the same network");
     ui::FormRow &grid = form_.add_action(kGridKey, tr("SteamGridDB key"));
     grid.text = grid_key_ ? tr("Set") : tr("Not set");
     grid.description =
         key_page_.empty()
             ? tr("Free at steamgriddb.com: your profile, Preferences, API. Or a line in "
                  "/data/orion/keys.txt")
-            : trf("Free at steamgriddb.com: your profile, Preferences, API. Or paste it on a "
-                  "phone or PC at {0}",
-                  {key_page_});
+            : tr("Free at steamgriddb.com: your profile, Preferences, API. Typing it here "
+                 "works too");
     form_.add_value(kStateInfo, tr("Box art folder"), art_folder(prefs, state_dir_)).description =
         tr("Chosen under Storage");
 }
@@ -2008,6 +2016,7 @@ void SettingsPanel::draw_content(ui::Canvas &canvas, float opacity) const
         canvas.list.pop_opacity();
     }
     form_.draw(canvas);
+    draw_key_code(canvas);
     // What the buttons do here, under the rows.
     const ui::Theme &theme = form_.style.theme;
     ui::GlyphStyle glyphs = ui::GlyphStyle::dark();
@@ -2030,6 +2039,57 @@ void SettingsPanel::draw_content(ui::Canvas &canvas, float opacity) const
     const gfx::Rect area = sheet_.content_rect();
     layout.cy = area.y + area.h - 26.0f;
     ui::draw_hints(canvas.list, canvas.fonts, glyphs, hints, 3, area.x + area.w, true, layout);
+}
+
+// Box art and RomM: the key page's address as a QR code, on a white card a
+// phone reads from across the room (dark on light, a quiet margin of four
+// modules), at the foot of the rows, with what it is for beside it.
+void SettingsPanel::draw_key_code(ui::Canvas &canvas) const
+{
+    const bool art = section_ == Section::art;
+    if ((!art && section_ != Section::romm) || key_qr_.size == 0 || wide_ < 0.5f)
+        return;
+    const gfx::Rect &rows = form_.bounds();
+    const int span = key_qr_.size + 8;
+    const float module = std::floor((kCodeRoom - 24.0f) / static_cast<float>(span));
+    const float side = module * static_cast<float>(span);
+    const gfx::Rect card{rows.x + 4.0f, rows.y + rows.h + 12.0f, side, side};
+    gfx::DrawList &list = canvas.list;
+    list.rounded_rect(card, 14.0f, Color::rgb(0xffffff));
+    // A row's dark modules side by side are one rectangle: a few hundred
+    // shapes at most.
+    for (int y = 0; y < key_qr_.size; ++y)
+    {
+        int x = 0;
+        while (x < key_qr_.size)
+        {
+            if (!key_qr_.dark(x, y))
+            {
+                ++x;
+                continue;
+            }
+            const int start = x;
+            while (x < key_qr_.size && key_qr_.dark(x, y))
+                ++x;
+            list.rounded_rect({card.x + module * static_cast<float>(start + 4),
+                               card.y + module * static_cast<float>(y + 4),
+                               module * static_cast<float>(x - start), module},
+                              0.0f, Color::rgb(0x000000));
+        }
+    }
+    const ui::Theme &theme = form_.style.theme;
+    ui::Painter paint(canvas.list, canvas.fonts, theme, canvas.glass);
+    const float left = card.x + card.w + 36.0f;
+    paint.label(art ? tr("Scan to enter your SteamGridDB key")
+                    : tr("Scan to enter RomM's address and pairing code"),
+                left, card.y + 52.0f, 28.0f, theme.text);
+    paint.label(key_page_, left, card.y + 100.0f, 25.0f, theme.accent);
+    paint.label(
+        art ? tr("No key yet? It is free at steamgriddb.com: your profile, Preferences, API")
+            : tr("RomM shows a pairing code under your profile, Client tokens"),
+        left, card.y + 150.0f, 21.0f, theme.text_muted);
+    paint.label(tr("The phone or PC must be on the same network as the console"), left,
+                card.y + 186.0f, 21.0f, theme.text_muted);
 }
 
 void SettingsPanel::draw(ui::Canvas &canvas) const

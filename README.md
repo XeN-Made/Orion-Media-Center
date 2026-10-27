@@ -241,6 +241,11 @@ within 30 minutes. Every step it took is written to
 - **FTP**: everything in `/data/orion` is open to your FTP server, to add
   pictures, music and keys or to delete the folder.
 - **Renaming a title**: Options, Rename. Clear the name to give it its own back.
+- **Labels**: the banner on each cover (GAME, PS4, HOMEBREW, MEDIA, GBA...)
+  and the header of a drawn case. Settings, Labels changes any label's text,
+  its colour and its text's colour, and makes labels of your own (*New
+  label*); Options on a title, *Label…*, gives it one of yours or ORION's
+  back.
 - **Themes of your own**: a `.theme` text file in `/data/orion/themes/`;
   [docs/ORION_THEMES.md](docs/ORION_THEMES.md) has every key and
   [template.theme](docs/themes/template.theme) to start from.
@@ -354,8 +359,8 @@ while ORION is open.
   puts the old one back. **Find art by name…** asks for the name to look for
   first, for a game SteamGridDB knows by another name.
   Enter the key in Settings, Box art; or, while ORION is open, on a phone or
-  PC at `http://<console IP>:9062` (Settings, Box art shows the address); or
-  put a line
+  PC at `http://<console IP>:9062` (Settings, Box art shows the address and a
+  QR code to scan); or put a line
   `steamgriddb = <your key>` in `/data/orion/keys.txt`.
 - Background music: every `.ogg` in `/data/orion/music` joins ORION's own
   tracks. Settings, Sound sets the volumes and skips a song.

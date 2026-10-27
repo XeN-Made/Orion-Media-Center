@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "core/qr.hpp"
 #include "core/settings.hpp"
 #include "core/tween.hpp"
 #include "library/library.hpp"
@@ -182,6 +183,9 @@ class SettingsPanel
     void set_key_page(std::string address)
     {
         key_page_ = std::move(address);
+        // Box art shows it as a code a phone scans, too.
+        if (key_page_.empty() || !make_qr(key_page_, &key_qr_))
+            key_qr_ = QrCode();
     }
     // ORION's folder as the launch helper sees it, and what its backdrops
     // folder holds (shown under Storage).
@@ -326,6 +330,7 @@ class SettingsPanel
     LabelLook label_look(const std::string &id, const LibraryPrefs &prefs) const;
     const LabelEntry *label_entry(const std::string &id) const;
     void draw_trailing(ui::Canvas &canvas, const gfx::Rect &control, const ui::FormRow &row) const;
+    void draw_key_code(ui::Canvas &canvas) const;
     void build_emulators(const LibraryPrefs &prefs);
     void build_emulator_page(const library::EmulatorApp &app, const LibraryPrefs &prefs);
     void build_browser();
@@ -391,6 +396,7 @@ class SettingsPanel
     bool grid_key_ =
         false; // a SteamGridDB key is in keys.txt // empty until a scan reports: what a scan finds
     std::string key_page_; // the key page address, or empty
+    QrCode key_qr_;        // that address as a QR code (empty with none)
     std::string romm_address_;
     bool romm_paired_ = false;
     std::string romm_status_;

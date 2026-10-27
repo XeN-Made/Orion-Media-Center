@@ -312,6 +312,11 @@ constexpr app::TourStep kTour[] = {
     {0.3f, action_bit(Action::jump_next)},
     {0.2f, 0, Direction::right},
     {0.8f, 0, Direction::none, "settings-emulators"},
+    // RomM: its server, pairing and games, and the key page's code.
+    {0.2f, action_bit(Action::back)},
+    {0.3f, action_bit(Action::jump_next)},
+    {0.2f, 0, Direction::right},
+    {0.8f, 0, Direction::none, "settings-romm"},
     // Storage, next: the drives first (two invented ones on a PC), then the
     // folders.
     {0.2f, action_bit(Action::back)},
@@ -764,6 +769,8 @@ class Library final : public app::Concept
                 settings_.set_key_page("http://" + address + ":" +
                                        std::to_string(orion::kKeyPagePort));
         }
+        else if (!sys::on_console())
+            settings_.set_key_page("http://192.168.1.20:" + std::to_string(orion::kKeyPagePort));
         rebuild_tabs(start);
         restyle();
         rebuild();

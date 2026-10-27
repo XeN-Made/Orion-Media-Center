@@ -20,6 +20,7 @@ src/core/save_file.cpp
 src/core/settings.cpp
 src/core/sha256.cpp
 src/core/version.cpp
+src/core/qr.cpp
 src/core/zip.cpp
 src/demo/catalog.cpp
 src/gfx/draw_list.cpp

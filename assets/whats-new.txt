@@ -6,8 +6,14 @@ Only what you lack | RomM games you already have on the console are left out (Se
 Title music volume | Settings, Sound: how loud a focused game's own music plays, apart from the Music volume.
 No FTP server needed | Payload Manager, PS5Upload and the other installed apps show without an FTP server running.
 What's new | This page, once after each update, and again any time from Settings, About.
+Labels | Settings, Labels: change the text and colours of the banners on the covers, or make labels of your own and give them to games (Options, Label…).
+Scan to set up | Settings, Box art and Settings, RomM show a QR code: scan it with a phone to enter your SteamGridDB key or RomM's details.
+Saves from RomM | Before a RetroArch game starts, a newer save of it on RomM comes to the console first; Options, Continue starts from the newest save state, RomM's included.
 ## Fixed
 Icons no longer show another title's picture for a few seconds when ORION opens.
 Autoboot waits for ShadowMountPlus instead of showing "could not find the game or application" over and over.
 A game's own music is no longer faint, and keeps playing while Settings or a menu is open.
 A large RomM library lists in smaller steps, and a list left unfinished carries on where it stopped.
+Box art no longer stalls after a few games, and keeps going a few hundred games at a time until every game has been tried.
+Games downloaded from RomM show in the library at once, and ORION no longer closes after a download.
+Covers fit inside the case pictures whole, without a second header from the box's own.
