@@ -149,8 +149,9 @@ static int ends_with(const char *text, const char *end)
 // that can take ten seconds, so the note is put back only when it closes.
 static const char *const kPs5sx2Note = "/data/PCSX2/logs/disc-launch.txt";
 
-// Only args.txt, test-run.txt (and config/frontend.cfg, which earlier builds
-// changed) of a title under /data/homebrew, and PS5SX2's launch note.
+// Only args.txt, test-run.txt, orion-continue.cfg (RetroArch's settings for
+// a Continue) and config/frontend.cfg (which earlier builds changed) of a
+// title under /data/homebrew, and PS5SX2's launch note.
 static int changeable(const char *path)
 {
     if (strcmp(path, kPs5sx2Note) == 0)
@@ -158,7 +159,7 @@ static int changeable(const char *path)
     return strncmp(path, "/data/homebrew/", 15) == 0 && strstr(path, "..") == NULL &&
            strlen(path) <= 400 &&
            (ends_with(path, "/args.txt") || ends_with(path, "/test-run.txt") ||
-            ends_with(path, "/config/frontend.cfg"));
+            ends_with(path, "/orion-continue.cfg") || ends_with(path, "/config/frontend.cfg"));
 }
 
 // Writes bytes as a file every app can read, whatever the umask.
@@ -1100,6 +1101,15 @@ int main(void)
             for (int j = 0; j < i; ++j)
                 restore(&files[j]);
             say("not launching: the title would not get what it needs");
+            notify("ORION could not start that game");
+            // Not left on the home screen: back to ORION, which asked.
+            if (return_to != NULL || fallback_to != NULL)
+            {
+                static launch_job_t back;
+                memset(&back, 0, sizeof(back));
+                strcpy(back.title, return_to != NULL ? return_to : fallback_to);
+                launch(&back);
+            }
             return 1;
         }
     }

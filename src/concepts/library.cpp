@@ -6443,18 +6443,30 @@ class Library final : public app::Concept
     // edges (a square PS5 icon its sides, a wide GBA box most of them),
     // often the game's title; fitted inside a dimmed copy, it read as two
     // pictures with a bar between them. So it is scaled to the window.
+    // A scan of a whole box (a PS2 or Xbox 360 cover with its header band, a
+    // PS1 one with its spine) has the case's shape rather than the window's:
+    // of that, only the part the window frames shows, or its header would
+    // show twice, the case's and its own.
     void draw_cover_fitted(ui::Canvas &canvas, const Rect &window, const ui::CardItem &item,
-                           const Title &title) const
+                           const Title &title, const library::CaseTemplate &shell) const
     {
         const bool sharp = title.sharp_texture != 0 && title.sharp_height > 0;
         const std::uint32_t texture = sharp ? title.sharp_texture : item.texture;
-        if (texture == 0)
+        if (texture == 0 || shell.width <= 0 || shell.height <= 0 || shell.window_h <= 0.0f)
         {
             draw_cover_art(canvas, window, window, item, title, 0.0f);
             return;
         }
-        canvas.list.image(texture, window, sharp ? Rect{0.0f, 0.0f, 1.0f, 1.0f} : item.uv,
-                          Color::rgb(0xffffff), 0.0f);
+        const float picture =
+            sharp ? static_cast<float>(title.sharp_width) / static_cast<float>(title.sharp_height)
+                  : std::max(0.2f, item.image_aspect);
+        const float whole = static_cast<float>(shell.width) / static_cast<float>(shell.height);
+        const float framed = whole * shell.window_w / shell.window_h;
+        Rect uv = sharp ? Rect{0.0f, 0.0f, 1.0f, 1.0f} : item.uv;
+        if (std::abs(std::log(picture / whole)) < std::abs(std::log(picture / framed)))
+            uv = {uv.x + shell.window_x * uv.w, uv.y + shell.window_y * uv.h, shell.window_w * uv.w,
+                  shell.window_h * uv.h};
+        canvas.list.image(texture, window, uv, Color::rgb(0xffffff), 0.0f);
     }
 
     // A game in a case picture: the cover in its window, the picture over it
@@ -6482,7 +6494,7 @@ class Library final : public app::Concept
         if (shell.window_solid)
             list.image(shell.texture, art, gfx::kFullUv, Color::rgb(0xffffff));
         list.push_clip(window);
-        draw_cover_fitted(canvas, window, item, title);
+        draw_cover_fitted(canvas, window, item, title, shell);
         list.pop_clip();
         if (!shell.window_solid)
             list.image(shell.texture, art, gfx::kFullUv, Color::rgb(0xffffff));
