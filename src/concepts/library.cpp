@@ -4160,7 +4160,10 @@ class Library final : public app::Concept
             save::read_file(state + "/art/tried.txt", &tried, 1u << 20);
         for (const Title &title : titles())
         {
-            if (!title.is_rom() || !title.icon.empty() ||
+            // A server's game (RomM) is not on the console: its cover comes
+            // when it is about to be seen (want_icons), not with the rest. A
+            // large library would otherwise fetch thousands at once.
+            if (!title.is_rom() || !title.icon.empty() || !title.remote.empty() ||
                 !prefs_.system_enabled(library::shelf_system(title.system)) ||
                 tried.find(title.id + "\n") != std::string::npos)
                 continue;
@@ -4204,9 +4207,14 @@ class Library final : public app::Concept
         const int first = std::max(0, focus - focus % kColumns - 2 * kColumns);
         const int last = std::min(static_cast<int>(view_.size()), focus + 5 * kColumns);
         bool asked = false;
+        std::vector<orion::ArtJob> remote;
         const auto want = [&](int index)
         {
             const Title &title = titles()[static_cast<std::size_t>(index)];
+            // A server game in view with no picture: its cover is fetched now.
+            if (title.is_rom() && title.icon.empty() && !title.remote.empty() && prefs_.auto_art &&
+                !art_.running() && romm_art_asked_.insert(title.id).second)
+                remote.push_back(art_job(title));
             if (!title.is_rom() || title.texture != 0 || title.icon.empty())
                 return;
             std::string &wanted = wanted_icons_[title.id];
@@ -4226,6 +4234,11 @@ class Library final : public app::Concept
         }
         if (asked)
             art_sweep_ = std::max(art_sweep_, 2);
+        if (!remote.empty() && sys::on_console())
+        {
+            arm_grid();
+            art_.start(std::move(remote), context_.library.state_dir + "/art.txt");
+        }
     }
 
     // Pictures found reach the shell, which uploads them; the covers pick the
@@ -6739,6 +6752,7 @@ class Library final : public app::Concept
     std::shared_ptr<RommPairing> romm_pairing_;
     std::string romm_status_;
     bool romm_auto_synced_ = false;
+    std::unordered_set<std::string> romm_art_asked_; // RomM games whose cover was asked for
     std::vector<std::string> preview_files_;
     int preview_index_ = 0;
     bool keeping_ = false;

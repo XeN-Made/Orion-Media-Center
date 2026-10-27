@@ -123,13 +123,36 @@ std::string romm_content_url(const std::string &base, const RommGame &game)
            library::url_encode(game.multi ? game.fs_name + ".zip" : game.fs_name);
 }
 
+// An address as RomM writes it, made one curl takes: its cover paths end
+// "?ts=2026-10-05 03:40:07", and a space (or a name's own characters) is no
+// part of an address until it is escaped. What is escaped already stays.
+std::string escaped_url(std::string_view url)
+{
+    static constexpr char kHex[] = "0123456789ABCDEF";
+    std::string out;
+    for (const char c : url)
+    {
+        const auto byte = static_cast<unsigned char>(c);
+        if (byte <= 0x20 || byte >= 0x7f ||
+            std::string_view("\"<>\\^`{|}").find(c) != std::string_view::npos)
+        {
+            out += '%';
+            out += kHex[byte >> 4];
+            out += kHex[byte & 15];
+        }
+        else
+            out += c;
+    }
+    return out;
+}
+
 std::string romm_cover_url(const std::string &base, const RommGame &game)
 {
     if (game.cover.empty())
         return {};
     if (game.cover.rfind("http://", 0) == 0 || game.cover.rfind("https://", 0) == 0)
-        return game.cover;
-    return base + (game.cover.front() == '/' ? "" : "/") + game.cover;
+        return escaped_url(game.cover);
+    return base + (game.cover.front() == '/' ? "" : "/") + escaped_url(game.cover);
 }
 
 std::vector<std::string> romm_headers(const std::string &token)

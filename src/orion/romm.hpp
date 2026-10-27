@@ -61,6 +61,9 @@ std::string romm_platforms_url(const std::string &base);
 std::string romm_games_url(const std::string &base, long long platform_id, int offset, int limit);
 // The game's file (a ZIP of all of them for a multi-file game).
 std::string romm_content_url(const std::string &base, const RommGame &game);
+// An address with what curl refuses in one (spaces, quotes, non-ASCII
+// bytes) escaped; what is escaped already stays as it is.
+std::string escaped_url(std::string_view url);
 // The cover's address: a path on the server, or an address of its own.
 std::string romm_cover_url(const std::string &base, const RommGame &game);
 std::vector<std::string> romm_headers(const std::string &token);

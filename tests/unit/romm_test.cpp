@@ -50,6 +50,12 @@ TEST(Romm, BuildsItsAddresses)
     game.cover = "/assets/romm/resources/roms/1/12/cover/big.png?ts=1";
     EXPECT_EQ(orion::romm_cover_url(base, game),
               "http://nas:3000/assets/romm/resources/roms/1/12/cover/big.png?ts=1");
+    // RomM's own paths carry a time with a space in it: escaped.
+    game.cover = "/assets/romm/resources/roms/2/7710/cover/big.png?ts=2026-10-05 03:42:40";
+    EXPECT_EQ(
+        orion::romm_cover_url(base, game),
+        "http://nas:3000/assets/romm/resources/roms/2/7710/cover/big.png?ts=2026-10-05%2003:42:40");
+    EXPECT_EQ(orion::escaped_url("a b%20c\"d\xc3\xa9"), "a%20b%20c%22d%C3%A9");
     game.cover = "https://images.example/cover.jpg";
     EXPECT_EQ(orion::romm_cover_url(base, game), "https://images.example/cover.jpg");
     EXPECT_EQ(orion::romm_headers("abc"), (std::vector<std::string>{"Authorization: Bearer abc"}));
