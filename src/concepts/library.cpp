@@ -4150,6 +4150,12 @@ class Library final : public app::Concept
             art_sweep_ = 2;
         if (art_sweep_ > 0 && --art_sweep_ == 0)
             refresh_covers();
+        // A picture loaded again (a newer copy of a home-screen icon) is a
+        // new texture, and the old one's number goes to whatever loads next,
+        // often a game's: a cover holding the old number showed that game's
+        // picture until the tab was built again. Covers follow their titles.
+        if (covers_stale())
+            refresh_covers();
         if (art_.running())
         {
             const orion::ArtFetcher::Progress now = art_.progress();
@@ -4232,6 +4238,27 @@ class Library final : public app::Concept
     }
 
     // The covers on screen take the textures the shell has uploaded since.
+    // Whether a cover shows a texture its title no longer has.
+    bool covers_stale() const
+    {
+        const bool wide = wide_tab();
+        for (int i = 0; i < grid_.count(); ++i)
+        {
+            const ui::CardItem &item = grid_.items()[static_cast<std::size_t>(i)];
+            const Title &title = titles()[static_cast<std::size_t>(item.tag)];
+            if (item.texture != title.texture &&
+                !(wide && title.wide_texture != 0 && item.texture == title.wide_texture))
+                return true;
+        }
+        for (std::size_t i = 0; i < continue_view_.size(); ++i)
+        {
+            const ui::CardItem &item = continue_.items()[i];
+            if (item.texture != titles()[static_cast<std::size_t>(item.tag)].texture)
+                return true;
+        }
+        return false;
+    }
+
     void refresh_covers()
     {
         const bool wide = wide_tab();

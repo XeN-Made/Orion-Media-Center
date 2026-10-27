@@ -36,6 +36,25 @@ class LibraryDesign : public hui::testing::ConceptFixture
     }
 };
 
+// A title's picture loaded again is a new texture (the old number goes to
+// the next picture loaded): its cover shows the new one at once, not the
+// number it kept, which another title's picture may own by then.
+TEST_F(LibraryDesign, CoversFollowTheirTitlesNewTextures)
+{
+    auto design = with_fixture();
+    send(*design, hui::InputFrame());
+    for (hui::library::Title &title : library_.titles)
+        title.texture = 0;
+    library_.titles.front().texture = 4242;
+    send(*design, hui::InputFrame());
+    frame_.reset();
+    design->draw(frame_);
+    bool shown = false;
+    for (const hui::gfx::Run &run : frame_.scene.runs())
+        shown = shown || run.texture == 4242;
+    EXPECT_TRUE(shown);
+}
+
 // A console that has not been set up starts on the setup; Skip setup ends it
 // for good and the library takes the input again.
 TEST_F(LibraryDesign, ANewConsoleStartsOnTheSetupAndCanSkipIt)
