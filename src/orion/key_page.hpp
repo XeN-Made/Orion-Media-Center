@@ -21,7 +21,10 @@ inline constexpr int kKeyPagePort = 9062;
 // in <state_dir>/keys.txt (orion/steamgriddb.hpp) and sets *saved. The key
 // is never written back into a page. An empty request gets an empty answer:
 // nothing is sent. Exposed for tests.
-std::string answer_key_request(std::string_view request, const std::string &state_dir, bool *saved);
+// A POST of "smb_address", "smb_user" and "smb_password" to /smb adds a
+// network drive (orion/shares.hpp) and sets *shares.
+std::string answer_key_request(std::string_view request, const std::string &state_dir, bool *saved,
+                               bool *shares = nullptr);
 
 // ORION's logs from state_dir as a ZIP for the player to attach to a bug
 // report: the files named in kLogFiles (never keys.txt or anything holding a
@@ -66,6 +69,11 @@ class KeyPage
     {
         return saved_.exchange(false);
     }
+    // True once after a network drive was added from the page.
+    bool take_shares_changed()
+    {
+        return shares_.exchange(false);
+    }
 
   private:
     void serve(int listener, std::string state_dir);
@@ -74,6 +82,7 @@ class KeyPage
     std::atomic<bool> running_{false};
     std::atomic<bool> stopping_{false};
     std::atomic<bool> saved_{false};
+    std::atomic<bool> shares_{false};
 };
 
 } // namespace hui::orion

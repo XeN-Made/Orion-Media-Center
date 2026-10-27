@@ -7,6 +7,7 @@
 #include "core/save_file.hpp"
 #include "core/zip.hpp"
 #include "orion/romm.hpp"
+#include "orion/shares.hpp"
 #include "orion/steamgriddb.hpp"
 
 #include <algorithm>
@@ -64,6 +65,7 @@ struct Shown
     bool grid_key = false;
     std::string romm; // the RomM address, or empty
     bool paired = false;
+    std::vector<std::string> shares; // the network drives' addresses
 };
 
 Shown shown(const std::string &state_dir)
@@ -72,6 +74,8 @@ Shown shown(const std::string &state_dir)
     out.grid_key = !read_service_key(state_dir, kSteamGridDb).empty();
     out.romm = romm_base(read_service_key(state_dir, kRommUrl));
     out.paired = !read_service_key(state_dir, kRommToken).empty();
+    for (const Share &share : load_shares(state_dir))
+        out.shares.push_back(share_address(share));
     return out;
 }
 
@@ -140,7 +144,22 @@ std::string page(const Shown &now, std::string_view note, bool good)
         "placeholder=\"Address with the port, like 192.168.1.20:8080 (empty keeps it)\">"
         "<input name=\"romm_code\" style=\"margin-top:.6rem\" autocomplete=\"off\" "
         "autocapitalize=\"characters\" spellcheck=\"false\" placeholder=\"Pairing code\">"
-        "<button>Save and pair</button></form>"
+        "<button>Save and pair</button></form>";
+    std::string drives;
+    for (const std::string &address : now.shares)
+        drives += (drives.empty() ? "" : ", ") + escaped(address);
+    html +=
+        "<h1 style=\"margin-top:2rem\">Network drive</h1><p>A folder on a Windows share or a "
+        "NAS (SMB) with your games in folders named for their systems (gba, snes, psx...). "
+        "ORION lists them and copies one to the console the first time you play it.</p><p>Now: " +
+        (drives.empty() ? std::string("none.") : drives + ".") +
+        "</p><form method=\"post\" action=\"/smb\"><input name=\"smb_address\" "
+        "autocomplete=\"off\" autocapitalize=\"off\" spellcheck=\"false\" "
+        "placeholder=\"\\\\nas\\games\\roms or smb://192.168.1.20/games\">"
+        "<input name=\"smb_user\" style=\"margin-top:.6rem\" autocomplete=\"off\" "
+        "autocapitalize=\"off\" spellcheck=\"false\" placeholder=\"User (empty: guest)\">"
+        "<input name=\"smb_password\" type=\"password\" style=\"margin-top:.6rem\" "
+        "autocomplete=\"off\" placeholder=\"Password\"><button>Add it</button></form>"
         "<h1 style=\"margin-top:2rem\">Logs</h1><p>Something not working? Download ORION's "
         "logs and attach the file to your report on GitHub. They hold no keys or tokens; "
         "they do show your console's and your servers' local addresses.</p>"
@@ -226,9 +245,12 @@ bool form_value(std::string_view body, std::string_view name, std::string *value
     return false;
 }
 
-std::string answer_key_request(std::string_view request, const std::string &state_dir, bool *saved)
+std::string answer_key_request(std::string_view request, const std::string &state_dir, bool *saved,
+                               bool *shares)
 {
     *saved = false;
+    if (shares != nullptr)
+        *shares = false;
     // Nothing asked (a connection the browser opened and closed): nothing said.
     if (request.empty())
         return {};
@@ -243,11 +265,39 @@ std::string answer_key_request(std::string_view request, const std::string &stat
                    : response("404 Not Found", "<p>Not here: try the address alone.</p>");
     const bool grid = line.rfind("POST /key ", 0) == 0;
     const bool romm = line.rfind("POST /romm ", 0) == 0;
-    if (!grid && !romm)
+    const bool smb = line.rfind("POST /smb ", 0) == 0;
+    if (!grid && !romm && !smb)
         return response("405 Method Not Allowed", "<p>Only the form is taken.</p>");
     const std::size_t head_end = request.find("\r\n\r\n");
     const std::string_view body =
         head_end == std::string_view::npos ? std::string_view() : request.substr(head_end + 4);
+    if (smb)
+    {
+        std::string address;
+        std::string user;
+        std::string password;
+        form_value(body, "smb_address", &address);
+        form_value(body, "smb_user", &user);
+        form_value(body, "smb_password", &password);
+        Share share;
+        if (!parse_share_address(address, &share))
+            return response("200 OK", page(shown(state_dir),
+                                           "That is not a share's address: \\\\server\\share, "
+                                           "or smb://server/share",
+                                           false));
+        share.user = user;
+        std::vector<Share> all = load_shares(state_dir);
+        const std::string id = add_share(all, share).id;
+        if (!save_shares(state_dir, all))
+            return response("200 OK", page(shown(state_dir), "Could not save it.", false));
+        write_service_key(state_dir, share_password_key(id), password);
+        if (shares != nullptr)
+            *shares = true;
+        return response("200 OK", page(shown(state_dir),
+                                       "Added. ORION is looking for its games now: watch the "
+                                       "console.",
+                                       true));
+    }
     if (romm)
     {
         std::string address;
@@ -382,7 +432,8 @@ void KeyPage::serve(int listener, std::string state_dir)
     const auto finish = [&](Client &client)
     {
         bool saved = false;
-        const std::string answer = answer_key_request(client.request, state_dir, &saved);
+        bool shares = false;
+        const std::string answer = answer_key_request(client.request, state_dir, &saved, &shares);
         std::size_t sent = 0;
         while (sent < answer.size())
         {
@@ -401,6 +452,8 @@ void KeyPage::serve(int listener, std::string state_dir)
         client.fd = -1;
         if (saved)
             saved_ = true;
+        if (shares)
+            shares_ = true;
     };
     while (!stopping_.load())
     {

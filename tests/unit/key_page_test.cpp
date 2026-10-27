@@ -7,6 +7,7 @@
 #include "core/save_file.hpp"
 #include "core/zip.hpp"
 #include "orion/romm.hpp"
+#include "orion/shares.hpp"
 #include "orion/steamgriddb.hpp"
 
 #include <gtest/gtest.h>
@@ -151,6 +152,41 @@ std::string read_all(int fd)
         text.append(buffer, static_cast<std::size_t>(got));
     }
     return text;
+}
+
+// POST /smb adds a network drive: its address read either way, its password
+// kept in keys.txt and never on the page; a bad address adds nothing.
+TEST(KeyPage, AddsANetworkDrive)
+{
+    const std::string dir = ::testing::TempDir() + "orion-key-page-smb";
+    ASSERT_TRUE(save::ensure_directory(dir));
+    std::remove((dir + "/shares.json").c_str());
+    std::remove((dir + "/keys.txt").c_str());
+    bool saved = true;
+    bool shares = false;
+    const std::string body = "smb_address=%5C%5Cnas%5Cgames%5Croms&smb_user=player&"
+                             "smb_password=hunter2";
+    const std::string post =
+        "POST /smb HTTP/1.1\r\nContent-Length: " + std::to_string(body.size()) + "\r\n\r\n" + body;
+    const std::string page = orion::answer_key_request(post, dir, &saved, &shares);
+    EXPECT_FALSE(saved);
+    EXPECT_TRUE(shares);
+    EXPECT_NE(page.find("Added"), std::string::npos);
+    EXPECT_EQ(page.find("hunter2"), std::string::npos);
+    EXPECT_NE(page.find("\\\\nas\\games\\roms"), std::string::npos); // listed now
+    const std::vector<orion::Share> added = orion::load_shares(dir);
+    ASSERT_EQ(added.size(), 1u);
+    EXPECT_EQ(added[0].server, "nas");
+    EXPECT_EQ(added[0].folder, "roms");
+    EXPECT_EQ(added[0].user, "player");
+    EXPECT_EQ(orion::read_service_key(dir, orion::share_password_key(added[0].id)), "hunter2");
+
+    const std::string bad = "smb_address=nas";
+    orion::answer_key_request(
+        "POST /smb HTTP/1.1\r\nContent-Length: " + std::to_string(bad.size()) + "\r\n\r\n" + bad,
+        dir, &saved, &shares);
+    EXPECT_FALSE(shares);
+    EXPECT_EQ(orion::load_shares(dir).size(), 1u);
 }
 
 // GET /logs: ORION's logs as a ZIP to save, the newest part of a long one,

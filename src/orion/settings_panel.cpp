@@ -127,6 +127,12 @@ enum : int
     kPageRight,
     kPageDelete,
     kNewLabel,
+    kAddShare,
+    kScanShares,
+    kSharePage,
+    kShareAddress,
+    kShareUser,
+    kShareRemove,
     kLabelPreview,
     kLabelText,
     kLabelFill,
@@ -143,6 +149,7 @@ enum : int
     kBrowseRow = 800,    // + the folder's index in browse_folders_ (or in places_)
     kDriveRow = 900,     // + the drive's index in drives_
     kLabelRow = 1000,    // + the label's index in label_rows_
+    kShareRow = 1100,    // + the drive's index in shares_
 };
 
 // The emulator a game folder is for: empty in the prefs is RetroArch.
@@ -180,6 +187,8 @@ const char *section_name(SettingsPanel::Section section)
         return i18n::marked("Sound");
     case SettingsPanel::Section::romm:
         return "RomM";
+    case SettingsPanel::Section::network:
+        return i18n::marked("Network drives");
     case SettingsPanel::Section::system:
         return i18n::marked("System");
     case SettingsPanel::Section::about:
@@ -392,8 +401,8 @@ void SettingsPanel::refresh(const Look &look, const LibraryPrefs &prefs)
 void SettingsPanel::build_nav()
 {
     // Emulators always, so Scan for emulators is there before one is found.
-    sections_ = {Section::library, Section::tabs, Section::labels, Section::emulators,
-                 Section::romm};
+    sections_ = {Section::library,   Section::tabs, Section::labels,
+                 Section::emulators, Section::romm, Section::network};
     if (emulator_ != nullptr && !emulator_->systems.empty())
         sections_.push_back(Section::art);
     sections_.push_back(Section::storage);
@@ -442,9 +451,10 @@ void SettingsPanel::layout()
     const float width = std::min(area.x + area.w - left, 1180.0f);
     form_.style.control_width = 340.0f + 80.0f * wide_;
     // Box art, RomM and About keep room under their rows for a code.
-    const bool code =
-        ((section_ == Section::art || section_ == Section::romm) && key_qr_.size > 0) ||
-        (section_ == Section::about && logs_qr_.size > 0);
+    const bool code = ((section_ == Section::art || section_ == Section::romm ||
+                        (section_ == Section::network && share_page_.empty())) &&
+                       key_qr_.size > 0) ||
+                      (section_ == Section::about && logs_qr_.size > 0);
     form_.set_bounds({left, area.y, width, area.h - kHints - (code ? kCodeRoom : 0.0f)});
 }
 
@@ -465,6 +475,7 @@ void SettingsPanel::show(Section section, const Look &look, const LibraryPrefs &
     section_ = section;
     page_.clear();
     label_page_.clear();
+    share_page_.clear();
     emulator_page_.clear();
     folder_page_ = -1;
     browsing_ = false;
@@ -557,12 +568,52 @@ void SettingsPanel::build(const Look &look, const LibraryPrefs &prefs)
     case Section::romm:
         build_romm(prefs);
         break;
+    case Section::network:
+        build_network();
+        break;
     case Section::system:
         build_system(prefs);
         break;
     case Section::about:
         build_about(prefs);
         break;
+    }
+}
+
+void SettingsPanel::build_network()
+{
+    const auto open = std::find_if(shares_.begin(), shares_.end(),
+                                   [&](const Share &s) { return s.id == share_page_; });
+    if (open == shares_.end())
+        share_page_.clear();
+    if (!share_page_.empty())
+    {
+        form_.add_header(tr("Network drives") + "  ·  " + share_address(*open));
+        form_.add_value(kShareAddress, tr("Address"), share_address(*open));
+        form_.add_value(kShareUser, tr("User"), open->user.empty() ? tr("Guest") : open->user);
+        ui::FormRow &remove = form_.add_action(kShareRemove, tr("Remove this drive"));
+        remove.danger = true;
+        remove.description =
+            tr("Its games leave the library; the ones already copied to the console stay");
+        return;
+    }
+    form_.add_header(tr("Network drives"));
+    if (!key_page_.empty())
+        form_.add_value(kSharePage, tr("Add one from a phone or PC"), key_page_).description =
+            tr("Scan the code below, or open this address on the same network");
+    ui::FormRow &add = form_.add_action(kAddShare, tr("Add a network drive"));
+    add.chevron = true;
+    add.description = tr("A Windows share or a NAS (SMB): its address, user and password");
+    if (!shares_.empty())
+        form_.add_action(kScanShares, tr("Look for games again")).description =
+            share_status_.empty() ? tr("Folders named for their systems: gba, snes, psx...")
+                                  : share_status_;
+    for (std::size_t i = 0; i < shares_.size(); ++i)
+    {
+        ui::FormRow &row =
+            form_.add_action(kShareRow + static_cast<int>(i), share_address(shares_[i]));
+        row.chevron = true;
+        row.text = shares_[i].user.empty() ? tr("Guest") : shares_[i].user;
     }
 }
 
@@ -1534,6 +1585,18 @@ SettingsPanel::Change SettingsPanel::handle(const InputFrame &input, ui::Feedbac
                     form_.focus_row(kEmulatorRow + static_cast<int>(i));
             }
         }
+        else if (!share_page_.empty())
+        {
+            const std::string was = share_page_;
+            share_page_.clear();
+            build(*look, *prefs);
+            layout();
+            for (std::size_t i = 0; i < shares_.size(); ++i)
+            {
+                if (shares_[i].id == was)
+                    form_.focus_row(kShareRow + static_cast<int>(i));
+            }
+        }
         else if (!label_page_.empty())
         {
             const std::string was = label_page_;
@@ -1661,6 +1724,22 @@ SettingsPanel::Change SettingsPanel::handle(const InputFrame &input, ui::Feedbac
             return Change::romm_sync;
         if (id == kRommBrowse)
             return Change::romm_browse;
+        if (id == kAddShare)
+            return Change::add_share;
+        if (id == kScanShares)
+            return Change::scan_shares;
+        if (id == kShareRemove && !share_page_.empty())
+            return Change::remove_share;
+        if (section_ == Section::network && id >= kShareRow &&
+            id - kShareRow < static_cast<int>(shares_.size()))
+        {
+            share_page_ = shares_[static_cast<std::size_t>(id - kShareRow)].id;
+            build(*look, *prefs);
+            layout();
+            form_.set_focus(0);
+            form_.enter();
+            return Change::none;
+        }
         if (emulator_ != nullptr && id >= kEmulatorRow &&
             id - kEmulatorRow < static_cast<int>(emulator_->apps.size()))
         {
@@ -2061,8 +2140,10 @@ void SettingsPanel::draw_key_code(ui::Canvas &canvas) const
 {
     const bool art = section_ == Section::art;
     const bool logs = section_ == Section::about;
+    const bool network = section_ == Section::network;
     const QrCode &code = logs ? logs_qr_ : key_qr_;
-    if ((!art && !logs && section_ != Section::romm) || code.size == 0 || wide_ < 0.5f)
+    if ((!art && !logs && !network && section_ != Section::romm) || code.size == 0 ||
+        wide_ < 0.5f || (network && !share_page_.empty()))
         return;
     const gfx::Rect &rows = form_.bounds();
     const int span = code.size + 8;
@@ -2095,13 +2176,15 @@ void SettingsPanel::draw_key_code(ui::Canvas &canvas) const
     const ui::Theme &theme = form_.style.theme;
     ui::Painter paint(canvas.list, canvas.fonts, theme, canvas.glass);
     const float left = card.x + card.w + 36.0f;
-    const std::string heading = logs  ? tr("Scan to download ORION's logs")
-                                : art ? tr("Scan to enter your SteamGridDB key")
-                                      : tr("Scan to enter RomM's address and pairing code");
+    const std::string heading = logs      ? tr("Scan to download ORION's logs")
+                                : art     ? tr("Scan to enter your SteamGridDB key")
+                                : network ? tr("Scan to add a network drive")
+                                          : tr("Scan to enter RomM's address and pairing code");
     const std::string note =
-        logs  ? tr("Attach the file to your report on GitHub: no keys or tokens are in it")
-        : art ? tr("No key yet? It is free at steamgriddb.com: your profile, Preferences, API")
-              : tr("RomM shows a pairing code under your profile, Client tokens");
+        logs      ? tr("Attach the file to your report on GitHub: no keys or tokens are in it")
+        : art     ? tr("No key yet? It is free at steamgriddb.com: your profile, Preferences, API")
+        : network ? tr("Its address (\\\\nas\\games), user name and password")
+                  : tr("RomM shows a pairing code under your profile, Client tokens");
     paint.label(heading, left, card.y + 52.0f, 28.0f, theme.text);
     paint.label(logs ? key_page_ + "/logs" : key_page_, left, card.y + 100.0f, 25.0f, theme.accent);
     paint.label(note, left, card.y + 150.0f, 21.0f, theme.text_muted);

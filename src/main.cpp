@@ -25,6 +25,7 @@
 #include "library/library.hpp"
 #include "orion/prefs.hpp"
 #include "orion/romm.hpp"
+#include "orion/shares.hpp"
 #include "orion/updates.hpp"
 #include "platform/ps5/audio_out.hpp"
 #include "platform/ps5/display_egl.hpp"
@@ -307,19 +308,34 @@ int main()
     const auto scan_emulators = [&titles](bool starting)
     {
         const orion::LibraryPrefs prefs = orion::load_prefs(titles.state_dir);
-        // RomM's games, as the last sync listed them (orion/romm.hpp).
+        // The games on the player's network drives, as the last scan found
+        // them (orion/shares.hpp), then RomM's, as the last sync listed them
+        // (orion/romm.hpp). The drives first: the library lists only so many.
         std::vector<library::RemoteGame> remote;
+        const std::vector<orion::Share> shares = orion::load_shares(titles.state_dir);
+        std::string found;
+        if (!shares.empty() &&
+            save::read_file(titles.state_dir + "/share-games.tsv", &found, 32u << 20))
+            remote =
+                orion::share_remote_games(orion::read_share_files(found), shares, titles.state_dir);
         std::string catalogue;
         const std::string base =
             orion::romm_base(orion::read_service_key(titles.state_dir, orion::kRommUrl));
         if (!base.empty() && prefs.romm_show != "off" &&
             save::read_file(titles.state_dir + "/romm-games.tsv", &catalogue, 32u << 20))
-            remote = orion::romm_remote_games(orion::read_romm_catalogue(catalogue), base,
-                                              titles.state_dir);
+        {
+            std::vector<library::RemoteGame> romm = orion::romm_remote_games(
+                orion::read_romm_catalogue(catalogue), base, titles.state_dir);
+            remote.insert(remote.end(), std::make_move_iterator(romm.begin()),
+                          std::make_move_iterator(romm.end()));
+        }
         // Games downloaded from RomM are the console's own, found where they
         // landed: RomM's list (capped, see add_remote_games) may not name them.
         std::vector<library::GameFolder> folders = orion::game_folders(prefs);
         folders.push_back({orion::romm_folder(titles.state_dir) + "/games", "", ""});
+        // And the network drives' games copied to the console already.
+        for (const orion::Share &share : shares)
+            folders.push_back({titles.state_dir + "/shares/" + share.id, "", ""});
         const int games = library::add_emulator_games(
             titles, folders, orion::art_folder(prefs, titles.state_dir), prefs.every_version,
             starting ? boot_step : std::function<void(const char *)>(), remote, true);

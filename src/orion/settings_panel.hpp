@@ -12,6 +12,7 @@
 #include "orion/look.hpp"
 #include "orion/drives.hpp"
 #include "orion/prefs.hpp"
+#include "orion/shares.hpp"
 #include "ui/components/form.hpp"
 #include "ui/components/sheet.hpp"
 #include "ui/components/sidenav.hpp"
@@ -110,6 +111,9 @@ class SettingsPanel
         type_romm_code, // "Pair with RomM" was chosen: the screen asks for the code
         romm_sync,      // "Sync RomM games" was chosen
         romm_browse,    // "Browse RomM games": the screen opens the RomM Games screen
+        add_share,      // "Add a network drive": the screen asks for its address
+        scan_shares,    // "Look for games again" (Network drives)
+        remove_share,   // "Remove" on a drive's page: share_id() says which
         new_label,      // "New label": the screen asks for its text
         rename_label,   // "Text" on a label's page: label_id() says which
     };
@@ -124,9 +128,10 @@ class SettingsPanel
         storage,
         sound,
         appearance,
-        romm,   // the RomM server: its address, pairing, which games show
-        system, // the language, autoboot, rest mode, returning after a game
-        about,  // the version, updates, where things are
+        romm,    // the RomM server: its address, pairing, which games show
+        network, // network drives (SMB): their addresses, their games
+        system,  // the language, autoboot, rest mode, returning after a game
+        about,   // the version, updates, where things are
     };
 
     SettingsPanel();
@@ -152,6 +157,18 @@ class SettingsPanel
     void set_tabs(std::vector<TabEntry> tabs)
     {
         tabs_ = std::move(tabs);
+    }
+    // The network drives (orion/shares.hpp) and what the last look for
+    // their games found.
+    void set_shares(std::vector<Share> shares, std::string status)
+    {
+        shares_ = std::move(shares);
+        share_status_ = std::move(status);
+    }
+    // The drive whose page is open, or empty.
+    const std::string &share_id() const
+    {
+        return share_page_;
     }
     // The built-in labels the library has titles for.
     void set_labels(std::vector<LabelEntry> labels)
@@ -317,6 +334,7 @@ class SettingsPanel
     void build(const Look &look, const LibraryPrefs &prefs);
     void build_library(const LibraryPrefs &prefs);
     void build_romm(const LibraryPrefs &prefs);
+    void build_network();
     void build_system(const LibraryPrefs &prefs);
     void build_tabs(const LibraryPrefs &prefs);
     void build_tab_page(const LibraryPrefs &prefs);
@@ -377,6 +395,9 @@ class SettingsPanel
     const library::Emulator *emulator_ = nullptr;
     std::vector<TabEntry> tabs_;
     std::string tab_id_;
+    std::vector<Share> shares_;
+    std::string share_status_;
+    std::string share_page_; // the drive whose page is open; empty: the list
     std::vector<LabelEntry> label_entries_;
     std::string label_page_;                       // the label whose page is open; empty: the list
     std::vector<std::string> label_rows_;          // the list's labels, by row (kLabelRow + i)

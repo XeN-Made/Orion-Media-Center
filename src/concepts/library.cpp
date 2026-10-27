@@ -29,6 +29,8 @@
 #include "orion/romm.hpp"
 #include "orion/romm_browser.hpp"
 #include "orion/romm_saves.hpp"
+#include "orion/shares.hpp"
+#include "platform/ps5/smb.hpp"
 #include "orion/steamgriddb.hpp"
 #include "orion/wide_copies.hpp"
 #include "orion/look.hpp"
@@ -186,6 +188,9 @@ enum class Typing : std::uint8_t
     new_label,           // from Settings > Labels > New label
     new_label_for_title, // from a title's menu: the title wears it
     rename_label,        // from a label's page in Settings
+    share_address,       // from Settings > Network drives > Add: its address,
+    share_user,          // then the user (empty: a guest),
+    share_password,      // then the password (shown as stars)
 };
 
 // Tags of the menu items.
@@ -319,6 +324,11 @@ constexpr app::TourStep kTour[] = {
     {0.3f, action_bit(Action::jump_next)},
     {0.2f, 0, Direction::right},
     {0.8f, 0, Direction::none, "settings-romm"},
+    // Network drives: add one here or from a phone (the key page's code).
+    {0.2f, action_bit(Action::back)},
+    {0.3f, action_bit(Action::jump_next)},
+    {0.2f, 0, Direction::right},
+    {0.8f, 0, Direction::none, "settings-network"},
     // Storage, next: the drives first (two invented ones on a PC), then the
     // folders.
     {0.2f, action_bit(Action::back)},
@@ -532,7 +542,9 @@ bool game_file_here(const std::string &path)
 std::string describe(const Title &title, const std::string &emulator)
 {
     if (title.is_rom() && !title.remote.empty() && !game_file_here(title.path))
-        return library::short_system_name(title.system) + "  ·  " + tr("On RomM");
+        return library::short_system_name(title.system) + "  ·  " +
+               (title.remote.rfind(orion::kShareScheme, 0) == 0 ? tr("On a network drive")
+                                                                : tr("On RomM"));
     if (title.is_rom())
         return library::short_system_name(title.system) + "  ·  " + emulator;
     std::string text = library::platform_name(title.platform);
@@ -1116,6 +1128,13 @@ class Library final : public app::Concept
         follow_drive_space();
         follow_system_play_time();
         follow_romm(feedback);
+        follow_shares(feedback);
+        // A network drive added on a phone or PC: its games are looked for.
+        if (key_page_.take_shares_changed())
+        {
+            refresh_shares();
+            scan_shares(feedback, true);
+        }
         if (key_page_.take_saved())
         {
             // Either form: the SteamGridDB key, or RomM's address and a code
@@ -1928,6 +1947,7 @@ class Library final : public app::Concept
 
     void open_settings(app::Feedback &feedback)
     {
+        settings_.set_shares(orion::load_shares(context_.library.state_dir), share_status_);
         settings_.set_tabs(every_tab());
         settings_.set_labels(every_label());
         settings_.set_version(context_.version);
@@ -2256,6 +2276,28 @@ class Library final : public app::Concept
             start_typing(Typing::new_label, "");
             feedback.play(audio::Cue::modal_open);
             break;
+        case orion::SettingsPanel::Change::add_share:
+            pending_share_ = orion::Share();
+            start_typing(Typing::share_address, "");
+            feedback.play(audio::Cue::modal_open);
+            break;
+        case orion::SettingsPanel::Change::scan_shares:
+            scan_shares(feedback, true);
+            break;
+        case orion::SettingsPanel::Change::remove_share:
+        {
+            const std::string &state = context_.library.state_dir;
+            const std::string id = settings_.share_id();
+            std::vector<orion::Share> shares = orion::load_shares(state);
+            std::erase_if(shares, [&](const orion::Share &s) { return s.id == id; });
+            orion::save_shares(state, shares);
+            orion::write_service_key(state, orion::share_password_key(id), "");
+            refresh_shares();
+            context_.rescan_requested = true; // its games leave the library
+            show_note(true, tr("Network drive removed"));
+            feedback.play(audio::Cue::saved);
+            break;
+        }
         case orion::SettingsPanel::Change::rename_label:
         {
             menu_label_ = settings_.label_id();
@@ -2415,7 +2457,8 @@ class Library final : public app::Concept
         return typing == Typing::search ? kMaxQuery
                : typing == Typing::art_folder || typing == Typing::rom_folder ||
                        typing == Typing::grid_key || typing == Typing::romm_url ||
-                       typing == Typing::romm_code
+                       typing == Typing::romm_code || typing == Typing::share_address ||
+                       typing == Typing::share_user || typing == Typing::share_password
                    ? kMaxPath
                : typing == Typing::rename_title || typing == Typing::art_name ? orion::kMaxTitleName
                                                                               : kMaxName;
@@ -2538,6 +2581,40 @@ class Library final : public app::Concept
             prefs_.art_dir = name_;
             art_folder_changed();
             feedback.play(audio::Cue::saved);
+            return;
+        }
+        if (typing == Typing::share_address)
+        {
+            if (!orion::parse_share_address(name_, &pending_share_))
+            {
+                show_note(false, tr("That is not a share's address: \\\\server\\share"));
+                feedback.play(audio::Cue::error);
+                return;
+            }
+            start_typing(Typing::share_user, "");
+            return;
+        }
+        if (typing == Typing::share_user)
+        {
+            pending_share_.user = name_;
+            start_typing(Typing::share_password, "");
+            return;
+        }
+        if (typing == Typing::share_password)
+        {
+            const std::string &state = context_.library.state_dir;
+            std::vector<orion::Share> shares = orion::load_shares(state);
+            const std::string id = orion::add_share(shares, pending_share_).id;
+            if (!orion::save_shares(state, shares))
+            {
+                show_note(false, tr("Could not save the network drive"));
+                feedback.play(audio::Cue::error);
+                return;
+            }
+            orion::write_service_key(state, orion::share_password_key(id), name_);
+            name_.clear();
+            refresh_shares();
+            scan_shares(feedback, true);
             return;
         }
         if (typing == Typing::new_label || typing == Typing::new_label_for_title)
@@ -2797,7 +2874,9 @@ class Library final : public app::Concept
         romm_downloading_id_ = title.id;
         romm_downloading_name_ = title.name;
         romm_launch_after_ = true;
-        show_note(true, trf("Downloading {0} from RomM…", {title.name}));
+        show_note(true, title.remote.rfind(orion::kShareScheme, 0) == 0
+                            ? trf("Copying {0} from the network drive…", {title.name})
+                            : trf("Downloading {0} from RomM…", {title.name}));
         feedback.play(audio::Cue::select);
     }
 
@@ -3054,6 +3133,60 @@ class Library final : public app::Concept
             return false;
         *request += "@install " + staged + "\t" + player.app->root + "/orion-continue.cfg\n";
         return true;
+    }
+
+    // ---- network drives (orion/shares.hpp) ----
+
+    // Looks for the drives' games again; at start, a little after the rest.
+    void refresh_shares()
+    {
+        settings_.set_shares(orion::load_shares(context_.library.state_dir), share_status_);
+        if (settings_.is_open())
+            settings_.refresh(look_, prefs_);
+    }
+
+    void scan_shares(app::Feedback &feedback, bool asked)
+    {
+        const std::vector<orion::Share> shares = orion::load_shares(context_.library.state_dir);
+        if (shares.empty() || !sys::on_console() || share_scan_.running())
+        {
+            if (asked)
+            {
+                show_note(false, shares.empty() ? tr("No network drive is set up")
+                                                : tr("Still looking on the network drives"));
+                feedback.play(audio::Cue::error);
+            }
+            return;
+        }
+        share_scan_.start(shares, context_.library.state_dir);
+        share_status_ = tr("Looking for games on the network drives…");
+        refresh_shares();
+        if (asked)
+        {
+            show_note(true, share_status_);
+            feedback.play(audio::Cue::select);
+        }
+    }
+
+    void follow_shares(app::Feedback &feedback)
+    {
+        if (!shares_scanned_ && clock_ > 14.0f && launch_pending_ <= 0.0f)
+        {
+            shares_scanned_ = true;
+            scan_shares(feedback, false);
+        }
+        orion::ShareScan::Result result;
+        if (!share_scan_.take_finished(&result))
+            return;
+        share_status_ =
+            result.error.empty()
+                ? i18n::plural(result.files, "{0} file found", "{0} files found")
+                : trf("{0} ({1})", {i18n::plural(result.files, "{0} file found", "{0} files found"),
+                                    result.error});
+        if (!result.error.empty())
+            show_note(false, trf("Network drive: {0}", {result.error}));
+        refresh_shares();
+        context_.rescan_requested = true; // the library lists what was found
     }
 
     // The picked games, one after another (a launch's download first).
@@ -7316,7 +7449,15 @@ class Library final : public app::Concept
                            Color::rgb(0xffffff, 0.18f));
         const ui::Fonts &fonts = context_.fonts;
         const bool search = typing_ == Typing::search || typing_ == Typing::none;
-        const std::string &text = search ? query_ : name_;
+        // A password shows as stars, a character each.
+        std::string text = search ? query_ : name_;
+        if (typing_ == Typing::share_password)
+        {
+            const auto count =
+                std::count_if(text.begin(), text.end(), [](char c)
+                              { return (static_cast<unsigned char>(c) & 0xc0) != 0x80; });
+            text.assign(static_cast<std::size_t>(count), '*');
+        }
         const std::string placeholder =
             search                            ? tr("Search titles or IDs")
             : typing_ == Typing::rename_tab   ? tr("Rename the tab")
@@ -7330,6 +7471,10 @@ class Library final : public app::Concept
             : typing_ == Typing::romm_code ? tr("The pairing code RomM shows")
             : typing_ == Typing::romm_search  ? tr("A game's name, or part of it")
             : typing_ == Typing::rename_label ? tr("The label's text; empty gives it ORION's back")
+            : typing_ == Typing::share_address
+                ? tr("The share's address, like \\\\192.168.1.20\\games\\roms")
+            : typing_ == Typing::share_user     ? tr("Its user name; empty signs in as a guest")
+            : typing_ == Typing::share_password ? tr("Its password")
             : typing_ == Typing::new_label || typing_ == Typing::new_label_for_title
                 ? tr("Name the new label")
                 : tr("Name the new tab");
@@ -7461,10 +7606,23 @@ class Library final : public app::Concept
     orion::RommSync romm_sync_{[](const std::string &url, const std::vector<std::string> &headers,
                                   std::size_t limit, std::string *body, std::string *error)
                                { return sys::http_get(url, headers, limit, body, error); }};
+    // A game from RomM, or from a network drive (smb://, orion/shares.hpp).
     orion::FileDownload romm_download_{
-        [](const std::string &url, const std::vector<std::string> &headers, const std::string &path,
-           std::size_t limit, std::string *error)
-        { return sys::http_download(url, headers, path, limit, error); }};
+        [this](const std::string &url, const std::vector<std::string> &headers,
+               const std::string &path, std::size_t limit, std::string *error)
+        {
+            if (url.rfind(orion::kShareScheme, 0) == 0)
+                return orion::download_share_file(context_.library.state_dir, url, path, error);
+            return sys::http_download(url, headers, path, limit, error);
+        }};
+    // The network drives' games, looked for at start and from Settings.
+    orion::ShareScan share_scan_{
+        [](const sys::SmbLogin &login, const std::string &folder, int depth, std::size_t most,
+           std::vector<sys::SmbEntry> *entries, std::string *error)
+        { return sys::smb_list(login, folder, depth, most, entries, error); }};
+    bool shares_scanned_ = false;
+    orion::Share pending_share_; // a drive being typed in: its address, then its user
+    std::string share_status_;
     std::string romm_downloading_id_;
     std::string romm_downloading_name_;
     std::shared_ptr<RommPairing> romm_pairing_;
