@@ -27,7 +27,11 @@ namespace
 
 constexpr std::size_t kMaxInfo = 64u << 10;
 constexpr std::size_t kMaxRomsPerSystem = 10000; // a tab; Game Boy and Color share one
-constexpr std::size_t kMaxPlaylist = 16u << 20;  // a few thousand entries is a few megabytes
+// Server games (RomM) the library lists at most: each one is a title in
+// memory, and ORION's heap is 128 MB; past this the RomM Games screen lists
+// them.
+constexpr int kMaxRemoteListed = 6000;
+constexpr std::size_t kMaxPlaylist = 16u << 20; // a few thousand entries is a few megabytes
 
 struct ShortName
 {
@@ -1638,6 +1642,18 @@ int read_retroarch_playlist(Emulator &emulator, std::string_view text, const std
             rom.system = system;
         // An archive's member ("game.zip#game.sfc") is RetroArch's to open.
         const std::string file = rom.rom.substr(0, rom.rom.find('#'));
+        // A playlist of several systems ("usb0.lpl", its cores "DETECT")
+        // names none: the game's folder may ("/mnt/usb0/psp/...").
+        if (rom.system.empty())
+        {
+            const std::size_t slash = file.rfind('/');
+            const std::size_t before = slash == std::string::npos || slash == 0
+                                           ? std::string::npos
+                                           : file.rfind('/', slash - 1);
+            if (before != std::string::npos)
+                rom.system =
+                    system_of_folder(file.substr(before + 1, slash - before - 1), emulator);
+        }
         // The extension, where it names a system (.gba, .nds), before a core
         // that plays several (mGBA: Game Boy, Color and Advance).
         if (rom.system.empty())
@@ -1971,7 +1987,9 @@ int keep_best_versions(std::vector<Title> &roms, const std::string &launcher)
         const Title &held = roms[at->second];
         const int mine = version_score(rom.path);
         const int theirs = version_score(held.path);
-        const bool better = mine != theirs ? mine > theirs
+        // A game on the console beats a server's copy of it, whatever its file.
+        const bool better = rom.remote.empty() != held.remote.empty() ? rom.remote.empty()
+                            : mine != theirs                          ? mine > theirs
                             : rom.path.size() != held.path.size()
                                 ? rom.path.size() < held.path.size()
                                 : rom.path < held.path;
@@ -2016,6 +2034,10 @@ OwnedGames::OwnedGames(const std::vector<Title> &roms)
         const std::string shelf = shelf_system(rom.system);
         keys_.insert(shelf + "\n" + file_of(rom.path));
         keys_.insert(shelf + "\t" + art_key(rom.name));
+        // Its file's own name too, whatever system it was put under: a
+        // playlist that mixes systems can say the wrong one, and a file named
+        // "101-in-1 Megamix [NPEH00068] [PSP].zip" is that game anywhere.
+        keys_.insert("\v" + file_of(rom.path));
     }
 }
 
@@ -2025,7 +2047,7 @@ bool OwnedGames::has(const std::string &system, const std::string &path,
     const std::string shelf = shelf_system(system);
     std::string file = file_of(path);
     const bool zipped = file.size() > 4 && file.compare(file.size() - 4, 4, ".zip") == 0;
-    return keys_.count(shelf + "\n" + file) != 0 ||
+    return keys_.count(shelf + "\n" + file) != 0 || keys_.count("\v" + file) != 0 ||
            (zipped && keys_.count(shelf + "\n" + file.substr(0, file.size() - 4)) != 0) ||
            keys_.count(shelf + "\t" + art_key(name)) != 0;
 }
@@ -2041,6 +2063,8 @@ int add_remote_games(Emulator &emulator, const std::vector<RemoteGame> &games,
     std::vector<Title> found;
     for (const RemoteGame &game : games)
     {
+        if (static_cast<int>(found.size()) >= kMaxRemoteListed)
+            break;
         const std::string system = system_of_folder(game.system_folder, emulator);
         if (system.empty() || game.path.empty())
             continue;

@@ -375,6 +375,52 @@ TEST(Emulators, ListsServerGamesOnTheirSystems)
     EXPECT_EQ(library::add_remote_games(again, server, &roms, true), 1);
     EXPECT_EQ(roms.back().name, "Brand New");
     EXPECT_EQ(library::add_remote_games(again, server, &roms, false), 2); // all: the other two
+
+    // A file of the same name is the same game on any system: a playlist that
+    // mixes systems may have put the console's copy under another one.
+    std::vector<library::Title> mixed(1);
+    mixed[0].system = "Nintendo - Game Boy Advance";
+    mixed[0].path = "/mnt/usb0/psp/101-in-1 Megamix [NPEH00068] [PSP].zip";
+    mixed[0].name = "101-in-1 Megamix [NPEH00068] [PSP]";
+    const library::OwnedGames owned(mixed);
+    EXPECT_TRUE(owned.has("Sony - PlayStation Portable",
+                          "/data/orion/romm/games/psp/101-in-1 Megamix [NPEH00068] [PSP].zip",
+                          "101 in 1 Megamix"));
+    EXPECT_FALSE(owned.has("Sony - PlayStation Portable",
+                           "/data/orion/romm/games/psp/101-in-1 Megamix [NPUH10088] [PSP].zip",
+                           "101 in 1 Megamix"));
+
+    // A server's copy never hides the console's own (one version per game).
+    std::vector<library::Title> versions(2);
+    for (library::Title &rom : versions)
+    {
+        rom.system = "Nintendo - Game Boy Advance";
+        rom.name = "Moon Garden";
+        rom.launcher = title.id;
+    }
+    versions[0].path = "/mnt/usb0/gba/Moon Garden (Europe) (Rev 1).gba"; // the console's
+    versions[1].path = "/data/orion/romm/games/gba/Moon Garden (USA) [!].gba";
+    versions[1].remote = "http://nas:3000/api/roms/1/content/x.gba";
+    EXPECT_EQ(library::keep_best_versions(versions, title.id), 1);
+    ASSERT_EQ(versions.size(), 1u);
+    EXPECT_TRUE(versions[0].remote.empty());
+}
+
+// A playlist of several systems ("usb0.lpl", cores left to "DETECT") names
+// no system for its games: the game's folder does.
+TEST(Emulators, TellsAPlaylistGamesSystemByItsFolder)
+{
+    const library::Title title = retroarch();
+    std::vector<library::Title> roms;
+    library::Emulator emulator = library::scan_retroarch(title, &roms);
+    const std::size_t before = roms.size();
+    library::read_retroarch_playlist(
+        emulator,
+        R"({"items": [{"path": "/mnt/usb0/gba/Lunar Lift (USA).zip", "label": "Lunar Lift",
+                       "core_path": "DETECT", "core_name": "DETECT", "db_name": "usb0.lpl"}]})",
+        "usb0.lpl", &roms);
+    ASSERT_EQ(roms.size(), before + 1);
+    EXPECT_EQ(roms.back().system, "Nintendo - Game Boy Advance");
 }
 
 TEST(Emulators, ReadsThePlayersOwnRomFolders)

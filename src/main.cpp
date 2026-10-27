@@ -319,7 +319,7 @@ int main()
         const int games = library::add_emulator_games(
             titles, orion::game_folders(prefs), orion::art_folder(prefs, titles.state_dir),
             prefs.every_version, starting ? boot_step : std::function<void(const char *)>(), remote,
-            prefs.romm_show != "all");
+            true);
         // RomM covers an older ORION fetched for every game: the ones no
         // title shows (its emulator has art, or it is not listed) go.
         if (!remote.empty())

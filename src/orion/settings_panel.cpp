@@ -530,11 +530,11 @@ void SettingsPanel::build_romm(const LibraryPrefs &prefs)
     browse.chevron = true;
     browse.description = tr("A tab per system: tick the games to download, see which have saves");
     static const char *const kShowNames[] = {i18n::marked("Only ones not on the console"),
-                                             i18n::marked("All of them"), i18n::marked("None")};
-    const int show = prefs.romm_show == "all" ? 1 : prefs.romm_show == "off" ? 2 : 0;
+                                             i18n::marked("None")};
+    const int show = prefs.romm_show == "off" ? 1 : 0;
     form_
         .add_choice(kRommShow, tr("RomM games in the library"),
-                    i18n::tr_range(kShowNames, kShowNames + 3), show)
+                    i18n::tr_range(kShowNames, kShowNames + 2), show)
         .description = tr("A game already on the console (the same file, or the same name on the "
                           "same system) shows once, from the console");
     form_.add_action(kRommSync, tr("Refresh RomM's game list")).description =
@@ -1515,8 +1515,8 @@ SettingsPanel::Change SettingsPanel::handle(const InputFrame &input, ui::Feedbac
     case kRommShow:
     {
         // The games are listed again, with RomM's as now asked.
-        static constexpr const char *kShowKeys[] = {"missing", "all", "off"};
-        prefs->romm_show = kShowKeys[std::clamp(form_.choice_index(kRommShow), 0, 2)];
+        static constexpr const char *kShowKeys[] = {"missing", "off"};
+        prefs->romm_show = kShowKeys[std::clamp(form_.choice_index(kRommShow), 0, 1)];
         return Change::scan_emulators;
     }
     case kEveryVersion:

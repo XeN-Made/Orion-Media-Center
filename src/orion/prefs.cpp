@@ -565,8 +565,8 @@ LibraryPrefs load_prefs(const std::string &state_dir)
     prefs.title_music = root["title_music"].bool_or(prefs.title_music);
     prefs.every_version = root["every_version"].bool_or(prefs.every_version);
     if (const std::string show = root["romm_show"].string_or("");
-        show == "missing" || show == "all" || show == "off")
-        prefs.romm_show = show;
+        show == "missing" || show == "off")
+        prefs.romm_show = show; // "all", from before, reads as "missing"
     if (const std::string seen = root["whats_new_seen"].string_or(""); seen.size() <= 32)
         prefs.whats_new_seen = seen;
     if (const std::string language = root["language"].string_or("");

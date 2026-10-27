@@ -182,7 +182,9 @@ struct LibraryPrefs
     // other regions); off, only the best of them (library::keep_best_versions).
     bool every_version = false;
     // Which of RomM's games the library lists (orion/romm.hpp): "missing",
-    // the ones not on the console already; "all"; or "off".
+    // the ones not on the console already, or "off". (Every one, a second copy
+    // of each game the console has, is for the RomM Games screen: listed in
+    // the library, a large catalogue ran ORION out of memory.)
     std::string romm_show = "missing";
     // The language ORION is shown in: a code ("es", "pt-BR"), or empty for
     // the console's own (orion/languages.hpp).
