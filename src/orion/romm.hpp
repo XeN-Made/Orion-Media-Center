@@ -106,6 +106,7 @@ class RommSync
         int games = 0;
         int covers = 0;
         int resumed = 0;   // systems an earlier, unfinished sync had read already
+        int total = 0;     // games the server counts on all its systems (0: not known yet)
         std::string error; // the first failure; empty when it all worked
     };
 

@@ -618,3 +618,5 @@ author = ORION
 "{0} games on {1} systems so far, going on from {2} read before…" = "Eddig {0} játék {1} rendszeren, folytatva a korábban beolvasott {2} után…"
 "Title music volume" = "Címzene hangereje"
 "How loud a focused game's own music plays, apart from the Music volume" = "Milyen hangosan szól a kijelölt játék saját zenéje, a Zene hangerejétől függetlenül"
+"Downloading {0} from RomM  ·  {1}" = "{0} letöltése a RomM-ról  ·  {1}"
+"Listing RomM's games  ·  {0} of {1}" = "A RomM játékainak listázása  ·  {0} / {1}"

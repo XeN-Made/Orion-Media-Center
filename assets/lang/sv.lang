@@ -618,3 +618,5 @@ author = Svenska ORION-bidragsgivare
 "{0} games on {1} systems so far, going on from {2} read before…" = "{0} spel på {1} system hittills, fortsätter från {2} som lästs tidigare…"
 "Title music volume" = "Volym för titelmusik"
 "How loud a focused game's own music plays, apart from the Music volume" = "Hur högt det markerade spelets egen musik spelas, oberoende av musikvolymen"
+"Downloading {0} from RomM  ·  {1}" = "Laddar ner {0} från RomM  ·  {1}"
+"Listing RomM's games  ·  {0} of {1}" = "Listar RomM:s spel  ·  {0} av {1}"

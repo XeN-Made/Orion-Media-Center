@@ -623,3 +623,5 @@ author = ORION
 "{0} games on {1} systems so far, going on from {2} read before…" = "{0} juegos en {1} sistemas por ahora, siguiendo desde {2} leídos antes…"
 "Title music volume" = "Volumen de la música de títulos"
 "How loud a focused game's own music plays, apart from the Music volume" = "Qué tan alta suena la música propia del juego enfocado, aparte del volumen de la música"
+"Downloading {0} from RomM  ·  {1}" = "Descargando {0} de RomM  ·  {1}"
+"Listing RomM's games  ·  {0} of {1}" = "Listando los juegos de RomM  ·  {0} de {1}"

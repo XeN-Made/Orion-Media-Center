@@ -445,6 +445,9 @@ void RommSync::run(std::string base, std::string token, std::string state_dir)
         {
             std::lock_guard<std::mutex> lock(mutex_);
             progress_.platforms = static_cast<int>(platforms.size());
+            progress_.total = 0;
+            for (const RommPlatform &platform : platforms)
+                progress_.total += platform.rom_count;
         }
         std::vector<RommGame> games;
         // A system that cannot be read keeps what the last sync had of it;

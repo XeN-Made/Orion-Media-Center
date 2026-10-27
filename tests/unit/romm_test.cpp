@@ -217,6 +217,7 @@ TEST(Romm, SyncsTheCatalogueAndItsCovers)
     const orion::RommSync::Progress done = sync.progress();
     EXPECT_EQ(done.error, "");
     EXPECT_EQ(done.platforms, 2);
+    EXPECT_EQ(done.total, 3); // the systems' counts: the progress bar's whole
     EXPECT_EQ(done.games, 2);
     EXPECT_EQ(done.covers, 1);
     EXPECT_EQ(asked.size(), 2u); // the systems, then one page: the empty system is not asked

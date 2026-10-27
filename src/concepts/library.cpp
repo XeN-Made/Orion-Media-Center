@@ -1551,6 +1551,19 @@ class Library final : public app::Concept
             if (now.total > 0)
                 progress = static_cast<float>(now.done) / static_cast<float>(now.total);
         }
+        else if (romm_download_.running())
+            status = trf("Downloading {0} from RomM  ·  {1}",
+                         {romm_downloading_name_, megabytes(romm_download_.written())});
+        else if (romm_sync_.running())
+        {
+            const orion::RommSync::Progress now = romm_sync_.progress();
+            status = now.total > 0 ? trf("Listing RomM's games  ·  {0} of {1}",
+                                         {std::to_string(now.games), std::to_string(now.total)})
+                                   : tr("Asking RomM for its games…");
+            if (now.total > 0)
+                progress =
+                    std::min(1.0f, static_cast<float>(now.games) / static_cast<float>(now.total));
+        }
         else if (backdrop_copies_.running())
             status = tr("Copying game backgrounds…");
         else if (icon_copies_.running())
@@ -2620,11 +2633,19 @@ class Library final : public app::Concept
     // Pairing's answer, the sync's progress and a download's end.
     void follow_romm(app::Feedback &feedback)
     {
-        // A sync at start, a little after the rest, while paired.
+        // At start, a little after the rest, while paired: a sync left
+        // unfinished goes on (orion/romm.hpp keeps its progress), and a list
+        // a day old is read again. A large library is not read on every start.
         if (!romm_auto_synced_ && clock_ > 12.0f && launch_pending_ <= 0.0f)
         {
             romm_auto_synced_ = true;
-            sync_romm(feedback, false);
+            const std::string &state = context_.library.state_dir;
+            struct stat info = {};
+            const bool unfinished = ::stat((state + "/romm-sync-done.txt").c_str(), &info) == 0;
+            const bool stale = ::stat((state + "/romm-games.tsv").c_str(), &info) != 0 ||
+                               std::time(nullptr) - info.st_mtime > 24 * 3600;
+            if (unfinished || stale)
+                sync_romm(feedback, false);
         }
         if (romm_pairing_ != nullptr && romm_pairing_->done.load())
         {
