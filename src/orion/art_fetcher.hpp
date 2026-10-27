@@ -100,6 +100,12 @@ class ArtFetcher
     std::vector<std::string> take_missing();
     // Stops after the request in flight; waits for the thread.
     void cancel();
+    // Stops after the request in flight, without waiting (a RomM game
+    // downloading comes first: the screen must not stall for it).
+    void stop()
+    {
+        cancel_ = true;
+    }
     // Waits for the run to end (tests).
     void wait();
 

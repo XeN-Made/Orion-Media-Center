@@ -1586,6 +1586,9 @@ class Library final : public app::Concept
         float progress = -1.0f;
         if (context_.rescan_requested)
             status = tr("Looking for emulators and their games…");
+        else if (romm_download_.running())
+            status = trf("Downloading {0} from RomM  ·  {1}",
+                         {romm_downloading_name_, megabytes(romm_download_.written())});
         else if (art_.running())
         {
             const orion::ArtFetcher::Progress now = art_.progress();
@@ -1594,9 +1597,6 @@ class Library final : public app::Concept
             if (now.total > 0)
                 progress = static_cast<float>(now.done) / static_cast<float>(now.total);
         }
-        else if (romm_download_.running())
-            status = trf("Downloading {0} from RomM  ·  {1}",
-                         {romm_downloading_name_, megabytes(romm_download_.written())});
         else if (romm_sync_.running())
         {
             const orion::RommSync::Progress now = romm_sync_.progress();
@@ -2691,6 +2691,7 @@ class Library final : public app::Concept
             feedback.play(audio::Cue::error);
             return;
         }
+        pause_art_for_romm();
         if (!sys::on_console() ||
             !romm_download_.start(title.remote, orion::romm_headers(romm_token()), title.path))
         {
@@ -2750,6 +2751,17 @@ class Library final : public app::Concept
         }
     }
 
+    // A game from RomM comes before box art: a box art run stops for it (a
+    // few hundred covers would share the line with it) and starts again when
+    // the downloads are done, from the games still without a picture.
+    void pause_art_for_romm()
+    {
+        if (!art_.running())
+            return;
+        art_.stop();
+        art_paused_for_romm_ = true;
+    }
+
     // The picked games, one after another (a launch's download first).
     void follow_romm_queue()
     {
@@ -2757,6 +2769,7 @@ class Library final : public app::Concept
             return;
         const orion::RommEntry entry = romm_queue_.front();
         romm_queue_.pop_front();
+        pause_art_for_romm();
         if (romm_download_.start(entry.url, orion::romm_headers(romm_token()), entry.path))
         {
             romm_downloading_id_.clear();
@@ -2875,6 +2888,13 @@ class Library final : public app::Concept
             }
         }
         follow_romm_queue();
+        if (art_paused_for_romm_ && romm_queue_.empty() && !romm_download_.running() &&
+            !art_.running())
+        {
+            art_paused_for_romm_ = false;
+            if (prefs_.auto_art)
+                start_art(false);
+        }
     }
 
     struct RommPairing
@@ -6873,6 +6893,7 @@ class Library final : public app::Concept
     orion::RommBrowser romm_browser_;
     std::deque<orion::RommEntry> romm_queue_; // picked games waiting their turn
     bool romm_launch_after_ = false;          // the download is a launch's: start it after
+    bool art_paused_for_romm_ = false;        // a box art run stopped for a RomM game
     int romm_queued_done_ = 0;                // picked games fetched in this run of the queue
     std::vector<std::string> preview_files_;
     int preview_index_ = 0;
