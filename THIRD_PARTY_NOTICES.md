@@ -138,8 +138,9 @@ replace the pinned SDK or install files globally. PacBrew recipes and every
 linked third-party library retain their upstream licenses; applications must
 review those terms before redistribution.
 
-ORION links these ports statically (`PACBREW_PACKAGES=libcurl libwebp` in the
-Makefile) to download box art over HTTPS and to read WebP pictures:
+ORION links these ports statically (`PACBREW_PACKAGES=libcurl libwebp libsmb2
+libarchive` in the Makefile) to download box art over HTTPS, to read WebP
+pictures, to read games off SMB shares and to unpack PS5 games from archives:
 
 | Library | Version | License |
 | --- | --- | --- |
@@ -150,6 +151,10 @@ Makefile) to download box art over HTTPS and to read WebP pictures:
 | [zlib](https://zlib.net/) | 1.3.2 | zlib license |
 | [libwebp](https://chromium.googlesource.com/webm/libwebp) | 1.x | BSD-3-Clause |
 | [SQLite](https://sqlite.org/) | 3.x | Public domain |
+| [libsmb2](https://github.com/sahlberg/libsmb2) | 6.1.0 | LGPL-2.1-or-later |
+| [libarchive](https://www.libarchive.org/) | 3.7.4 | BSD-2-Clause |
+| [XZ Utils](https://tukaani.org/xz/) (liblzma) | 5.x | 0BSD (public domain before 5.6) |
+| [bzip2](https://sourceware.org/bzip2/) (libbz2) | 1.0.x | bzip2 license (BSD-style) |
 
 SQLite is linked only into the play time payload
 (`assets/payloads/orion-playtime.elf`, `payload/playtime/`), which reads the

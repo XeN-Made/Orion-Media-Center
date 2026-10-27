@@ -23,8 +23,9 @@ override APP_STATIC_ARCHIVES := $(strip .deps/ps5-opengl/libps5opengl-group.a $(
 override APP_IMPORT_STUBS := $(strip $(OPENGL_SDK)/lib/libSceAgc.so \
 	$(OPENGL_SDK)/lib/libSceAgcDriver.so $(APP_IMPORT_STUBS))
 # libcurl (with OpenSSL): ORION downloads box art over HTTPS. libwebp: case
-# pictures and other art saved as WebP.
-PACBREW_PACKAGES ?= libcurl libwebp
+# pictures and other art saved as WebP. libsmb2: games on Windows shares and
+# NAS drives. libarchive: PS5 games installed from ZIP, 7z and RAR archives.
+PACBREW_PACKAGES ?= libcurl libwebp libsmb2 libarchive
 PACBREW_INCLUDE_PATHS ?=
 PACBREW_STATIC_ARCHIVES ?=
 PS5_HOST ?=

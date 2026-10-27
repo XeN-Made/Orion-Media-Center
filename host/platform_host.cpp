@@ -4,6 +4,8 @@
 
 #include "platform/ps5/system.hpp"
 
+#include "platform/ps5/smb.hpp"
+
 #include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
@@ -113,6 +115,32 @@ bool http_download(const std::string &url, const std::string &path, std::size_t 
     (void)url;
     (void)path;
     (void)limit;
+    *error = "the PC preview has no network";
+    return false;
+}
+
+bool smb_list(const SmbLogin &login, const std::string &folder, int depth, std::size_t most,
+              std::vector<SmbEntry> *entries, std::string *error)
+{
+    (void)login;
+    (void)folder;
+    (void)depth;
+    (void)most;
+    entries->clear();
+    *error = "the PC preview has no network";
+    return false;
+}
+
+bool smb_download(const SmbLogin &login, const std::string &path, const std::string &local,
+                  std::atomic<std::uint64_t> *done, const std::atomic<bool> *cancel,
+                  std::string *error)
+{
+    (void)login;
+    (void)path;
+    (void)local;
+    (void)cancel;
+    if (done != nullptr)
+        *done = 0;
     *error = "the PC preview has no network";
     return false;
 }
