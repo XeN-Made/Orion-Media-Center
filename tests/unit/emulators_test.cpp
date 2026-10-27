@@ -10,9 +10,9 @@
 #include "library/emulators.hpp"
 #include "library/library.hpp"
 
-#include <algorithm>
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
