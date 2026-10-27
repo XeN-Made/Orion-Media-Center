@@ -91,6 +91,7 @@ class SettingsPanel
         check_updates,  // "Check now" (Library, updates)
         install_update, // "Install ORION <version>": the screen hands it to the helper
         language,       // the Language row changed (prefs.language)
+        whats_new,      // "What's new" (About): the screen shows this version's notes
         type_romm_url,  // "RomM server" was chosen: the screen asks for the address
         type_romm_code, // "Pair with RomM" was chosen: the screen asks for the code
         romm_sync,      // "Sync RomM games" was chosen

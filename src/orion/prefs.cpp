@@ -567,6 +567,8 @@ LibraryPrefs load_prefs(const std::string &state_dir)
     if (const std::string show = root["romm_show"].string_or("");
         show == "missing" || show == "all" || show == "off")
         prefs.romm_show = show;
+    if (const std::string seen = root["whats_new_seen"].string_or(""); seen.size() <= 32)
+        prefs.whats_new_seen = seen;
     if (const std::string language = root["language"].string_or("");
         language.size() <= 16 &&
         std::all_of(language.begin(), language.end(),
@@ -621,6 +623,7 @@ bool save_prefs(const std::string &state_dir, const LibraryPrefs &prefs)
     text += std::string("  \"every_version\": ") + (prefs.every_version ? "true" : "false") + ",\n";
     text += "  \"romm_show\": " + json::quote(prefs.romm_show) + ",\n";
     text += "  \"language\": " + json::quote(prefs.language) + ",\n";
+    text += "  \"whats_new_seen\": " + json::quote(prefs.whats_new_seen) + ",\n";
     text += std::string("  \"moved_leave_shelf\": ") +
             (prefs.moved_leave_shelf ? "true" : "false") + ",\n";
     text += std::string("  \"auto_art\": ") + (prefs.auto_art ? "true" : "false") + ",\n";

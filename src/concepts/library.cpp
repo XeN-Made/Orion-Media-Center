@@ -39,6 +39,7 @@
 #include "orion/drives.hpp"
 #include "orion/title_details.hpp"
 #include "orion/updates.hpp"
+#include "orion/whats_new.hpp"
 #include "platform/ps5/system.hpp"
 #include "ui/components/carousel.hpp"
 #include "ui/components/grid.hpp"
@@ -993,6 +994,11 @@ class Library final : public app::Concept
             update_typing(input, feedback);
         else if (menu_.is_open())
             update_menu(input, feedback);
+        else if (whats_new_.is_open())
+        {
+            if (whats_new_.handle(input, feedback))
+                whats_new_.close(feedback);
+        }
         else if (details_.is_open())
             update_details(input, feedback);
         else if (setup_.is_open())
@@ -1027,6 +1033,23 @@ class Library final : public app::Concept
         dialog_.update(dt);
         settings_.update(dt);
         details_.update(dt);
+        whats_new_.update(dt);
+        // After an update, once: what changed (orion/whats_new.hpp).
+        if (!whats_new_checked_ && clock_ > 2.0f && !setup_.is_open() && !dialog_.is_open() &&
+            info_title_.empty() && launch_pending_ <= 0.0f)
+        {
+            whats_new_checked_ = true;
+            const orion::WhatsNewNotes notes = whats_new_notes();
+            if (orion::show_whats_new(notes, context_.version, prefs_.whats_new_seen,
+                                      prefs_.setup_done))
+                whats_new_.open(notes, feedback);
+            // Seen, or nothing to see (a new install): not asked again for it.
+            if (!notes.version.empty() && prefs_.whats_new_seen != notes.version)
+            {
+                prefs_.whats_new_seen = notes.version;
+                save_prefs();
+            }
+        }
         follow_drive_space();
         follow_system_play_time();
         follow_romm(feedback);
@@ -1151,6 +1174,7 @@ class Library final : public app::Concept
         draw_hold_to_exit(list, paint);
         details_.draw(canvas);
         settings_.draw(canvas);
+        whats_new_.draw(canvas);
         setup_.draw(canvas);
         if (keyboard_shown_.value > 0.01f && over_settings)
             draw_keyboard(canvas, paint);
@@ -1214,6 +1238,7 @@ class Library final : public app::Concept
         settings_.set_theme(theme_, reduced_);
         setup_.set_theme(theme_, reduced_);
         details_.set_theme(theme_, reduced_);
+        whats_new_.set_theme(theme_, reduced_);
     }
 
     // The shape of the active tab's covers: the one chosen in Settings, else
@@ -2243,6 +2268,19 @@ class Library final : public app::Concept
             settings_.close(feedback);
             install_update(feedback);
             break;
+        case orion::SettingsPanel::Change::whats_new:
+        {
+            const orion::WhatsNewNotes notes = whats_new_notes();
+            if (notes.items.empty())
+            {
+                show_note(false, tr("This version has no notes"));
+                feedback.play(audio::Cue::error);
+                break;
+            }
+            settings_.close(feedback);
+            whats_new_.open(notes, feedback);
+            break;
+        }
         case orion::SettingsPanel::Change::check_updates:
             check_for_updates(true);
             feedback.play(audio::Cue::select);
@@ -2497,6 +2535,16 @@ class Library final : public app::Concept
                                         context_.library.state_dir + "/art/picks", title->id);
         show_note(true, trf("Looking on SteamGridDB for {0}…", {preview_query_}));
         feedback.play(audio::Cue::select);
+    }
+
+    // The notes ORION ships for its version (assets/whats-new.txt).
+    static orion::WhatsNewNotes whats_new_notes()
+    {
+        std::string text;
+        orion::WhatsNewNotes notes;
+        if (save::read_file("/app0/assets/whats-new.txt", &text, 256u << 10))
+            orion::parse_whats_new(text, &notes);
+        return notes;
     }
 
     // ---- RomM (orion/romm.hpp) ----
@@ -6671,6 +6719,8 @@ class Library final : public app::Concept
     bool preview_asked_ = false; // false: waiting for the picker to be free
     std::string grid_key_;       // keys.txt's, as last read
     orion::KeyPage key_page_;    // the key typed on a phone or PC (http://<console>:9062)
+    orion::WhatsNew whats_new_;  // this version's notes, once after an update
+    bool whats_new_checked_ = false;
     // RomM: the sync, a game being downloaded, a pairing under way.
     orion::RommSync romm_sync_{[](const std::string &url, const std::vector<std::string> &headers,
                                   std::size_t limit, std::string *body, std::string *error)

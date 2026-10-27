@@ -238,6 +238,7 @@ author =
 "The pairing code RomM shows" = ""
 "This folder (PC preview)" = ""
 "This is the new ORION" = ""
+"This version has no notes" = ""
 "Titles you move here stay here." = ""
 "Try fewer letters, or press Circle to clear the search." = ""
 "Up one folder" = ""
@@ -551,7 +552,9 @@ author =
 "Use this folder" = ""
 "Version" = ""
 "View" = ""
+"What changed in this version" = ""
 "What moves behind the glass" = ""
+"What's new" = ""
 "When ORION starts, new games get covers from the internet" = ""
 "When the console wakes on the home screen, ORION opens; a game left running stays in front" = ""
 "Where {0} looks by itself; ORION looks there too" = ""
@@ -627,3 +630,6 @@ author =
 "Plays with" = ""
 "Size" = ""
 "Where it is" = ""
+
+# src/orion/whats_new.cpp
+"What's new in ORION {0}" = ""

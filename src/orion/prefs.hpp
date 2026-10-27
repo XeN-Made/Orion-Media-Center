@@ -187,6 +187,9 @@ struct LibraryPrefs
     // The language ORION is shown in: a code ("es", "pt-BR"), or empty for
     // the console's own (orion/languages.hpp).
     std::string language;
+    // The version whose What's new was shown (orion/whats_new.hpp): it shows
+    // once after each update.
+    std::string whats_new_seen;
     // A title moved to a custom tab leaves its Games / Homebrew / Media
     // shelf; it always stays in All.
     bool moved_leave_shelf = true;

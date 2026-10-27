@@ -47,6 +47,7 @@ enum : int
     kUpdateNow,
     kInstallUpdate,
     kAboutVersion,
+    kWhatsNew,
     kAboutTitle,
     kAboutReleases,
     kAboutLog,
@@ -598,6 +599,9 @@ void SettingsPanel::build_about(const LibraryPrefs &prefs)
 {
     form_.add_header(tr("ORION Media Center"));
     form_.add_value(kAboutVersion, tr("Version"), version_.empty() ? tr("Unknown") : version_);
+    ui::FormRow &news = form_.add_action(kWhatsNew, tr("What's new"));
+    news.chevron = true;
+    news.description = tr("What changed in this version");
     form_.add_value(kAboutTitle, tr("Title ID"), title_id_);
     form_.add_value(kAboutReleases, tr("Releases"), kReleasesPage);
     form_.add_header(tr("Updates"));
@@ -1379,6 +1383,8 @@ SettingsPanel::Change SettingsPanel::handle(const InputFrame &input, ui::Feedbac
             return Change::run_setup;
         if (id == kUpdateNow)
             return Change::check_updates;
+        if (id == kWhatsNew)
+            return Change::whats_new;
         if (id == kInstallUpdate)
             return Change::install_update;
         if (id == kScanEmulators)

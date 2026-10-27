@@ -620,3 +620,7 @@ author = ORION
 "How loud a focused game's own music plays, apart from the Music volume" = "Milyen hangosan szól a kijelölt játék saját zenéje, a Zene hangerejétől függetlenül"
 "Downloading {0} from RomM  ·  {1}" = "{0} letöltése a RomM-ról  ·  {1}"
 "Listing RomM's games  ·  {0} of {1}" = "A RomM játékainak listázása  ·  {0} / {1}"
+"This version has no notes" = "Ehhez a verzióhoz nincsenek jegyzetek"
+"What changed in this version" = "Mi változott ebben a verzióban"
+"What's new" = "Újdonságok"
+"What's new in ORION {0}" = "Az ORION {0} újdonságai"

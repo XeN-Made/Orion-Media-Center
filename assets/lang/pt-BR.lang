@@ -625,3 +625,7 @@ author = ORION
 "How loud a focused game's own music plays, apart from the Music volume" = "O volume da música própria do jogo em foco, à parte do volume da música"
 "Downloading {0} from RomM  ·  {1}" = "Baixando {0} do RomM  ·  {1}"
 "Listing RomM's games  ·  {0} of {1}" = "Listando os jogos do RomM  ·  {0} de {1}"
+"This version has no notes" = "Esta versão não tem notas"
+"What changed in this version" = "O que mudou nesta versão"
+"What's new" = "Novidades"
+"What's new in ORION {0}" = "Novidades do ORION {0}"

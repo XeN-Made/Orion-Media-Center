@@ -1,0 +1,13 @@
+# 01.106.000
+## New
+RomM | Your RomM server's games on their systems' tabs, with its covers. A game downloads the first time you play it. Settings, RomM.
+Set up from a phone | Settings, RomM shows an address to open on a phone or PC, for the server and its pairing code.
+Only what you lack | RomM games you already have on the console are left out (Settings, RomM, RomM games in the library).
+Title music volume | Settings, Sound: how loud a focused game's own music plays, apart from the Music volume.
+No FTP server needed | Payload Manager, PS5Upload and the other installed apps show without an FTP server running.
+What's new | This page, once after each update, and again any time from Settings, About.
+## Fixed
+Icons no longer show another title's picture for a few seconds when ORION opens.
+Autoboot waits for ShadowMountPlus instead of showing "could not find the game or application" over and over.
+A game's own music is no longer faint, and keeps playing while Settings or a menu is open.
+A large RomM library lists in smaller steps, and a list left unfinished carries on where it stopped.
