@@ -36,6 +36,7 @@ author =
 "Box art folder: {0}  ({1} found)" = ""
 "Box art is downloading; try again when it is done" = ""
 "Bringing {0}'s save from RomM…" = ""
+"Bringing {0}'s save state from RomM…" = ""
 "Cancel" = ""
 "Checking and unpacking ORION {0}…" = ""
 "Choose a picture" = ""

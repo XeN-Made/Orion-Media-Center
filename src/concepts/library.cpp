@@ -65,6 +65,7 @@
 #include <atomic>
 #include <deque>
 #include <memory>
+#include <optional>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -2770,6 +2771,9 @@ class Library final : public app::Concept
             return;
         art_.stop();
         art_paused_for_romm_ = true;
+        // The run starts again from the games still without a picture.
+        art_asked_.clear();
+        art_more_ = false;
     }
 
     // ---- saves between RomM and RetroArch (orion/romm_saves.hpp) ----
@@ -2853,6 +2857,74 @@ class Library final : public app::Concept
         romm_launch_after_ = true;
         romm_save_target_ = target;
         show_note(true, trf("Bringing {0}'s save from RomM…", {title.name}));
+        feedback.play(audio::Cue::select);
+        return true;
+    }
+
+    // The launch a download was for, a Continue still a Continue.
+    void launch_after_romm(app::Feedback &feedback)
+    {
+        continue_next_ = std::exchange(romm_continue_after_, false);
+        launch(romm_downloading_id_, feedback);
+        continue_next_ = false;
+    }
+
+    // RomM's newest save state of a game made by the core that plays it here
+    // (a state of another core does not load), from the last sync's list.
+    std::optional<orion::RommSave> romm_state_of(const Title &title, const library::Player &player)
+    {
+        const long long id = romm_id_of(title);
+        std::string text;
+        if (id <= 0 ||
+            !save::read_file(context_.library.state_dir + "/romm-saves.tsv", &text, 8u << 20))
+            return std::nullopt;
+        const std::string core = orion::retroarch_core_key(player.core);
+        const std::vector<orion::RommSave> saves = orion::read_romm_saves(text);
+        const orion::RommSave *state = orion::latest_romm_save(saves, id, core, true);
+        if (state == nullptr)
+            return std::nullopt;
+        std::string made_by = state->emulator;
+        for (char &c : made_by)
+            c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        if (made_by != core)
+            return std::nullopt;
+        return *state;
+    }
+
+    // Continue, when RomM keeps a newer state than the console's newest (it
+    // was played on another device): that state comes in as the one
+    // RetroArch loads by itself, then the game starts from it. True when a
+    // download started.
+    bool pull_romm_state(const std::string &id, app::Feedback &feedback)
+    {
+        const Title *title = find_title(id);
+        if (title == nullptr || !title->is_rom() || !sys::on_console() || romm_download_.running())
+            return false;
+        const library::Player player = player_of(*title);
+        const std::string base = romm_base();
+        const std::string token = romm_token();
+        const std::string folder = retroarch_folder(player, "savestates");
+        if (player.app == nullptr || player.app->key != "retroarch" || base.empty() ||
+            token.empty() || folder.empty() || !save::ensure_directory(folder))
+            return false;
+        const std::optional<orion::RommSave> state = romm_state_of(*title, player);
+        if (!state)
+            return false;
+        const std::string stem = orion::retroarch_stem(player.rom);
+        const std::string newest = orion::newest_state(folder, stem);
+        struct stat info = {};
+        if (!newest.empty() && ::stat(newest.c_str(), &info) == 0 &&
+            static_cast<std::int64_t>(info.st_mtime) + 60 >= orion::parse_date_time(state->updated))
+            return false;
+        pause_art_for_romm();
+        if (!romm_download_.start(orion::romm_save_content_url(base, *state),
+                                  orion::romm_headers(token), folder + "/" + stem + ".state.auto"))
+            return false;
+        romm_downloading_id_ = title->id;
+        romm_downloading_name_ = title->name;
+        romm_launch_after_ = true;
+        romm_continue_after_ = true;
+        show_note(true, trf("Bringing {0}'s save state from RomM…", {title->name}));
         feedback.play(audio::Cue::select);
         return true;
     }
@@ -3013,11 +3085,13 @@ class Library final : public app::Concept
                 if (!save.empty())
                 {
                     std::rename((save + ".orion-backup").c_str(), save.c_str());
-                    launch(romm_downloading_id_, feedback);
+                    launch_after_romm(feedback);
                 }
+                else
+                    romm_continue_after_ = false;
             }
             else if (romm_launch_after_)
-                launch(romm_downloading_id_, feedback);
+                launch_after_romm(feedback);
             // The last picked game in. A game the library lists already plays
             // from where it landed (its file is there now): no rebuild, which
             // on a large library was heavy enough to end ORION. One it does
@@ -3531,7 +3605,8 @@ class Library final : public app::Concept
         launch.tag = kItemLaunch;
         launch.disabled = launch_pending_ > 0.0f;
         items.push_back(launch);
-        if (!continue_state(title).empty())
+        if (!continue_state(title).empty() ||
+            (title.is_rom() && romm_state_of(title, player_of(title)).has_value()))
         {
             ui::MenuItem resume = menu_item(tr("Continue from the last save state"));
             resume.tag = kItemContinue;
@@ -4093,6 +4168,8 @@ class Library final : public app::Concept
         }
         if (tag == kItemContinue)
         {
+            if (pull_romm_state(menu_title_, feedback))
+                return;
             continue_next_ = true;
             launch(menu_title_, feedback);
             continue_next_ = false;
@@ -4307,10 +4384,14 @@ class Library final : public app::Concept
         const library::Player player = title->is_rom() ? player_of(*title) : library::Player();
         const library::EmulatorApp *app = player.app;
         const bool retroarch = app != nullptr && app->key == "retroarch";
-        // RomM keeps a newer save of it: that one first, then the start.
-        if (retroarch && pull_romm_save(*title, player, feedback))
-            return;
         const bool continuing = retroarch && std::exchange(continue_next_, false);
+        // RomM keeps a newer save of it: that one first, then the start (a
+        // Continue still continues).
+        if (retroarch && pull_romm_save(*title, player, feedback))
+        {
+            romm_continue_after_ = continuing;
+            return;
+        }
         // RetroArch, as its own ES-DE does: -L <core> <game>.
         const std::string core = retroarch ? player.core : std::string();
         const std::string launcher = app != nullptr ? app->title_id : std::string();
@@ -4465,9 +4546,8 @@ class Library final : public app::Concept
         if (!retry)
             save::read_file(state + "/art/tried.txt", &tried, 1u << 20);
         // The tab in view first, then the rest; by itself (not asked for), a
-        // run is a few hundred games: a library of thousands without art took
-        // an hour that looked stuck. The rest come on the next starts, as they
-        // scroll into view, or all at once from Settings, Box art.
+        // run is a few hundred games, and the next run takes the next few
+        // hundred, so the tab in view leads again each time.
         std::vector<int> order(view_.begin(), view_.end());
         std::unordered_set<int> seen(order.begin(), order.end());
         for (int i = 0; i < static_cast<int>(titles().size()); ++i)
@@ -4482,7 +4562,8 @@ class Library final : public app::Concept
             // when it is about to be seen (want_icons), not with the rest.
             if (!title.is_rom() || !title.icon.empty() || !title.remote.empty() ||
                 !prefs_.system_enabled(library::shelf_system(title.system)) ||
-                tried.find(title.id + "\n") != std::string::npos)
+                tried.find(title.id + "\n") != std::string::npos ||
+                (!retry && art_asked_.count(title.id) != 0))
                 continue;
             jobs.push_back(art_job(title));
             if (!retry && jobs.size() >= kArtPerRun)
@@ -4504,6 +4585,14 @@ class Library final : public app::Concept
             return;
         }
         const std::string &state = context_.library.state_dir;
+        // A run by itself takes a few hundred, then the next few hundred
+        // (art_more_), each game once while ORION runs.
+        art_more_ = !manual && count >= kArtPerRun;
+        if (!manual)
+        {
+            for (const orion::ArtJob &job : jobs)
+                art_asked_.insert(job.id);
+        }
         sys::art_trace(("starting the art thread for " + std::to_string(count) + " games").c_str());
         arm_grid();
         if (!art_.start(std::move(jobs), state + "/art.txt"))
@@ -4589,6 +4678,13 @@ class Library final : public app::Concept
             return;
         const orion::ArtFetcher::Progress done = art_.progress();
         remember_tried(art_.take_missing());
+        // More games without art: the next run goes on from them.
+        if (std::exchange(art_more_, false) && prefs_.auto_art)
+        {
+            start_art(false);
+            if (art_.running())
+                return;
+        }
         std::string summary =
             trf("Found {0} of {1}", {std::to_string(done.found), std::to_string(done.total)});
         if (done.missing > 0)
@@ -6342,11 +6438,43 @@ class Library final : public app::Concept
         return nullptr;
     }
 
+    // A cover whole in a case's window. Cropped to fill it, a cover of
+    // another shape lost what was near its edges (a square PS5 icon its
+    // sides, a wide GBA box most of them), often the game's title. It is
+    // fitted inside instead, over a dimmed copy that fills the window, so no
+    // empty bars show; a cover of nearly the window's shape just fills it.
+    void draw_cover_fitted(ui::Canvas &canvas, const Rect &window, const ui::CardItem &item,
+                           const Title &title) const
+    {
+        const bool sharp = title.sharp_texture != 0 && title.sharp_height > 0;
+        const std::uint32_t texture = sharp ? title.sharp_texture : item.texture;
+        const float picture =
+            sharp ? static_cast<float>(title.sharp_width) / static_cast<float>(title.sharp_height)
+                  : std::max(0.2f, item.image_aspect);
+        const float shape = window.w / std::max(window.h, 1.0f);
+        draw_cover_art(canvas, window, window, item, title, 0.0f);
+        if (texture == 0 || std::abs(picture / shape - 1.0f) < 0.03f)
+            return;
+        canvas.list.rounded_rect(window, 0.0f, Color::rgb(0x05070d, 0.55f));
+        Rect fitted = window;
+        if (picture > shape)
+        {
+            fitted.h = window.w / picture;
+            fitted.y = window.y + (window.h - fitted.h) * 0.5f;
+        }
+        else
+        {
+            fitted.w = window.h * picture;
+            fitted.x = window.x + (window.w - fitted.w) * 0.5f;
+        }
+        draw_cover_art(canvas, fitted, fitted, item, title, 0.0f);
+    }
+
     // A game in a case picture: the cover in its window, the picture over it
     // (or under it, for a flat window), both stretched to the case's cell.
     // A picture of another shape (a PS1 jewel case, near square) is drawn to
-    // this one too: the cover is cropped to its window, never stretched, and
-    // a cell left partly empty would show the grid's backing around it.
+    // this one too, and a cell left partly empty would show the grid's
+    // backing around it.
     void draw_case_template(ui::Canvas &canvas, const Rect &art, const ui::CardItem &item,
                             const Title &title, const library::CaseTemplate &shell,
                             float focus) const
@@ -6367,7 +6495,7 @@ class Library final : public app::Concept
         if (shell.window_solid)
             list.image(shell.texture, art, gfx::kFullUv, Color::rgb(0xffffff));
         list.push_clip(window);
-        draw_cover_art(canvas, window, window, item, title, 0.0f);
+        draw_cover_fitted(canvas, window, item, title);
         list.pop_clip();
         if (!shell.window_solid)
             list.image(shell.texture, art, gfx::kFullUv, Color::rgb(0xffffff));
@@ -7076,9 +7204,12 @@ class Library final : public app::Concept
     bool romm_auto_synced_ = false;
     std::unordered_set<std::string> romm_art_asked_; // RomM games whose cover was asked for
     orion::RommBrowser romm_browser_;
-    std::deque<orion::RommEntry> romm_queue_; // picked games waiting their turn
-    bool romm_launch_after_ = false;          // the download is a launch's: start it after
-    bool art_paused_for_romm_ = false;        // a box art run stopped for a RomM game
+    std::deque<orion::RommEntry> romm_queue_;   // picked games waiting their turn
+    bool romm_continue_after_ = false;          // that launch is a Continue
+    bool romm_launch_after_ = false;            // the download is a launch's: start it after
+    std::unordered_set<std::string> art_asked_; // games a run by itself took
+    bool art_more_ = false;                     // that run was full: another follows
+    bool art_paused_for_romm_ = false;          // a box art run stopped for a RomM game
     std::unordered_set<std::string> romm_save_checked_;   // games whose RomM save was looked at
     std::unordered_map<std::string, long long> romm_ids_; // RomM's ids by file name
     std::string romm_save_target_; // a save being brought from RomM: where it goes

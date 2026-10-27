@@ -653,3 +653,4 @@ author = Svenska ORION-bidragsgivare
 "Bringing {0}'s save from RomM…" = "Hämtar sparningen för {0} från RomM…"
 "Continue from the last save state" = "Fortsätt från senaste sparläget"
 "its last save state could not be made ready" = "dess senaste sparläge kunde inte förberedas"
+"Bringing {0}'s save state from RomM…" = "Hämtar sparläget för {0} från RomM…"

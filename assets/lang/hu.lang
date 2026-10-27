@@ -653,3 +653,4 @@ author = ORION
 "Bringing {0}'s save from RomM…" = "{0} mentésének letöltése a RomM-ról…"
 "Continue from the last save state" = "Folytatás az utolsó mentett állapotból"
 "its last save state could not be made ready" = "az utolsó mentett állapotát nem sikerült előkészíteni"
+"Bringing {0}'s save state from RomM…" = "{0} mentett állapotának letöltése a RomM-ról…"
