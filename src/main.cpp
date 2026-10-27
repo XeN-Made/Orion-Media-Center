@@ -25,6 +25,7 @@
 #include "library/library.hpp"
 #include "orion/prefs.hpp"
 #include "orion/romm.hpp"
+#include "orion/updates.hpp"
 #include "platform/ps5/audio_out.hpp"
 #include "platform/ps5/display_egl.hpp"
 #include "platform/ps5/pad.hpp"
@@ -660,6 +661,20 @@ int main()
         music.pump(dt);
         title_music.play(shell.title_music());
         title_music.pump(dt);
+        // What a focused title's music did, in /data/orion/title-music.txt:
+        // the file asked for, and why it would not play.
+        {
+            static std::string asked;
+            static std::string failed;
+            if (shell.title_music() != asked && !shell.title_music().empty())
+                orion::update_log(titles.state_dir + "/title-music.txt",
+                                  "asked: " + shell.title_music());
+            asked = shell.title_music();
+            if (title_music.error() != failed && !title_music.error().empty())
+                orion::update_log(titles.state_dir + "/title-music.txt",
+                                  "cannot play: " + title_music.error());
+            failed = title_music.error();
+        }
         shell.set_now_playing(music.current());
 
         shell.compose(renderer);

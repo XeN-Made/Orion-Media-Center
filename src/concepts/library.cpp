@@ -3013,11 +3013,16 @@ class Library final : public app::Concept
             else if (!still_none(folder + "/" + title.id + ".none"))
             {
                 // Asked of the system once; the answer comes on a later frame.
-                if (sys::on_console() && !sound_copies_.running())
-                    sound_copies_.start({title.id}, folder, ftp_port(), {"/snd0.at9"}, ".at9");
+                if (sys::on_console() && !sound_copies_.running() &&
+                    sound_copies_.start({title.id}, folder, ftp_port(), {"/snd0.at9"}, ".at9"))
+                    orion::update_log(context_.library.state_dir + "/title-music.txt",
+                                      "asking the system for " + title.id + "'s music");
                 return {};
             }
         }
+        if (path.empty())
+            orion::update_log(context_.library.state_dir + "/title-music.txt",
+                              "no music for " + title.id + " (" + title.path + ")");
         music_paths_[title.id] = path;
         return path;
     }
