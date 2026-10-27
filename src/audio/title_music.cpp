@@ -9,6 +9,7 @@
 #include "third_party/libatrac9/libatrac9.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <cstring>
 
@@ -18,7 +19,14 @@ namespace hui::audio
 namespace
 {
 
-constexpr float kTitleGain = 0.55f; // the title's song, a little over the playlist
+// A title's song is brought to this loudness (RMS of the samples): the
+// playlist's tracks are mastered at about -18 LUFS and play at 0.4, about
+// 0.05; a little over that.
+constexpr float kTitleLoudness = 0.07f;
+constexpr float kLeastGain = 0.25f;
+constexpr float kMostGain = 4.0f;
+constexpr float kMostPeak = 0.95f;
+constexpr int kMeasureFrames = 48000 * 3; // the first three seconds
 constexpr float kFadeIn = 0.6f;
 constexpr float kFadeOut = 0.25f;
 constexpr std::size_t kAhead = 12288; // frames kept buffered (~0.25 s): a switch is quick
@@ -184,6 +192,25 @@ void TitleMusic::init(Mixer &mixer, MusicPlayer &playlist)
     mixer.set_stream_gain(1, 0.0f, 0.0f);
 }
 
+float title_loudness_gain(const float *samples, std::size_t count)
+{
+    double sum = 0.0;
+    float peak = 0.0f;
+    for (std::size_t i = 0; i < count; ++i)
+    {
+        sum += static_cast<double>(samples[i]) * samples[i];
+        peak = std::max(peak, std::fabs(samples[i]));
+    }
+    const float rms =
+        count > 0 ? static_cast<float>(std::sqrt(sum / static_cast<double>(count))) : 0.0f;
+    if (rms < 1e-4f)
+        return 1.0f; // silence (or a quiet intro): nothing to go by
+    float gain = std::clamp(kTitleLoudness / rms, kLeastGain, kMostGain);
+    if (peak > 0.0f)
+        gain = std::min(gain, std::max(kLeastGain, kMostPeak / peak));
+    return gain;
+}
+
 void TitleMusic::play(const std::string &path)
 {
     if (mixer_ == nullptr || path == path_)
@@ -207,7 +234,27 @@ bool TitleMusic::open(const std::string &path)
         error_ = "cannot read " + path;
         return false;
     }
-    if (data.compare(0, 4, "OggS") == 0)
+    // Its opening decoded once to measure how loud it is, then the song is
+    // opened again from the start to play.
+    const bool ogg = data.compare(0, 4, "OggS") == 0;
+    {
+        std::vector<float> opening(static_cast<std::size_t>(kMeasureFrames) * 2);
+        int got = 0;
+        if (ogg)
+        {
+            MusicTrack probe;
+            if (probe.open(data).empty())
+                got = probe.decode(opening.data(), kMeasureFrames);
+        }
+        else
+        {
+            At9Track probe;
+            if (probe.open(data).empty())
+                got = probe.decode(opening.data(), kMeasureFrames);
+        }
+        gain_ = title_loudness_gain(opening.data(), static_cast<std::size_t>(std::max(got, 0)) * 2);
+    }
+    if (ogg)
     {
         auto track = std::make_unique<MusicTrack>();
         error_ = track->open(std::move(data));
@@ -254,7 +301,7 @@ void TitleMusic::pump(float dt)
         }
         if (playlist_ != nullptr)
             playlist_->set_lowered(true);
-        mixer_->set_stream_gain(1, kTitleGain, kFadeIn);
+        mixer_->set_stream_gain(1, gain_, kFadeIn);
     }
     if (!at9_ && !ogg_)
         return;

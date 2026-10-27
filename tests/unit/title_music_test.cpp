@@ -70,5 +70,31 @@ TEST(TitleMusic, DecodesAndLoopsAnAtrac9Song)
     EXPECT_EQ(broken.decode(out.data(), 100), 0);
 }
 
+// A quiet preview is brought up, a loud one down, so every title's song
+// plays about as loud; never so far up that its peak would clip.
+TEST(TitleMusic, BringsEverySongToOneLoudness)
+{
+    std::vector<float> quiet(48000 * 2);
+    std::vector<float> loud(48000 * 2);
+    for (std::size_t i = 0; i < quiet.size(); ++i)
+    {
+        const float wave = std::sin(static_cast<float>(i) * 0.01f);
+        quiet[i] = 0.05f * wave;
+        loud[i] = 0.3f * wave;
+    }
+    const float up = audio::title_loudness_gain(quiet.data(), quiet.size());
+    const float down = audio::title_loudness_gain(loud.data(), loud.size());
+    EXPECT_GT(up, 1.5f);
+    EXPECT_LT(down, 0.5f);
+    // The same loudness after: within a few per cent.
+    EXPECT_NEAR(0.05f * up, 0.3f * down, 0.005f);
+    // A quiet song with one loud click: held below clipping.
+    quiet[100] = 0.9f;
+    EXPECT_LE(audio::title_loudness_gain(quiet.data(), quiet.size()) * 0.9f, 0.95f + 1e-4f);
+    // Silence: left as it is.
+    std::vector<float> silence(1000, 0.0f);
+    EXPECT_FLOAT_EQ(audio::title_loudness_gain(silence.data(), silence.size()), 1.0f);
+}
+
 } // namespace
 } // namespace hui

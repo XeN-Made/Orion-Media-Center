@@ -65,6 +65,13 @@ class At9Track
     std::size_t pcm_position_ = 0; // frames of it already given out
 };
 
+// The gain that brings a song's opening (interleaved stereo samples) to the
+// loudness a title's song plays at, a little over ORION's playlist. The
+// home screen's previews are mastered far quieter than ORION's tracks, and
+// differently from game to game: one fixed gain left most of them faint.
+// Never so much that the loudest sample would clip.
+float title_loudness_gain(const float *samples, std::size_t count);
+
 // Plays one title's music on the mixer's second music deck, the playlist
 // lowered under it: play() fades the last one out and the new one in; an
 // empty path ends it and the playlist comes back. Decoding runs on the
@@ -106,6 +113,7 @@ class TitleMusic
     std::string opened_; // decoding now
     std::string error_;
     float switching_ = 0.0f; // seconds of silence while the last one fades
+    float gain_ = 1.0f;      // the song's own (title_loudness_gain)
     std::vector<float> buffer_;
 };
 
