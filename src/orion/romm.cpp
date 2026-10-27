@@ -518,7 +518,7 @@ RommSync::Progress RommSync::progress() const
     return progress_;
 }
 
-bool RommSync::start(std::string base, std::string token, std::string state_dir)
+bool RommSync::start(std::string base, std::string token, std::string state_dir, bool saves_only)
 {
     if (running_.load() || base.empty() || token.empty() || state_dir.empty())
         return false;
@@ -526,15 +526,17 @@ bool RommSync::start(std::string base, std::string token, std::string state_dir)
     {
         std::lock_guard<std::mutex> lock(mutex_);
         progress_ = Progress();
+        progress_.saves_only = saves_only;
     }
     cancel_ = false;
     running_ = true;
     worker_ = std::thread([this, base = std::move(base), token = std::move(token),
-                           state_dir = std::move(state_dir)]() { run(base, token, state_dir); });
+                           state_dir = std::move(state_dir), saves_only]()
+                          { run(base, token, state_dir, saves_only); });
     return true;
 }
 
-void RommSync::run(std::string base, std::string token, std::string state_dir)
+void RommSync::run(std::string base, std::string token, std::string state_dir, bool saves_only)
 {
     const std::vector<std::string> headers = romm_headers(token);
     const auto fail = [&](const std::string &error)
@@ -542,6 +544,22 @@ void RommSync::run(std::string base, std::string token, std::string state_dir)
         std::lock_guard<std::mutex> lock(mutex_);
         if (progress_.error.empty())
             progress_.error = error;
+    };
+    // The player's saves and save states: a short list, read whole each time.
+    const auto read_saves = [&]()
+    {
+        std::string body;
+        std::string error;
+        std::vector<RommSave> saves;
+        const bool read = get_(romm_saves_url(base), headers, kMaxAnswer, &body, &error) &&
+                          parse_romm_saves(body, false, &saves) &&
+                          get_(romm_states_url(base), headers, kMaxAnswer, &body, &error) &&
+                          parse_romm_saves(body, true, &saves);
+        if (!read)
+            return fail("saves: " + (error.empty() ? std::string("not a list") : error));
+        save::write_atomic(state_dir + "/romm-saves.tsv", romm_saves_text(saves));
+        std::lock_guard<std::mutex> lock(mutex_);
+        progress_.saves = static_cast<int>(saves.size());
     };
     const auto work = [&]()
     {
@@ -658,21 +676,8 @@ void RommSync::run(std::string base, std::string token, std::string state_dir)
         // Whole: the progress is not needed any more.
         std::remove(done_path.c_str());
         std::remove(part_path.c_str());
-        // The player's saves and save states: a short list, read whole each
-        // time. Without them the games are listed all the same.
-        std::vector<RommSave> saves;
-        const bool saves_read = get_(romm_saves_url(base), headers, kMaxAnswer, &body, &error) &&
-                                parse_romm_saves(body, false, &saves) &&
-                                get_(romm_states_url(base), headers, kMaxAnswer, &body, &error) &&
-                                parse_romm_saves(body, true, &saves);
-        if (saves_read)
-        {
-            save::write_atomic(state_dir + "/romm-saves.tsv", romm_saves_text(saves));
-            std::lock_guard<std::mutex> lock(mutex_);
-            progress_.saves = static_cast<int>(saves.size());
-        }
-        else
-            fail("saves: " + error);
+        // Without the saves the games are listed all the same.
+        read_saves();
         const std::string written =
             save::write_atomic(state_dir + "/romm-games.tsv", romm_catalogue_text(games));
         if (!written.empty())
@@ -681,7 +686,10 @@ void RommSync::run(std::string base, std::string token, std::string state_dir)
         // console already, with their emulators' art. The box art downloader
         // fetches RomM's cover for a game listed without any (ArtJob::first_url).
     };
-    work();
+    if (saves_only)
+        read_saves();
+    else
+        work();
     running_ = false;
     finished_ = true;
 }

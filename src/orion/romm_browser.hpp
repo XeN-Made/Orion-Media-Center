@@ -76,7 +76,8 @@ class RommBrowser
 
     RommBrowser();
     void set_theme(const ui::Theme &theme, bool reduced_motion);
-    void open(std::vector<RommEntry> entries, ui::Feedback &feedback);
+    // saves_read: whether ORION has the player's saves from RomM at all.
+    void open(std::vector<RommEntry> entries, bool saves_read, ui::Feedback &feedback);
     void close(ui::Feedback &feedback);
     bool is_open() const
     {
@@ -109,7 +110,8 @@ class RommBrowser
     RommFilter filter_ = RommFilter::missing;
     std::unordered_set<long long> picked_; // RomM's ids
     std::string query_;
-    bool saves_tab_ = false; // the first tab is Saves (there are some)
+    bool saves_tab_ = true;   // the first tab is Saves
+    bool saves_read_ = false; // ORION has the player's saves from RomM
     gfx::Rect area_;
 };
 

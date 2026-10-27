@@ -146,15 +146,16 @@ void RommBrowser::set_theme(const ui::Theme &theme, bool reduced_motion)
         reduced_motion;
 }
 
-void RommBrowser::open(std::vector<RommEntry> entries, ui::Feedback &feedback)
+void RommBrowser::open(std::vector<RommEntry> entries, bool saves_read, ui::Feedback &feedback)
 {
+    saves_read_ = saves_read;
     entries_ = std::move(entries);
     systems_ = romm_entry_systems(entries_);
     picked_.clear();
     query_.clear();
     std::vector<ui::TabItem> tabs;
-    saves_tab_ = std::any_of(entries_.begin(), entries_.end(),
-                             [](const RommEntry &entry) { return entry.saves + entry.states > 0; });
+    // Saves first, always: with none, it says why.
+    saves_tab_ = !entries_.empty();
     if (saves_tab_)
     {
         ui::TabItem tab;
@@ -344,7 +345,10 @@ void RommBrowser::draw_content(ui::Canvas &canvas, const gfx::Rect &area, float)
         paint.body(systems_.empty() ? tr("Refresh RomM's game list in Settings, RomM first")
                    : !query_.empty()
                        ? tr("No game here has that in its name: Options searches again")
-                       : tr("No games here with this filter: Triangle changes it"),
+                   : saves && !saves_read_
+                       ? tr("ORION has not read your saves from RomM yet: Settings, RomM shows why")
+                   : saves ? tr("No saves on RomM for these games yet")
+                           : tr("No games here with this filter: Triangle changes it"),
                    area.x, area.y + kListTop + 60.0f, 24.0f, theme.text_muted);
     else
         list_.draw(canvas);

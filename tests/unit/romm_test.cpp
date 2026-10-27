@@ -264,6 +264,17 @@ TEST(Romm, SyncsTheCatalogueAndItsCovers)
     EXPECT_EQ(sync.progress().resumed, 0);
     EXPECT_EQ(asked.size(), 4u);
 
+    // The saves alone: two requests, the games' list left as it was.
+    asked.clear();
+    std::remove((dir + "/romm-saves.tsv").c_str());
+    ASSERT_TRUE(sync.start("http://nas:3000", "rmm_token", dir, true));
+    sync.wait();
+    EXPECT_TRUE(sync.progress().saves_only);
+    EXPECT_EQ(sync.progress().saves, 2);
+    EXPECT_EQ(asked, (std::vector<std::string>{"http://nas:3000/api/saves",
+                                               "http://nas:3000/api/states"}));
+    EXPECT_TRUE(save::read_file(dir + "/romm-saves.tsv", &saves_text));
+
     // A system that cannot be read now keeps the games the last sync had.
     pages.erase(orion::romm_games_url("http://nas:3000", 1, 0, 50));
     ASSERT_TRUE(sync.start("http://nas:3000", "rmm_token", dir));

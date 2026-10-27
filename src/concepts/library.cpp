@@ -479,8 +479,17 @@ std::string monogram(const std::string &name)
 }
 
 // emulator: the app that plays a game for an emulator ("RetroArch").
+// A RomM game's file is on the console once it was played (downloaded).
+bool game_file_here(const std::string &path)
+{
+    struct stat info = {};
+    return !path.empty() && ::stat(path.c_str(), &info) == 0;
+}
+
 std::string describe(const Title &title, const std::string &emulator)
 {
+    if (title.is_rom() && !title.remote.empty() && !game_file_here(title.path))
+        return library::short_system_name(title.system) + "  ·  " + tr("On RomM");
     if (title.is_rom())
         return library::short_system_name(title.system) + "  ·  " + emulator;
     std::string text = library::platform_name(title.platform);
@@ -2711,7 +2720,7 @@ class Library final : public app::Concept
                                                orion::read_romm_saves(saves),
                                                context_.library.emulator, owned, romm_base(),
                                                orion::romm_folder(state) + "/games"),
-                           feedback);
+                           !saves.empty(), feedback);
     }
 
     void update_romm_browser(const InputFrame &input, app::Feedback &feedback)
@@ -2773,6 +2782,9 @@ class Library final : public app::Concept
                                std::time(nullptr) - info.st_mtime > 24 * 3600;
             if (unfinished || stale)
                 sync_romm(feedback, false);
+            // Else the saves alone: a save made on another device shows today.
+            else if (!romm_base().empty() && !romm_token().empty() && sys::on_console())
+                romm_sync_.start(romm_base(), romm_token(), state, true);
         }
         if (romm_pairing_ != nullptr && romm_pairing_->done.load())
         {
@@ -2794,7 +2806,7 @@ class Library final : public app::Concept
             if (error.empty())
                 sync_romm(feedback, false);
         }
-        if (romm_sync_.running())
+        if (romm_sync_.running() && !romm_sync_.progress().saves_only)
         {
             const orion::RommSync::Progress now = romm_sync_.progress();
             romm_status_ =
@@ -2811,14 +2823,28 @@ class Library final : public app::Concept
         if (romm_sync_.take_finished())
         {
             const orion::RommSync::Progress done = romm_sync_.progress();
-            romm_status_ = done.error.empty()
-                               ? trf("Last sync: {0} games on {1} systems",
-                                     {std::to_string(done.games), std::to_string(done.platforms)})
-                               : trf("Last sync failed: {0}", {done.error});
-            show_romm_state();
-            if (done.error.empty())
-                context_.rescan_requested = true; // the library lists them again
+            // A token without the right to read saves gets 401 or 403.
+            const bool refused = done.error.find("HTTP 401") != std::string::npos ||
+                                 done.error.find("HTTP 403") != std::string::npos;
+            const std::string saves =
+                done.saves >= 0 ? i18n::plural(done.saves, "{0} save", "{0} saves") : std::string();
+            if (done.saves_only)
+                romm_status_ = !done.error.empty()
+                                   ? trf("RomM saves could not be read: {0}", {done.error})
+                                   : trf("{0} on RomM", {saves});
             else
+                romm_status_ =
+                    done.error.empty()
+                        ? trf("Last sync: {0} games on {1} systems, {2}",
+                              {std::to_string(done.games), std::to_string(done.platforms), saves})
+                        : trf("Last sync failed: {0}", {done.error});
+            if (refused)
+                romm_status_ += "  ·  " + tr("Pair again with a token that may read saves "
+                                             "(RomM: Client tokens, the assets.read permission)");
+            show_romm_state();
+            if (done.error.empty() && !done.saves_only)
+                context_.rescan_requested = true; // the library lists them again
+            else if (!done.error.empty())
                 show_note(false, trf("RomM: {0}", {done.error}));
         }
         if (romm_download_.running() &&

@@ -128,9 +128,10 @@ class RommSync
     {
         int platforms = 0;
         int games = 0;
-        int resumed = 0;   // systems an earlier, unfinished sync had read already
-        int total = 0;     // games the server counts on all its systems (0: not known yet)
-        int saves = 0;     // saves and save states the player has there
+        int resumed = 0; // systems an earlier, unfinished sync had read already
+        int total = 0;   // games the server counts on all its systems (0: not known yet)
+        int saves = -1;  // saves and save states the player has there (-1: not read)
+        bool saves_only = false;
         std::string error; // the first failure; empty when it all worked
     };
 
@@ -139,7 +140,9 @@ class RommSync
     RommSync(const RommSync &) = delete;
     RommSync &operator=(const RommSync &) = delete;
 
-    bool start(std::string base, std::string token, std::string state_dir);
+    // saves_only: the player's saves and states alone (a quick request; the
+    // games' list is left as it is).
+    bool start(std::string base, std::string token, std::string state_dir, bool saves_only = false);
     bool running() const
     {
         return running_.load();
@@ -156,7 +159,7 @@ class RommSync
     void wait();
 
   private:
-    void run(std::string base, std::string token, std::string state_dir);
+    void run(std::string base, std::string token, std::string state_dir, bool saves_only);
 
     HttpGetWith get_;
     std::thread worker_;

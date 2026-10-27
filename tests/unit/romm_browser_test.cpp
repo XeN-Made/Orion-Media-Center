@@ -95,7 +95,8 @@ TEST_F(RommBrowserScreen, TicksAndDownloadsThePickedGames)
     }
     entries[2].owned = true;
     orion::RommBrowser browser;
-    browser.open(entries, feedback_);
+    browser.open(entries, true, feedback_);
+    browser.handle(press(Action::jump_next), feedback_); // past Saves, to GBA
     for (int i = 0; i < 30; ++i)
         browser.update(1.0f / 60.0f);
     // Nothing ticked: Square refuses.
