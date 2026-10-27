@@ -394,7 +394,7 @@ happened, and the log the list below names.
 
 Please include those files when you report a problem. The easiest way:
 Settings, About, **Share your logs** shows an address and a QR code; open it on
-a phone or PC on the same network and it downloads  with all
+a phone or PC on the same network and it downloads `orion-logs.zip` with all
 of them (no keys or tokens; it does show local network addresses).
 
 ## Building it yourself

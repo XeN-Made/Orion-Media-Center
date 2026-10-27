@@ -128,6 +128,8 @@ constexpr std::size_t kMaxRequestPath = 1024;
 constexpr int kFtpPort = 2121;
 // Continue's config for one start, as RetroArch sees it (its folder is /app0).
 constexpr const char *kContinueConfig = "/app0/orion-continue.cfg";
+// The band down the left of an older Game Boy Advance box, as a share of its width.
+constexpr float kGbaBand = 0.2f;
 // Games without box art a run looks for by itself (Find box art now: all).
 constexpr std::size_t kArtPerRun = 300;
 // How long Circle is held to close ORION.
@@ -6710,6 +6712,14 @@ class Library final : public app::Concept
         if (std::abs(std::log(picture / whole)) < std::abs(std::log(picture / framed)))
             uv = {uv.x + shell.window_x * uv.w, uv.y + shell.window_y * uv.h, shell.window_w * uv.w,
                   shell.window_h * uv.h};
+        // An older Game Boy Advance box (libretro's scans, nearly square) has
+        // its band down the left fifth instead: the case's header stands for it.
+        else if (picture > 0.85f && picture < 1.2f && title.is_rom() &&
+                 library::short_system_name(title.system) == "GBA")
+        {
+            uv.x += uv.w * kGbaBand;
+            uv.w *= 1.0f - kGbaBand;
+        }
         canvas.list.image(texture, window, uv, Color::rgb(0xffffff), 0.0f);
     }
 
