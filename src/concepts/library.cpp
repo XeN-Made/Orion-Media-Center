@@ -2746,9 +2746,8 @@ class Library final : public app::Concept
             feedback.play(audio::Cue::select);
             for (orion::RommEntry &entry : picked)
             {
-                const std::string id = library::rom_id(entry.path);
-                if (find_title(id) == nullptr)
-                    romm_needs_rescan_ = true;
+                if (find_title(library::rom_id(entry.path)) == nullptr)
+                    romm_unlisted_.emplace_back(entry.path, entry.game.name);
                 romm_queue_.push_back(std::move(entry));
             }
             break;
@@ -3029,8 +3028,12 @@ class Library final : public app::Concept
                                              "{0} games downloaded from RomM"));
                 feedback.play(audio::Cue::saved);
                 romm_queued_done_ = 0;
-                if (std::exchange(romm_needs_rescan_, false))
-                    context_.rescan_requested = true;
+                for (auto &game : std::exchange(romm_unlisted_, {}))
+                {
+                    struct stat info = {};
+                    if (::stat(game.first.c_str(), &info) == 0)
+                        context_.downloaded_games.push_back(std::move(game));
+                }
                 rebuild(); // their subtitles: no longer "On RomM"
             }
         }
@@ -4576,6 +4579,8 @@ class Library final : public app::Concept
             refresh_covers();
         if (art_.running())
         {
+            if (const std::vector<std::string> missing = art_.take_missing(); !missing.empty())
+                remember_tried(missing);
             const orion::ArtFetcher::Progress now = art_.progress();
             settings_.set_art_status(trf("Found {0} of {1} so far…",
                                          {std::to_string(now.found), std::to_string(now.total)}));
@@ -7076,10 +7081,11 @@ class Library final : public app::Concept
     bool art_paused_for_romm_ = false;        // a box art run stopped for a RomM game
     std::unordered_set<std::string> romm_save_checked_;   // games whose RomM save was looked at
     std::unordered_map<std::string, long long> romm_ids_; // RomM's ids by file name
-    std::string romm_save_target_;   // a save being brought from RomM: where it goes
-    bool continue_next_ = false;     // the next launch continues from the last state
-    int romm_queued_done_ = 0;       // picked games fetched in this run of the queue
-    bool romm_needs_rescan_ = false; // a picked game the library does not list yet
+    std::string romm_save_target_; // a save being brought from RomM: where it goes
+    bool continue_next_ = false;   // the next launch continues from the last state
+    int romm_queued_done_ = 0;     // picked games fetched in this run of the queue
+    // Picked games the library does not list yet (file, name): added once in.
+    std::vector<std::pair<std::string, std::string>> romm_unlisted_;
     std::vector<std::string> preview_files_;
     int preview_index_ = 0;
     bool keeping_ = false;

@@ -2207,4 +2207,36 @@ int add_emulator_games(Library &library, const std::vector<GameFolder> &folders,
     return count;
 }
 
+int add_downloaded_games(Library &library, const std::vector<RemoteGame> &games,
+                         const std::string &art_dir)
+{
+    std::unordered_set<std::string> listed;
+    for (const Title &title : library.titles)
+    {
+        if (title.is_rom())
+            listed.insert(title.id);
+    }
+    std::vector<RemoteGame> fresh;
+    for (const RemoteGame &game : games)
+    {
+        if (listed.count(rom_id(game.path)) == 0)
+            fresh.push_back(game);
+    }
+    std::vector<Title> roms;
+    const int added = add_remote_games(library.emulator, fresh, &roms, false);
+    if (added == 0)
+        return 0;
+    for (EmulatorApp &app : library.emulator.apps)
+    {
+        if (app.key == "retroarch")
+            app.games += added;
+    }
+    sort_systems(library.emulator);
+    const EmulatorApp *retroarch = library.emulator.app("retroarch");
+    attach_rom_art(roms, retroarch != nullptr ? retroarch->root : std::string(), art_dir);
+    for (Title &rom : roms)
+        library.titles.push_back(std::move(rom));
+    return added;
+}
+
 } // namespace hui::library

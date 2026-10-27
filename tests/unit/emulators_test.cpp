@@ -324,6 +324,35 @@ TEST(Emulators, TellsRetroArchsLauncherWhichGame)
               "--appendconfig\n/app0/orion-continue.cfg\n/mnt/usb0/gba/a.gba\n");
 }
 
+// A game just downloaded joins a library already scanned as the console's
+// own; one listed already (a RomM game in its list) is not added twice.
+TEST(Emulators, AddsDownloadedGamesWithoutAScan)
+{
+    library::Library lib;
+    lib.titles.push_back(retroarch());
+    std::vector<library::Title> roms;
+    lib.emulator = library::scan_retroarch(lib.titles.front(), &roms);
+    for (library::Title &rom : roms)
+        lib.titles.push_back(rom);
+    const std::size_t before = lib.titles.size();
+    const int games_before = lib.emulator.app("retroarch")->games;
+    std::vector<library::RemoteGame> games(2);
+    games[0].system_folder = "gba";
+    games[0].name = "Moon Garden";
+    games[0].path = "/data/orion/romm/games/gba/Moon Garden (USA).gba";
+    games[1].system_folder = "gba";
+    games[1].name = "Listed";
+    games[1].path = roms.front().rom; // the library has it
+    EXPECT_EQ(library::add_downloaded_games(lib, games, ""), 1);
+    ASSERT_EQ(lib.titles.size(), before + 1);
+    const library::Title &moon = lib.titles.back();
+    EXPECT_EQ(moon.system, "Nintendo - Game Boy Advance");
+    EXPECT_EQ(moon.name, "Moon Garden");
+    EXPECT_TRUE(moon.remote.empty()); // the console's own now
+    EXPECT_EQ(lib.emulator.app("retroarch")->games, games_before + 1);
+    EXPECT_EQ(library::add_downloaded_games(lib, games, ""), 0); // listed now
+}
+
 // Games kept on a server join their systems' tabs before they are on the
 // console, play in RetroArch, and a file listed already is not listed twice.
 TEST(Emulators, ListsServerGamesOnTheirSystems)

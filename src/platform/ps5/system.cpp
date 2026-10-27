@@ -17,6 +17,7 @@
 #include <netdb.h>
 #include <thread>
 #include <utility>
+#include <vector>
 #include <cerrno>
 #include <cstdarg>
 #include <netinet/in.h>
@@ -278,6 +279,60 @@ void let_go(CURL *curl, curl_slist *resolve)
     curl_slist_free_all(resolve);
 }
 
+// ---- handles kept for the next request ----
+//
+// Handed to the thread above, cleanups of 30 s each still fell behind: past
+// kMaxPending waiting, every request cleaned up its own, and a box art run
+// stalled after its first few games. A finished handle is now reset and kept
+// for the next request, so nothing is cleaned up (and its connections are
+// used again); only past kMaxIdle at once does one go to the thread above.
+constexpr std::size_t kMaxIdle = 8;
+
+struct Idle
+{
+    std::mutex mutex;
+    std::vector<CURL *> handles;
+};
+
+Idle &idle()
+{
+    static Idle instance;
+    return instance;
+}
+
+CURL *take_handle()
+{
+    Idle &pool = idle();
+    {
+        std::lock_guard<std::mutex> lock(pool.mutex);
+        if (!pool.handles.empty())
+        {
+            CURL *curl = pool.handles.back();
+            pool.handles.pop_back();
+            return curl;
+        }
+    }
+    return curl_easy_init();
+}
+
+// The request is over: its options go (the resolve list with them), the
+// handle stays for the next one.
+void put_back(CURL *curl, curl_slist *resolve)
+{
+    curl_easy_reset(curl);
+    curl_slist_free_all(resolve);
+    Idle &pool = idle();
+    {
+        std::lock_guard<std::mutex> lock(pool.mutex);
+        if (pool.handles.size() < kMaxIdle)
+        {
+            pool.handles.push_back(curl);
+            return;
+        }
+    }
+    let_go(curl, nullptr);
+}
+
 // The host's IPv4 address, from the system's resolver; empty when it has
 // none. Given to curl (CURLOPT_RESOLVE), so curl starts no lookup of its own.
 std::string resolve_ipv4(const std::string &host)
@@ -388,7 +443,7 @@ std::string fetch(std::string url, Target *target, long whole)
         const std::string entry = resolve_entry(url, &host);
         if (entry.empty())
             return host.empty() ? "not a web address" : "cannot find " + host;
-        CURL *curl = curl_easy_init();
+        CURL *curl = take_handle();
         if (curl == nullptr)
             return "curl did not start";
         curl_slist *resolve = curl_slist_append(nullptr, entry.c_str());
@@ -440,7 +495,7 @@ std::string fetch(std::string url, Target *target, long whole)
         char *location = nullptr;
         curl_easy_getinfo(curl, CURLINFO_REDIRECT_URL, &location);
         const std::string next = location != nullptr ? location : "";
-        let_go(curl, resolve);
+        put_back(curl, resolve);
         if (code != CURLE_OK)
             return target->over     ? std::string("too large")
                    : target->failed ? std::string("could not write the file (disk full?)")

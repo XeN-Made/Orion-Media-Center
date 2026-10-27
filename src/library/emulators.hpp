@@ -123,6 +123,12 @@ int add_emulator_games(Library &library, const std::vector<GameFolder> &folders,
 // Returns how many joined.
 int add_remote_games(Emulator &emulator, const std::vector<RemoteGame> &games,
                      std::vector<Title> *roms, bool missing_only = true);
+// Games just downloaded (their files here now) into a library already
+// scanned, without scanning it again: each one it does not list yet joins
+// its system as the console's own, with the art found for it. Returns how
+// many joined.
+int add_downloaded_games(Library &library, const std::vector<RemoteGame> &games,
+                         const std::string &art_dir);
 
 // The games on the console, for telling whether a server's game is one of
 // them: the same file name, or the same name, on the same system. A game of

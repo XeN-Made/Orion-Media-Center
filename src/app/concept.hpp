@@ -103,6 +103,10 @@ struct Context
     // Titles the player renamed (id, name; empty: its own again): the app
     // applies them between frames and bumps library.generation.
     std::vector<std::pair<std::string, std::string>> new_names = {};
+    // Games just downloaded that the library does not list yet (their file,
+    // their name): the app adds them between frames and bumps
+    // library.generation, without scanning everything again.
+    std::vector<std::pair<std::string, std::string>> downloaded_games = {};
     // The song the background music plays now (its file name), set by the
     // app every frame; a design that wants the next one sets skip_song.
     std::string now_playing = {};

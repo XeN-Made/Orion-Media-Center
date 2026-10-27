@@ -98,6 +98,10 @@ class Shell
     {
         return std::exchange(context_.new_names, {});
     }
+    std::vector<std::pair<std::string, std::string>> take_downloaded_games()
+    {
+        return std::exchange(context_.downloaded_games, {});
+    }
 
     void update(const InputFrame &input, float dt);
     // Queues this frame's layers; the caller presents them.

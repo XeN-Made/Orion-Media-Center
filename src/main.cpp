@@ -316,10 +316,13 @@ int main()
             save::read_file(titles.state_dir + "/romm-games.tsv", &catalogue, 32u << 20))
             remote = orion::romm_remote_games(orion::read_romm_catalogue(catalogue), base,
                                               titles.state_dir);
+        // Games downloaded from RomM are the console's own, found where they
+        // landed: RomM's list (capped, see add_remote_games) may not name them.
+        std::vector<library::GameFolder> folders = orion::game_folders(prefs);
+        folders.push_back({orion::romm_folder(titles.state_dir) + "/games", "", ""});
         const int games = library::add_emulator_games(
-            titles, orion::game_folders(prefs), orion::art_folder(prefs, titles.state_dir),
-            prefs.every_version, starting ? boot_step : std::function<void(const char *)>(), remote,
-            true);
+            titles, folders, orion::art_folder(prefs, titles.state_dir), prefs.every_version,
+            starting ? boot_step : std::function<void(const char *)>(), remote, true);
         // RomM covers an older ORION fetched for every game: the ones no
         // title shows (its emulator has art, or it is not listed) go.
         if (!remote.empty())
@@ -591,6 +594,35 @@ int main()
             }
         }
         // The player chose a picture for a title, or gave it its own back.
+        // Games downloaded from RomM that the library did not list yet.
+        if (auto downloaded = shell.take_downloaded_games(); !downloaded.empty())
+        {
+            std::vector<library::RemoteGame> games;
+            for (auto &[path, name] : downloaded)
+            {
+                library::RemoteGame game;
+                const std::size_t slash = path.rfind('/');
+                const std::size_t before = slash == std::string::npos || slash == 0
+                                               ? std::string::npos
+                                               : path.rfind('/', slash - 1);
+                if (slash != std::string::npos && before != std::string::npos)
+                    game.system_folder = path.substr(before + 1, slash - before - 1);
+                game.name = std::move(name);
+                game.path = std::move(path);
+                games.push_back(std::move(game));
+            }
+            const orion::LibraryPrefs prefs = orion::load_prefs(titles.state_dir);
+            const int added = library::add_downloaded_games(
+                titles, games, orion::art_folder(prefs, titles.state_dir));
+            if (added > 0)
+            {
+                library::apply_names(titles, prefs.title_names);
+                library::apply_custom_art(titles, titles.state_dir + "/custom-art");
+                library::load_icons(titles, renderer.batch());
+                ++titles.generation;
+            }
+            sys::log("[ORION] %d downloaded games joined the library", added);
+        }
         if (shell.take_custom_art_change())
         {
             for (const std::string &id :
