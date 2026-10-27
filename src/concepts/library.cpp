@@ -6438,36 +6438,23 @@ class Library final : public app::Concept
         return nullptr;
     }
 
-    // A cover whole in a case's window. Cropped to fill it, a cover of
-    // another shape lost what was near its edges (a square PS5 icon its
-    // sides, a wide GBA box most of them), often the game's title. It is
-    // fitted inside instead, over a dimmed copy that fills the window, so no
-    // empty bars show; a cover of nearly the window's shape just fills it.
+    // A cover whole in a case's window, filling it as a printed sleeve fills
+    // its case. Cropped, a cover of another shape lost what was near its
+    // edges (a square PS5 icon its sides, a wide GBA box most of them),
+    // often the game's title; fitted inside a dimmed copy, it read as two
+    // pictures with a bar between them. So it is scaled to the window.
     void draw_cover_fitted(ui::Canvas &canvas, const Rect &window, const ui::CardItem &item,
                            const Title &title) const
     {
         const bool sharp = title.sharp_texture != 0 && title.sharp_height > 0;
         const std::uint32_t texture = sharp ? title.sharp_texture : item.texture;
-        const float picture =
-            sharp ? static_cast<float>(title.sharp_width) / static_cast<float>(title.sharp_height)
-                  : std::max(0.2f, item.image_aspect);
-        const float shape = window.w / std::max(window.h, 1.0f);
-        draw_cover_art(canvas, window, window, item, title, 0.0f);
-        if (texture == 0 || std::abs(picture / shape - 1.0f) < 0.03f)
+        if (texture == 0)
+        {
+            draw_cover_art(canvas, window, window, item, title, 0.0f);
             return;
-        canvas.list.rounded_rect(window, 0.0f, Color::rgb(0x05070d, 0.55f));
-        Rect fitted = window;
-        if (picture > shape)
-        {
-            fitted.h = window.w / picture;
-            fitted.y = window.y + (window.h - fitted.h) * 0.5f;
         }
-        else
-        {
-            fitted.w = window.h * picture;
-            fitted.x = window.x + (window.w - fitted.w) * 0.5f;
-        }
-        draw_cover_art(canvas, fitted, fitted, item, title, 0.0f);
+        canvas.list.image(texture, window, sharp ? Rect{0.0f, 0.0f, 1.0f, 1.0f} : item.uv,
+                          Color::rgb(0xffffff), 0.0f);
     }
 
     // A game in a case picture: the cover in its window, the picture over it
