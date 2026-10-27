@@ -20,7 +20,10 @@
 // autostart can be turned off without touching the autoloader). Every step
 // is appended to /data/orion/autostart.txt.
 
+#include <arpa/inet.h>
 #include <fcntl.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
 #include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -38,6 +41,12 @@
 #define GONE_FOR_MS 1500             // nothing in front this long: the app has closed
 #define POLL_MS 250
 #define LAUNCH_TRIES 5
+#define REGISTERED_WAIT_S 120 // a jailbreak's homebrew loader may take this long to list ORION
+#define NOT_FOUND 0x80940031  // the system does not know the title (yet)
+#define NOT_FOUND_RETRY_S 5   // each try shows the system's error: not every second
+#define NOT_FOUND_TRIES 12    // a minute of them, while the homebrew loader finishes
+#define SHADOWMOUNT_PORT 10101
+#define SHADOWMOUNT_WAIT_S 60
 
 // The launch parameters as the PS5 homebrew loader passes them: only the
 // user is filled in (payload/launcher/main.c).
@@ -105,13 +114,62 @@ static void orion_title(char *title, size_t size)
     snprintf(title, size, "%s", text);
 }
 
+// Right after a jailbreak, the loader that lists the homebrew apps
+// (ShadowMountPlus) may not have listed ORION yet: asked to start it then,
+// the system says it does not know it (0x80940031, "could not find the game
+// or application") and shows that every time. So first wait for ORION to be
+// listed: its folder in /user/app, which the system makes when it registers it.
+// Whether ShadowMountPlus answers on its port yet (it mounts the homebrew
+// apps ORION is one of).
+static int shadowmount_up(void)
+{
+    const int fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (fd < 0)
+        return 0;
+    struct sockaddr_in address;
+    memset(&address, 0, sizeof(address));
+    address.sin_family = AF_INET;
+    address.sin_port = htons(SHADOWMOUNT_PORT);
+    address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    const int up = connect(fd, (struct sockaddr *)&address, sizeof(address)) == 0;
+    close(fd);
+    return up;
+}
+
+static void wait_registered(const char *title)
+{
+    char app[64];
+    snprintf(app, sizeof(app), "/user/app/%s/sce_sys/param.json", title);
+    char meta[64];
+    snprintf(meta, sizeof(meta), "/user/appmeta/%s/param.json", title);
+    int waited = 0;
+    for (; !exists(app) && !exists(meta) && waited < REGISTERED_WAIT_S; ++waited)
+        usleep(1000 * 1000);
+    if (waited > 0)
+        say("%s listed by the system after %d s%s", title, waited,
+            waited >= REGISTERED_WAIT_S ? " (or not: trying anyway)" : "");
+    // The folder outlives a restart; the mount behind it does not. Without
+    // ShadowMountPlus running at all (another loader), a minute is lost once.
+    int up = 0;
+    for (; !shadowmount_up() && up < SHADOWMOUNT_WAIT_S; ++up)
+        usleep(1000 * 1000);
+    if (up > 0)
+        say(up >= SHADOWMOUNT_WAIT_S ? "no ShadowMountPlus after %d s: trying anyway"
+                                     : "ShadowMountPlus answered after %d s",
+            up);
+    if (up > 0 && up < SHADOWMOUNT_WAIT_S)
+        usleep(3000 * 1000); // and a moment for it to mount what it found
+}
+
 static int open_orion(void)
 {
     char title[16];
     orion_title(title, sizeof(title));
+    wait_registered(title);
     int user = 0;
     if (sceUserServiceGetForegroundUser(&user) != 0)
         say("no foreground user; launching for user 0");
+    int not_found = 0;
     for (int attempt = 1; attempt <= LAUNCH_TRIES; ++attempt)
     {
         launch_param_t param;
@@ -122,6 +180,13 @@ static int open_orion(void)
         say("launch %d of %d: 0x%08x", attempt, LAUNCH_TRIES, (unsigned)result);
         if (result >= 0)
             return 0;
+        // Not listed yet: tried again for a while, apart from the other tries.
+        if ((unsigned)result == NOT_FOUND && ++not_found < NOT_FOUND_TRIES)
+        {
+            --attempt;
+            usleep(NOT_FOUND_RETRY_S * 1000 * 1000);
+            continue;
+        }
         usleep(1000 * 1000);
     }
     return 1;
