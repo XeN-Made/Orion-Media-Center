@@ -16,11 +16,17 @@ namespace hui::orion
 inline constexpr int kKeyPagePort = 9062;
 
 // The answer to one HTTP request (the whole response, headers and all).
-// GET shows the form; a POST of "steamgriddb=<key>" to /key saves the key
+// GET shows the form, GET /logs ORION's logs as a ZIP (logs_zip); a POST
+// of "steamgriddb=<key>" to /key saves the key
 // in <state_dir>/keys.txt (orion/steamgriddb.hpp) and sets *saved. The key
 // is never written back into a page. An empty request gets an empty answer:
 // nothing is sent. Exposed for tests.
 std::string answer_key_request(std::string_view request, const std::string &state_dir, bool *saved);
+
+// ORION's logs from state_dir as a ZIP for the player to attach to a bug
+// report: the files named in kLogFiles (never keys.txt or anything holding a
+// key or token), each its newest 512 KB, and what ORION is (param.json).
+std::string logs_zip(const std::string &state_dir);
 
 // Whether a request has its headers and as much body as they announce.
 bool request_complete(std::string_view request);

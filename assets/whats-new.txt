@@ -8,6 +8,7 @@ No FTP server needed | Payload Manager, PS5Upload and the other installed apps s
 What's new | This page, once after each update, and again any time from Settings, About.
 Labels | Settings, Labels: change the text and colours of the banners on the covers, or make labels of your own and give them to games (Options, Label…).
 Scan to set up | Settings, Box art and Settings, RomM show a QR code: scan it with a phone to enter your SteamGridDB key or RomM's details.
+Share your logs | Settings, About: a QR code downloads ORION's logs on a phone or PC, to attach to a bug report.
 Saves from RomM | Before a RetroArch game starts, a newer save of it on RomM comes to the console first; Options, Continue starts from the newest save state, RomM's included.
 ## Fixed
 Icons no longer show another title's picture for a few seconds when ORION opens.

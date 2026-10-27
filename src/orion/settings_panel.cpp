@@ -54,6 +54,7 @@ enum : int
     kAboutTitle,
     kAboutReleases,
     kAboutLog,
+    kShareLogs,
     kLeaveShelf,
     kTabTheme,
     kBase,
@@ -439,8 +440,10 @@ void SettingsPanel::layout()
     const float left = area.x + (nav_.style.expanded_width + 56.0f) * wide_;
     const float width = std::min(area.x + area.w - left, 1180.0f);
     form_.style.control_width = 340.0f + 80.0f * wide_;
-    // Box art and RomM keep room under their rows for the key page's code.
-    const bool code = (section_ == Section::art || section_ == Section::romm) && key_qr_.size > 0;
+    // Box art, RomM and About keep room under their rows for a code.
+    const bool code =
+        ((section_ == Section::art || section_ == Section::romm) && key_qr_.size > 0) ||
+        (section_ == Section::about && logs_qr_.size > 0);
     form_.set_bounds({left, area.y, width, area.h - kHints - (code ? kCodeRoom : 0.0f)});
 }
 
@@ -664,6 +667,10 @@ void SettingsPanel::build_about(const LibraryPrefs &prefs)
     news.description = tr("What changed in this version");
     form_.add_value(kAboutTitle, tr("Title ID"), title_id_);
     form_.add_value(kAboutReleases, tr("Releases"), kReleasesPage);
+    if (!key_page_.empty())
+        form_.add_value(kShareLogs, tr("Share your logs"), key_page_ + "/logs").description =
+            tr("Something not working? Scan the code below or open this address on a phone or "
+               "PC, and attach the file to your report");
     form_.add_header(tr("Updates"));
     if (!update_ready_.empty())
         form_.add_action(kInstallUpdate, trf("Install ORION {0}", {update_ready_})).description =
@@ -2047,10 +2054,12 @@ void SettingsPanel::draw_content(ui::Canvas &canvas, float opacity) const
 void SettingsPanel::draw_key_code(ui::Canvas &canvas) const
 {
     const bool art = section_ == Section::art;
-    if ((!art && section_ != Section::romm) || key_qr_.size == 0 || wide_ < 0.5f)
+    const bool logs = section_ == Section::about;
+    const QrCode &code = logs ? logs_qr_ : key_qr_;
+    if ((!art && !logs && section_ != Section::romm) || code.size == 0 || wide_ < 0.5f)
         return;
     const gfx::Rect &rows = form_.bounds();
-    const int span = key_qr_.size + 8;
+    const int span = code.size + 8;
     const float module = std::floor((kCodeRoom - 24.0f) / static_cast<float>(span));
     const float side = module * static_cast<float>(span);
     const gfx::Rect card{rows.x + 4.0f, rows.y + rows.h + 12.0f, side, side};
@@ -2058,18 +2067,18 @@ void SettingsPanel::draw_key_code(ui::Canvas &canvas) const
     list.rounded_rect(card, 14.0f, Color::rgb(0xffffff));
     // A row's dark modules side by side are one rectangle: a few hundred
     // shapes at most.
-    for (int y = 0; y < key_qr_.size; ++y)
+    for (int y = 0; y < code.size; ++y)
     {
         int x = 0;
-        while (x < key_qr_.size)
+        while (x < code.size)
         {
-            if (!key_qr_.dark(x, y))
+            if (!code.dark(x, y))
             {
                 ++x;
                 continue;
             }
             const int start = x;
-            while (x < key_qr_.size && key_qr_.dark(x, y))
+            while (x < code.size && code.dark(x, y))
                 ++x;
             list.rounded_rect({card.x + module * static_cast<float>(start + 4),
                                card.y + module * static_cast<float>(y + 4),
@@ -2080,14 +2089,16 @@ void SettingsPanel::draw_key_code(ui::Canvas &canvas) const
     const ui::Theme &theme = form_.style.theme;
     ui::Painter paint(canvas.list, canvas.fonts, theme, canvas.glass);
     const float left = card.x + card.w + 36.0f;
-    paint.label(art ? tr("Scan to enter your SteamGridDB key")
-                    : tr("Scan to enter RomM's address and pairing code"),
-                left, card.y + 52.0f, 28.0f, theme.text);
-    paint.label(key_page_, left, card.y + 100.0f, 25.0f, theme.accent);
-    paint.label(
-        art ? tr("No key yet? It is free at steamgriddb.com: your profile, Preferences, API")
-            : tr("RomM shows a pairing code under your profile, Client tokens"),
-        left, card.y + 150.0f, 21.0f, theme.text_muted);
+    const std::string heading = logs  ? tr("Scan to download ORION's logs")
+                                : art ? tr("Scan to enter your SteamGridDB key")
+                                      : tr("Scan to enter RomM's address and pairing code");
+    const std::string note =
+        logs  ? tr("Attach the file to your report on GitHub: no keys or tokens are in it")
+        : art ? tr("No key yet? It is free at steamgriddb.com: your profile, Preferences, API")
+              : tr("RomM shows a pairing code under your profile, Client tokens");
+    paint.label(heading, left, card.y + 52.0f, 28.0f, theme.text);
+    paint.label(logs ? key_page_ + "/logs" : key_page_, left, card.y + 100.0f, 25.0f, theme.accent);
+    paint.label(note, left, card.y + 150.0f, 21.0f, theme.text_muted);
     paint.label(tr("The phone or PC must be on the same network as the console"), left,
                 card.y + 186.0f, 21.0f, theme.text_muted);
 }

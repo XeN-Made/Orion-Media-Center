@@ -703,3 +703,7 @@ author = ORION
 "What the label says" = "Lo que dice la etiqueta"
 "What the label says; empty gives it ORION's back" = "Lo que dice la etiqueta; vacío recupera el de ORION"
 "Your label: its text and colours" = "Tu etiqueta: su texto y colores"
+"Attach the file to your report on GitHub: no keys or tokens are in it" = "Adjunta el archivo a tu reporte en GitHub: no contiene claves ni tokens"
+"Scan to download ORION's logs" = "Escanea para descargar los registros de ORION"
+"Share your logs" = "Comparte tus registros"
+"Something not working? Scan the code below or open this address on a phone or PC, and attach the file to your report" = "¿Algo no funciona? Escanea el código de abajo o abre esta dirección en un móvil o PC y adjunta el archivo a tu reporte"

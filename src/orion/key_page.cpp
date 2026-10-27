@@ -4,6 +4,8 @@
 
 #include "orion/key_page.hpp"
 
+#include "core/save_file.hpp"
+#include "core/zip.hpp"
 #include "orion/romm.hpp"
 #include "orion/steamgriddb.hpp"
 
@@ -30,6 +32,23 @@ constexpr std::size_t kMaxRequest = 16u << 10;
 constexpr std::size_t kMaxClients = 8;
 constexpr std::int64_t kQuietMs = 30000; // a connection that long without a request is dropped
 
+// The logs a bug report wants, from <state_dir>. A list, not a pattern:
+// keys.txt and the RomM lists (a whole library) never go out.
+constexpr const char *kLogFiles[] = {
+    "boot.txt",           "scan.txt",
+    "launch.txt",         "launch-helper.txt",
+    "launcher.txt",       "autostart.txt",
+    "resume.txt",         "art.txt",
+    "art-trace.txt",      "title-music.txt",
+    "registered.txt",     "drives.txt",
+    "drives-space.txt",   "system-playtime.txt",
+    "retroarch-args.txt", "opened-up.txt",
+    "ftp-port.txt",       "title.txt",
+    "new-title-id.txt",   "library.json",
+    "theme.json",
+};
+constexpr std::size_t kMaxLogBytes = 512u << 10; // the newest part of a long log
+
 std::string response(std::string_view status, std::string_view body)
 {
     return "HTTP/1.1 " + std::string(status) +
@@ -54,6 +73,15 @@ Shown shown(const std::string &state_dir)
     out.romm = romm_base(read_service_key(state_dir, kRommUrl));
     out.paired = !read_service_key(state_dir, kRommToken).empty();
     return out;
+}
+
+// A file to save, not a page to show.
+std::string download(std::string_view type, std::string_view name, std::string_view body)
+{
+    return "HTTP/1.1 200 OK\r\nContent-Type: " + std::string(type) +
+           "\r\nContent-Disposition: attachment; filename=\"" + std::string(name) +
+           "\"\r\nCache-Control: no-store\r\nConnection: close\r\nContent-Length: " +
+           std::to_string(body.size()) + "\r\n\r\n" + std::string(body);
 }
 
 std::string escaped(std::string_view text)
@@ -112,7 +140,12 @@ std::string page(const Shown &now, std::string_view note, bool good)
         "placeholder=\"Address with the port, like 192.168.1.20:8080 (empty keeps it)\">"
         "<input name=\"romm_code\" style=\"margin-top:.6rem\" autocomplete=\"off\" "
         "autocapitalize=\"characters\" spellcheck=\"false\" placeholder=\"Pairing code\">"
-        "<button>Save and pair</button></form></main></body></html>";
+        "<button>Save and pair</button></form>"
+        "<h1 style=\"margin-top:2rem\">Logs</h1><p>Something not working? Download ORION's "
+        "logs and attach the file to your report on GitHub. They hold no keys or tokens; "
+        "they do show your console's and your servers' local addresses.</p>"
+        "<p><a style=\"color:#9db4ff\" href=\"/logs\">Download ORION's logs</a></p>"
+        "</main></body></html>";
     return html;
 }
 
@@ -125,6 +158,25 @@ int hex_digit(char c)
 }
 
 } // namespace
+
+std::string logs_zip(const std::string &state_dir)
+{
+    std::vector<std::pair<std::string, std::string>> files;
+    for (const char *name : kLogFiles)
+    {
+        std::string text;
+        if (!save::read_file(state_dir + "/" + name, &text, 64u << 20))
+            continue;
+        if (text.size() > kMaxLogBytes)
+            text = "(the first " + std::to_string(text.size() - kMaxLogBytes) +
+                   " bytes are left out)\n" + text.substr(text.size() - kMaxLogBytes);
+        files.emplace_back(std::string("orion-logs/") + name, std::move(text));
+    }
+    std::string param;
+    if (save::read_file("/app0/sce_sys/param.json", &param, 64u << 10))
+        files.emplace_back("orion-logs/param.json", std::move(param));
+    return zip_files(files);
+}
 
 bool request_complete(std::string_view request)
 {
@@ -182,6 +234,8 @@ std::string answer_key_request(std::string_view request, const std::string &stat
         return {};
     const std::size_t line_end = request.find("\r\n");
     const std::string_view line = request.substr(0, line_end);
+    if (line.rfind("GET /logs ", 0) == 0)
+        return download("application/zip", "orion-logs.zip", logs_zip(state_dir));
     if (line.rfind("GET ", 0) == 0)
         return line.rfind("GET / ", 0) == 0 || line.rfind("GET /key ", 0) == 0 ||
                        line.rfind("GET /romm ", 0) == 0

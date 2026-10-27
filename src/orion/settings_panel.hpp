@@ -183,9 +183,12 @@ class SettingsPanel
     void set_key_page(std::string address)
     {
         key_page_ = std::move(address);
-        // Box art shows it as a code a phone scans, too.
+        // Box art shows it as a code a phone scans, too, and About the
+        // address of the logs.
         if (key_page_.empty() || !make_qr(key_page_, &key_qr_))
             key_qr_ = QrCode();
+        if (key_page_.empty() || !make_qr(key_page_ + "/logs", &logs_qr_))
+            logs_qr_ = QrCode();
     }
     // ORION's folder as the launch helper sees it, and what its backdrops
     // folder holds (shown under Storage).
@@ -397,6 +400,7 @@ class SettingsPanel
         false; // a SteamGridDB key is in keys.txt // empty until a scan reports: what a scan finds
     std::string key_page_; // the key page address, or empty
     QrCode key_qr_;        // that address as a QR code (empty with none)
+    QrCode logs_qr_;       // and its logs' address (About)
     std::string romm_address_;
     bool romm_paired_ = false;
     std::string romm_status_;

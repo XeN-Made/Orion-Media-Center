@@ -57,6 +57,30 @@ TEST(Sha256, MatchesTheStandardVectors)
               "cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0");
 }
 
+// zip_files: what it stores reads back, names and bytes as they were.
+TEST(Zip, StoresFilesThatReadBack)
+{
+    const std::string binary("a\0b\xff", 4);
+    const std::string archive =
+        zip_files({{"logs/boot.txt", "booted\n"}, {"bin", binary}, {"empty", ""}});
+    std::vector<std::pair<std::string, std::string>> back;
+    std::string error;
+    ASSERT_TRUE(unzip(
+        archive,
+        [&](const std::string &name, std::string_view data)
+        {
+            back.emplace_back(name, std::string(data));
+            return true;
+        },
+        &error))
+        << error;
+    ASSERT_EQ(back.size(), 3u);
+    EXPECT_EQ(back[0].first, "logs/boot.txt");
+    EXPECT_EQ(back[0].second, "booted\n");
+    EXPECT_EQ(back[1].second, binary);
+    EXPECT_TRUE(back[2].second.empty());
+}
+
 TEST(Zip, ReadsStoredAndDeflatedEntriesAndSkipsFolders)
 {
     std::vector<std::string> names;

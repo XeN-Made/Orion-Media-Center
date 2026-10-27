@@ -33,6 +33,31 @@ std::uint32_t u32(std::string_view bytes, std::size_t at)
     return u16(bytes, at) | u16(bytes, at + 2) << 16;
 }
 
+// CRC-32 (IEEE 802.3, reflected), as ZIP keeps for each file.
+std::uint32_t crc32(std::string_view bytes)
+{
+    std::uint32_t crc = 0xffffffffu;
+    for (const char byte : bytes)
+    {
+        crc ^= static_cast<std::uint8_t>(byte);
+        for (int bit = 0; bit < 8; ++bit)
+            crc = (crc >> 1) ^ (0xedb88320u & (0u - (crc & 1u)));
+    }
+    return ~crc;
+}
+
+void put16(std::string &out, std::uint32_t value)
+{
+    out += static_cast<char>(value & 0xffu);
+    out += static_cast<char>((value >> 8) & 0xffu);
+}
+
+void put32(std::string &out, std::uint32_t value)
+{
+    put16(out, value & 0xffffu);
+    put16(out, value >> 16);
+}
+
 bool fail(std::string *error, std::string why)
 {
     if (error != nullptr)
@@ -41,6 +66,63 @@ bool fail(std::string *error, std::string why)
 }
 
 } // namespace
+
+std::string zip_files(const std::vector<std::pair<std::string, std::string>> &files)
+{
+    std::string out;
+    std::string directory;
+    for (const auto &[name, data] : files)
+    {
+        const auto offset = static_cast<std::uint32_t>(out.size());
+        const std::uint32_t crc = crc32(data);
+        const auto size = static_cast<std::uint32_t>(data.size());
+        const auto name_size = static_cast<std::uint32_t>(name.size());
+        // The local header: version 2.0, names in UTF-8 (bit 11), stored,
+        // no date (1980-01-01 00:00).
+        put32(out, kLocalHeader);
+        put16(out, 20);
+        put16(out, 0x0800);
+        put16(out, 0);
+        put16(out, 0);
+        put16(out, 0x21);
+        put32(out, crc);
+        put32(out, size);
+        put32(out, size);
+        put16(out, name_size);
+        put16(out, 0);
+        out += name;
+        out += data;
+        put32(directory, kDirectoryEntry);
+        put16(directory, 20);
+        put16(directory, 20);
+        put16(directory, 0x0800);
+        put16(directory, 0);
+        put16(directory, 0);
+        put16(directory, 0x21);
+        put32(directory, crc);
+        put32(directory, size);
+        put32(directory, size);
+        put16(directory, name_size);
+        put16(directory, 0); // extra
+        put16(directory, 0); // comment
+        put16(directory, 0); // disk
+        put16(directory, 0); // internal attributes
+        put32(directory, 0); // external attributes
+        put32(directory, offset);
+        directory += name;
+    }
+    const auto start = static_cast<std::uint32_t>(out.size());
+    out += directory;
+    put32(out, kEndOfDirectory);
+    put16(out, 0);
+    put16(out, 0);
+    put16(out, static_cast<std::uint32_t>(files.size()));
+    put16(out, static_cast<std::uint32_t>(files.size()));
+    put32(out, static_cast<std::uint32_t>(directory.size()));
+    put32(out, start);
+    put16(out, 0);
+    return out;
+}
 
 bool unzip(std::string_view archive, const ZipVisitor &each, std::string *error)
 {

@@ -342,6 +342,11 @@ constexpr app::TourStep kTour[] = {
     {0.3f, action_bit(Action::jump_next)},
     {0.2f, 0, Direction::right},
     {0.8f, 0, Direction::none, "settings-system"},
+    // About: the version, updates, and the logs to share with their code.
+    {0.2f, action_bit(Action::back)},
+    {0.3f, action_bit(Action::jump_next)},
+    {0.2f, 0, Direction::right},
+    {0.8f, 0, Direction::none, "settings-about"},
     {0.2f, action_bit(Action::back)},
     {0.5f, action_bit(Action::back)},
     {0.6f, action_bit(Action::north)},

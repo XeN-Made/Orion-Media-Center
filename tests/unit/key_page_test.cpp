@@ -5,16 +5,20 @@
 #include "orion/key_page.hpp"
 
 #include "core/save_file.hpp"
+#include "core/zip.hpp"
 #include "orion/romm.hpp"
 #include "orion/steamgriddb.hpp"
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <arpa/inet.h>
 #include <cstdio>
 #include <netinet/in.h>
 #include <string>
+#include <string_view>
 #include <sys/socket.h>
+#include <vector>
 #include <sys/time.h>
 #include <unistd.h>
 
@@ -147,6 +151,49 @@ std::string read_all(int fd)
         text.append(buffer, static_cast<std::size_t>(got));
     }
     return text;
+}
+
+// GET /logs: ORION's logs as a ZIP to save, the newest part of a long one,
+// and never the keys.
+TEST(KeyPage, HandsOverTheLogsWithoutTheKeys)
+{
+    const std::string dir = ::testing::TempDir() + "orion-key-page-logs";
+    ASSERT_TRUE(save::ensure_directory(dir));
+    ASSERT_TRUE(save::write_atomic(dir + "/boot.txt", "booted\n").empty());
+    ASSERT_TRUE(
+        save::write_atomic(dir + "/art.txt", std::string(600u << 10, 'a') + "end\n").empty());
+    ASSERT_TRUE(orion::write_service_key(dir, orion::kSteamGridDb, "secret-key").empty());
+    bool saved = true;
+    const std::string answer =
+        orion::answer_key_request("GET /logs HTTP/1.1\r\nHost: x\r\n\r\n", dir, &saved);
+    EXPECT_FALSE(saved);
+    EXPECT_EQ(answer.rfind("HTTP/1.1 200 OK", 0), 0u);
+    EXPECT_NE(answer.find("Content-Type: application/zip"), std::string::npos);
+    EXPECT_NE(answer.find("filename=\"orion-logs.zip\""), std::string::npos);
+    EXPECT_EQ(answer.find("secret-key"), std::string::npos);
+    const std::string zip = answer.substr(answer.find("\r\n\r\n") + 4);
+    std::vector<std::string> names;
+    std::string art;
+    std::string error;
+    ASSERT_TRUE(unzip(
+        zip,
+        [&](const std::string &name, std::string_view data)
+        {
+            names.push_back(name);
+            if (name == "orion-logs/art.txt")
+                art = std::string(data);
+            return true;
+        },
+        &error))
+        << error;
+    EXPECT_NE(std::find(names.begin(), names.end(), "orion-logs/boot.txt"), names.end());
+    EXPECT_EQ(std::find(names.begin(), names.end(), "orion-logs/keys.txt"), names.end());
+    EXPECT_LT(art.size(), 520u << 10);
+    EXPECT_EQ(art.rfind("(the first ", 0), 0u);
+    EXPECT_EQ(art.substr(art.size() - 4), "end\n");
+    // The page links to it.
+    EXPECT_NE(orion::answer_key_request("GET / HTTP/1.1\r\n\r\n", dir, &saved).find("/logs"),
+              std::string::npos);
 }
 
 // As a browser does it: a spare connection that stays quiet, then the page

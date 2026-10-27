@@ -392,7 +392,10 @@ happened, and the log the list below names.
 - **Start over**: delete `/data/orion/library.json` and ORION runs its setup
   again, keeping your box art.
 
-Please include those files when you report a problem.
+Please include those files when you report a problem. The easiest way:
+Settings, About, **Share your logs** shows an address and a QR code; open it on
+a phone or PC on the same network and it downloads  with all
+of them (no keys or tokens; it does show local network addresses).
 
 ## Building it yourself
 
