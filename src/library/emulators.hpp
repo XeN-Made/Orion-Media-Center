@@ -11,6 +11,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace hui::library
@@ -122,6 +123,19 @@ int add_emulator_games(Library &library, const std::vector<GameFolder> &folders,
 // Returns how many joined.
 int add_remote_games(Emulator &emulator, const std::vector<RemoteGame> &games,
                      std::vector<Title> *roms, bool missing_only = true);
+
+// The games on the console, for telling whether a server's game is one of
+// them: the same file name, or the same name, on the same system. A game of
+// several files arrives as <name>.zip; the console may keep the folder.
+class OwnedGames
+{
+  public:
+    explicit OwnedGames(const std::vector<Title> &roms);
+    bool has(const std::string &system, const std::string &path, const std::string &name) const;
+
+  private:
+    std::unordered_set<std::string> keys_;
+};
 // Full ROM sets hold many files of one game: bad dumps ([b1]), overdumps
 // ([o1]), hacks ([h1], (Hack)), pirates ([p1]), trainers ([t1]), fixes
 // ([f1]), alternates ([a1]), translations ([T+Eng]), betas and demos, other

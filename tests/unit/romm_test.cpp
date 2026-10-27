@@ -177,7 +177,8 @@ TEST(Romm, DownloadsAGame)
     EXPECT_EQ(download.error(), "HTTP 404");
 }
 
-// The whole catalogue, a page at a time, then the covers it lacks.
+// The whole catalogue, a page at a time, then the player's saves and
+// states (no covers: the box art downloader asks for those a game needs).
 TEST(Romm, SyncsTheCatalogueAndItsCovers)
 {
     const std::string dir = ::testing::TempDir() + "orion-romm-sync";
@@ -191,6 +192,13 @@ TEST(Romm, SyncsTheCatalogueAndItsCovers)
                        "path_cover_large": "/c/10.png"},
                       {"id": 11, "platform_id": 1, "name": "Comet Post", "fs_name": "b.gba"}],
             "total": 2})";
+    pages["http://nas:3000/api/saves"] =
+        R"([{"id": 5, "rom_id": 10, "file_name": "Moon Garden.srm", "emulator": "mgba",
+             "file_size_bytes": 131072, "updated_at": "2026-10-12T13:44:10+00:00"}])";
+    pages["http://nas:3000/api/states"] =
+        R"([{"id": 6, "rom_id": 10, "file_name": "Moon Garden.state1", "emulator": "mgba",
+             "slot": "1", "file_size_bytes": 2048}])";
+    std::remove((dir + "/romm-saves.tsv").c_str());
     std::vector<std::string> asked;
     std::vector<std::string> keys;
     const orion::HttpGetWith get = [&](const std::string &url,
@@ -217,13 +225,24 @@ TEST(Romm, SyncsTheCatalogueAndItsCovers)
     EXPECT_EQ(done.platforms, 2);
     EXPECT_EQ(done.total, 3); // the systems' counts: the progress bar's whole
     EXPECT_EQ(done.games, 2);
-    // The systems, then one page: the empty system is not asked, and no
-    // cover is (the box art downloader asks for those a game needs).
-    EXPECT_EQ(asked.size(), 2u);
+    EXPECT_EQ(done.saves, 2);
+    // The systems, one page (the empty system is not asked), the saves and
+    // the states.
+    EXPECT_EQ(asked.size(), 4u);
     EXPECT_EQ(keys, (std::vector<std::string>{"Authorization: Bearer rmm_token"}));
     std::string text;
     ASSERT_TRUE(save::read_file(dir + "/romm-games.tsv", &text));
     EXPECT_EQ(orion::read_romm_catalogue(text).size(), 2u);
+    std::string saves_text;
+    ASSERT_TRUE(save::read_file(dir + "/romm-saves.tsv", &saves_text));
+    const std::vector<orion::RommSave> saves = orion::read_romm_saves(saves_text);
+    ASSERT_EQ(saves.size(), 2u);
+    EXPECT_EQ(saves[0].rom_id, 10);
+    EXPECT_FALSE(saves[0].state);
+    EXPECT_EQ(saves[0].file_name, "Moon Garden.srm");
+    EXPECT_EQ(saves[0].size, 131072u);
+    EXPECT_TRUE(saves[1].state);
+    EXPECT_EQ(saves[1].slot, "1");
 
     // A sync that stopped part way goes on from the systems it had read.
     ASSERT_TRUE(save::write_atomic(dir + "/romm-sync-done.txt", "http://nas:3000\n1\n").empty());
@@ -232,7 +251,8 @@ TEST(Romm, SyncsTheCatalogueAndItsCovers)
     ASSERT_TRUE(sync.start("http://nas:3000", "rmm_token", dir));
     sync.wait();
     EXPECT_EQ(sync.progress().resumed, 1);
-    EXPECT_EQ(asked.size(), 1u); // the systems only: the one read before is not asked again
+    EXPECT_EQ(asked.size(),
+              3u); // the systems and the saves: the one read before is not asked again
     EXPECT_EQ(sync.progress().games, 2);
     std::string none;
     EXPECT_FALSE(save::read_file(dir + "/romm-sync-done.txt", &none)); // whole now: gone
@@ -242,7 +262,7 @@ TEST(Romm, SyncsTheCatalogueAndItsCovers)
     ASSERT_TRUE(sync.start("http://nas:3000", "rmm_token", dir));
     sync.wait();
     EXPECT_EQ(sync.progress().resumed, 0);
-    EXPECT_EQ(asked.size(), 2u);
+    EXPECT_EQ(asked.size(), 4u);
 
     // A system that cannot be read now keeps the games the last sync had.
     pages.erase(orion::romm_games_url("http://nas:3000", 1, 0, 50));

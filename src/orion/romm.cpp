@@ -155,6 +155,93 @@ std::string romm_cover_url(const std::string &base, const RommGame &game)
     return base + (game.cover.front() == '/' ? "" : "/") + escaped_url(game.cover);
 }
 
+std::string romm_saves_url(const std::string &base)
+{
+    return base + "/api/saves";
+}
+
+std::string romm_states_url(const std::string &base)
+{
+    return base + "/api/states";
+}
+
+bool parse_romm_saves(std::string_view text, bool state, std::vector<RommSave> *saves)
+{
+    json::Value root;
+    if (!json::parse(text, &root))
+        return false;
+    const json::Value &list = root.is_object() ? root["items"] : root;
+    for (const json::Value &item : list.elements())
+    {
+        RommSave save;
+        save.id = as_id(item["id"]);
+        save.rom_id = as_id(item["rom_id"]);
+        save.state = state;
+        save.emulator = item["emulator"].string_or("");
+        save.slot = item["slot"].string_or("");
+        save.file_name = item["file_name"].string_or("");
+        const double size = item["file_size_bytes"].number_or(0.0);
+        save.size = size > 0.0 ? static_cast<std::uint64_t>(size) : 0;
+        save.updated = item["updated_at"].string_or("");
+        if (save.id > 0 && save.rom_id > 0 && !save.file_name.empty())
+            saves->push_back(std::move(save));
+    }
+    return true;
+}
+
+std::string romm_saves_text(const std::vector<RommSave> &saves)
+{
+    std::string text = "# ORION's copy of the player's saves on RomM: id, game, state, size, "
+                       "updated, emulator, slot, file\n";
+    for (const RommSave &save : saves)
+        text += std::to_string(save.id) + "\t" + std::to_string(save.rom_id) + "\t" +
+                (save.state ? "1" : "0") + "\t" + std::to_string(save.size) + "\t" +
+                field(save.updated) + "\t" + field(save.emulator) + "\t" + field(save.slot) + "\t" +
+                field(save.file_name) + "\n";
+    return text;
+}
+
+std::vector<RommSave> read_romm_saves(std::string_view text)
+{
+    std::vector<RommSave> saves;
+    std::size_t start = 0;
+    while (start < text.size())
+    {
+        std::size_t end = text.find('\n', start);
+        if (end == std::string_view::npos)
+            end = text.size();
+        const std::string_view line = text.substr(start, end - start);
+        start = end + 1;
+        if (line.empty() || line.front() == '#')
+            continue;
+        std::vector<std::string> parts;
+        std::size_t at = 0;
+        while (parts.size() < 7)
+        {
+            const std::size_t tab = line.find('\t', at);
+            if (tab == std::string_view::npos)
+                break;
+            parts.emplace_back(line.substr(at, tab - at));
+            at = tab + 1;
+        }
+        if (parts.size() != 7)
+            continue;
+        parts.emplace_back(line.substr(at));
+        RommSave save;
+        save.id = std::atoll(parts[0].c_str());
+        save.rom_id = std::atoll(parts[1].c_str());
+        save.state = parts[2] == "1";
+        save.size = std::strtoull(parts[3].c_str(), nullptr, 10);
+        save.updated = parts[4];
+        save.emulator = parts[5];
+        save.slot = parts[6];
+        save.file_name = parts[7];
+        if (save.id > 0 && save.rom_id > 0 && !save.file_name.empty())
+            saves.push_back(std::move(save));
+    }
+    return saves;
+}
+
 std::vector<std::string> romm_headers(const std::string &token)
 {
     if (token.empty())
@@ -571,6 +658,21 @@ void RommSync::run(std::string base, std::string token, std::string state_dir)
         // Whole: the progress is not needed any more.
         std::remove(done_path.c_str());
         std::remove(part_path.c_str());
+        // The player's saves and save states: a short list, read whole each
+        // time. Without them the games are listed all the same.
+        std::vector<RommSave> saves;
+        const bool saves_read = get_(romm_saves_url(base), headers, kMaxAnswer, &body, &error) &&
+                                parse_romm_saves(body, false, &saves) &&
+                                get_(romm_states_url(base), headers, kMaxAnswer, &body, &error) &&
+                                parse_romm_saves(body, true, &saves);
+        if (saves_read)
+        {
+            save::write_atomic(state_dir + "/romm-saves.tsv", romm_saves_text(saves));
+            std::lock_guard<std::mutex> lock(mutex_);
+            progress_.saves = static_cast<int>(saves.size());
+        }
+        else
+            fail("saves: " + error);
         const std::string written =
             save::write_atomic(state_dir + "/romm-games.tsv", romm_catalogue_text(games));
         if (!written.empty())

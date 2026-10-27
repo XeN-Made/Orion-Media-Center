@@ -76,6 +76,27 @@ bool parse_romm_games(std::string_view json, const std::vector<RommPlatform> &pl
 // The token from an exchanged pairing code's answer, or empty.
 std::string parse_romm_pairing(std::string_view json);
 
+// A save or a save state kept on the server for one of its games.
+struct RommSave
+{
+    long long id = 0;
+    long long rom_id = 0;
+    bool state = false;   // a save state; else a save file
+    std::string emulator; // as RomM names it ("retroarch", "mgba"), or empty
+    std::string slot;     // its slot, or empty
+    std::string file_name;
+    std::uint64_t size = 0;
+    std::string updated; // "2026-10-12T13:44:10..." (UTC)
+};
+
+std::string romm_saves_url(const std::string &base);
+std::string romm_states_url(const std::string &base);
+// A list of saves (state = false) or states (true), appended to *saves.
+bool parse_romm_saves(std::string_view json, bool state, std::vector<RommSave> *saves);
+// As ORION keeps them (<state>/romm-saves.tsv).
+std::string romm_saves_text(const std::vector<RommSave> &saves);
+std::vector<RommSave> read_romm_saves(std::string_view text);
+
 // The games as ORION keeps them between starts (<state>/romm-games.tsv), so
 // the library lists them without asking the server.
 std::string romm_catalogue_text(const std::vector<RommGame> &games);
@@ -109,6 +130,7 @@ class RommSync
         int games = 0;
         int resumed = 0;   // systems an earlier, unfinished sync had read already
         int total = 0;     // games the server counts on all its systems (0: not known yet)
+        int saves = 0;     // saves and save states the player has there
         std::string error; // the first failure; empty when it all worked
     };
 
