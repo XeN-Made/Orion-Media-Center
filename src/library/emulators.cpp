@@ -881,6 +881,23 @@ bool later_disc(const std::string &file)
            name[at + 6] <= '9';
 }
 
+// A file on a drive slot ("/mnt/usb0/gbc/x.gbc") without its slot
+// ("/gbc/x.gbc"); empty for anything else. The same drive is mounted at
+// another slot from one start to the next, and a playlist made at each lists
+// its games once per slot.
+std::string drive_tail(const std::string &path)
+{
+    for (const char *slot : {"/mnt/usb", "/mnt/ext"})
+    {
+        const std::size_t length = std::string_view(slot).size();
+        if (path.compare(0, length, slot) != 0)
+            continue;
+        const std::size_t slash = path.find('/', length);
+        return slash == std::string::npos ? std::string() : path.substr(slash);
+    }
+    return {};
+}
+
 // The folders an emulator looks in by itself, as ORION sees them.
 std::vector<std::string> own_folders(const std::string &key, const std::string &root)
 {
@@ -1622,10 +1639,23 @@ int read_retroarch_playlist(Emulator &emulator, std::string_view text, const std
         app->folders.push_back(scanned);
 
     std::unordered_set<std::string> listed;
-    for (const Title &rom : *roms)
+    // The games already listed from a drive slot, by their path without it.
+    std::unordered_map<std::string, std::size_t> on_drives; // tail: index in *roms
+    for (std::size_t i = 0; i < roms->size(); ++i)
+    {
+        const Title &rom = (*roms)[i];
         listed.insert(rom.id);
+        if (const std::string tail = drive_tail(rom.path); !tail.empty())
+            on_drives.emplace(tail, i);
+    }
     std::vector<Title> found;
+    std::unordered_map<std::string, std::size_t> found_on_drives; // tail: index in found
     FolderIndex folders;
+    // The folder RetroArch scanned to make the playlist: one of its own.
+    if (const std::string scanned = root["scan_content_dir"].string_or("");
+        !scanned.empty() && scanned.front() == '/' &&
+        std::find(app->folders.begin(), app->folders.end(), scanned) == app->folders.end())
+        app->folders.push_back(scanned);
     for (const json::Value &item : root["items"].elements())
     {
         Title rom;
@@ -1681,6 +1711,26 @@ int read_retroarch_playlist(Emulator &emulator, std::string_view text, const std
         rom.category = Category::game;
         rom.platform = Platform::unknown;
         rom.source = Source::image;
+        // The same game listed from another slot of the same drive: one copy,
+        // the one whose folder is there now.
+        if (const std::string tail = drive_tail(rom.path); !tail.empty())
+        {
+            Title *other = nullptr;
+            if (const auto at = on_drives.find(tail); at != on_drives.end())
+                other = &(*roms)[at->second];
+            else if (const auto mine = found_on_drives.find(tail); mine != found_on_drives.end())
+                other = &found[mine->second];
+            if (other != nullptr)
+            {
+                if (!folders.folder_of(other->path) && folders.folder_of(rom.path))
+                {
+                    other->path = rom.path;
+                    other->rom = rom.rom;
+                }
+                continue;
+            }
+            found_on_drives.emplace(tail, found.size());
+        }
         found.push_back(std::move(rom));
     }
     const int added = place_games(emulator, found, roms);

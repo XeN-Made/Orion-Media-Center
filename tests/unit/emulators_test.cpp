@@ -10,6 +10,7 @@
 #include "library/emulators.hpp"
 #include "library/library.hpp"
 
+#include <algorithm>
 #include <gtest/gtest.h>
 
 #include <cstdint>
@@ -404,6 +405,31 @@ TEST(Emulators, ListsServerGamesOnTheirSystems)
     EXPECT_EQ(library::keep_best_versions(versions, title.id), 1);
     ASSERT_EQ(versions.size(), 1u);
     EXPECT_TRUE(versions[0].remote.empty());
+}
+
+// One drive mounted at another slot from one start to the next: a
+// playlist made at each lists its games once per slot. One copy, the one
+// whose folder is there now; and the folder RetroArch scanned is one of its own.
+TEST(Emulators, ListsAGameOnceAcrossDriveSlots)
+{
+    const library::Title title = retroarch();
+    std::vector<library::Title> roms;
+    library::Emulator emulator = library::scan_retroarch(title, &roms);
+    const std::size_t before = roms.size();
+    for (const char *slot : {"usb7", "usb6"})
+        library::read_retroarch_playlist(
+            emulator,
+            std::string(R"({"scan_content_dir": "/mnt/)") + slot +
+                R"(", "items": [{"path": "/mnt/)" + slot +
+                R"(/gba/Lunar Lift (USA).gba", "label": "Lunar Lift", "core_path": "DETECT"}]})",
+            std::string(slot) + ".lpl", &roms);
+    EXPECT_EQ(roms.size(), before + 1); // one copy
+    const library::EmulatorApp *retroarch = emulator.app("retroarch");
+    ASSERT_NE(retroarch, nullptr);
+    for (const char *folder : {"/mnt/usb7", "/mnt/usb6"})
+        EXPECT_NE(std::find(retroarch->folders.begin(), retroarch->folders.end(), folder),
+                  retroarch->folders.end())
+            << folder;
 }
 
 // A playlist of several systems ("usb0.lpl", cores left to "DETECT") names
