@@ -310,12 +310,15 @@ TEST(OrionPrefs, BackgroundsCanBeToldApart)
     orion::LibraryPrefs prefs;
     EXPECT_TRUE(prefs.game_backgrounds);
     EXPECT_FALSE(prefs.blurred_covers); // the sky, unless asked for
+    EXPECT_TRUE(prefs.case_pictures);
+    prefs.case_pictures = false;
     EXPECT_FLOAT_EQ(prefs.background_strength, 1.0f);
     prefs.blurred_covers = true;
     prefs.background_strength = 0.5f;
     ASSERT_TRUE(orion::save_prefs(dir, prefs));
     orion::LibraryPrefs back = orion::load_prefs(dir);
     EXPECT_TRUE(back.blurred_covers);
+    EXPECT_FALSE(back.case_pictures);
     EXPECT_NEAR(back.background_strength, 0.5f, 0.01f);
     // Out of range by hand: kept within it.
     ASSERT_TRUE(save::write_atomic(dir + "/library.json", R"({"background_strength": 7})").empty());

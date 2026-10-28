@@ -707,3 +707,5 @@ author = ORION
 "Scan to download ORION's logs" = "Escaneie para baixar os registros do ORION"
 "Share your logs" = "Compartilhe seus registros"
 "Something not working? Scan the code below or open this address on a phone or PC, and attach the file to your report" = "Algo não funciona? Escaneie o código abaixo ou abra este endereço num celular ou PC e anexe o arquivo ao seu relato"
+"Case pictures" = "Imagens de caixas"
+"Cases view puts each cover in a picture of its console's case; off draws a plain one" = "A vista Caixas põe cada capa numa imagem da caixa do seu console; desligado desenha uma simples"

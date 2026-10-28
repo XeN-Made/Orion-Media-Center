@@ -702,3 +702,5 @@ author = ORION
 "Scan to download ORION's logs" = "Olvasd be az ORION naplóinak letöltéséhez"
 "Share your logs" = "Naplók megosztása"
 "Something not working? Scan the code below or open this address on a phone or PC, and attach the file to your report" = "Valami nem működik? Olvasd be a lenti kódot, vagy nyisd meg ezt a címet telefonon vagy PC-n, és csatold a fájlt a hibajelentéshez"
+"Case pictures" = "Tokképek"
+"Cases view puts each cover in a picture of its console's case; off draws a plain one" = "A Tokok nézet minden borítót a konzolja tokjának képébe tesz; kikapcsolva egyszerű tokot rajzol"

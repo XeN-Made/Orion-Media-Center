@@ -36,6 +36,7 @@ enum : int
     kLanguage = 1,
     kSort,
     kView,
+    kCasePictures,
     kReopen,
     kContinueRow,
     kGroupSystems,
@@ -615,6 +616,8 @@ void SettingsPanel::build_library(const LibraryPrefs &prefs)
         .add_choice(kView, tr("View"), i18n::tr_range(kViewNames, kViewNames + kViewCount),
                     view_index(prefs.view))
         .description = tr("Grid of covers, big cases three to a screen, or a list");
+    form_.add_toggle(kCasePictures, tr("Case pictures"), prefs.case_pictures).description =
+        tr("Cases view puts each cover in a picture of its console's case; off draws a plain one");
     form_.add_toggle(kReopen, tr("Reopen on last tab"), prefs.reopen_last_tab).description =
         tr("ORION starts on the tab you left it on");
     form_.add_toggle(kContinueRow, tr("Continue playing"), prefs.continue_row).description =
@@ -1739,6 +1742,9 @@ SettingsPanel::Change SettingsPanel::handle(const InputFrame &input, ui::Feedbac
         return Change::prefs;
     case kView:
         prefs->view = kViewKeys[std::clamp(form_.choice_index(kView), 0, kViewCount - 1)];
+        return Change::prefs;
+    case kCasePictures:
+        prefs->case_pictures = form_.toggle_value(kCasePictures);
         return Change::prefs;
     case kTitleVolume:
         if (app_settings_ == nullptr)

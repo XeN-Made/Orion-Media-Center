@@ -10,6 +10,7 @@ Labels | Settings, Labels: change the text and colours of the banners on the cov
 Scan to set up | Settings, Box art and Settings, RomM show a QR code: scan it with a phone to enter your SteamGridDB key or RomM's details.
 Share your logs | Settings, About: a QR code downloads ORION's logs on a phone or PC, to attach to a bug report.
 Saves from RomM | Before a RetroArch game starts, a newer save of it on RomM comes to the console first; Options, Continue starts from the newest save state, RomM's included.
+Case pictures | Settings, Library: off, Cases view draws a plain case for every game instead of the pictures of real ones.
 ## Fixed
 Icons no longer show another title's picture for a few seconds when ORION opens.
 Autoboot waits for ShadowMountPlus instead of showing "could not find the game or application" over and over.

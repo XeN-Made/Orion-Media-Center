@@ -120,6 +120,7 @@ struct Placement
 //     "last_tab": "tab:t1",
 //     "sort": "recent",
 //     "view": "grid",
+//     "case_pictures": true,
 //     "reopen_last_tab": true,
 //     "group_systems": true,
 //     "continue_row": true,
@@ -174,6 +175,9 @@ struct LibraryPrefs
     std::string last_tab = "all";
     std::string sort = "name"; // "name", "name_reversed", "recent", "platform"
     std::string view = "grid"; // a kViewKeys entry
+    // Cases view puts covers in the pictures of real cases (ORION's and the
+    // player's, /data/orion/cases); off draws ORION's own plain case for all.
+    bool case_pictures = true;
     bool reopen_last_tab = true;
     // The emulated systems share one Emulators tab, a row of their own under it.
     bool group_systems = true;

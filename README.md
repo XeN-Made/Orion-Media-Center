@@ -352,6 +352,8 @@ while ORION is open.
   `3ds.png`, `ds.png`, `switch.png`, `gba.png`, `snes.png`...). Any size
   works; a case's shape (about 4:5) looks best. ORION reads them when it
   opens; a kind with no picture keeps ORION's own drawn case.
+  Settings, Library, **Case pictures** off draws ORION's own case for every
+  title.
 - **SteamGridDB**: with a key of your own (free: steamgriddb.com, your
   profile, Preferences, API), games no other source has a cover for get one
   from SteamGridDB, and Options on any title, **Find other art…**, shows up to

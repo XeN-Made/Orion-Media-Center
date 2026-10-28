@@ -6672,7 +6672,7 @@ class Library final : public app::Concept
     // The player's picture of this title's case (<state_dir>/cases), if any.
     const library::CaseTemplate *case_template(const Title &title) const
     {
-        if (context_.library.cases.empty())
+        if (context_.library.cases.empty() || !prefs_.case_pictures)
             return nullptr;
         std::string alias;
         const std::string key = library::case_key(title, &alias);
