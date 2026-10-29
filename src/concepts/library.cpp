@@ -65,6 +65,7 @@
 #include <cstring>
 #include <ctime>
 #include <atomic>
+#include <chrono>
 #include <deque>
 #include <memory>
 #include <optional>
@@ -5644,9 +5645,30 @@ class Library final : public app::Concept
                 apps_time_ = info.st_mtime;
             if (!save::read_file(kPlaytimePath, &elf, 8u << 20) || elf.empty())
                 return;
-            std::thread([elf = std::move(elf)]() { sys::send_payload(elf, kLoaderPort); }).detach();
+            // The loader may not be up yet (just after autoboot): twice more,
+            // ten seconds apart. What the last try met is kept for the note.
+            auto error = std::make_shared<std::atomic<int>>(-1);
+            helper_error_ = error;
+            std::thread(
+                [elf = std::move(elf), error]()
+                {
+                    int failed = 0;
+                    for (int attempt = 0; attempt < 3; ++attempt)
+                    {
+                        if (attempt > 0)
+                            std::this_thread::sleep_for(std::chrono::seconds(10));
+                        failed = sys::send_payload(elf, kLoaderPort);
+                        if (failed == 0)
+                            break;
+                        sys::log("[HUI] helper: no ELF loader on port %d (errno %d), try %d",
+                                 kLoaderPort, failed, attempt + 1);
+                    }
+                    error->store(failed);
+                })
+                .detach();
             return;
         }
+        note_missing_installs();
         if (clock_ - playtime_asked_ > 30.0f ||
             static_cast<int>(clock_ * 2.0f) == static_cast<int>((clock_ - last_dt_) * 2.0f))
             return;
@@ -5667,6 +5689,18 @@ class Library final : public app::Concept
         const Sort sort = sort_of(sort_key());
         if (sort == Sort::played || sort == Sort::most_played)
             rebuild();
+    }
+
+    // Installed packages are read by the helper, or else by an FTP server: with
+    // neither, the library lacks them and says so, once.
+    void note_missing_installs()
+    {
+        if (helper_noted_ || !helper_error_ || helper_error_->load() <= 0 ||
+            registered_.running() || registered_.result().ftp_port != 0)
+            return;
+        helper_noted_ = true;
+        show_note(false, trf("Installed games may be missing: no ELF loader answered on port {0}",
+                             {std::to_string(kLoaderPort)}));
     }
 
     const orion::PlayRecord &played(const Title &title) const
@@ -7669,8 +7703,11 @@ class Library final : public app::Concept
     float drive_space_asked_ = -1.0f;  // clock_ when the helper was sent for the drives' space
     std::time_t drive_space_time_ = 0; // when the answer shown was written
     float playtime_asked_ = -1.0f;     // clock_ when the play time reader was sent
-    std::time_t playtime_time_ = 0;    // when the system's play time read was written
-    std::time_t apps_time_ = 0;        // when the payload's list of installed apps was
+    // The helper's send: -1 while trying, 0 sent, else the errno of the last try.
+    std::shared_ptr<std::atomic<int>> helper_error_;
+    bool helper_noted_ = false;
+    std::time_t playtime_time_ = 0; // when the system's play time read was written
+    std::time_t apps_time_ = 0;     // when the payload's list of installed apps was
     float last_dt_ = 0.0f;
     std::string details_id_; // the title it shows
     std::string info_title_; // a message waiting to be shown

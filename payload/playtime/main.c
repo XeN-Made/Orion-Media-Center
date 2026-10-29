@@ -14,7 +14,7 @@
 // The idea and the table's layout come from PlayTime by ghost1372 (MIT).
 //
 // Before that, the apps the system has installed: ORION's sandbox cannot see
-// /user/app either, and asking a console FTP server for it (what ORION did
+// /user/app (or extended storage's user/app) either, and asking a console FTP server for it (what ORION did
 // alone before) needs one to be running. For each app this copies its
 // metadata (param.json, or a PS4 title's param.sfo) and its icon into
 // /data/orion/system-apps/<ID>/, once, and lists the IDs in index.txt
@@ -136,79 +136,126 @@ static int is_title_id(const char *id)
     return 1;
 }
 
-// /user/app's titles: their metadata and icon, copied once, and the list.
-static void list_apps(void)
+// Where installed apps are: the internal drive's /user/app, then extended
+// storage (USB and M.2), which may keep a user/app of its own. Whether the
+// system also lists those in /user/app is not known, so all are read and a
+// title is taken once.
+static const char *const kAppRoots[] = {"/user", "/mnt/ext0/user", "/mnt/ext1/user"};
+
+static char app_index[MAX_APPS * 10 + 1];
+static size_t index_used = 0;
+static int index_count = 0;
+
+static int listed(const char *id)
 {
-    mkdir(APPS_DIR, 0777);
-    DIR *apps = opendir("/user/app");
+    for (size_t at = 0; at < index_used; at += 10)
+    {
+        if (memcmp(app_index + at, id, 9) == 0)
+            return 1;
+    }
+    return 0;
+}
+
+// Copies the first of these that exists to `to`: <base>/<id><tail>, a pair
+// of strings each. 1 when one was copied.
+static int copy_first(const char *const *pairs, int count, const char *id, const char *to,
+                      size_t limit)
+{
+    char from[256];
+    for (int i = 0; i < count; ++i)
+    {
+        snprintf(from, sizeof(from), "%s/%s%s", pairs[2 * i], id, pairs[2 * i + 1]);
+        if (copy_file(from, to, limit))
+            return 1;
+    }
+    return 0;
+}
+
+// One root's apps: their metadata and icon, copied once, and their IDs.
+static void list_root(const char *root, int *copied)
+{
+    char path[256];
+    snprintf(path, sizeof(path), "%s/app", root);
+    DIR *apps = opendir(path);
     if (apps == NULL)
     {
-        say("cannot list /user/app (errno %d)", errno);
+        // Extended storage is often not there at all: only the internal
+        // drive's absence is worth a line.
+        if (strcmp(root, "/user") == 0 || errno != ENOENT)
+            say("cannot list %s (errno %d)", path, errno);
         return;
     }
-    static char index[MAX_APPS * 10 + 1];
-    size_t used = 0;
-    int count = 0;
-    int copied = 0;
+    int found = 0;
+    int added = 0;
     struct dirent *entry;
-    while ((entry = readdir(apps)) != NULL && count < MAX_APPS)
+    while ((entry = readdir(apps)) != NULL && index_count < MAX_APPS)
     {
         const char *id = entry->d_name;
         if (!is_title_id(id))
             continue;
-        char from[256];
+        ++found;
+        if (listed(id))
+            continue;
         char to[256];
         char dir[256];
         snprintf(dir, sizeof(dir), APPS_DIR "/%s", id);
         mkdir(dir, 0777);
-        // PS5: the home screen's copy, or the app's own (a payload's tile
-        // has no appmeta); PS4: its param.sfo.
+        // PS5: the home screen's copy (the internal drive's, or the drive's
+        // own), else the app's own (a payload's tile has no appmeta); PS4:
+        // its param.sfo.
         snprintf(to, sizeof(to), "%s/param.json", dir);
         char sfo[256];
         snprintf(sfo, sizeof(sfo), "%s/param.sfo", dir);
+        char meta[256];
+        char own[256];
+        snprintf(meta, sizeof(meta), "%s/appmeta", root);
+        snprintf(own, sizeof(own), "%s/app", root);
         if (!exists(to) && !exists(sfo))
         {
-            snprintf(from, sizeof(from), "/user/appmeta/%s/param.json", id);
-            int got = copy_file(from, to, 1u << 20);
+            const char *const json[] = {"/user/appmeta", "/param.json", meta, "/param.json",
+                                        own, "/sce_sys/param.json"};
+            const char *const ps4[] = {"/system_data/priv/appmeta", "/param.sfo", own,
+                                       "/sce_sys/param.sfo"};
+            int got = copy_first(json, 3, id, to, 1u << 20);
             if (!got)
-            {
-                snprintf(from, sizeof(from), "/user/app/%s/sce_sys/param.json", id);
-                got = copy_file(from, to, 1u << 20);
-            }
-            if (!got)
-            {
-                snprintf(from, sizeof(from), "/system_data/priv/appmeta/%s/param.sfo", id);
-                got = copy_file(from, sfo, 1u << 20);
-            }
-            copied += got;
+                got = copy_first(ps4, 2, id, sfo, 1u << 20);
+            *copied += got;
         }
         snprintf(to, sizeof(to), "%s/icon0.png", dir);
         if (!exists(to))
         {
-            snprintf(from, sizeof(from), "/user/appmeta/%s/icon0.png", id);
-            if (!copy_file(from, to, 8u << 20))
-            {
-                snprintf(from, sizeof(from), "/user/app/%s/sce_sys/icon0.png", id);
-                copy_file(from, to, 8u << 20);
-            }
+            const char *const icon[] = {"/user/appmeta", "/icon0.png", meta, "/icon0.png",
+                                        own, "/sce_sys/icon0.png"};
+            copy_first(icon, 3, id, to, 8u << 20);
         }
-        memcpy(index + used, id, 9);
-        index[used + 9] = '\n';
-        used += 10;
-        ++count;
+        memcpy(app_index + index_used, id, 9);
+        app_index[index_used + 9] = '\n';
+        index_used += 10;
+        ++index_count;
+        ++added;
     }
     closedir(apps);
+    say("%s: %d apps, %d not listed before", path, found, added);
+}
+
+// Every root's titles, then the list.
+static void list_apps(void)
+{
+    mkdir(APPS_DIR, 0777);
+    int copied = 0;
+    for (size_t i = 0; i < sizeof(kAppRoots) / sizeof(kAppRoots[0]); ++i)
+        list_root(kAppRoots[i], &copied);
     // The list last: ORION reads it as "what is installed now".
     const char *part = APPS_DIR "/index.txt.part";
     const int fd = open(part, O_WRONLY | O_CREAT | O_TRUNC, 0666);
     if (fd < 0)
         return;
-    const ssize_t written = write(fd, index, used);
+    const ssize_t written = write(fd, app_index, index_used);
     fchmod(fd, 0666);
     close(fd);
-    if (written == (ssize_t)used)
+    if (written == (ssize_t)index_used)
         rename(part, APPS_DIR "/index.txt");
-    say("%d installed apps, %d with new metadata", count, copied);
+    say("%d installed apps, %d with new metadata", index_count, copied);
 }
 
 // The home-screen pictures ORION asked for, as its backgrounds.

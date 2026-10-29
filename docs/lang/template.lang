@@ -117,6 +117,7 @@ author =
 "Homebrew" = ""
 "Image" = ""
 "Installed" = ""
+"Installed games may be missing: no ELF loader answered on port {0}" = ""
 "It appears on the home screen in a moment, with its new icon.\nClose this ORION, delete its tile (Options on it, Delete),\nthen open the new ORION. Everything comes along." = ""
 "Its address with the port, like 192.168.1.20:8080" = ""
 "Its files are erased for good:\n{0}\nIt leaves the home screen too.\nThis cannot be undone." = ""

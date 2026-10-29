@@ -732,3 +732,4 @@ author = Svenska ORION-bidragsgivare
 "Remove this drive" = "Ta bort den här enheten"
 "Scan to add a network drive" = "Skanna för att lägga till en nätverksenhet"
 "User" = "Användare"
+"Installed games may be missing: no ELF loader answered on port {0}" = "Installerade spel kan saknas: ingen ELF-laddare svarade på port {0}"
