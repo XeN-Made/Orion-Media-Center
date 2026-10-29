@@ -1992,13 +1992,21 @@ class Library final : public app::Concept
 
     // ---- network drives found on the network (orion/shares.hpp) ----
 
+    // The drive menus open over Settings when it is open (they belong to
+    // it, and the menu is drawn over it), in the middle; else at the focus.
+    Rect drive_menu_anchor() const
+    {
+        return settings_.is_open() ? Rect{gfx::kVirtualWidth * 0.5f - 300.0f, 300.0f, 600.0f, 60.0f}
+                                   : grid_.cell_rect(grid_.focus());
+    }
+
     // A menu that says what is being waited for.
     void waiting_menu(std::string text, app::Feedback &feedback)
     {
         ui::MenuItem waiting = menu_item(std::move(text));
         waiting.disabled = true;
         menu_.set_items({waiting});
-        menu_.open(grid_.cell_rect(grid_.focus()), feedback);
+        menu_.open(drive_menu_anchor(), feedback);
     }
 
     // The machines found, then the folders one shares.
@@ -2018,6 +2026,7 @@ class Library final : public app::Concept
         if (found.servers_asked)
         {
             found_servers_ = std::move(found.servers);
+            orion::log_share(state, "search " + found.trace);
             std::string names;
             for (const sys::SmbServer &server : found_servers_)
                 names += " " + server.address + (server.name.empty() ? "" : "=" + server.name);
@@ -2078,7 +2087,7 @@ class Library final : public app::Concept
         }
         menu_.set_items(std::move(items));
         if (!menu_.is_open())
-            menu_.open(grid_.cell_rect(grid_.focus()), feedback);
+            menu_.open(drive_menu_anchor(), feedback);
     }
 
     // A tag of those menus: true when it was one.
@@ -2126,7 +2135,6 @@ class Library final : public app::Concept
             feedback.play(audio::Cue::error);
             return;
         }
-        settings_.close(feedback);
         install_share_ = *share;
         install_dir_ = share->folder;
         list_share_folder(feedback);
@@ -2144,7 +2152,7 @@ class Library final : public app::Concept
         looking.disabled = true;
         items.push_back(looking);
         menu_.set_items(std::move(items));
-        menu_.open(grid_.cell_rect(grid_.focus()), feedback);
+        menu_.open(drive_menu_anchor(), feedback);
     }
 
     std::string install_folder_name() const
@@ -2203,7 +2211,7 @@ class Library final : public app::Concept
         if (total == 0 && !game)
             add(tr("No PS5 games or folders here"), 0);
         menu_.set_items(std::move(items));
-        menu_.open(grid_.cell_rect(grid_.focus()), feedback);
+        menu_.open(drive_menu_anchor(), feedback);
     }
 
     // Where it goes: each drive ORION may install to, with its free space;
@@ -2231,7 +2239,7 @@ class Library final : public app::Concept
             items.push_back(item);
         }
         menu_.set_items(std::move(items));
-        menu_.open(grid_.cell_rect(grid_.focus()), feedback);
+        menu_.open(drive_menu_anchor(), feedback);
     }
 
     std::string drive_name(const std::string &drive) const
@@ -2774,7 +2782,6 @@ class Library final : public app::Concept
                 feedback.play(audio::Cue::error);
                 break;
             }
-            settings_.close(feedback);
             finder_.find(own);
             waiting_menu(tr("Looking for drives on your network…"), feedback);
             break;

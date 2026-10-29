@@ -146,9 +146,10 @@ bool smb_download(const SmbLogin &login, const std::string &path, const std::str
     return false;
 }
 
-std::vector<SmbServer> smb_find_servers(const std::string &own)
+std::vector<SmbServer> smb_find_servers(const std::string &own, std::string *trace)
 {
     (void)own;
+    *trace = "the PC preview has no network";
     return {};
 }
 

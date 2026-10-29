@@ -367,7 +367,7 @@ bool DriveFinder::find(std::string own)
         {
             Result result;
             result.servers_asked = true;
-            result.servers = find_(own);
+            result.servers = find_(own, &result.trace);
             return result;
         });
 }

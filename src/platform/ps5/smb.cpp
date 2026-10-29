@@ -24,6 +24,7 @@
 #include <netdb.h>
 #include <netinet/in.h>
 #include <poll.h>
+#include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <string>
 #include <unistd.h>
@@ -226,51 +227,149 @@ bool SmbConnection::list(const std::string &folder, const std::string &prefix, i
     return true;
 }
 
-std::vector<SmbServer> smb_find_servers(const std::string &own)
+namespace
+{
+
+using Clock = std::chrono::steady_clock;
+
+int ms_left(Clock::time_point until)
+{
+    const auto left =
+        std::chrono::duration_cast<std::chrono::milliseconds>(until - Clock::now()).count();
+    return left > 0 ? static_cast<int>(left) : 0;
+}
+
+// A socket that never waits: fcntl first, FIONBIO if that did not take.
+bool never_waits(int s)
+{
+    ::fcntl(s, F_SETFL, ::fcntl(s, F_GETFL, 0) | O_NONBLOCK);
+    if ((::fcntl(s, F_GETFL, 0) & O_NONBLOCK) != 0)
+        return true;
+    int on = 1;
+    return ::ioctl(s, FIONBIO, &on) == 0;
+}
+
+std::string text_of(std::uint32_t address)
+{
+    in_addr ip = {};
+    ip.s_addr = htonl(address);
+    char text[INET_ADDRSTRLEN] = {};
+    ::inet_ntop(AF_INET, &ip, text, sizeof(text));
+    return text;
+}
+
+void add_server(std::vector<SmbServer> *servers, const std::string &address)
+{
+    for (const SmbServer &server : *servers)
+    {
+        if (server.address == address)
+            return;
+    }
+    servers->push_back({address, ""});
+}
+
+} // namespace
+
+std::vector<SmbServer> smb_find_servers(const std::string &own, std::string *trace)
 {
     std::vector<SmbServer> servers;
+    trace->clear();
     in_addr self = {};
     if (::inet_pton(AF_INET, own.c_str(), &self) != 1)
+    {
+        *trace = "no address of its own";
         return servers;
-    const std::uint32_t base = ntohl(self.s_addr) & 0xffffff00u;
-    // Port 445 knocked on, a batch of addresses at a time: an open one
-    // completes its connection, a missing one stays quiet until the wait ends.
+    }
+    const auto started = Clock::now();
+    // The whole search ends by then, whatever the network does.
+    const auto deadline = started + std::chrono::seconds(8);
+    const std::uint32_t me = ntohl(self.s_addr);
+    const std::uint32_t base = me & 0xffffff00u;
+
+    // Windows PCs: a broadcast NetBIOS query for the workgroup most are in,
+    // answered by each of them with its address.
+    int workgroup = 0;
+    const int u = ::socket(AF_INET, SOCK_DGRAM, 0);
+    if (u >= 0 && never_waits(u))
+    {
+        int on = 1;
+        ::setsockopt(u, SOL_SOCKET, SO_BROADCAST, &on, sizeof(on));
+        unsigned char packet[50];
+        netbios_question(packet, 0x5157, "WORKGROUP", ' ', 0x00, 0x20, true);
+        sockaddr_in to = {};
+        to.sin_family = AF_INET;
+        to.sin_port = htons(137);
+        to.sin_addr.s_addr = htonl(INADDR_BROADCAST);
+        ::sendto(u, packet, sizeof(packet), 0, reinterpret_cast<const sockaddr *>(&to), sizeof(to));
+        const auto until = std::min(deadline, Clock::now() + std::chrono::milliseconds(900));
+        for (int reads = 0; reads < 64; ++reads)
+        {
+            pollfd wait = {u, POLLIN, 0};
+            if (::poll(&wait, 1, ms_left(until)) <= 0)
+                break;
+            unsigned char answer[576];
+            const ssize_t got = ::recv(u, answer, sizeof(answer), 0);
+            if (got < 0)
+                break;
+            // Ours and an answer: the name again, type, class, time to live,
+            // length at 54, then 6 bytes an address (2 of flags, 4 of address).
+            if (got < 62 || answer[0] != 0x51 || answer[1] != 0x57 || (answer[2] & 0x80) == 0)
+                continue;
+            const int length = (answer[54] << 8) | answer[55];
+            for (int at = 56; at + 6 <= 56 + length && at + 6 <= got; at += 6)
+            {
+                const std::uint32_t found = (static_cast<std::uint32_t>(answer[at + 2]) << 24) |
+                                            (static_cast<std::uint32_t>(answer[at + 3]) << 16) |
+                                            (static_cast<std::uint32_t>(answer[at + 4]) << 8) |
+                                            answer[at + 5];
+                if (found != me && found != 0)
+                {
+                    add_server(&servers, text_of(found));
+                    ++workgroup;
+                }
+            }
+        }
+    }
+
+    // Anything taking SMB on the 256 addresses around: port 445 knocked on
+    // a batch at a time; an open one completes its connection.
+    int knocked = 0;
+    int open = 0;
     constexpr int kBatch = 64;
-    for (int first = 1; first < 255; first += kBatch)
+    for (int first = 1; first < 255 && ms_left(deadline) > 0; first += kBatch)
     {
         std::vector<std::pair<int, std::uint32_t>> trying;
         for (int host = first; host < std::min(255, first + kBatch); ++host)
         {
             const std::uint32_t address = base | static_cast<std::uint32_t>(host);
-            if (address == ntohl(self.s_addr))
+            if (address == me)
                 continue;
             const int s = ::socket(AF_INET, SOCK_STREAM, 0);
             if (s < 0)
                 continue;
-            ::fcntl(s, F_SETFL, ::fcntl(s, F_GETFL, 0) | O_NONBLOCK);
+            if (!never_waits(s))
+            {
+                ::close(s);
+                continue;
+            }
             sockaddr_in to = {};
             to.sin_family = AF_INET;
             to.sin_port = htons(445);
             to.sin_addr.s_addr = htonl(address);
+            ++knocked;
             if (::connect(s, reinterpret_cast<const sockaddr *>(&to), sizeof(to)) == 0 ||
                 errno == EINPROGRESS)
                 trying.emplace_back(s, address);
             else
                 ::close(s);
         }
-        const auto until = std::chrono::steady_clock::now() + std::chrono::milliseconds(600);
-        while (!trying.empty())
+        const auto until = std::min(deadline, Clock::now() + std::chrono::milliseconds(700));
+        while (!trying.empty() && ms_left(until) > 0)
         {
-            const auto left = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                  until - std::chrono::steady_clock::now())
-                                  .count();
-            if (left <= 0)
-                break;
             std::vector<pollfd> waits;
             for (const auto &[s, address] : trying)
                 waits.push_back({s, POLLOUT, 0});
-            if (::poll(waits.data(), static_cast<nfds_t>(waits.size()), static_cast<int>(left)) <=
-                0)
+            if (::poll(waits.data(), static_cast<nfds_t>(waits.size()), ms_left(until)) <= 0)
                 break;
             for (std::size_t i = waits.size(); i-- > 0;)
             {
@@ -281,11 +380,8 @@ std::vector<SmbServer> smb_find_servers(const std::string &own)
                 ::getsockopt(trying[i].first, SOL_SOCKET, SO_ERROR, &problem, &size);
                 if (problem == 0 && (waits[i].revents & POLLOUT) != 0)
                 {
-                    in_addr found = {};
-                    found.s_addr = htonl(trying[i].second);
-                    char text[INET_ADDRSTRLEN] = {};
-                    ::inet_ntop(AF_INET, &found, text, sizeof(text));
-                    servers.push_back({text, ""});
+                    add_server(&servers, text_of(trying[i].second));
+                    ++open;
                 }
                 ::close(trying[i].first);
                 trying.erase(trying.begin() + static_cast<std::ptrdiff_t>(i));
@@ -294,12 +390,13 @@ std::vector<SmbServer> smb_find_servers(const std::string &own)
         for (const auto &[s, address] : trying)
             ::close(s);
     }
+
     // Each one's name: a NetBIOS node status query ("*"), answered with the
     // names it holds; the first unique workstation name is the machine's.
-    const int s = ::socket(AF_INET, SOCK_DGRAM, 0);
-    if (s >= 0)
+    int named = 0;
+    if (u >= 0)
     {
-        for (std::size_t i = 0; i < servers.size(); ++i)
+        for (std::size_t i = 0; i < servers.size() && i < 256; ++i)
         {
             unsigned char packet[50];
             netbios_question(packet, static_cast<std::uint16_t>(0x5200 + i), "*", 0x00, 0x00, 0x21,
@@ -308,20 +405,24 @@ std::vector<SmbServer> smb_find_servers(const std::string &own)
             to.sin_family = AF_INET;
             to.sin_port = htons(137);
             ::inet_pton(AF_INET, servers[i].address.c_str(), &to.sin_addr);
-            ::sendto(s, packet, sizeof(packet), 0, reinterpret_cast<const sockaddr *>(&to),
+            ::sendto(u, packet, sizeof(packet), 0, reinterpret_cast<const sockaddr *>(&to),
                      sizeof(to));
         }
-        pollfd wait = {s, POLLIN, 0};
-        while (!servers.empty() && ::poll(&wait, 1, 800) > 0)
+        const auto until = std::min(deadline + std::chrono::seconds(1),
+                                    Clock::now() + std::chrono::milliseconds(900));
+        for (int reads = 0; reads < 256 && !servers.empty(); ++reads)
         {
+            pollfd wait = {u, POLLIN, 0};
+            if (::poll(&wait, 1, ms_left(until)) <= 0)
+                break;
             unsigned char answer[1024];
-            const ssize_t got = ::recv(s, answer, sizeof(answer), 0);
+            const ssize_t got = ::recv(u, answer, sizeof(answer), 0);
+            if (got < 0)
+                break;
             // The header, the name (34 bytes), type, class, time to live and
             // length: the count of names at 56, then 18 bytes a name.
-            if (got < 57 || (answer[2] & 0x80) == 0)
-                continue;
             const std::size_t which = static_cast<std::size_t>(answer[1]);
-            if (answer[0] != 0x52 || which >= servers.size())
+            if (got < 57 || (answer[2] & 0x80) == 0 || answer[0] != 0x52 || which >= servers.size())
                 continue;
             const int count = answer[56];
             for (int n = 0; n < count && 57 + 18 * (n + 1) <= got; ++n)
@@ -332,12 +433,21 @@ std::vector<SmbServer> smb_find_servers(const std::string &own)
                 std::string name(reinterpret_cast<const char *>(entry), 15);
                 while (!name.empty() && (name.back() == ' ' || name.back() == '\0'))
                     name.pop_back();
+                if (servers[which].name.empty())
+                    ++named;
                 servers[which].name = name;
                 break;
             }
         }
-        ::close(s);
     }
+    if (u >= 0)
+        ::close(u);
+    const auto took =
+        std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now() - started).count();
+    *trace = "around " + own + ": workgroup answers " + std::to_string(workgroup) +
+             ", port 445 knocked on " + std::to_string(knocked) + " addresses, open on " +
+             std::to_string(open) + ", named " + std::to_string(named) + ", " +
+             std::to_string(took) + " ms";
     return servers;
 }
 

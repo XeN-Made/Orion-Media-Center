@@ -107,7 +107,8 @@ void log_share(const std::string &state_dir, std::string_view line);
 class DriveFinder
 {
   public:
-    using FindServers = std::function<std::vector<sys::SmbServer>(const std::string &own)>;
+    using FindServers =
+        std::function<std::vector<sys::SmbServer>(const std::string &own, std::string *trace)>;
     using ListShares = std::function<bool(const sys::SmbLogin &login,
                                           std::vector<std::string> *shares, std::string *error)>;
     struct Result
@@ -116,6 +117,7 @@ class DriveFinder
         std::vector<sys::SmbServer> servers;
         std::vector<std::string> shares;
         std::string error;
+        std::string trace; // find(): how the search went, for the log
     };
 
     DriveFinder(FindServers find, ListShares list);

@@ -158,9 +158,10 @@ TEST(Shares, AScanListsEveryShareAndKeepsOneAsleep)
 TEST(Shares, AreFoundOnTheNetworkThenTheirFoldersListed)
 {
     orion::DriveFinder finder(
-        [](const std::string &own)
+        [](const std::string &own, std::string *trace)
         {
             EXPECT_EQ(own, "192.168.1.30");
+            *trace = "one open";
             return std::vector<hui::sys::SmbServer>{{"192.168.1.20", "MEDIA-PC"}};
         },
         [](const hui::sys::SmbLogin &login, std::vector<std::string> *shares, std::string *error)
@@ -180,6 +181,7 @@ TEST(Shares, AreFoundOnTheNetworkThenTheirFoldersListed)
     EXPECT_TRUE(result.servers_asked);
     ASSERT_EQ(result.servers.size(), 1u);
     EXPECT_EQ(result.servers[0].name, "MEDIA-PC");
+    EXPECT_EQ(result.trace, "one open");
 
     hui::sys::SmbLogin login;
     login.server = "192.168.1.20";
