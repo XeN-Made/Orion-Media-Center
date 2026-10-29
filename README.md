@@ -350,14 +350,20 @@ went wrong. The PC can be named by its name or by its IP address.
 
 ### Installing PS5 games from a network drive
 
-Settings, Network drives, a drive, **Install a PS5 game…** browses the drive.
-It offers:
+Settings, Network drives, a drive, **Install from this drive…** browses the
+drive. It offers:
 
 - a game's folder (one with `sce_sys/param.json` in it): **Install** it;
 - an image ShadowMountPlus mounts: `.ffpkg`, `.ffpfs` or `.exfat`;
 - an archive: `.zip`, `.7z` or `.rar`, in one part or several
   (`.part1.rar`, `.part2.rar`...; `.rar`, `.r00`...; `.7z.001`...): choose the
   first part.
+- a PS4 or PS5 package (`.pkg`: a game, an add-on, an update). Each one says
+  whether it is **Installed**, **Not installed**, or for a game the console
+  does not have. Choosing one hands it to the console's own installer, which
+  reads it straight off the drive (keep ORION open until it has been read
+  whole; the console's Downloads shows the rest). Fake packages need kstuff
+  running, as with any package installer.
 
 Then choose where it goes: the console's storage, extended storage or a USB
 drive, each with its free space (`homebrew` on that drive, where
