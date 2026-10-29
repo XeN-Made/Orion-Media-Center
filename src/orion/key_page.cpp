@@ -45,8 +45,8 @@ constexpr const char *kLogFiles[] = {
     "drives-space.txt",   "system-playtime.txt",
     "retroarch-args.txt", "opened-up.txt",
     "ftp-port.txt",       "title.txt",
-    "new-title-id.txt",   "library.json",
-    "theme.json",
+    "shares.txt",         "new-title-id.txt",
+    "library.json",       "theme.json",
 };
 constexpr std::size_t kMaxLogBytes = 512u << 10; // the newest part of a long log
 
@@ -315,18 +315,18 @@ std::string answer_key_request(std::string_view request, const std::string &stat
                                            "That is not a share's address: \\\\server\\share, "
                                            "or smb://server/share",
                                            false, "smb"));
-        share.user = user;
+        set_share_user(&share, user);
         // Tried before it is kept: signed in and its folder opened.
         if (check != nullptr && *check)
         {
-            sys::SmbLogin login;
-            login.server = share.server;
-            login.share = share.share;
-            login.user = share.user;
-            login.password = password;
+            const sys::SmbLogin login = share_login_with(share, password);
             std::vector<sys::SmbEntry> entries;
             std::string error;
-            if (!(*check)(login, share.folder, 0, 1, &entries, &error))
+            const bool opened = (*check)(login, share.folder, 0, 1, &entries, &error);
+            log_share(state_dir, "key page: " + share_address(share) + " as " +
+                                     (share.user.empty() ? std::string("guest") : share.user) +
+                                     (opened ? ": opened" : ": " + error));
+            if (!opened)
             {
                 const std::string hint = share_hint(error);
                 return response("200 OK", page(shown(state_dir),

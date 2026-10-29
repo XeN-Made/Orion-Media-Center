@@ -42,4 +42,20 @@ bool smb_download(const SmbLogin &login, const std::string &path, const std::str
                   std::atomic<std::uint64_t> *done, const std::atomic<bool> *cancel,
                   std::string *error);
 
+// A machine answering SMB on the local network.
+struct SmbServer
+{
+    std::string address; // "192.168.1.20"
+    std::string name;    // its Windows (NetBIOS) name, when it says: "MEDIA-PC"
+};
+
+// The machines on the console's local network (the 256 addresses around
+// `own`, "192.168.1.30") that take SMB connections, with their names. About
+// two seconds. Blocking. On a PC: none.
+std::vector<SmbServer> smb_find_servers(const std::string &own);
+
+// The folders a server shares with this user (login.share is not used):
+// disk shares only, not the hidden ones ending in "$". Blocking.
+bool smb_shares(const SmbLogin &login, std::vector<std::string> *shares, std::string *error);
+
 } // namespace hui::sys

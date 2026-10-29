@@ -146,6 +146,20 @@ bool smb_download(const SmbLogin &login, const std::string &path, const std::str
     return false;
 }
 
+std::vector<SmbServer> smb_find_servers(const std::string &own)
+{
+    (void)own;
+    return {};
+}
+
+bool smb_shares(const SmbLogin &login, std::vector<std::string> *shares, std::string *error)
+{
+    (void)login;
+    shares->clear();
+    *error = "the PC preview has no network";
+    return false;
+}
+
 bool copy_game(const GameSource &source, const std::string &into, CopyProgress *progress,
                std::string *error)
 {

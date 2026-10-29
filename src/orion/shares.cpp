@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
+#include <ctime>
 #include <utility>
 
 namespace hui::orion
@@ -183,13 +184,30 @@ const Share &add_share(std::vector<Share> &shares, Share share)
 
 sys::SmbLogin share_login(const Share &share, const std::string &state_dir)
 {
+    return share_login_with(share, read_service_key(state_dir, share_password_key(share.id)));
+}
+
+sys::SmbLogin share_login_with(const Share &share, const std::string &password)
+{
     sys::SmbLogin login;
     login.server = share.server;
     login.share = share.share;
     login.user = share.user;
     login.domain = share.domain;
-    login.password = read_service_key(state_dir, share_password_key(share.id));
+    login.password = password;
     return login;
+}
+
+void set_share_user(Share *share, std::string_view typed)
+{
+    while (!typed.empty() && std::isspace(static_cast<unsigned char>(typed.front())) != 0)
+        typed.remove_prefix(1);
+    while (!typed.empty() && std::isspace(static_cast<unsigned char>(typed.back())) != 0)
+        typed.remove_suffix(1);
+    const std::size_t slash = typed.find_first_of("\\/");
+    share->domain =
+        slash == std::string_view::npos ? std::string() : std::string(typed.substr(0, slash));
+    share->user = std::string(slash == std::string_view::npos ? typed : typed.substr(slash + 1));
 }
 
 std::string share_files_text(const std::vector<ShareFile> &files)
@@ -289,6 +307,91 @@ bool download_share_file(const std::string &state_dir, const std::string &url,
     }
     return sys::smb_download(share_login(*share, state_dir), rest.substr(slash + 1), path, nullptr,
                              nullptr, error);
+}
+
+void log_share(const std::string &state_dir, std::string_view line)
+{
+    if (state_dir.empty())
+        return;
+    std::string text;
+    const std::string file = state_dir + "/shares.txt";
+    save::read_file(file, &text, 256u << 10);
+    // The newest lines, a few hundred at most.
+    if (text.size() > 64u * 1024u)
+        text.erase(0, text.find('\n', text.size() - 48u * 1024u) + 1);
+    text += std::to_string(static_cast<long long>(std::time(nullptr))) + "  " + std::string(line) +
+            "\n";
+    save::write_atomic(file, text);
+}
+
+DriveFinder::DriveFinder(FindServers find, ListShares list)
+    : find_(std::move(find)), list_(std::move(list))
+{
+}
+
+DriveFinder::~DriveFinder()
+{
+    wait();
+}
+
+void DriveFinder::wait()
+{
+    if (worker_.joinable())
+        worker_.join();
+}
+
+bool DriveFinder::run(std::function<Result()> work)
+{
+    if (running_.load())
+        return false;
+    wait();
+    running_ = true;
+    worker_ = std::thread(
+        [this, work = std::move(work)]()
+        {
+            Result result = work();
+            {
+                const std::lock_guard<std::mutex> lock(mutex_);
+                result_ = std::move(result);
+                finished_ = true;
+            }
+            running_ = false;
+        });
+    return true;
+}
+
+bool DriveFinder::find(std::string own)
+{
+    return run(
+        [this, own = std::move(own)]()
+        {
+            Result result;
+            result.servers_asked = true;
+            result.servers = find_(own);
+            return result;
+        });
+}
+
+bool DriveFinder::list(sys::SmbLogin login)
+{
+    return run(
+        [this, login = std::move(login)]()
+        {
+            Result result;
+            if (!list_(login, &result.shares, &result.error) && result.error.empty())
+                result.error = "no answer";
+            return result;
+        });
+}
+
+bool DriveFinder::take_finished(Result *result)
+{
+    const std::lock_guard<std::mutex> lock(mutex_);
+    if (!finished_)
+        return false;
+    finished_ = false;
+    *result = std::move(result_);
+    return true;
 }
 
 ShareScan::ShareScan(SmbLister list) : list_(std::move(list))

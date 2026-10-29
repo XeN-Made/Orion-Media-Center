@@ -136,6 +136,7 @@ enum : int
     kShareUser,
     kShareRemove,
     kShareInstall,
+    kFindShares,
     kStopInstall,
     kLabelPreview,
     kLabelText,
@@ -619,6 +620,10 @@ void SettingsPanel::build_network()
     ui::FormRow &add = form_.add_action(kAddShare, tr("Add a network drive"));
     add.chevron = true;
     add.description = tr("A Windows share or a NAS (SMB): its address, user and password");
+    ui::FormRow &find = form_.add_action(kFindShares, tr("Find drives on this network"));
+    find.chevron = true;
+    find.description =
+        tr("The PCs and NAS drives sharing folders here, then the folders they share");
     if (!shares_.empty())
         form_.add_action(kScanShares, tr("Look for games again")).description =
             share_status_.empty() ? tr("Folders named for their systems: gba, snes, psx...")
@@ -1757,6 +1762,8 @@ SettingsPanel::Change SettingsPanel::handle(const InputFrame &input, ui::Feedbac
             return Change::scan_shares;
         if (id == kShareRemove && !share_page_.empty())
             return Change::remove_share;
+        if (id == kFindShares)
+            return Change::find_shares;
         if (id == kShareInstall && !share_page_.empty())
             return Change::install_game;
         if (id == kStopInstall)

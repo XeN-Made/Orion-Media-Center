@@ -54,6 +54,11 @@ const Share &add_share(std::vector<Share> &shares, Share share);
 
 // How ORION signs in to a share (its password read from keys.txt).
 sys::SmbLogin share_login(const Share &share, const std::string &state_dir);
+// The same with a password in hand (a drive being tried before it is kept).
+sys::SmbLogin share_login_with(const Share &share, const std::string &password);
+// The user as typed: "PC\\user" (or "PC/user") signs in to that machine's or
+// domain's account, as Windows writes it; anything else is the user alone.
+void set_share_user(Share *share, std::string_view typed);
 
 // A file a scan found on a share: which share, where in it (from the share's
 // top), how big.
@@ -88,6 +93,57 @@ bool download_share_file(const std::string &state_dir, const std::string &url,
 using SmbLister =
     std::function<bool(const sys::SmbLogin &login, const std::string &folder, int depth,
                        std::size_t most, std::vector<sys::SmbEntry> *entries, std::string *error)>;
+// What happened with network drives, a line at a time, in
+// <state>/shares.txt (shared with the logs): tries, finds, installs. Never a
+// password.
+void log_share(const std::string &state_dir, std::string_view line);
+
+// The drives on the network, then the folders one of them shares, each
+// asked on a thread of its own (both wait on the network).
+//
+//   DriveFinder finder(sys::smb_find_servers, sys::smb_shares);
+//   finder.find("192.168.1.30");
+//   ...every frame: if (finder.take_finished(&result)) ...
+class DriveFinder
+{
+  public:
+    using FindServers = std::function<std::vector<sys::SmbServer>(const std::string &own)>;
+    using ListShares = std::function<bool(const sys::SmbLogin &login,
+                                          std::vector<std::string> *shares, std::string *error)>;
+    struct Result
+    {
+        bool servers_asked = false; // find() (else list())
+        std::vector<sys::SmbServer> servers;
+        std::vector<std::string> shares;
+        std::string error;
+    };
+
+    DriveFinder(FindServers find, ListShares list);
+    ~DriveFinder();
+    DriveFinder(const DriveFinder &) = delete;
+    DriveFinder &operator=(const DriveFinder &) = delete;
+
+    bool find(std::string own);
+    bool list(sys::SmbLogin login);
+    bool running() const
+    {
+        return running_.load();
+    }
+    bool take_finished(Result *result);
+    void wait();
+
+  private:
+    bool run(std::function<Result()> work);
+
+    FindServers find_;
+    ListShares list_;
+    std::thread worker_;
+    std::atomic<bool> running_{false};
+    std::mutex mutex_;
+    bool finished_ = false;
+    Result result_;
+};
+
 class ShareScan
 {
   public:

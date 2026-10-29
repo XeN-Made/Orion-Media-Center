@@ -117,6 +117,7 @@ class SettingsPanel
         scan_shares,    // "Look for games again" (Network drives)
         remove_share,   // "Remove" on a drive's page: share_id() says which
         install_game,   // "Install a PS5 game" on a drive's page: share_id() says which
+        find_shares,    // "Find drives on this network"
         stop_install,   // "Stop installing" (Network drives)
         new_label,      // "New label": the screen asks for its text
         rename_label,   // "Text" on a label's page: label_id() says which

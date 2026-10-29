@@ -153,6 +153,79 @@ TEST(Shares, AScanListsEveryShareAndKeepsOneAsleep)
     EXPECT_FALSE(scan.take_finished(&result));
 }
 
+// Machines found, then one's folders, each on its own thread; a refused
+// sign-in comes back as what the server said, with a hint in plain words.
+TEST(Shares, AreFoundOnTheNetworkThenTheirFoldersListed)
+{
+    orion::DriveFinder finder(
+        [](const std::string &own)
+        {
+            EXPECT_EQ(own, "192.168.1.30");
+            return std::vector<hui::sys::SmbServer>{{"192.168.1.20", "MEDIA-PC"}};
+        },
+        [](const hui::sys::SmbLogin &login, std::vector<std::string> *shares, std::string *error)
+        {
+            if (login.password != "right")
+            {
+                *error = "Session setup failed (STATUS_LOGON_FAILURE)";
+                return false;
+            }
+            *shares = {"Games", "Music"};
+            return true;
+        });
+    orion::DriveFinder::Result result;
+    ASSERT_TRUE(finder.find("192.168.1.30"));
+    finder.wait();
+    ASSERT_TRUE(finder.take_finished(&result));
+    EXPECT_TRUE(result.servers_asked);
+    ASSERT_EQ(result.servers.size(), 1u);
+    EXPECT_EQ(result.servers[0].name, "MEDIA-PC");
+
+    hui::sys::SmbLogin login;
+    login.server = "192.168.1.20";
+    login.password = "wrong";
+    ASSERT_TRUE(finder.list(login));
+    finder.wait();
+    ASSERT_TRUE(finder.take_finished(&result));
+    EXPECT_FALSE(result.servers_asked);
+    EXPECT_NE(std::string(orion::share_hint(result.error)).find("password is wrong"),
+              std::string::npos);
+    login.password = "right";
+    ASSERT_TRUE(finder.list(login));
+    finder.wait();
+    ASSERT_TRUE(finder.take_finished(&result));
+    EXPECT_EQ(result.shares, (std::vector<std::string>{"Games", "Music"}));
+    EXPECT_TRUE(std::string(orion::share_hint("no answer")).empty());
+}
+
+// The log keeps its newest lines and never grows past a few dozen KB.
+TEST(Shares, LogWhatHappensAndStaySmall)
+{
+    const std::string dir = ::testing::TempDir() + "orion-shares-log";
+    ASSERT_TRUE(hui::save::ensure_directory(dir));
+    std::remove((dir + "/shares.txt").c_str());
+    for (int i = 0; i < 2000; ++i)
+        orion::log_share(dir, "try " + std::to_string(i) + ": STATUS_LOGON_FAILURE");
+    std::string text;
+    ASSERT_TRUE(hui::save::read_file(dir + "/shares.txt", &text, 1u << 20));
+    EXPECT_LE(text.size(), 66u * 1024u);
+    EXPECT_NE(text.find("try 1999: STATUS_LOGON_FAILURE\n"), std::string::npos);
+    EXPECT_EQ(text.find("try 0:"), std::string::npos);
+}
+
+// "PC\\user" signs in to that machine's account.
+TEST(Shares, TakeAUserWithItsMachine)
+{
+    orion::Share share;
+    orion::set_share_user(&share, " MEDIA-PC\\orion ");
+    EXPECT_EQ(share.domain, "MEDIA-PC");
+    EXPECT_EQ(share.user, "orion");
+    EXPECT_EQ(orion::share_login_with(share, "pw").domain, "MEDIA-PC");
+    orion::set_share_user(&share, "orion");
+    EXPECT_TRUE(share.domain.empty());
+    EXPECT_EQ(share.user, "orion");
+}
+
 TEST(Shares, ADownloadNamesWhatIsWrong)
 {
     const std::string dir = fresh_dir("orion-shares-download");

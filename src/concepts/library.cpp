@@ -239,6 +239,8 @@ enum : int
     kItemLabel = 5000,        // + an index in custom_labels()
     kItemInstallPlace = 6000, // + an index in install_places_
     kItemInstallItem = 6100,  // + an index in install_entries_
+    kItemFoundServer = 11000, // + an index in found_servers_
+    kItemFoundShare = 11500,  // + an index in found_shares_
 };
 
 // The picture browser shows this many folders and pictures at a time: the
@@ -1038,6 +1040,7 @@ class Library final : public app::Concept
         poll_icon_copies();
         follow_install(feedback);
         follow_share_check(feedback);
+        follow_finder(feedback);
         if (registered_.take_finished() && registered_.result().changed)
             context_.registered_changed = true;
         const bool reduced = context_.settings.reduced_motion;
@@ -1987,6 +1990,126 @@ class Library final : public app::Concept
         feedback.play(audio::Cue::focus);
     }
 
+    // ---- network drives found on the network (orion/shares.hpp) ----
+
+    // A menu that says what is being waited for.
+    void waiting_menu(std::string text, app::Feedback &feedback)
+    {
+        ui::MenuItem waiting = menu_item(std::move(text));
+        waiting.disabled = true;
+        menu_.set_items({waiting});
+        menu_.open(grid_.cell_rect(grid_.focus()), feedback);
+    }
+
+    // The machines found, then the folders one shares.
+    void follow_finder(app::Feedback &feedback)
+    {
+        orion::DriveFinder::Result found;
+        if (!finder_.take_finished(&found))
+            return;
+        const std::string &state = context_.library.state_dir;
+        std::vector<ui::MenuItem> items;
+        const auto title = [&](std::string text)
+        {
+            ui::MenuItem item = menu_item(std::move(text));
+            item.disabled = true;
+            items.push_back(item);
+        };
+        if (found.servers_asked)
+        {
+            found_servers_ = std::move(found.servers);
+            std::string names;
+            for (const sys::SmbServer &server : found_servers_)
+                names += " " + server.address + (server.name.empty() ? "" : "=" + server.name);
+            orion::log_share(state, "found " + std::to_string(found_servers_.size()) +
+                                        " SMB servers:" + names);
+            if (found_servers_.empty())
+            {
+                if (menu_.is_open())
+                    menu_.close(feedback);
+                show_note(false, tr("No drive answered on this network. On a Windows PC, set the "
+                                    "network to Private and share a folder"));
+                feedback.play(audio::Cue::error);
+                return;
+            }
+            title(tr("Drives on your network"));
+            for (std::size_t i = 0; i < found_servers_.size(); ++i)
+            {
+                const sys::SmbServer &server = found_servers_[i];
+                ui::MenuItem item = menu_item(server.name.empty() ? server.address : server.name);
+                item.shortcut = server.name.empty() ? std::string() : server.address;
+                item.tag = kItemFoundServer + static_cast<int>(i);
+                items.push_back(item);
+            }
+        }
+        else
+        {
+            found_shares_ = std::move(found.shares);
+            orion::log_share(
+                state,
+                "shares of " + pending_share_.server + " as " +
+                    (pending_share_.user.empty() ? std::string("guest") : pending_share_.user) +
+                    ": " +
+                    (found.error.empty() ? std::to_string(found_shares_.size()) + " folders"
+                                         : found.error));
+            if (!found.error.empty() || found_shares_.empty())
+            {
+                finding_shares_ = false;
+                pending_password_.clear();
+                if (menu_.is_open())
+                    menu_.close(feedback);
+                const std::string hint = tr(orion::share_hint(found.error));
+                show_note(false,
+                          found.error.empty()
+                              ? trf("{0} shares no folders with this user", {pending_share_.server})
+                              : trf("Could not open {0}: {1}",
+                                    {pending_share_.server,
+                                     found.error + (hint.empty() ? "" : ". " + hint)}));
+                feedback.play(audio::Cue::error);
+                return;
+            }
+            title(trf("Folders {0} shares", {pending_share_.server}));
+            for (std::size_t i = 0; i < found_shares_.size(); ++i)
+            {
+                ui::MenuItem item = menu_item(found_shares_[i]);
+                item.tag = kItemFoundShare + static_cast<int>(i);
+                items.push_back(item);
+            }
+        }
+        menu_.set_items(std::move(items));
+        if (!menu_.is_open())
+            menu_.open(grid_.cell_rect(grid_.focus()), feedback);
+    }
+
+    // A tag of those menus: true when it was one.
+    bool found_item(int tag, app::Feedback &feedback)
+    {
+        if (tag >= kItemFoundServer &&
+            tag - kItemFoundServer < static_cast<int>(found_servers_.size()))
+        {
+            // Its address is kept (a name the console may not find again);
+            // then who signs in.
+            pending_share_ = orion::Share();
+            pending_share_.server =
+                found_servers_[static_cast<std::size_t>(tag - kItemFoundServer)].address;
+            finding_shares_ = true;
+            start_typing(Typing::share_user, "");
+            feedback.play(audio::Cue::modal_open);
+            return true;
+        }
+        if (tag >= kItemFoundShare &&
+            tag - kItemFoundShare < static_cast<int>(found_shares_.size()))
+        {
+            finding_shares_ = false;
+            pending_share_.share = found_shares_[static_cast<std::size_t>(tag - kItemFoundShare)];
+            const sys::SmbLogin login = orion::share_login_with(pending_share_, pending_password_);
+            share_check_.start(login, "");
+            show_note(true, trf("Checking {0}…", {orion::share_address(pending_share_)}));
+            return true;
+        }
+        return false;
+    }
+
     // ---- PS5 games installed off a network drive (orion/game_install.hpp) ----
 
     // Install a PS5 game…: the drive's folders, from the one its games are in.
@@ -2218,6 +2341,11 @@ class Library final : public app::Concept
         if (!share_check_.take_finished(&seen, &trouble))
             return;
         const std::string password = std::exchange(pending_password_, std::string());
+        orion::log_share(
+            context_.library.state_dir,
+            "console: " + orion::share_address(pending_share_) + " as " +
+                (pending_share_.user.empty() ? std::string("guest") : pending_share_.user) +
+                (trouble.empty() ? ": opened" : ": " + trouble));
         if (!trouble.empty())
         {
             const std::string hint = tr(orion::share_hint(trouble));
@@ -2267,6 +2395,12 @@ class Library final : public app::Concept
             return;
         const std::string &name = game_install_.name();
         using Problem = orion::GameInstall::Problem;
+        orion::log_share(context_.library.state_dir,
+                         "install " + name + ": " +
+                             (done.ok
+                                  ? "into " + done.installed
+                                  : "problem " + std::to_string(static_cast<int>(done.problem)) +
+                                        " " + done.detail));
         if (done.ok)
         {
             show_note(true, trf("Installed {0}", {name}));
@@ -2631,6 +2765,20 @@ class Library final : public app::Concept
             start_typing(Typing::share_address, "");
             feedback.play(audio::Cue::modal_open);
             break;
+        case orion::SettingsPanel::Change::find_shares:
+        {
+            const std::string own = orion::local_address();
+            if (own.empty())
+            {
+                show_note(false, tr("The console is not on a network"));
+                feedback.play(audio::Cue::error);
+                break;
+            }
+            settings_.close(feedback);
+            finder_.find(own);
+            waiting_menu(tr("Looking for drives on your network…"), feedback);
+            break;
+        }
         case orion::SettingsPanel::Change::install_game:
             browse_share(settings_.share_id(), feedback);
             break;
@@ -2972,7 +3120,7 @@ class Library final : public app::Concept
         }
         if (typing == Typing::share_user)
         {
-            pending_share_.user = name_;
+            orion::set_share_user(&pending_share_, name_);
             start_typing(Typing::share_password, "");
             return;
         }
@@ -2981,11 +3129,18 @@ class Library final : public app::Concept
             // Tried first (follow_share_check keeps it once it opens).
             pending_password_ = name_;
             name_.clear();
-            sys::SmbLogin login;
-            login.server = pending_share_.server;
-            login.share = pending_share_.share;
-            login.user = pending_share_.user;
-            login.password = pending_password_;
+            // A drive found on the network: its shared folders are asked
+            // for, to choose from.
+            if (finding_shares_)
+            {
+                const sys::SmbLogin ask =
+                    orion::share_login_with(pending_share_, pending_password_);
+                finder_.list(ask);
+                waiting_menu(trf("Asking {0} for its shared folders…", {pending_share_.server}),
+                             feedback);
+                return;
+            }
+            const sys::SmbLogin login = orion::share_login_with(pending_share_, pending_password_);
             share_check_.start(login, pending_share_.folder);
             show_note(true, trf("Checking {0}…", {orion::share_address(pending_share_)}));
             return;
@@ -3557,7 +3712,10 @@ class Library final : public app::Concept
                 : trf("{0} ({1})", {i18n::plural(result.files, "{0} file found", "{0} files found"),
                                     result.error});
         if (!result.error.empty())
+        {
+            orion::log_share(context_.library.state_dir, "games scan: " + result.error);
             show_note(false, trf("Network drive: {0}", {result.error}));
+        }
         refresh_shares();
         context_.rescan_requested = true; // the library lists what was found
     }
@@ -4737,7 +4895,7 @@ class Library final : public app::Concept
         const int tag = menu_.items()[static_cast<std::size_t>(menu_.focus())].tag;
         if (menu_.is_open())
             menu_.close(feedback);
-        if (install_item(tag, feedback))
+        if (install_item(tag, feedback) || found_item(tag, feedback))
             return;
 
         if (tag == kItemLaunch)
@@ -8101,6 +8259,10 @@ class Library final : public app::Concept
     bool shares_scanned_ = false;
     orion::Share pending_share_;   // a drive being typed in: its address, then its user
     std::string pending_password_; // ... and its password, while it is tried
+    bool finding_shares_ = false;  // the drive was found: its folders are asked for next
+    orion::DriveFinder finder_{sys::smb_find_servers, sys::smb_shares};
+    std::vector<sys::SmbServer> found_servers_;
+    std::vector<std::string> found_shares_;
     orion::ShareListing share_check_{sys::smb_list};
     std::string share_status_;
     std::string romm_downloading_id_;

@@ -8,11 +8,17 @@
 // smb2.h first: libsmb2.h uses its types.
 #include <smb2/smb2.h>
 #include <smb2/libsmb2.h>
+#include <smb2/libsmb2-raw.h>
+#include <smb2/libsmb2-dcerpc.h>
+#include <smb2/libsmb2-dcerpc-srvsvc.h>
 
+#include <algorithm>
 #include <arpa/inet.h>
+#include <chrono>
 #include <cctype>
 #include <cerrno>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <fcntl.h>
 #include <netdb.h>
@@ -40,6 +46,33 @@ namespace hui::sys
 namespace
 {
 
+// A NetBIOS name query's 50 bytes: `name` in its 16-byte form (padded with
+// `pad`, then `suffix`), for records of `type`.
+void netbios_question(unsigned char *packet, std::uint16_t id, const std::string &name,
+                      unsigned char pad, unsigned char suffix, unsigned char type, bool broadcast)
+{
+    std::memset(packet, 0, 50);
+    packet[0] = static_cast<unsigned char>(id >> 8);
+    packet[1] = static_cast<unsigned char>(id & 0xff);
+    packet[2] = broadcast ? 0x01 : 0x00;
+    packet[3] = broadcast ? 0x10 : 0x00;
+    packet[5] = 1;
+    packet[12] = 0x20;
+    for (int i = 0; i < 16; ++i)
+    {
+        const unsigned char c =
+            i == 15 ? suffix
+            : i < static_cast<int>(name.size())
+                ? static_cast<unsigned char>(
+                      std::toupper(static_cast<unsigned char>(name[static_cast<std::size_t>(i)])))
+                : pad;
+        packet[13 + 2 * i] = static_cast<unsigned char>('A' + (c >> 4));
+        packet[14 + 2 * i] = static_cast<unsigned char>('A' + (c & 0x0f));
+    }
+    packet[47] = type;
+    packet[49] = 0x01;
+}
+
 // A Windows PC by its name ("MEDIA-PC"). The console's resolver knows only
 // DNS, which has no such name on a home network: it is asked the way
 // Windows asks, a NetBIOS name query broadcast on the local network (RFC
@@ -48,29 +81,9 @@ bool netbios_address(const std::string &name, std::string *address)
 {
     if (name.empty() || name.size() > 15)
         return false;
-    unsigned char packet[50] = {};
-    const std::uint16_t id = static_cast<std::uint16_t>(::getpid() ^ 0x4f52);
-    packet[0] = static_cast<unsigned char>(id >> 8);
-    packet[1] = static_cast<unsigned char>(id & 0xff);
-    packet[2] = 0x01; // recursion desired
-    packet[3] = 0x10; // broadcast
-    packet[5] = 1;    // one question
-    // The name: 16 bytes (upper case, padded with spaces, then 0x20 for the
-    // file server), each as two letters 'A' + a half byte.
-    packet[12] = 0x20;
-    for (int i = 0; i < 16; ++i)
-    {
-        const unsigned char c =
-            i == 15 ? 0x20
-            : i < static_cast<int>(name.size())
-                ? static_cast<unsigned char>(
-                      std::toupper(static_cast<unsigned char>(name[static_cast<std::size_t>(i)])))
-                : ' ';
-        packet[13 + 2 * i] = static_cast<unsigned char>('A' + (c >> 4));
-        packet[14 + 2 * i] = static_cast<unsigned char>('A' + (c & 0x0f));
-    }
-    packet[47] = 0x20; // type NB (byte 45 ends the name, 46 is the type's high byte)
-    packet[49] = 0x01; // class IN
+    unsigned char packet[50];
+    netbios_question(packet, static_cast<std::uint16_t>(::getpid() ^ 0x4f52), name, ' ', 0x20, 0x20,
+                     true);
     const int s = ::socket(AF_INET, SOCK_DGRAM, 0);
     if (s < 0)
         return false;
@@ -210,6 +223,183 @@ bool SmbConnection::list(const std::string &folder, const std::string &prefix, i
         list(folder.empty() ? name : folder + "/" + name,
              prefix.empty() ? name : prefix + "/" + name, depth - 1, most, entries, &ignored);
     }
+    return true;
+}
+
+std::vector<SmbServer> smb_find_servers(const std::string &own)
+{
+    std::vector<SmbServer> servers;
+    in_addr self = {};
+    if (::inet_pton(AF_INET, own.c_str(), &self) != 1)
+        return servers;
+    const std::uint32_t base = ntohl(self.s_addr) & 0xffffff00u;
+    // Port 445 knocked on, a batch of addresses at a time: an open one
+    // completes its connection, a missing one stays quiet until the wait ends.
+    constexpr int kBatch = 64;
+    for (int first = 1; first < 255; first += kBatch)
+    {
+        std::vector<std::pair<int, std::uint32_t>> trying;
+        for (int host = first; host < std::min(255, first + kBatch); ++host)
+        {
+            const std::uint32_t address = base | static_cast<std::uint32_t>(host);
+            if (address == ntohl(self.s_addr))
+                continue;
+            const int s = ::socket(AF_INET, SOCK_STREAM, 0);
+            if (s < 0)
+                continue;
+            ::fcntl(s, F_SETFL, ::fcntl(s, F_GETFL, 0) | O_NONBLOCK);
+            sockaddr_in to = {};
+            to.sin_family = AF_INET;
+            to.sin_port = htons(445);
+            to.sin_addr.s_addr = htonl(address);
+            if (::connect(s, reinterpret_cast<const sockaddr *>(&to), sizeof(to)) == 0 ||
+                errno == EINPROGRESS)
+                trying.emplace_back(s, address);
+            else
+                ::close(s);
+        }
+        const auto until = std::chrono::steady_clock::now() + std::chrono::milliseconds(600);
+        while (!trying.empty())
+        {
+            const auto left = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                  until - std::chrono::steady_clock::now())
+                                  .count();
+            if (left <= 0)
+                break;
+            std::vector<pollfd> waits;
+            for (const auto &[s, address] : trying)
+                waits.push_back({s, POLLOUT, 0});
+            if (::poll(waits.data(), static_cast<nfds_t>(waits.size()), static_cast<int>(left)) <=
+                0)
+                break;
+            for (std::size_t i = waits.size(); i-- > 0;)
+            {
+                if (waits[i].revents == 0)
+                    continue;
+                int problem = 0;
+                socklen_t size = sizeof(problem);
+                ::getsockopt(trying[i].first, SOL_SOCKET, SO_ERROR, &problem, &size);
+                if (problem == 0 && (waits[i].revents & POLLOUT) != 0)
+                {
+                    in_addr found = {};
+                    found.s_addr = htonl(trying[i].second);
+                    char text[INET_ADDRSTRLEN] = {};
+                    ::inet_ntop(AF_INET, &found, text, sizeof(text));
+                    servers.push_back({text, ""});
+                }
+                ::close(trying[i].first);
+                trying.erase(trying.begin() + static_cast<std::ptrdiff_t>(i));
+            }
+        }
+        for (const auto &[s, address] : trying)
+            ::close(s);
+    }
+    // Each one's name: a NetBIOS node status query ("*"), answered with the
+    // names it holds; the first unique workstation name is the machine's.
+    const int s = ::socket(AF_INET, SOCK_DGRAM, 0);
+    if (s >= 0)
+    {
+        for (std::size_t i = 0; i < servers.size(); ++i)
+        {
+            unsigned char packet[50];
+            netbios_question(packet, static_cast<std::uint16_t>(0x5200 + i), "*", 0x00, 0x00, 0x21,
+                             false);
+            sockaddr_in to = {};
+            to.sin_family = AF_INET;
+            to.sin_port = htons(137);
+            ::inet_pton(AF_INET, servers[i].address.c_str(), &to.sin_addr);
+            ::sendto(s, packet, sizeof(packet), 0, reinterpret_cast<const sockaddr *>(&to),
+                     sizeof(to));
+        }
+        pollfd wait = {s, POLLIN, 0};
+        while (!servers.empty() && ::poll(&wait, 1, 800) > 0)
+        {
+            unsigned char answer[1024];
+            const ssize_t got = ::recv(s, answer, sizeof(answer), 0);
+            // The header, the name (34 bytes), type, class, time to live and
+            // length: the count of names at 56, then 18 bytes a name.
+            if (got < 57 || (answer[2] & 0x80) == 0)
+                continue;
+            const std::size_t which = static_cast<std::size_t>(answer[1]);
+            if (answer[0] != 0x52 || which >= servers.size())
+                continue;
+            const int count = answer[56];
+            for (int n = 0; n < count && 57 + 18 * (n + 1) <= got; ++n)
+            {
+                const unsigned char *entry = answer + 57 + 18 * n;
+                if (entry[15] != 0x00 || (entry[16] & 0x80) != 0)
+                    continue;
+                std::string name(reinterpret_cast<const char *>(entry), 15);
+                while (!name.empty() && (name.back() == ' ' || name.back() == '\0'))
+                    name.pop_back();
+                servers[which].name = name;
+                break;
+            }
+        }
+        ::close(s);
+    }
+    return servers;
+}
+
+bool smb_shares(const SmbLogin &login, std::vector<std::string> *shares, std::string *error)
+{
+    shares->clear();
+    // The list is asked of the server's IPC$ share.
+    SmbLogin ipc = login;
+    ipc.share = "IPC$";
+    SmbConnection connection;
+    if (!connection.open(ipc, error))
+        return false;
+    struct Answer
+    {
+        bool done = false;
+        int status = 0;
+        srvsvc_NetrShareEnum_rep *rep = nullptr;
+    } answer;
+    const smb2_command_cb done = [](smb2_context *, int status, void *data, void *mine)
+    {
+        Answer *answer = static_cast<Answer *>(mine);
+        answer->done = true;
+        answer->status = status;
+        answer->rep = static_cast<srvsvc_NetrShareEnum_rep *>(data);
+    };
+    if (smb2_share_enum_async(connection.get(), SHARE_INFO_1, done, &answer) < 0)
+    {
+        *error = connection.said();
+        return false;
+    }
+    const auto until = std::chrono::steady_clock::now() + std::chrono::seconds(20);
+    while (!answer.done && std::chrono::steady_clock::now() < until)
+    {
+        pollfd wait = {smb2_get_fd(connection.get()),
+                       static_cast<short>(smb2_which_events(connection.get())), 0};
+        if (::poll(&wait, 1, 1000) < 0 || smb2_service(connection.get(), wait.revents) < 0)
+            break;
+    }
+    if (!answer.done || answer.status != 0 || answer.rep == nullptr)
+    {
+        *error = answer.done ? connection.said() : std::string("no answer");
+        if (answer.rep != nullptr)
+            smb2_free_data(connection.get(), answer.rep);
+        return false;
+    }
+    const srvsvc_SHARE_INFO_1_CONTAINER &list = answer.rep->ses.ShareInfo.Level1;
+    for (std::uint32_t i = 0; list.Buffer != nullptr && i < list.EntriesRead; ++i)
+    {
+        const srvsvc_SHARE_INFO_1 &info = list.Buffer->share_info_1[i];
+        if ((info.type & 0x0fffffffu) != SHARE_TYPE_DISKTREE || info.netname.utf16 == nullptr)
+            continue;
+        const char *name = smb2_utf16_to_utf8(info.netname.utf16->val,
+                                              static_cast<std::size_t>(info.netname.utf16->len));
+        if (name == nullptr)
+            continue;
+        std::string text = name;
+        std::free(const_cast<char *>(name));
+        if (!text.empty() && text.back() != '$')
+            shares->push_back(text);
+    }
+    smb2_free_data(connection.get(), answer.rep);
+    std::sort(shares->begin(), shares->end());
     return true;
 }
 
