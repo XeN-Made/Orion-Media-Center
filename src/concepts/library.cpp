@@ -1097,7 +1097,10 @@ class Library final : public app::Concept
                                       prefs_.setup_done))
                 whats_new_.open(notes, feedback);
             // Seen, or nothing to see (a new install): not asked again for it.
-            if (!notes.version.empty() && prefs_.whats_new_seen != notes.version)
+            // Only for this version's notes: a test build still numbered as
+            // the last release must not mark the next one's notes seen.
+            if (!notes.version.empty() && notes.version == context_.version &&
+                prefs_.whats_new_seen != notes.version)
             {
                 prefs_.whats_new_seen = notes.version;
                 save_prefs();
