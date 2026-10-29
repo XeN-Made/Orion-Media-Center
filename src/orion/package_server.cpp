@@ -58,9 +58,16 @@ std::string read_head(int fd, std::string *buffer, const std::atomic<bool> &stop
         }
         if (buffer->size() > 16 * 1024 || stopping.load())
             return {};
+        // The installer keeps a connection open between ranges a while; it
+        // is looked at twice a second, so stopping never waits on it.
+        int quiet = 0;
         pollfd wait = {fd, POLLIN, 0};
-        // The installer keeps a connection open between ranges a while.
-        if (::poll(&wait, 1, 60000) <= 0)
+        while (::poll(&wait, 1, 500) == 0)
+        {
+            if (stopping.load() || ++quiet > 120)
+                return {};
+        }
+        if ((wait.revents & POLLIN) == 0)
             return {};
         char chunk[4096];
         const ssize_t got = ::recv(fd, chunk, sizeof(chunk), 0);

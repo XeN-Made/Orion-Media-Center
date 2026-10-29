@@ -4,12 +4,16 @@
 
 #pragma once
 
+#include "orion/package_server.hpp"
+#include "orion/packages.hpp"
 #include "orion/shares.hpp"
 #include "platform/ps5/game_copy.hpp"
 
 #include <atomic>
 #include <cstdint>
 #include <functional>
+#include <map>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <string_view>
@@ -52,10 +56,20 @@ std::vector<InstallPlace> install_places();
 
 // One folder of a share listed on a thread of its own (SMB waits on the
 // network), for the install browser: its folders first, then its files.
+// The first `most` bytes of a file on a share (a package's head).
+using ShareHeadReader = std::function<bool(const sys::SmbLogin &login, const std::string &path,
+                                           std::size_t most, std::string *bytes)>;
+bool read_share_head(const sys::SmbLogin &login, const std::string &path, std::size_t most,
+                     std::string *bytes);
+// A package on a share, read where the installer asks (sys::SmbFile).
+std::unique_ptr<PackageSource> open_share_package(const sys::SmbLogin &login,
+                                                  const std::string &path, std::string *error);
+
 class ShareListing
 {
   public:
-    explicit ShareListing(SmbLister list);
+    // With `heads`, each .pkg in the folder (60 at most) is read for what it is.
+    explicit ShareListing(SmbLister list, ShareHeadReader heads = {});
     ~ShareListing();
     ShareListing(const ShareListing &) = delete;
     ShareListing &operator=(const ShareListing &) = delete;
@@ -67,10 +81,18 @@ class ShareListing
     }
     // True once after a listing ended; *error is empty when it worked.
     bool take_finished(std::vector<sys::SmbEntry> *entries, std::string *error);
+    // The packages of the last listing taken, by their path in the folder.
+    const std::map<std::string, PackageId> &packages() const
+    {
+        return taken_packages_;
+    }
     void wait();
 
   private:
     SmbLister list_;
+    ShareHeadReader heads_;
+    std::map<std::string, PackageId> packages_;
+    std::map<std::string, PackageId> taken_packages_;
     std::thread worker_;
     std::atomic<bool> running_{false};
     std::mutex mutex_;

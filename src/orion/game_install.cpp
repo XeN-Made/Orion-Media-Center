@@ -254,7 +254,53 @@ std::vector<InstallPlace> install_places()
     return places;
 }
 
-ShareListing::ShareListing(SmbLister list) : list_(std::move(list))
+namespace
+{
+
+class SharePackage : public PackageSource
+{
+  public:
+    long long read(std::uint64_t offset, void *buffer, std::size_t count) override
+    {
+        return file.read(offset, buffer, count);
+    }
+    sys::SmbFile file;
+};
+
+} // namespace
+
+bool read_share_head(const sys::SmbLogin &login, const std::string &path, std::size_t most,
+                     std::string *bytes)
+{
+    bytes->clear();
+    sys::SmbFile file;
+    std::string error;
+    if (!file.open(login, path, &error))
+        return false;
+    bytes->resize(static_cast<std::size_t>(std::min<std::uint64_t>(most, file.size())));
+    std::size_t have = 0;
+    while (have < bytes->size())
+    {
+        const long long got = file.read(have, bytes->data() + have, bytes->size() - have);
+        if (got <= 0)
+            break;
+        have += static_cast<std::size_t>(got);
+    }
+    bytes->resize(have);
+    return have > 0;
+}
+
+std::unique_ptr<PackageSource> open_share_package(const sys::SmbLogin &login,
+                                                  const std::string &path, std::string *error)
+{
+    auto package = std::make_unique<SharePackage>();
+    if (!package->file.open(login, path, error))
+        return nullptr;
+    return package;
+}
+
+ShareListing::ShareListing(SmbLister list, ShareHeadReader heads)
+    : list_(std::move(list)), heads_(std::move(heads))
 {
 }
 
@@ -289,8 +335,23 @@ bool ShareListing::start(sys::SmbLogin login, std::string folder)
                                      return a.directory;
                                  return lower(a.path) < lower(b.path);
                              });
+            // Each package's head, for what it is and whether it is in.
+            std::map<std::string, PackageId> packages;
+            for (const sys::SmbEntry &entry : entries)
+            {
+                if (!heads_ || entry.directory || !ends(lower(entry.path), ".pkg") ||
+                    packages.size() >= 60)
+                    continue;
+                std::string head;
+                PackageId id;
+                if (heads_(login, folder.empty() ? entry.path : folder + "/" + entry.path,
+                           kPackageHead, &head))
+                    read_package(head, &id);
+                packages[entry.path] = id;
+            }
             {
                 const std::lock_guard<std::mutex> lock(mutex_);
+                packages_ = std::move(packages);
                 entries_ = std::move(entries);
                 error_ = std::move(error);
                 finished_ = true;
@@ -306,6 +367,7 @@ bool ShareListing::take_finished(std::vector<sys::SmbEntry> *entries, std::strin
     if (!finished_)
         return false;
     finished_ = false;
+    taken_packages_ = std::move(packages_);
     *entries = std::move(entries_);
     *error = std::move(error_);
     return true;

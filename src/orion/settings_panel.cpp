@@ -596,10 +596,10 @@ void SettingsPanel::build_network()
         form_.add_header(tr("Network drives") + "  ·  " + share_address(*open));
         form_.add_value(kShareAddress, tr("Address"), share_address(*open));
         form_.add_value(kShareUser, tr("User"), open->user.empty() ? tr("Guest") : open->user);
-        ui::FormRow &install = form_.add_action(kShareInstall, tr("Install a PS5 game…"));
+        ui::FormRow &install = form_.add_action(kShareInstall, tr("Install from this drive…"));
         install.chevron = true;
-        install.description = tr("A game's folder, an image (.ffpkg, .exfat) or an archive (ZIP, "
-                                 "7z, RAR in one or more parts) on this drive");
+        install.description = tr("PS5 games (folders, .ffpkg, .exfat, ZIP, 7z, RAR) and PS4 or "
+                                 "PS5 packages (.pkg: games, add-ons, updates)");
         ui::FormRow &remove = form_.add_action(kShareRemove, tr("Remove this drive"));
         remove.danger = true;
         remove.description =

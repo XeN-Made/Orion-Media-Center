@@ -125,6 +125,8 @@ constexpr int kLoaderPort = 9021;
 constexpr const char *kResumePath = "/app0/assets/payloads/orion-resume.elf";
 // The reader of the system's play time, sent once as ORION starts (payload/playtime).
 constexpr const char *kPlaytimePath = "/app0/assets/payloads/orion-playtime.elf";
+// The go-between that hands a package to the console's installer (payload/pkginstall).
+constexpr const char *kPkgInstallPath = "/app0/assets/payloads/orion-pkginstall.elf";
 constexpr float kHoldToDelete = 1.5f; // seconds of Cross on Delete
 // The launch helper reads a request of 4 KiB; a game's path is one line of it.
 constexpr std::size_t kMaxRequestPath = 1024;
@@ -1041,6 +1043,7 @@ class Library final : public app::Concept
         follow_install(feedback);
         follow_share_check(feedback);
         follow_finder(feedback);
+        follow_package(feedback);
         if (registered_.take_finished() && registered_.result().changed)
             context_.registered_changed = true;
         const bool reduced = context_.settings.reduced_motion;
@@ -1686,6 +1689,15 @@ class Library final : public app::Concept
         float progress = -1.0f;
         if (context_.rescan_requested)
             status = tr("Looking for emulators and their games…");
+        else if (package_server_.running())
+        {
+            const std::uint64_t size = package_server_.size();
+            const std::uint64_t sent = std::min(package_server_.sent(), size);
+            status = trf("Sending {0} to the console's installer  ·  {1} of {2}",
+                         {package_name_, size_text(sent), size_text(size)});
+            if (size > 0)
+                progress = static_cast<float>(sent) / static_cast<float>(size);
+        }
         else if (game_install_.running())
         {
             // A 7z is read in more than one pass: never more than all of it.
@@ -2187,7 +2199,8 @@ class Library final : public app::Concept
             if (entry.directory && entry.path == "sce_sys")
                 game = true;
             else if (entry.directory ||
-                     orion::install_kind(entry.path) != sys::GameSourceKind::none)
+                     orion::install_kind(entry.path) != sys::GameSourceKind::none ||
+                     install_listing_.packages().count(entry.path) != 0)
                 shown.push_back(static_cast<int>(i));
         }
         if (game)
@@ -2204,12 +2217,12 @@ class Library final : public app::Concept
             if (entry.directory)
                 add(entry.path + "/", kItemInstallItem + at);
             else
-                add(entry.path, kItemInstallItem + at, size_text(entry.size));
+                add(entry.path, kItemInstallItem + at, item_note(entry));
         }
         if ((install_page_ + 1) * kPickPage < total)
             add(tr("More…"), kItemInstallMore);
         if (total == 0 && !game)
-            add(tr("No PS5 games or folders here"), 0);
+            add(tr("Nothing to install here"), 0);
         menu_.set_items(std::move(items));
         menu_.open(drive_menu_anchor(), feedback);
     }
@@ -2295,6 +2308,12 @@ class Library final : public app::Concept
                 list_share_folder(feedback);
                 return true;
             }
+            const auto package = install_listing_.packages().find(entry.path);
+            if (package != install_listing_.packages().end())
+            {
+                install_package(on_share(entry.path), entry, package->second, feedback);
+                return true;
+            }
             install_source_ = sys::GameSource();
             install_source_.kind = orion::install_kind(entry.path);
             // An archive is named for its game; an image keeps its file's name.
@@ -2377,6 +2396,113 @@ class Library final : public app::Concept
         scan_shares(feedback, true);
     }
 
+    // ---- packages (.pkg) handed to the console's installer ----
+
+    // A file in the install browser: a package says whether it is in.
+    std::string item_note(const sys::SmbEntry &entry) const
+    {
+        const auto package = install_listing_.packages().find(entry.path);
+        if (package == install_listing_.packages().end())
+            return size_text(entry.size);
+        switch (orion::package_state(package->second, installed_content_))
+        {
+        case orion::PackageState::installed:
+            return tr("Installed");
+        case orion::PackageState::not_installed:
+            return trf("Not installed  ·  {0}", {size_text(entry.size)});
+        case orion::PackageState::no_game:
+            return trf("Its game is not here  ·  {0}", {size_text(entry.size)});
+        case orion::PackageState::unknown:
+            break;
+        }
+        return trf("Not a package ORION can read  ·  {0}", {size_text(entry.size)});
+    }
+
+    // The package served from the drive, the job written, the go-between
+    // sent to the ELF loader; follow_package does the rest.
+    void install_package(const std::string &path, const sys::SmbEntry &entry,
+                         const orion::PackageId &id, app::Feedback &feedback)
+    {
+        const auto refuse = [&](std::string why)
+        {
+            show_note(false, std::move(why));
+            feedback.play(audio::Cue::error);
+        };
+        if (package_server_.running())
+            return refuse(trf("Still sending {0} to the installer", {package_name_}));
+        if (id.kind == orion::PackageKind::none)
+            return refuse(trf("{0} is not a PS4 or PS5 package ORION can read", {entry.path}));
+        if (orion::package_state(id, installed_content_) == orion::PackageState::installed)
+            return refuse(trf("{0} is already installed", {entry.path}));
+        std::string elf;
+        if (!sys::on_console() || !save::read_file(kPkgInstallPath, &elf, 8u << 20) || elf.empty())
+            return refuse(tr("Packages are installed on the console"));
+        const sys::SmbLogin login = orion::share_login(install_share_, context_.library.state_dir);
+        const std::string token = "p" + std::to_string(static_cast<long long>(std::time(nullptr)));
+        if (!package_server_.start(token, entry.size, [login, path](std::string *error)
+                                   { return orion::open_share_package(login, path, error); }))
+            return refuse(tr("Could not start the package server"));
+        install_browsing_ = false;
+        package_token_ = token;
+        package_name_ = entry.path;
+        package_asked_ = clock_;
+        package_answered_ = false;
+        const std::string &state = context_.library.state_dir;
+        std::remove((state + "/pkg-install-result.txt").c_str());
+        save::write_atomic(state + "/pkg-install.txt",
+                           token + "\t" + package_server_.url() + "\t" + entry.path + "\n");
+        orion::log_share(state, "package " + entry.path + " (" + id.content_id + "): asked");
+        std::thread([elf = std::move(elf)]() { sys::send_payload(elf, kLoaderPort); }).detach();
+        show_note(true, trf("Asking the console's installer for {0}…", {entry.path}));
+        feedback.play(audio::Cue::select);
+    }
+
+    // The installer's answer, then the package read whole (or abandoned).
+    void follow_package(app::Feedback &feedback)
+    {
+        if (!package_server_.running())
+            return;
+        const std::string &state = context_.library.state_dir;
+        const auto finish = [&](bool ok, std::string note)
+        {
+            package_server_.stop();
+            std::remove((state + "/pkg-install.txt").c_str()); // the go-between ends
+            orion::log_share(state, "package " + package_name_ + ": " + note);
+            show_note(ok, std::move(note));
+            feedback.play(ok ? audio::Cue::saved : audio::Cue::error);
+        };
+        if (!package_answered_)
+        {
+            std::string text;
+            if (save::read_file(state + "/pkg-install-result.txt", &text, 4096) &&
+                text.rfind(package_token_ + "\t", 0) == 0)
+            {
+                package_answered_ = true;
+                const std::string code = text.substr(package_token_.size() + 1, 8);
+                if (code != "00000000")
+                    return finish(false, trf("The console's installer refused {0} (error {1})",
+                                             {package_name_, code}));
+                show_note(true, trf("The console is installing {0}: it shows in Downloads",
+                                    {package_name_}));
+                return;
+            }
+            if (clock_ - package_asked_ > 30.0f)
+                return finish(false,
+                              tr("The installer did not answer: is the ELF loader running?"));
+            return;
+        }
+        // Read whole and let go of, or nothing asked for ten minutes.
+        if (package_server_.sent() >= package_server_.size() &&
+            package_server_.connections() == 0 && package_server_.quiet_seconds() >= 20)
+        {
+            installed_content_ = orion::read_installed(state);
+            return finish(true, trf("{0} went to the console whole: it finishes installing there",
+                                    {package_name_}));
+        }
+        if (package_server_.quiet_seconds() >= 600)
+            finish(false, trf("The installer stopped reading {0}", {package_name_}));
+    }
+
     // The folder listed, then the install as it ends.
     void follow_install(app::Feedback &feedback)
     {
@@ -2395,6 +2521,7 @@ class Library final : public app::Concept
             else
             {
                 install_entries_ = std::move(entries);
+                installed_content_ = orion::read_installed(context_.library.state_dir);
                 open_install_menu(feedback);
             }
         }
@@ -8309,12 +8436,19 @@ class Library final : public app::Concept
     bool install_browsing_ = false;
     int install_page_ = 0;
     std::vector<sys::SmbEntry> install_entries_;
-    orion::ShareListing install_listing_{sys::smb_list};
+    orion::ShareListing install_listing_{sys::smb_list, orion::read_share_head};
     sys::GameSource install_source_;
     std::string install_name_;
     std::uint64_t install_size_ = 0;
     std::vector<orion::InstallPlace> install_places_;
     orion::GameInstall game_install_{sys::copy_game};
+    // A package going to the console's installer, streamed from its drive.
+    orion::PackageServer package_server_;
+    std::string package_token_;
+    std::string package_name_;
+    float package_asked_ = 0.0f;
+    bool package_answered_ = false;
+    orion::Installed installed_content_; // what the console has, for the browser
     int pick_page_ = 0;
     float check_started_ = 0.0f;       // clock_ when the running check began
     bool update_asked_ = false;        // the check this launch makes by itself has started
