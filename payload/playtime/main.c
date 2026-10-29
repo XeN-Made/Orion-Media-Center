@@ -18,7 +18,8 @@
 // alone before) needs one to be running. For each app this copies its
 // metadata (param.json, or a PS4 title's param.sfo) and its icon into
 // /data/orion/system-apps/<ID>/, once, and lists the IDs in index.txt
-// (orion/registered_titles.hpp reads them). Then the home-screen pictures
+// (orion/registered_titles.hpp reads them), and the add-ons in
+// /user/addcont in addcont.txt. Then the home-screen pictures
 // ORION asks for in /data/orion/system-want.txt ("pic0 <ID>" a line) go to
 // /data/orion/backdrops/<ID>.png. On every system software, app.db or not.
 
@@ -258,6 +259,59 @@ static void list_apps(void)
     say("%d installed apps, %d with new metadata", index_count, copied);
 }
 
+// The add-ons installed: /user/addcont/<game ID>/<label>, a line each as
+// "<ID>\t<label>" in addcont.txt, so ORION can tell which DLC packages are in.
+static void list_addcont(void)
+{
+    static char text[64 * 1024];
+    size_t used = 0;
+    int count = 0;
+    DIR *games = opendir("/user/addcont");
+    if (games == NULL)
+    {
+        if (errno != ENOENT)
+            say("cannot list /user/addcont (errno %d)", errno);
+    }
+    else
+    {
+        struct dirent *game;
+        while ((game = readdir(games)) != NULL)
+        {
+            if (!is_title_id(game->d_name))
+                continue;
+            char path[256];
+            snprintf(path, sizeof(path), "/user/addcont/%s", game->d_name);
+            DIR *labels = opendir(path);
+            if (labels == NULL)
+                continue;
+            struct dirent *label;
+            while ((label = readdir(labels)) != NULL)
+            {
+                if (label->d_name[0] == '.' || strlen(label->d_name) > 32)
+                    continue;
+                const int wrote = snprintf(text + used, sizeof(text) - used, "%s\t%s\n",
+                                           game->d_name, label->d_name);
+                if (wrote < 0 || (size_t)wrote >= sizeof(text) - used)
+                    break;
+                used += (size_t)wrote;
+                ++count;
+            }
+            closedir(labels);
+        }
+        closedir(games);
+    }
+    const char *part = APPS_DIR "/addcont.txt.part";
+    const int fd = open(part, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+    if (fd < 0)
+        return;
+    const ssize_t written = write(fd, text, used);
+    fchmod(fd, 0666);
+    close(fd);
+    if (written == (ssize_t)used)
+        rename(part, APPS_DIR "/addcont.txt");
+    say("%d add-ons installed", count);
+}
+
 // The home-screen pictures ORION asked for, as its backgrounds.
 static void copy_wanted(void)
 {
@@ -449,6 +503,7 @@ static int read_play_time(void)
 int main(void)
 {
     list_apps();
+    list_addcont();
     copy_wanted();
     return read_play_time();
 }

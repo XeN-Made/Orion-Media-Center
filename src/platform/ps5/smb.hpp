@@ -43,6 +43,32 @@ bool smb_download(const SmbLogin &login, const std::string &path, const std::str
                   std::atomic<std::uint64_t> *done, const std::atomic<bool> *cancel,
                   std::string *error);
 
+// One file of a share open for reading at any place, through a connection
+// of its own: what the package server streams from. Not shared between
+// threads.
+class SmbFile
+{
+  public:
+    SmbFile();
+    ~SmbFile();
+    SmbFile(const SmbFile &) = delete;
+    SmbFile &operator=(const SmbFile &) = delete;
+
+    bool open(const SmbLogin &login, const std::string &path, std::string *error);
+    std::uint64_t size() const
+    {
+        return size_;
+    }
+    // Up to `count` bytes from `offset`; how many were read, or -1.
+    long long read(std::uint64_t offset, void *buffer, std::size_t count);
+    void close();
+
+  private:
+    struct Open;
+    Open *open_ = nullptr;
+    std::uint64_t size_ = 0;
+};
+
 // A machine answering SMB on the local network.
 struct SmbServer
 {

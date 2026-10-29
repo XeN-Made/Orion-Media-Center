@@ -399,6 +399,66 @@ std::vector<SmbServer> smb_find_servers(const std::string &own, std::string *tra
     return servers;
 }
 
+struct SmbFile::Open
+{
+    SmbConnection connection;
+    smb2fh *file = nullptr;
+    std::uint32_t chunk = 1u << 20;
+};
+
+SmbFile::SmbFile() = default;
+
+SmbFile::~SmbFile()
+{
+    close();
+}
+
+bool SmbFile::open(const SmbLogin &login, const std::string &path, std::string *error)
+{
+    close();
+    open_ = new Open();
+    if (!open_->connection.open(login, error))
+    {
+        close();
+        return false;
+    }
+    open_->file = smb2_open(open_->connection.get(), path.c_str(), O_RDONLY);
+    smb2_stat_64 info = {};
+    if (open_->file == nullptr || smb2_fstat(open_->connection.get(), open_->file, &info) < 0)
+    {
+        *error = path + ": " + open_->connection.said();
+        close();
+        return false;
+    }
+    size_ = info.smb2_size;
+    const std::uint32_t most = smb2_get_max_read_size(open_->connection.get());
+    if (most != 0 && most < open_->chunk)
+        open_->chunk = most;
+    return true;
+}
+
+long long SmbFile::read(std::uint64_t offset, void *buffer, std::size_t count)
+{
+    if (open_ == nullptr || open_->file == nullptr)
+        return -1;
+    const std::uint32_t asked =
+        static_cast<std::uint32_t>(std::min<std::size_t>(count, open_->chunk));
+    const int got = smb2_pread(open_->connection.get(), open_->file,
+                               static_cast<std::uint8_t *>(buffer), asked, offset);
+    return got < 0 ? -1 : got;
+}
+
+void SmbFile::close()
+{
+    if (open_ == nullptr)
+        return;
+    if (open_->file != nullptr)
+        smb2_close(open_->connection.get(), open_->file);
+    delete open_;
+    open_ = nullptr;
+    size_ = 0;
+}
+
 bool smb_shares(const SmbLogin &login, std::vector<std::string> *shares, std::string *error)
 {
     shares->clear();

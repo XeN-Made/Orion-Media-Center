@@ -146,6 +146,36 @@ bool smb_download(const SmbLogin &login, const std::string &path, const std::str
     return false;
 }
 
+struct SmbFile::Open
+{
+};
+
+SmbFile::SmbFile() = default;
+
+SmbFile::~SmbFile() = default;
+
+bool SmbFile::open(const SmbLogin &login, const std::string &path, std::string *error)
+{
+    (void)login;
+    (void)path;
+    *error = "the PC preview has no network";
+    return false;
+}
+
+long long SmbFile::read(std::uint64_t offset, void *buffer, std::size_t count)
+{
+    (void)offset;
+    (void)buffer;
+    (void)count;
+    return -1;
+}
+
+void SmbFile::close()
+{
+    open_ = nullptr;
+    size_ = 0;
+}
+
 std::vector<SmbServer> smb_find_servers(const std::string &own, std::string *trace,
                                         const std::function<void(const std::string &)> &step)
 {
