@@ -169,6 +169,24 @@ class Shell
 
   private:
     void record(Frame &frame, const Concept &design, float opacity, float dx, float scale);
+    // A large picture read and decoded on a thread of its own (a 4K PNG
+    // takes a while), then uploaded by compose().
+    struct PictureLoad
+    {
+        std::thread worker;
+        std::atomic<bool> busy{false};
+        std::mutex mutex;
+        std::string decoding; // what the worker was asked for (path and version)
+        library::Image image; // what it made, waiting for compose()
+        std::string made;     // ... and for which request
+        bool ready = false;
+        std::string shown;         // the request the texture holds
+        std::uint32_t retired = 0; // freed a frame later: lists may still use it
+    };
+    void load_picture(PictureLoad &load, const std::string &path, int version, int size);
+    // Uploads what was made; with let_go, frees the texture instead.
+    void upload_picture(PictureLoad &load, gfx::Renderer &renderer, bool let_go,
+                        std::uint32_t *texture, float *aspect);
     void load_backdrop();
     void upload_backdrop(gfx::Renderer &renderer);
     void draw_chrome();
@@ -196,16 +214,9 @@ class Shell
     bool settings_changed_ = true; // applied once at start-up
     float save_delay_ = 0.0f;      // > 0: a save is pending
     bool welcomed_ = false;
-    // The picture Context::backdrop_path names: read and decoded on a thread
-    // of its own (a 4K PNG takes a while), uploaded by compose().
-    std::thread backdrop_worker_;
-    std::atomic<bool> backdrop_busy_{false};
-    std::mutex backdrop_mutex_;
-    std::string backdrop_decoding_; // what the worker was asked for
-    library::Image backdrop_image_; // what it made, waiting for compose()
-    std::string backdrop_image_path_;
-    bool backdrop_ready_ = false;
-    std::uint32_t backdrop_retired_ = 0; // freed a frame later: lists may still use it
+    // The pictures Context::backdrop_path and wallpaper_path name.
+    PictureLoad backdrop_;
+    PictureLoad wallpaper_;
 };
 
 } // namespace hui::app

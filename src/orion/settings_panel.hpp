@@ -85,17 +85,19 @@ class SettingsPanel
     enum class Change : std::uint8_t
     {
         none,
-        look,            // the Look was edited
-        prefs,           // the LibraryPrefs were edited
-        new_tab,         // "New tab" was chosen: the screen asks for a name
-        save_theme,      // "Save as new theme" was chosen: the screen asks for a name
-        rename_tab,      // "Rename" on a tab's page: tab_id() says which custom tab
-        fetch_art,       // "Find box art now" was chosen
-        art_folder,      // the box art folder changed (prefs.art_dir)
-        type_art_folder, // "Your own folder" was chosen: the screen asks for a path
-        type_grid_key,   // "SteamGridDB key" was chosen: the screen asks for it
-        add_rom_folder,  // "Type a path" in the folder browser: the screen asks for one, for
-                         // emulator_page()
+        look,              // the Look was edited
+        prefs,             // the LibraryPrefs were edited
+        new_tab,           // "New tab" was chosen: the screen asks for a name
+        save_theme,        // "Save as new theme" was chosen: the screen asks for a name
+        choose_background, // "Background picture": the screen opens its picture browser
+        clear_background,  // "Use the sky": the player's picture goes
+        rename_tab,        // "Rename" on a tab's page: tab_id() says which custom tab
+        fetch_art,         // "Find box art now" was chosen
+        art_folder,        // the box art folder changed (prefs.art_dir)
+        type_art_folder,   // "Your own folder" was chosen: the screen asks for a path
+        type_grid_key,     // "SteamGridDB key" was chosen: the screen asks for it
+        add_rom_folder,    // "Type a path" in the folder browser: the screen asks for one, for
+                           // emulator_page()
         add_folder, // "Use this folder" in the folder browser: browse_result(), for emulator_page()
         copy_backdrops, // "Copy them again": the screen asks the helper anew
         folders,        // a game folder changed or went: save and scan again
@@ -169,6 +171,11 @@ class SettingsPanel
     const std::string &share_id() const
     {
         return share_page_;
+    }
+    // Whether the player has a picture of their own behind the library.
+    void set_background(bool own)
+    {
+        own_background_ = own;
     }
     // The built-in labels the library has titles for.
     void set_labels(std::vector<LabelEntry> labels)
@@ -398,6 +405,7 @@ class SettingsPanel
     std::vector<Share> shares_;
     std::string share_status_;
     std::string share_page_; // the drive whose page is open; empty: the list
+    bool own_background_ = false;
     std::vector<LabelEntry> label_entries_;
     std::string label_page_;                       // the label whose page is open; empty: the list
     std::vector<std::string> label_rows_;          // the list's labels, by row (kLabelRow + i)

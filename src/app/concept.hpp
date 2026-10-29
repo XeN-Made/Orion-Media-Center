@@ -118,6 +118,13 @@ struct Context
     std::string backdrop_shown = {};
     std::uint32_t backdrop_texture = 0;
     float backdrop_aspect = 16.0f / 9.0f;
+    // The player's own picture in place of the sky, the same way: empty
+    // frees it. A new wallpaper_version reads the same file again (a picture
+    // replaced under the same name).
+    std::string wallpaper_path = {};
+    int wallpaper_version = 0;
+    std::uint32_t wallpaper_texture = 0;
+    float wallpaper_aspect = 16.0f / 9.0f;
 };
 
 // One frame of a design, back to front:

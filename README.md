@@ -64,6 +64,9 @@ most played.
   or the one you pick; other languages can be added as files.
 - Themes and a look of your own: colours, the galaxy sky, glass, corners,
   focus ring, per tab if you like.
+- A background picture of your own in place of the sky: Settings,
+  Appearance, **Background picture** (a PNG, JPEG or WebP from any drive), or
+  put it in `/data/orion` as `background.png` (or `.jpg`, `.webp`).
 - Background music (add your own `.ogg` files) and sound effects.
 - Opens by itself after the jailbreak if you like (autoboot, off until you turn
   it on), returns to ORION when a game closes, and updates itself when a newer

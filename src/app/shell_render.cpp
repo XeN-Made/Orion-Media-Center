@@ -15,28 +15,50 @@ namespace
 constexpr float kSlide = 90.0f;
 } // namespace
 
+void Shell::upload_picture(PictureLoad &load, gfx::Renderer &renderer, bool let_go,
+                           std::uint32_t *texture, float *aspect)
+{
+    if (load.retired != 0)
+    {
+        renderer.batch().delete_texture(load.retired);
+        load.retired = 0;
+    }
+    if (let_go)
+    {
+        // Let go: the texture goes, and the same picture asked for again
+        // is read again.
+        if (*texture != 0)
+            load.retired = *texture;
+        *texture = 0;
+        if (!load.busy.load())
+            load.decoding.clear();
+        return;
+    }
+    const std::lock_guard<std::mutex> lock(load.mutex);
+    if (!load.ready)
+        return;
+    load.ready = false;
+    load.retired = *texture;
+    *texture = 0;
+    if (!load.image.rgba.empty())
+    {
+        *texture = renderer.batch().create_texture(load.image.width, load.image.height,
+                                                   load.image.rgba.data());
+        *aspect = static_cast<float>(load.image.width) / static_cast<float>(load.image.height);
+    }
+    load.shown = load.made;
+    load.image = library::Image();
+}
+
 void Shell::upload_backdrop(gfx::Renderer &renderer)
 {
-    if (backdrop_retired_ != 0)
-    {
-        renderer.batch().delete_texture(backdrop_retired_);
-        backdrop_retired_ = 0;
-    }
-    const std::lock_guard<std::mutex> lock(backdrop_mutex_);
-    if (!backdrop_ready_)
-        return;
-    backdrop_ready_ = false;
-    backdrop_retired_ = context_.backdrop_texture;
-    context_.backdrop_texture = 0;
-    if (!backdrop_image_.rgba.empty())
-    {
-        context_.backdrop_texture = renderer.batch().create_texture(
-            backdrop_image_.width, backdrop_image_.height, backdrop_image_.rgba.data());
-        context_.backdrop_aspect =
-            static_cast<float>(backdrop_image_.width) / static_cast<float>(backdrop_image_.height);
-    }
-    context_.backdrop_shown = backdrop_image_path_;
-    backdrop_image_ = library::Image();
+    // A game's picture stays up until another replaces it; the player's own
+    // goes when its path is emptied.
+    upload_picture(backdrop_, renderer, false, &context_.backdrop_texture,
+                   &context_.backdrop_aspect);
+    context_.backdrop_shown = backdrop_.shown.substr(0, backdrop_.shown.find('\n'));
+    upload_picture(wallpaper_, renderer, context_.wallpaper_path.empty(),
+                   &context_.wallpaper_texture, &context_.wallpaper_aspect);
 }
 
 void Shell::compose(gfx::Renderer &renderer)

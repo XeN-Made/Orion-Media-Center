@@ -76,6 +76,8 @@ enum : int
     kRim,
     kRestore,
     kSaveTheme,
+    kOwnBackground,
+    kClearBackground,
     kNewTab,
     kArtAuto,
     kReturn,
@@ -1464,6 +1466,14 @@ void SettingsPanel::build_appearance(const Look &look, const LibraryPrefs &prefs
         .add_slider(kBackgroundStrength, tr("Background strength"),
                     prefs.background_strength * 100.0f, 20.0f, 100.0f, 10.0f)
         .unit = " %";
+    ui::FormRow &picture = form_.add_action(kOwnBackground, tr("Background picture"));
+    picture.chevron = true;
+    picture.text = own_background_ ? tr("Your picture") : tr("None");
+    picture.description =
+        tr("A PNG, JPEG or WebP of your own behind the library, in place of the drawn sky");
+    if (own_background_)
+        form_.add_action(kClearBackground, tr("Use the sky")).description =
+            tr("Your picture goes; game backgrounds still show over the sky");
     ui::FormRow &save = form_.add_action(kSaveTheme, tr("Save as new theme"));
     save.description =
         tr("Keeps this look as a theme file in /data/orion/themes, to reuse or share");
@@ -1632,6 +1642,10 @@ SettingsPanel::Change SettingsPanel::handle(const InputFrame &input, ui::Feedbac
     {
         if (id == kSaveTheme)
             return Change::save_theme;
+        if (id == kOwnBackground)
+            return Change::choose_background;
+        if (id == kClearBackground)
+            return Change::clear_background;
         if (id == kRestore && themes_ != nullptr)
         {
             *look = default_look(*themes_);

@@ -180,4 +180,33 @@ TEST_F(OrionSettings, ALabelsPageChangesItsColours)
     EXPECT_TRUE(panel.label_id().empty());
 }
 
+// Appearance, near its end: Background picture asks the screen for a
+// picture; with one set, Use the sky takes it away.
+TEST_F(OrionSettings, ABackgroundPictureIsChosenAndTakenAway)
+{
+    for (const bool own : {false, true})
+    {
+        SettingsPanel panel;
+        panel.set_background(own);
+        panel.open(look_, prefs_, feedback_);
+        for (int i = 0; i < 16 && panel.section() != SettingsPanel::Section::appearance; ++i)
+            send_to(panel, press(Action::page_next));
+        ASSERT_EQ(panel.section(), SettingsPanel::Section::appearance);
+        send_to(panel, nav(Direction::right));
+        // To Restore the ORION look, the last row, then back up past Save as
+        // new theme.
+        for (int i = 0; i < 60; ++i)
+            send_to(panel, nav(Direction::down));
+        send_to(panel, nav(Direction::up));
+        send_to(panel, nav(Direction::up));
+        if (own)
+        {
+            EXPECT_EQ(send_to(panel, press(Action::confirm)),
+                      SettingsPanel::Change::clear_background);
+            send_to(panel, nav(Direction::up));
+        }
+        EXPECT_EQ(send_to(panel, press(Action::confirm)), SettingsPanel::Change::choose_background);
+    }
+}
+
 } // namespace

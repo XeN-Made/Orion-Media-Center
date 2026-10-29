@@ -115,28 +115,28 @@ void Shell::set_info_open(bool open)
 
 Shell::~Shell()
 {
-    if (backdrop_worker_.joinable())
-        backdrop_worker_.join();
+    for (PictureLoad *load : {&backdrop_, &wallpaper_})
+    {
+        if (load->worker.joinable())
+            load->worker.join();
+    }
 }
 
-void Shell::load_backdrop()
+void Shell::load_picture(PictureLoad &load, const std::string &path, int version, int size)
 {
-    const std::string &wanted = context_.backdrop_path;
-    if (wanted.empty() || wanted == backdrop_decoding_ || backdrop_busy_.load())
+    const std::string wanted = path + "\n" + std::to_string(version);
+    if (path.empty() || wanted == load.decoding || load.busy.load())
         return;
-    if (backdrop_worker_.joinable())
-        backdrop_worker_.join();
-    backdrop_decoding_ = wanted;
-    backdrop_busy_ = true;
-    const auto load = [this, path = wanted]
+    if (load.worker.joinable())
+        load.worker.join();
+    load.decoding = wanted;
+    load.busy = true;
+    const auto work = [&load, path, wanted, size]
     {
-        // Home-screen pictures are 3840 x 2160: a third of that is enough
-        // under a veil, and a sixth of the memory.
-        constexpr int kSize = 1280;
         std::string bytes;
         library::Image image;
-        const bool read = save::read_file(path, &bytes, 24u << 20);
-        const bool ok = read && library::decode_png(bytes, kSize, &image);
+        const bool read = save::read_file(path, &bytes, 32u << 20);
+        const bool ok = read && library::decode_png(bytes, size, &image);
         // Which pictures came in, in the console's step log.
         const std::string note =
             "backdrop " + path +
@@ -145,19 +145,28 @@ void Shell::load_backdrop()
                     : std::string(": not read"));
         sys::art_trace(note.c_str());
         {
-            const std::lock_guard<std::mutex> lock(backdrop_mutex_);
-            backdrop_image_ = ok ? std::move(image) : library::Image();
-            backdrop_image_path_ = path;
-            backdrop_ready_ = true;
+            const std::lock_guard<std::mutex> lock(load.mutex);
+            load.image = ok ? std::move(image) : library::Image();
+            load.made = wanted;
+            load.ready = true;
         }
-        backdrop_busy_ = false;
+        load.busy = false;
     };
     // On a PC the tour runs faster than the clock: load on the spot there, so
     // pictures and tests see the same thing every time.
     if (sys::on_console())
-        backdrop_worker_ = std::thread(load);
+        load.worker = std::thread(work);
     else
-        load();
+        work();
+}
+
+void Shell::load_backdrop()
+{
+    // Home-screen pictures are 3840 x 2160: a third of that is enough under
+    // a veil, and a sixth of the memory. The player's own picture is shown
+    // whole, so it keeps the screen's size.
+    load_picture(backdrop_, context_.backdrop_path, 0, 1280);
+    load_picture(wallpaper_, context_.wallpaper_path, context_.wallpaper_version, 1920);
 }
 
 void Shell::update(const InputFrame &input, float dt)

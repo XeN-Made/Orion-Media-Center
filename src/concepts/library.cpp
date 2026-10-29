@@ -825,6 +825,7 @@ class Library final : public app::Concept
         }
         if (prefs_.game_backgrounds && sys::on_console())
             request_backdrops();
+        context_.wallpaper_path = background_file();
         if (sys::on_console())
             request_icons();
         // Installed packages and images mounted from elsewhere.
@@ -1196,11 +1197,15 @@ class Library final : public app::Concept
             frame.backdrop.params[0] = drift * 6.0f;
             frame.backdrop.params[1] = std::sin(drift * 0.05f) * 40.0f;
         }
+        const bool own = context_.wallpaper_texture != 0 && !context_.wallpaper_path.empty();
         if (theme_.style == ui::SurfaceStyle::glass)
         {
-            draw_clouds(frame.scene, drift);
+            if (!own)
+                draw_clouds(frame.scene, drift);
             frame.glass = true;
         }
+        if (own)
+            draw_wallpaper(frame.scene);
         draw_backdrop(frame.scene);
 
         gfx::DrawList &list = frame.overlay;
@@ -1948,6 +1953,7 @@ class Library final : public app::Concept
 
     void open_settings(app::Feedback &feedback)
     {
+        settings_.set_background(!background_file().empty());
         settings_.set_shares(orion::load_shares(context_.library.state_dir), share_status_);
         settings_.set_tabs(every_tab());
         settings_.set_labels(every_label());
@@ -2337,6 +2343,23 @@ class Library final : public app::Concept
             break;
         case orion::SettingsPanel::Change::romm_browse:
             open_romm_browser(feedback);
+            break;
+        case orion::SettingsPanel::Change::choose_background:
+            settings_.close(feedback);
+            picking_music_ = false;
+            picking_background_ = true;
+            pick_dir_.clear();
+            pick_page_ = 0;
+            open_picture_menu(feedback);
+            break;
+        case orion::SettingsPanel::Change::clear_background:
+            for (const char *kind : kBackgroundKinds)
+                std::remove((context_.library.state_dir + "/background" + kind).c_str());
+            context_.wallpaper_path.clear();
+            settings_.set_background(false);
+            settings_.refresh(look_, prefs_);
+            show_note(true, tr("The sky is back"));
+            feedback.play(audio::Cue::saved);
             break;
         case orion::SettingsPanel::Change::type_grid_key:
             start_typing(Typing::grid_key, grid_key());
@@ -3571,7 +3594,8 @@ class Library final : public app::Concept
                 if (entry.directory)
                     pick_dirs_.push_back(entry.name);
                 else if (picking_music_ ? ends(".ogg") || ends(".at9")
-                                        : ends(".png") || ends(".jpg") || ends(".jpeg"))
+                                        : ends(".png") || ends(".jpg") || ends(".jpeg") ||
+                                              (picking_background_ && ends(".webp")))
                     pick_files_.push_back(entry.name);
             }
             std::sort(pick_dirs_.begin(), pick_dirs_.end());
@@ -3762,6 +3786,57 @@ class Library final : public app::Concept
     // The chosen file becomes the title's picture: copied into the player's
     // pictures as <ID>.<its extension>, which wins over a picture named after
     // the title (library::apply_custom_art).
+    // The player's own background: <state>/background.<kind>, put there from
+    // Settings or by hand (FTP). The first kind found is the one shown.
+    static constexpr const char *kBackgroundKinds[] = {".png", ".jpg", ".jpeg", ".webp"};
+
+    std::string background_file() const
+    {
+        const std::string &state = context_.library.state_dir;
+        if (state.empty())
+            return "";
+        for (const char *kind : kBackgroundKinds)
+        {
+            const std::string file = state + "/background" + kind;
+            struct stat info = {};
+            if (::stat(file.c_str(), &info) == 0 && S_ISREG(info.st_mode) && info.st_size > 0)
+                return file;
+        }
+        return "";
+    }
+
+    // A copy, so the picture stays when its drive is taken out; it must be
+    // a picture ORION can read, or the sky would vanish for nothing.
+    void choose_background(const std::string &file, app::Feedback &feedback)
+    {
+        std::string bytes;
+        library::Image probe;
+        if (!save::read_file(file, &bytes, 32u << 20) || bytes.empty() ||
+            !library::decode_png(bytes, 64, &probe))
+        {
+            show_note(false, trf("Could not read {0}", {file}));
+            feedback.play(audio::Cue::error);
+            return;
+        }
+        std::string extension = file.substr(file.rfind('.'));
+        for (char &c : extension)
+            c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        const std::string &state = context_.library.state_dir;
+        for (const char *kind : kBackgroundKinds)
+            std::remove((state + "/background" + kind).c_str());
+        const std::string failed = save::write_atomic(state + "/background" + extension, bytes);
+        if (!failed.empty())
+        {
+            show_note(false, trf("Could not save the picture: {0}", {failed}));
+            feedback.play(audio::Cue::error);
+            return;
+        }
+        context_.wallpaper_path = background_file();
+        ++context_.wallpaper_version;
+        show_note(true, tr("Your picture is the background now"));
+        feedback.play(audio::Cue::saved);
+    }
+
     void choose_picture(const std::string &file, app::Feedback &feedback)
     {
         const Title *title = find_title(menu_title_);
@@ -4394,6 +4469,7 @@ class Library final : public app::Concept
         if (tag == kItemPicture || tag == kItemMusic)
         {
             picking_music_ = tag == kItemMusic;
+            picking_background_ = false;
             pick_dir_.clear();
             pick_page_ = 0;
             open_picture_menu(feedback);
@@ -4467,6 +4543,8 @@ class Library final : public app::Concept
                 pick_dir_ + "/" + pick_files_[static_cast<std::size_t>(tag - kItemPickFile)];
             if (picking_music_)
                 choose_music(file, feedback);
+            else if (picking_background_)
+                choose_background(file, feedback);
             else
                 choose_picture(file, feedback);
             return;
@@ -5537,6 +5615,17 @@ class Library final : public app::Concept
         const bool in = ready && backdrop_drawn_ == backdrop_candidate_;
         const float speed = context_.settings.reduced_motion ? 10.0f : 2.2f;
         backdrop_alpha_ = std::clamp(backdrop_alpha_ + (in ? speed : -speed) * dt, 0.0f, 1.0f);
+    }
+
+    // The player's picture fills the screen (cropped to it) under a light
+    // veil of the page colour, deeper at the bottom where the hints are.
+    void draw_wallpaper(gfx::DrawList &scene) const
+    {
+        const Rect screen = {0.0f, 0.0f, gfx::kVirtualWidth, gfx::kVirtualHeight};
+        scene.image(context_.wallpaper_texture, screen, fill_uv(context_.wallpaper_aspect),
+                    Color::rgb(0xffffff), 0.0f);
+        scene.gradient_rect(screen, 0.0f, theme_.page.with_alpha(0.25f),
+                            theme_.page.with_alpha(0.6f));
     }
 
     // The part of a picture of this aspect that fills the screen.
@@ -7623,7 +7712,8 @@ class Library final : public app::Concept
     // Wide covers: the copies being made, and the titles already asked for.
     orion::WideCopies wide_copies_;
     std::unordered_set<std::string> wide_asked_;
-    bool picking_music_ = false; // the browser lists music, not pictures
+    bool picking_music_ = false;      // the browser lists music, not pictures
+    bool picking_background_ = false; // ... a picture for behind the library, not a title
     // Find other art: the title looked through, its picture before, the
     // covers so far, the one shown, and whether the full one is coming.
     orion::GridPicker picker_{grid_http()};
