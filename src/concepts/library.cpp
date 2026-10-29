@@ -30,9 +30,11 @@
 #include "orion/romm_browser.hpp"
 #include "orion/romm_saves.hpp"
 #include "orion/shares.hpp"
+#include "platform/ps5/game_copy.hpp"
 #include "platform/ps5/smb.hpp"
 #include "orion/steamgriddb.hpp"
 #include "orion/wide_copies.hpp"
+#include "orion/game_install.hpp"
 #include "orion/look.hpp"
 #include "orion/playtime.hpp"
 #include "orion/prefs.hpp"
@@ -209,28 +211,34 @@ enum : int
     kItemRemoveRom,
     kItemHdArt,
     kItemRename,
-    kItemPicture,         // Choose picture…
-    kItemOwnPicture,      // Use its own picture
-    kItemFindArt,         // Find other art… (SteamGridDB)
-    kItemMusic,           // Choose music…
-    kItemOwnMusic,        // Use its own music
-    kItemPickUp,          // the picture browser: up one folder
-    kItemPickMore,        // its next page
-    kItemPickLess,        // its page before
-    kItemMoveMenu,        // Move to tab…: the list of tabs
-    kItemDetails,         // Details…: the title's page
-    kItemFindArtName,     // Find art by name… (SteamGridDB)
-    kItemContinue,        // Continue from the last save state (RetroArch)
-    kItemLabelMenu,       // Label…: ORION's label, then the player's
-    kItemLabelOwn,        // ORION's label again
-    kItemNewLabel,        // New label…: typed, then worn
-    kItemMove = 100,      // + the tab's index
-    kItemShelf = 250,     // + a built-in shelf's index in kShelves
-    kItemPlayer = 300,    // 0: the default, then 1 + an index in library::players_for
-    kItemPickPlace = 500, // + an index in pick_places_
-    kItemPickDir = 1000,  // + an index in pick_dirs_
-    kItemPickFile = 3000, // + an index in pick_files_
-    kItemLabel = 5000,    // + an index in custom_labels()
+    kItemPicture,             // Choose picture…
+    kItemOwnPicture,          // Use its own picture
+    kItemFindArt,             // Find other art… (SteamGridDB)
+    kItemMusic,               // Choose music…
+    kItemOwnMusic,            // Use its own music
+    kItemPickUp,              // the picture browser: up one folder
+    kItemPickMore,            // its next page
+    kItemPickLess,            // its page before
+    kItemMoveMenu,            // Move to tab…: the list of tabs
+    kItemDetails,             // Details…: the title's page
+    kItemFindArtName,         // Find art by name… (SteamGridDB)
+    kItemContinue,            // Continue from the last save state (RetroArch)
+    kItemLabelMenu,           // Label…: ORION's label, then the player's
+    kItemLabelOwn,            // ORION's label again
+    kItemNewLabel,            // New label…: typed, then worn
+    kItemInstallUp,           // the install browser: up one folder
+    kItemInstallMore,         // its next page
+    kItemInstallLess,         // its page before
+    kItemInstallHere,         // Install this game folder
+    kItemMove = 100,          // + the tab's index
+    kItemShelf = 250,         // + a built-in shelf's index in kShelves
+    kItemPlayer = 300,        // 0: the default, then 1 + an index in library::players_for
+    kItemPickPlace = 500,     // + an index in pick_places_
+    kItemPickDir = 1000,      // + an index in pick_dirs_
+    kItemPickFile = 3000,     // + an index in pick_files_
+    kItemLabel = 5000,        // + an index in custom_labels()
+    kItemInstallPlace = 6000, // + an index in install_places_
+    kItemInstallItem = 6100,  // + an index in install_entries_
 };
 
 // The picture browser shows this many folders and pictures at a time: the
@@ -1026,6 +1034,7 @@ class Library final : public app::Concept
         follow_backdrop(dt);
         poll_art(feedback);
         poll_icon_copies();
+        follow_install(feedback);
         if (registered_.take_finished() && registered_.result().changed)
             context_.registered_changed = true;
         const bool reduced = context_.settings.reduced_motion;
@@ -1648,6 +1657,18 @@ class Library final : public app::Concept
                installer_.state() == orion::UpdateInstaller::State::unpacking;
     }
 
+    // A size as people read it: "850 MB", "12.4 GB".
+    static std::string size_text(std::uint64_t bytes)
+    {
+        constexpr std::uint64_t kGb = 1024ull * 1024ull * 1024ull;
+        if (bytes < kGb)
+            return megabytes(static_cast<std::size_t>(bytes));
+        char text[32];
+        std::snprintf(text, sizeof(text), "%.1f GB",
+                      static_cast<double>(bytes) / static_cast<double>(kGb));
+        return text;
+    }
+
     static std::string megabytes(std::size_t bytes)
     {
         return std::to_string((bytes + 512u * 1024u) / (1024u * 1024u)) + " MB";
@@ -1659,6 +1680,18 @@ class Library final : public app::Concept
         float progress = -1.0f;
         if (context_.rescan_requested)
             status = tr("Looking for emulators and their games…");
+        else if (game_install_.running())
+        {
+            // A 7z is read in more than one pass: never more than all of it.
+            const std::uint64_t total = game_install_.total();
+            const std::uint64_t done =
+                total > 0 ? std::min(game_install_.done(), total) : game_install_.done();
+            status = total > 0 ? trf("Installing {0}  ·  {1} of {2}",
+                                     {game_install_.name(), size_text(done), size_text(total)})
+                               : trf("Installing {0}…", {game_install_.name()});
+            if (total > 0)
+                progress = std::min(1.0f, static_cast<float>(done) / static_cast<float>(total));
+        }
         else if (romm_download_.running())
             status = trf("Downloading {0} from RomM  ·  {1}",
                          {romm_downloading_name_, megabytes(romm_download_.written())});
@@ -1951,8 +1984,284 @@ class Library final : public app::Concept
         feedback.play(audio::Cue::focus);
     }
 
+    // ---- PS5 games installed off a network drive (orion/game_install.hpp) ----
+
+    // Install a PS5 game…: the drive's folders, from the one its games are in.
+    void browse_share(const std::string &id, app::Feedback &feedback)
+    {
+        const std::vector<orion::Share> shares = orion::load_shares(context_.library.state_dir);
+        const auto share = std::find_if(shares.begin(), shares.end(),
+                                        [&](const orion::Share &s) { return s.id == id; });
+        if (share == shares.end())
+            return;
+        if (game_install_.running())
+        {
+            show_note(false, trf("Still installing {0}", {game_install_.name()}));
+            feedback.play(audio::Cue::error);
+            return;
+        }
+        settings_.close(feedback);
+        install_share_ = *share;
+        install_dir_ = share->folder;
+        list_share_folder(feedback);
+    }
+
+    void list_share_folder(app::Feedback &feedback)
+    {
+        install_browsing_ = true;
+        install_page_ = 0;
+        install_entries_.clear();
+        install_listing_.start(orion::share_login(install_share_, context_.library.state_dir),
+                               install_dir_);
+        std::vector<ui::MenuItem> items;
+        ui::MenuItem looking = menu_item(tr("Looking on the network drive…"));
+        looking.disabled = true;
+        items.push_back(looking);
+        menu_.set_items(std::move(items));
+        menu_.open(grid_.cell_rect(grid_.focus()), feedback);
+    }
+
+    std::string install_folder_name() const
+    {
+        const std::string &folder = install_dir_.empty() ? install_share_.share : install_dir_;
+        const std::size_t slash = folder.find_last_of('/');
+        return slash == std::string::npos ? folder : folder.substr(slash + 1);
+    }
+
+    // The folder listed: up, the folder itself when it is a game, then a
+    // page of its folders and of what can be installed.
+    void open_install_menu(app::Feedback &feedback)
+    {
+        std::vector<ui::MenuItem> items;
+        const auto add = [&](std::string label, int tag, std::string shortcut = {})
+        {
+            ui::MenuItem item = menu_item(std::move(label));
+            item.tag = tag;
+            item.disabled = tag == 0;
+            item.shortcut = std::move(shortcut);
+            items.push_back(item);
+        };
+        add(orion::share_address(install_share_) + (install_dir_.empty() ? "" : "/" + install_dir_),
+            0);
+        if (!install_dir_.empty())
+            add(tr("Up one folder"), kItemInstallUp);
+        std::vector<int> shown;
+        bool game = false;
+        for (std::size_t i = 0; i < install_entries_.size(); ++i)
+        {
+            const sys::SmbEntry &entry = install_entries_[i];
+            if (entry.directory && entry.path == "sce_sys")
+                game = true;
+            else if (entry.directory ||
+                     orion::install_kind(entry.path) != sys::GameSourceKind::none)
+                shown.push_back(static_cast<int>(i));
+        }
+        if (game)
+            add(trf("Install {0}", {install_folder_name()}), kItemInstallHere);
+        const int total = static_cast<int>(shown.size());
+        install_page_ = std::clamp(install_page_, 0, std::max(0, (total - 1) / kPickPage));
+        if (install_page_ > 0)
+            add(tr("Back…"), kItemInstallLess);
+        for (int i = install_page_ * kPickPage;
+             i < std::min(total, (install_page_ + 1) * kPickPage); ++i)
+        {
+            const int at = shown[static_cast<std::size_t>(i)];
+            const sys::SmbEntry &entry = install_entries_[static_cast<std::size_t>(at)];
+            if (entry.directory)
+                add(entry.path + "/", kItemInstallItem + at);
+            else
+                add(entry.path, kItemInstallItem + at, size_text(entry.size));
+        }
+        if ((install_page_ + 1) * kPickPage < total)
+            add(tr("More…"), kItemInstallMore);
+        if (total == 0 && !game)
+            add(tr("No PS5 games or folders here"), 0);
+        menu_.set_items(std::move(items));
+        menu_.open(grid_.cell_rect(grid_.focus()), feedback);
+    }
+
+    // Where it goes: each drive ORION may install to, with its free space;
+    // one with too little for what is copied cannot be chosen.
+    void open_place_menu(app::Feedback &feedback)
+    {
+        install_places_ = orion::install_places();
+        if (install_places_.empty())
+        {
+            show_note(false, tr("No drive to install to"));
+            feedback.play(audio::Cue::error);
+            return;
+        }
+        std::vector<ui::MenuItem> items;
+        ui::MenuItem title = menu_item(trf("Install {0} to", {install_name_}));
+        title.disabled = true;
+        items.push_back(title);
+        for (std::size_t i = 0; i < install_places_.size(); ++i)
+        {
+            const orion::InstallPlace &place = install_places_[i];
+            ui::MenuItem item = menu_item(drive_name(place.drive));
+            item.shortcut = trf("{0} free", {size_text(place.free)});
+            item.tag = kItemInstallPlace + static_cast<int>(i);
+            item.disabled = install_size_ > 0 && place.free < install_size_;
+            items.push_back(item);
+        }
+        menu_.set_items(std::move(items));
+        menu_.open(grid_.cell_rect(grid_.focus()), feedback);
+    }
+
+    std::string drive_name(const std::string &drive) const
+    {
+        if (drive == "/data")
+            return tr("The console's storage");
+        if (drive == "/mnt/ext0")
+            return tr("Extended storage");
+        if (drive == "/mnt/ext1")
+            return trf("Extended storage {0}", {"2"});
+        if (drive.rfind("/mnt/usb", 0) == 0)
+            return trf("USB drive {0}", {std::to_string(std::atoi(drive.c_str() + 8) + 1)});
+        return drive;
+    }
+
+    // A tag of the install menus: true when it was one.
+    bool install_item(int tag, app::Feedback &feedback)
+    {
+        const auto on_share = [&](const std::string &name)
+        { return install_dir_.empty() ? name : install_dir_ + "/" + name; };
+        if (tag == kItemInstallUp)
+        {
+            const std::size_t slash = install_dir_.find_last_of('/');
+            install_dir_ =
+                slash == std::string::npos ? std::string() : install_dir_.substr(0, slash);
+            list_share_folder(feedback);
+            return true;
+        }
+        if (tag == kItemInstallMore || tag == kItemInstallLess)
+        {
+            install_page_ += tag == kItemInstallMore ? 1 : -1;
+            open_install_menu(feedback);
+            return true;
+        }
+        if (tag == kItemInstallHere)
+        {
+            install_source_ = sys::GameSource();
+            install_source_.kind = sys::GameSourceKind::folder;
+            install_source_.paths = {install_dir_};
+            install_name_ = install_folder_name();
+            install_size_ = 0;
+            open_place_menu(feedback);
+            return true;
+        }
+        if (tag >= kItemInstallItem &&
+            tag - kItemInstallItem < static_cast<int>(install_entries_.size()))
+        {
+            const sys::SmbEntry entry =
+                install_entries_[static_cast<std::size_t>(tag - kItemInstallItem)];
+            if (entry.directory)
+            {
+                install_dir_ = on_share(entry.path);
+                list_share_folder(feedback);
+                return true;
+            }
+            install_source_ = sys::GameSource();
+            install_source_.kind = orion::install_kind(entry.path);
+            // An archive is named for its game; an image keeps its file's name.
+            install_name_ = install_source_.kind == sys::GameSourceKind::archive
+                                ? orion::install_name(entry.path)
+                                : entry.path;
+            install_size_ = 0;
+            std::vector<std::string> names;
+            for (const sys::SmbEntry &other : install_entries_)
+            {
+                if (!other.directory)
+                    names.push_back(other.path);
+            }
+            const std::vector<std::string> volumes =
+                install_source_.kind == sys::GameSourceKind::archive
+                    ? orion::archive_volumes(names, entry.path)
+                    : std::vector<std::string>{entry.path};
+            for (const std::string &volume : volumes)
+            {
+                install_source_.paths.push_back(on_share(volume));
+                for (const sys::SmbEntry &other : install_entries_)
+                    install_size_ += other.path == volume ? other.size : 0;
+            }
+            open_place_menu(feedback);
+            return true;
+        }
+        if (tag >= kItemInstallPlace &&
+            tag - kItemInstallPlace < static_cast<int>(install_places_.size()))
+        {
+            const orion::InstallPlace &place =
+                install_places_[static_cast<std::size_t>(tag - kItemInstallPlace)];
+            install_browsing_ = false;
+            install_source_.login = orion::share_login(install_share_, context_.library.state_dir);
+            if (!game_install_.start(install_source_, install_name_, place.path))
+            {
+                show_note(false, trf("Still installing {0}", {game_install_.name()}));
+                feedback.play(audio::Cue::error);
+                return true;
+            }
+            show_note(true, trf("Installing {0}…", {install_name_}));
+            feedback.play(audio::Cue::select);
+            return true;
+        }
+        return false;
+    }
+
+    // The folder listed, then the install as it ends.
+    void follow_install(app::Feedback &feedback)
+    {
+        std::vector<sys::SmbEntry> entries;
+        std::string error;
+        if (install_listing_.take_finished(&entries, &error) && install_browsing_)
+        {
+            if (!error.empty())
+            {
+                install_browsing_ = false;
+                if (menu_.is_open())
+                    menu_.close(feedback);
+                show_note(false, trf("Network drive: {0}", {error}));
+                feedback.play(audio::Cue::error);
+            }
+            else
+            {
+                install_entries_ = std::move(entries);
+                open_install_menu(feedback);
+            }
+        }
+        orion::GameInstall::Result done;
+        if (!game_install_.take_finished(&done))
+            return;
+        const std::string &name = game_install_.name();
+        using Problem = orion::GameInstall::Problem;
+        if (done.ok)
+        {
+            show_note(true, trf("Installed {0}", {name}));
+            feedback.play(audio::Cue::saved);
+            context_.rescan_requested = true; // ORION's scan finds it in its homebrew folder
+        }
+        else if (done.problem == Problem::stopped)
+            show_note(true, trf("Stopped installing {0}", {name}));
+        else
+        {
+            show_note(false, done.problem == Problem::no_game
+                                 ? trf("{0} has no PS5 game in it (no sce_sys/param.json)", {name})
+                             : done.problem == Problem::already_there
+                                 ? trf("{0} is already there: {1}", {name, done.detail})
+                             : done.problem == Problem::cannot_write
+                                 ? trf("Could not write {0}", {done.detail})
+                                 : trf("Could not install {0}: {1}", {name, done.detail}));
+            feedback.play(audio::Cue::error);
+        }
+        if (settings_.is_open())
+        {
+            settings_.set_installing("");
+            settings_.refresh(look_, prefs_);
+        }
+    }
+
     void open_settings(app::Feedback &feedback)
     {
+        settings_.set_installing(game_install_.running() ? game_install_.name() : std::string());
         settings_.set_background(!background_file().empty());
         settings_.set_shares(orion::load_shares(context_.library.state_dir), share_status_);
         settings_.set_tabs(every_tab());
@@ -2287,6 +2596,15 @@ class Library final : public app::Concept
             pending_share_ = orion::Share();
             start_typing(Typing::share_address, "");
             feedback.play(audio::Cue::modal_open);
+            break;
+        case orion::SettingsPanel::Change::install_game:
+            browse_share(settings_.share_id(), feedback);
+            break;
+        case orion::SettingsPanel::Change::stop_install:
+            game_install_.cancel();
+            settings_.set_installing("");
+            settings_.refresh(look_, prefs_);
+            feedback.play(audio::Cue::select);
             break;
         case orion::SettingsPanel::Change::scan_shares:
             scan_shares(feedback, true);
@@ -4379,12 +4697,17 @@ class Library final : public app::Concept
         {
             // Backed out of the emulator question: the game does not start.
             if (!menu_.is_open())
+            {
                 launch_after_pick_ = false;
+                install_browsing_ = false;
+            }
             return;
         }
         const int tag = menu_.items()[static_cast<std::size_t>(menu_.focus())].tag;
         if (menu_.is_open())
             menu_.close(feedback);
+        if (install_item(tag, feedback))
+            return;
 
         if (tag == kItemLaunch)
         {
@@ -7777,6 +8100,19 @@ class Library final : public app::Concept
     std::vector<std::pair<std::string, std::string>> pick_places_;
     std::vector<std::string> pick_dirs_;
     std::vector<std::string> pick_files_;
+    // Install a PS5 game…: the drive and folder browsed, what it holds, the
+    // game chosen, where it may go, and the job.
+    orion::Share install_share_;
+    std::string install_dir_;
+    bool install_browsing_ = false;
+    int install_page_ = 0;
+    std::vector<sys::SmbEntry> install_entries_;
+    orion::ShareListing install_listing_{sys::smb_list};
+    sys::GameSource install_source_;
+    std::string install_name_;
+    std::uint64_t install_size_ = 0;
+    std::vector<orion::InstallPlace> install_places_;
+    orion::GameInstall game_install_{sys::copy_game};
     int pick_page_ = 0;
     float check_started_ = 0.0f;       // clock_ when the running check began
     bool update_asked_ = false;        // the check this launch makes by itself has started

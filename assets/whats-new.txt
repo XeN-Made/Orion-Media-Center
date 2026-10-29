@@ -1,21 +1,8 @@
-# 01.106.000
+# 01.107.000
 ## New
-RomM | Your RomM server's games on their systems' tabs, with its covers. A game downloads the first time you play it. Settings, RomM.
-Set up from a phone | Settings, RomM shows an address to open on a phone or PC, for the server and its pairing code.
-Only what you lack | RomM games you already have on the console are left out (Settings, RomM, RomM games in the library).
-Title music volume | Settings, Sound: how loud a focused game's own music plays, apart from the Music volume.
-No FTP server needed | Payload Manager, PS5Upload and the other installed apps show without an FTP server running.
-What's new | This page, once after each update, and again any time from Settings, About.
-Labels | Settings, Labels: change the text and colours of the banners on the covers, or make labels of your own and give them to games (Options, Label…).
-Scan to set up | Settings, Box art and Settings, RomM show a QR code: scan it with a phone to enter your SteamGridDB key or RomM's details.
-Share your logs | Settings, About: a QR code downloads ORION's logs on a phone or PC, to attach to a bug report.
-Saves from RomM | Before a RetroArch game starts, a newer save of it on RomM comes to the console first; Options, Continue starts from the newest save state, RomM's included.
-Case pictures | Settings, Library: off, Cases view draws a plain case for every game instead of the pictures of real ones.
+Network drives | Settings, Network drives: games on a Windows shared folder or a NAS (SMB) show on their systems' tabs and copy to the console the first time you play them.
+Install PS5 games | From a network drive: a game's folder, a .ffpkg or .exfat image, or a ZIP, 7z or RAR archive (in parts too), unpacked as it comes off the network, to the drive you choose.
+Background picture | Settings, Appearance: a picture of your own behind the library in place of the sky.
 ## Fixed
-Icons no longer show another title's picture for a few seconds when ORION opens.
-Autoboot waits for ShadowMountPlus instead of showing "could not find the game or application" over and over.
-A game's own music is no longer faint, and keeps playing while Settings or a menu is open.
-A large RomM library lists in smaller steps, and a list left unfinished carries on where it stopped.
-Box art no longer stalls after a few games, and keeps going a few hundred games at a time until every game has been tried.
-Games downloaded from RomM show in the library at once, and ORION no longer closes after a download.
-Covers fit inside the case pictures whole, without a second header from the box's own.
+Games installed on extended storage are looked for as well as the console's own.
+ORION's helper tries again when the ELF loader is not ready yet, and says so when installed games cannot be read.

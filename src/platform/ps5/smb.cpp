@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "platform/ps5/smb.hpp"
+#include "platform/ps5/smb_connection.hpp"
 
 // smb2.h first: libsmb2.h uses its types.
 #include <smb2/smb2.h>
@@ -30,78 +31,58 @@ extern "C" struct protoent *getprotobyname(const char *name)
 namespace hui::sys
 {
 
-namespace
+SmbConnection::~SmbConnection()
 {
+    if (smb2_ == nullptr)
+        return;
+    if (connected_)
+        smb2_disconnect_share(smb2_);
+    smb2_destroy_context(smb2_);
+}
 
-// One signed-in connection to a share, closed when it goes.
-class Connection
+bool SmbConnection::open(const SmbLogin &login, std::string *error)
 {
-  public:
-    Connection() = default;
-    Connection(const Connection &) = delete;
-    Connection &operator=(const Connection &) = delete;
-    ~Connection()
+    smb2_ = smb2_init_context();
+    if (smb2_ == nullptr)
     {
-        if (smb2_ == nullptr)
-            return;
-        if (connected_)
-            smb2_disconnect_share(smb2_);
-        smb2_destroy_context(smb2_);
+        *error = "could not start SMB";
+        return false;
     }
-
-    bool open(const SmbLogin &login, std::string *error)
+    // Signing where the server wants it; no answer for 20 s is an error, not
+    // a wait for ever.
+    smb2_set_security_mode(smb2_, SMB2_NEGOTIATE_SIGNING_ENABLED);
+    smb2_set_timeout(smb2_, 20);
+    if (!login.domain.empty())
+        smb2_set_domain(smb2_, login.domain.c_str());
+    const std::string user = login.user.empty() ? std::string("guest") : login.user;
+    smb2_set_user(smb2_, user.c_str());
+    smb2_set_password(smb2_, login.password.c_str());
+    if (smb2_connect_share(smb2_, login.server.c_str(), login.share.c_str(), user.c_str()) < 0)
     {
-        smb2_ = smb2_init_context();
-        if (smb2_ == nullptr)
-        {
-            *error = "could not start SMB";
-            return false;
-        }
-        // Signing where the server wants it; no answer for 20 s is an error,
-        // not a wait for ever.
-        smb2_set_security_mode(smb2_, SMB2_NEGOTIATE_SIGNING_ENABLED);
-        smb2_set_timeout(smb2_, 20);
-        if (!login.domain.empty())
-            smb2_set_domain(smb2_, login.domain.c_str());
-        const std::string user = login.user.empty() ? std::string("guest") : login.user;
-        smb2_set_user(smb2_, user.c_str());
-        smb2_set_password(smb2_, login.password.c_str());
-        if (smb2_connect_share(smb2_, login.server.c_str(), login.share.c_str(), user.c_str()) < 0)
-        {
-            *error = said();
-            return false;
-        }
-        connected_ = true;
-        return true;
+        *error = said();
+        return false;
     }
+    connected_ = true;
+    return true;
+}
 
-    smb2_context *get() const
-    {
-        return smb2_;
-    }
-
-    std::string said() const
-    {
-        const char *text = smb2_ != nullptr ? smb2_get_error(smb2_) : nullptr;
-        return text != nullptr && *text != '\0' ? std::string(text) : std::string("no answer");
-    }
-
-  private:
-    smb2_context *smb2_ = nullptr;
-    bool connected_ = false;
-};
-
-bool list_into(Connection &connection, const std::string &folder, const std::string &prefix,
-               int depth, std::size_t most, std::vector<SmbEntry> *entries, std::string *error)
+std::string SmbConnection::said() const
 {
-    smb2dir *dir = smb2_opendir(connection.get(), folder.c_str());
+    const char *text = smb2_ != nullptr ? smb2_get_error(smb2_) : nullptr;
+    return text != nullptr && *text != '\0' ? std::string(text) : std::string("no answer");
+}
+
+bool SmbConnection::list(const std::string &folder, const std::string &prefix, int depth,
+                         std::size_t most, std::vector<SmbEntry> *entries, std::string *error)
+{
+    smb2dir *dir = smb2_opendir(smb2_, folder.c_str());
     if (dir == nullptr)
     {
-        *error = folder.empty() ? connection.said() : folder + ": " + connection.said();
+        *error = folder.empty() ? said() : folder + ": " + said();
         return false;
     }
     std::vector<std::string> inner;
-    while (const smb2dirent *entry = smb2_readdir(connection.get(), dir))
+    while (const smb2dirent *entry = smb2_readdir(smb2_, dir))
     {
         const std::string name = entry->name != nullptr ? entry->name : "";
         if (name.empty() || name.front() == '.' || entries->size() >= most)
@@ -114,7 +95,7 @@ bool list_into(Connection &connection, const std::string &folder, const std::str
             inner.push_back(name);
         entries->push_back(std::move(found));
     }
-    smb2_closedir(connection.get(), dir);
+    smb2_closedir(smb2_, dir);
     for (const std::string &name : inner)
     {
         if (entries->size() >= most)
@@ -122,22 +103,20 @@ bool list_into(Connection &connection, const std::string &folder, const std::str
         // A folder that cannot be read (no right to it) is left out; the
         // rest still lists.
         std::string ignored;
-        list_into(connection, folder.empty() ? name : folder + "/" + name,
-                  prefix.empty() ? name : prefix + "/" + name, depth - 1, most, entries, &ignored);
+        list(folder.empty() ? name : folder + "/" + name,
+             prefix.empty() ? name : prefix + "/" + name, depth - 1, most, entries, &ignored);
     }
     return true;
 }
-
-} // namespace
 
 bool smb_list(const SmbLogin &login, const std::string &folder, int depth, std::size_t most,
               std::vector<SmbEntry> *entries, std::string *error)
 {
     entries->clear();
-    Connection connection;
+    SmbConnection connection;
     if (!connection.open(login, error))
         return false;
-    return list_into(connection, folder, "", depth, most, entries, error);
+    return connection.list(folder, "", depth, most, entries, error);
 }
 
 bool smb_download(const SmbLogin &login, const std::string &path, const std::string &local,
@@ -146,7 +125,7 @@ bool smb_download(const SmbLogin &login, const std::string &path, const std::str
 {
     if (done != nullptr)
         *done = 0;
-    Connection connection;
+    SmbConnection connection;
     if (!connection.open(login, error))
         return false;
     smb2fh *file = smb2_open(connection.get(), path.c_str(), O_RDONLY);

@@ -209,4 +209,31 @@ TEST_F(OrionSettings, ABackgroundPictureIsChosenAndTakenAway)
     }
 }
 
+// Network drives: while a game goes in, Stop installing comes first; a
+// drive's page offers Install a PS5 game, just above Remove.
+TEST_F(OrionSettings, ANetworkDriveInstallsAGameAndStopsIt)
+{
+    SettingsPanel panel;
+    hui::orion::Share share;
+    share.id = "s1";
+    share.server = "nas";
+    share.share = "games";
+    panel.set_shares({share}, "");
+    panel.set_installing("Moon Garden");
+    panel.open(look_, prefs_, feedback_);
+    for (int i = 0; i < 16 && panel.section() != SettingsPanel::Section::network; ++i)
+        send_to(panel, press(Action::page_next));
+    ASSERT_EQ(panel.section(), SettingsPanel::Section::network);
+    send_to(panel, nav(Direction::right));
+    EXPECT_EQ(send_to(panel, press(Action::confirm)), SettingsPanel::Change::stop_install);
+    for (int i = 0; i < 10; ++i)
+        send_to(panel, nav(Direction::down));
+    send_to(panel, press(Action::confirm)); // the drive's page
+    EXPECT_EQ(panel.share_id(), "s1");
+    for (int i = 0; i < 10; ++i)
+        send_to(panel, nav(Direction::down));
+    send_to(panel, nav(Direction::up));
+    EXPECT_EQ(send_to(panel, press(Action::confirm)), SettingsPanel::Change::install_game);
+}
+
 } // namespace

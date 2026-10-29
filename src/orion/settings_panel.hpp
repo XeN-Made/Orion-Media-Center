@@ -116,6 +116,8 @@ class SettingsPanel
         add_share,      // "Add a network drive": the screen asks for its address
         scan_shares,    // "Look for games again" (Network drives)
         remove_share,   // "Remove" on a drive's page: share_id() says which
+        install_game,   // "Install a PS5 game" on a drive's page: share_id() says which
+        stop_install,   // "Stop installing" (Network drives)
         new_label,      // "New label": the screen asks for its text
         rename_label,   // "Text" on a label's page: label_id() says which
     };
@@ -173,6 +175,11 @@ class SettingsPanel
         return share_page_;
     }
     // Whether the player has a picture of their own behind the library.
+    // The PS5 game going in off a network drive, or empty.
+    void set_installing(std::string name)
+    {
+        installing_ = std::move(name);
+    }
     void set_background(bool own)
     {
         own_background_ = own;
@@ -406,6 +413,7 @@ class SettingsPanel
     std::string share_status_;
     std::string share_page_; // the drive whose page is open; empty: the list
     bool own_background_ = false;
+    std::string installing_;
     std::vector<LabelEntry> label_entries_;
     std::string label_page_;                       // the label whose page is open; empty: the list
     std::vector<std::string> label_rows_;          // the list's labels, by row (kLabelRow + i)

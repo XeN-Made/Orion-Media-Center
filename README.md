@@ -326,6 +326,41 @@ its name on the same system, shows once), all of them, or none.
 Steps 1 and 3 can also be done on a phone or PC at `http://<console IP>:9062`
 while ORION is open.
 
+### Games on a network drive
+
+ORION lists the games on a Windows shared folder or a NAS (SMB) on their
+systems' tabs, and copies a game to the console the first time you play it.
+
+1. Settings, **Network drives**, **Add a network drive**: the share's address
+   (`\\192.168.1.20\games\roms` or `smb://192.168.1.20/games/roms`), then a
+   user and password (empty signs in as a guest). Or scan the code there with
+   a phone and fill in the form; the password is kept on the console only.
+2. In that folder, a folder per system named as RetroArch's are (`gba`,
+   `snes`, `psx`...), with the games in them. ORION looks for them a little
+   after it opens, and again with **Look for games again**.
+
+A Windows PC works as the drive: right-click a folder, Properties, Sharing,
+Advanced Sharing, **Share this folder**; the network must be set to Private.
+The user and password are the ones you sign in to Windows with.
+
+### Installing PS5 games from a network drive
+
+Settings, Network drives, a drive, **Install a PS5 game…** browses the drive.
+It offers:
+
+- a game's folder (one with `sce_sys/param.json` in it): **Install** it;
+- an image ShadowMountPlus mounts: `.ffpkg`, `.ffpfs` or `.exfat`;
+- an archive: `.zip`, `.7z` or `.rar`, in one part or several
+  (`.part1.rar`, `.part2.rar`...; `.rar`, `.r00`...; `.7z.001`...): choose the
+  first part.
+
+Then choose where it goes: the console's storage, extended storage or a USB
+drive, each with its free space (`homebrew` on that drive, where
+ShadowMountPlus finds it). Archives are unpacked as they come off the network,
+so the archive itself is never stored. The progress shows at the top right;
+Settings, Network drives, **Stop installing** stops it and deletes what was
+copied. Encrypted archives (with a password) cannot be unpacked.
+
 ## Box art and music
 
 - Box art downloads as the covers scroll into view and is kept in

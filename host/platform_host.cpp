@@ -4,6 +4,7 @@
 
 #include "platform/ps5/system.hpp"
 
+#include "platform/ps5/game_copy.hpp"
 #include "platform/ps5/smb.hpp"
 
 #include <cstdarg>
@@ -141,6 +142,16 @@ bool smb_download(const SmbLogin &login, const std::string &path, const std::str
     (void)cancel;
     if (done != nullptr)
         *done = 0;
+    *error = "the PC preview has no network";
+    return false;
+}
+
+bool copy_game(const GameSource &source, const std::string &into, CopyProgress *progress,
+               std::string *error)
+{
+    (void)source;
+    (void)into;
+    (void)progress;
     *error = "the PC preview has no network";
     return false;
 }

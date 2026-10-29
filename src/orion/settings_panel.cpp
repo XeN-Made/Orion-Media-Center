@@ -135,6 +135,8 @@ enum : int
     kShareAddress,
     kShareUser,
     kShareRemove,
+    kShareInstall,
+    kStopInstall,
     kLabelPreview,
     kLabelText,
     kLabelFill,
@@ -593,6 +595,10 @@ void SettingsPanel::build_network()
         form_.add_header(tr("Network drives") + "  ·  " + share_address(*open));
         form_.add_value(kShareAddress, tr("Address"), share_address(*open));
         form_.add_value(kShareUser, tr("User"), open->user.empty() ? tr("Guest") : open->user);
+        ui::FormRow &install = form_.add_action(kShareInstall, tr("Install a PS5 game…"));
+        install.chevron = true;
+        install.description = tr("A game's folder, an image (.ffpkg, .exfat) or an archive (ZIP, "
+                                 "7z, RAR in one or more parts) on this drive");
         ui::FormRow &remove = form_.add_action(kShareRemove, tr("Remove this drive"));
         remove.danger = true;
         remove.description =
@@ -603,6 +609,13 @@ void SettingsPanel::build_network()
     if (!key_page_.empty())
         form_.add_value(kSharePage, tr("Add one from a phone or PC"), key_page_).description =
             tr("Scan the code below, or open this address on the same network");
+    if (!installing_.empty())
+    {
+        ui::FormRow &stop =
+            form_.add_action(kStopInstall, trf("Stop installing {0}", {installing_}));
+        stop.danger = true;
+        stop.description = tr("What was copied so far is deleted");
+    }
     ui::FormRow &add = form_.add_action(kAddShare, tr("Add a network drive"));
     add.chevron = true;
     add.description = tr("A Windows share or a NAS (SMB): its address, user and password");
@@ -1744,6 +1757,10 @@ SettingsPanel::Change SettingsPanel::handle(const InputFrame &input, ui::Feedbac
             return Change::scan_shares;
         if (id == kShareRemove && !share_page_.empty())
             return Change::remove_share;
+        if (id == kShareInstall && !share_page_.empty())
+            return Change::install_game;
+        if (id == kStopInstall)
+            return Change::stop_install;
         if (section_ == Section::network && id >= kShareRow &&
             id - kShareRow < static_cast<int>(shares_.size()))
         {
