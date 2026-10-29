@@ -795,7 +795,9 @@ class Library final : public app::Concept
             settings_.set_title_id(own_title_id());
         settings_.set_grid_key(!grid_key().empty());
         show_romm_state();
-        // The key page: the SteamGridDB key typed on a phone or PC.
+        // The key page: the SteamGridDB key typed on a phone or PC; a network
+        // drive added there is tried first.
+        key_page_.set_share_check(sys::smb_list);
         if (sys::on_console() && !data_missing_ && !context_.library.state_dir.empty() &&
             key_page_.start(context_.library.state_dir))
         {
@@ -1035,6 +1037,7 @@ class Library final : public app::Concept
         poll_art(feedback);
         poll_icon_copies();
         follow_install(feedback);
+        follow_share_check(feedback);
         if (registered_.take_finished() && registered_.result().changed)
             context_.registered_changed = true;
         const bool reduced = context_.settings.reduced_motion;
@@ -2207,6 +2210,37 @@ class Library final : public app::Concept
         return false;
     }
 
+    // A network drive typed in: kept once it opened, else what went wrong.
+    void follow_share_check(app::Feedback &feedback)
+    {
+        std::vector<sys::SmbEntry> seen;
+        std::string trouble;
+        if (!share_check_.take_finished(&seen, &trouble))
+            return;
+        const std::string password = std::exchange(pending_password_, std::string());
+        if (!trouble.empty())
+        {
+            const std::string hint = tr(orion::share_hint(trouble));
+            show_note(false, trf("Could not open {0}: {1}",
+                                 {orion::share_address(pending_share_),
+                                  trouble + (hint.empty() ? "" : ". " + hint)}));
+            feedback.play(audio::Cue::error);
+            return;
+        }
+        const std::string &state = context_.library.state_dir;
+        std::vector<orion::Share> shares = orion::load_shares(state);
+        const std::string id = orion::add_share(shares, pending_share_).id;
+        if (!orion::save_shares(state, shares))
+        {
+            show_note(false, tr("Could not save the network drive"));
+            feedback.play(audio::Cue::error);
+            return;
+        }
+        orion::write_service_key(state, orion::share_password_key(id), password);
+        refresh_shares();
+        scan_shares(feedback, true);
+    }
+
     // The folder listed, then the install as it ends.
     void follow_install(app::Feedback &feedback)
     {
@@ -2944,19 +2978,16 @@ class Library final : public app::Concept
         }
         if (typing == Typing::share_password)
         {
-            const std::string &state = context_.library.state_dir;
-            std::vector<orion::Share> shares = orion::load_shares(state);
-            const std::string id = orion::add_share(shares, pending_share_).id;
-            if (!orion::save_shares(state, shares))
-            {
-                show_note(false, tr("Could not save the network drive"));
-                feedback.play(audio::Cue::error);
-                return;
-            }
-            orion::write_service_key(state, orion::share_password_key(id), name_);
+            // Tried first (follow_share_check keeps it once it opens).
+            pending_password_ = name_;
             name_.clear();
-            refresh_shares();
-            scan_shares(feedback, true);
+            sys::SmbLogin login;
+            login.server = pending_share_.server;
+            login.share = pending_share_.share;
+            login.user = pending_share_.user;
+            login.password = pending_password_;
+            share_check_.start(login, pending_share_.folder);
+            show_note(true, trf("Checking {0}…", {orion::share_address(pending_share_)}));
             return;
         }
         if (typing == Typing::new_label || typing == Typing::new_label_for_title)
@@ -8068,7 +8099,9 @@ class Library final : public app::Concept
            std::vector<sys::SmbEntry> *entries, std::string *error)
         { return sys::smb_list(login, folder, depth, most, entries, error); }};
     bool shares_scanned_ = false;
-    orion::Share pending_share_; // a drive being typed in: its address, then its user
+    orion::Share pending_share_;   // a drive being typed in: its address, then its user
+    std::string pending_password_; // ... and its password, while it is tried
+    orion::ShareListing share_check_{sys::smb_list};
     std::string share_status_;
     std::string romm_downloading_id_;
     std::string romm_downloading_name_;

@@ -341,7 +341,12 @@ systems' tabs, and copies a game to the console the first time you play it.
 
 A Windows PC works as the drive: right-click a folder, Properties, Sharing,
 Advanced Sharing, **Share this folder**; the network must be set to Private.
-The user and password are the ones you sign in to Windows with.
+The user and password are the ones you sign in to Windows with (a Microsoft
+account: its email address and password, not the PIN). Windows lets no one in
+over the network with an empty password: give your user one, or make a user
+just for sharing (Settings, Accounts, Other users) and add it in the folder's
+Sharing permissions. ORION tries the drive before it keeps it, and says what
+went wrong. The PC can be named by its name or by its IP address.
 
 ### Installing PS5 games from a network drive
 

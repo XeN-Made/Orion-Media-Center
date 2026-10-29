@@ -4,6 +4,7 @@
 
 #include "orion/shares.hpp"
 
+#include "core/i18n.hpp"
 #include "core/save_file.hpp"
 #include "library/json.hpp"
 #include "orion/art_fetcher.hpp"
@@ -64,7 +65,10 @@ bool parse_share_address(std::string_view text, Share *share)
 {
     while (!text.empty() && std::isspace(static_cast<unsigned char>(text.front())) != 0)
         text.remove_prefix(1);
-    while (!text.empty() && std::isspace(static_cast<unsigned char>(text.back())) != 0)
+    // A full stop typed after it, as at the end of a sentence, is no part of
+    // it: Windows names end in neither.
+    while (!text.empty() &&
+           (std::isspace(static_cast<unsigned char>(text.back())) != 0 || text.back() == '.'))
         text.remove_suffix(1);
     std::string lowered(text.substr(0, std::min<std::size_t>(text.size(), 6)));
     for (char &c : lowered)
@@ -94,6 +98,22 @@ std::string share_address(const Share &share)
     for (const char c : share.folder.empty() ? std::string() : "/" + share.folder)
         out += c == '/' ? '\\' : c;
     return out;
+}
+
+const char *share_hint(std::string_view error)
+{
+    if (error.find("ACCOUNT_RESTRICTION") != std::string_view::npos)
+        return i18n::marked("Windows lets no one in over the network with an empty password: "
+                            "give the user a password, or make a user for sharing");
+    if (error.find("LOGON_FAILURE") != std::string_view::npos)
+        return i18n::marked("The user name or password is wrong. A Microsoft account signs in "
+                            "with its email address and its password, not the PIN");
+    if (error.find("BAD_NETWORK_NAME") != std::string_view::npos)
+        return i18n::marked("There is no share by that name on it: check the share's name");
+    if (error.find("ACCESS_DENIED") != std::string_view::npos)
+        return i18n::marked("That user may not open this folder: add them in its Sharing "
+                            "permissions");
+    return "";
 }
 
 std::string share_password_key(const std::string &id)

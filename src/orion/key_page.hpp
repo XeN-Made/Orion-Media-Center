@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include "orion/shares.hpp"
+
 #include <atomic>
 #include <string>
 #include <string_view>
@@ -23,8 +25,10 @@ inline constexpr int kKeyPagePort = 9062;
 // nothing is sent. Exposed for tests.
 // A POST of "smb_address", "smb_user" and "smb_password" to /smb adds a
 // network drive (orion/shares.hpp) and sets *shares.
+// With `check`, a network drive is signed in to and its folder listed
+// before it is kept; one that cannot be opened is not, and the page says why.
 std::string answer_key_request(std::string_view request, const std::string &state_dir, bool *saved,
-                               bool *shares = nullptr);
+                               bool *shares = nullptr, const SmbLister *check = nullptr);
 
 // ORION's logs from state_dir as a ZIP for the player to attach to a bug
 // report: the files named in kLogFiles (never keys.txt or anything holding a
@@ -58,6 +62,12 @@ class KeyPage
     KeyPage &operator=(const KeyPage &) = delete;
 
     // False when the port cannot be had (another app holds it).
+    // How a network drive is tried before it is added (sys::smb_list); set
+    // before start().
+    void set_share_check(SmbLister check)
+    {
+        check_ = std::move(check);
+    }
     bool start(std::string state_dir, int port = kKeyPagePort);
     void stop();
     bool running() const
@@ -83,6 +93,7 @@ class KeyPage
     std::atomic<bool> stopping_{false};
     std::atomic<bool> saved_{false};
     std::atomic<bool> shares_{false};
+    SmbLister check_;
 };
 
 } // namespace hui::orion

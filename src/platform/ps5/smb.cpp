@@ -9,10 +9,16 @@
 #include <smb2/smb2.h>
 #include <smb2/libsmb2.h>
 
+#include <arpa/inet.h>
+#include <cctype>
 #include <cerrno>
+#include <cstdint>
 #include <cstring>
 #include <fcntl.h>
 #include <netdb.h>
+#include <netinet/in.h>
+#include <poll.h>
+#include <sys/socket.h>
 #include <string>
 #include <unistd.h>
 #include <utility>
@@ -31,6 +37,101 @@ extern "C" struct protoent *getprotobyname(const char *name)
 namespace hui::sys
 {
 
+namespace
+{
+
+// A Windows PC by its name ("MEDIA-PC"). The console's resolver knows only
+// DNS, which has no such name on a home network: it is asked the way
+// Windows asks, a NetBIOS name query broadcast on the local network (RFC
+// 1002), for the file server's name, which a PC sharing folders answers.
+bool netbios_address(const std::string &name, std::string *address)
+{
+    if (name.empty() || name.size() > 15)
+        return false;
+    unsigned char packet[50] = {};
+    const std::uint16_t id = static_cast<std::uint16_t>(::getpid() ^ 0x4f52);
+    packet[0] = static_cast<unsigned char>(id >> 8);
+    packet[1] = static_cast<unsigned char>(id & 0xff);
+    packet[2] = 0x01; // recursion desired
+    packet[3] = 0x10; // broadcast
+    packet[5] = 1;    // one question
+    // The name: 16 bytes (upper case, padded with spaces, then 0x20 for the
+    // file server), each as two letters 'A' + a half byte.
+    packet[12] = 0x20;
+    for (int i = 0; i < 16; ++i)
+    {
+        const unsigned char c =
+            i == 15 ? 0x20
+            : i < static_cast<int>(name.size())
+                ? static_cast<unsigned char>(
+                      std::toupper(static_cast<unsigned char>(name[static_cast<std::size_t>(i)])))
+                : ' ';
+        packet[13 + 2 * i] = static_cast<unsigned char>('A' + (c >> 4));
+        packet[14 + 2 * i] = static_cast<unsigned char>('A' + (c & 0x0f));
+    }
+    packet[47] = 0x20; // type NB (byte 45 ends the name, 46 is the type's high byte)
+    packet[49] = 0x01; // class IN
+    const int s = ::socket(AF_INET, SOCK_DGRAM, 0);
+    if (s < 0)
+        return false;
+    int on = 1;
+    ::setsockopt(s, SOL_SOCKET, SO_BROADCAST, &on, sizeof(on));
+    sockaddr_in to = {};
+    to.sin_family = AF_INET;
+    to.sin_port = htons(137);
+    to.sin_addr.s_addr = htonl(INADDR_BROADCAST);
+    bool found = false;
+    for (int attempt = 0; attempt < 3 && !found; ++attempt)
+    {
+        ::sendto(s, packet, sizeof(packet), 0, reinterpret_cast<const sockaddr *>(&to), sizeof(to));
+        pollfd wait = {s, POLLIN, 0};
+        while (!found && ::poll(&wait, 1, 700) > 0)
+        {
+            unsigned char answer[576];
+            const ssize_t got = ::recv(s, answer, sizeof(answer), 0);
+            // Ours, an answer, no error; then the name again (34 bytes),
+            // type, class, time to live, length, flags: the address at 58.
+            if (got < 62 || answer[0] != packet[0] || answer[1] != packet[1] ||
+                (answer[2] & 0x80) == 0 || (answer[3] & 0x0f) != 0)
+                continue;
+            char text[INET_ADDRSTRLEN] = {};
+            if (::inet_ntop(AF_INET, answer + 58, text, sizeof(text)) != nullptr)
+            {
+                *address = text;
+                found = true;
+            }
+        }
+    }
+    ::close(s);
+    return found;
+}
+
+// The server as libsmb2 can reach it: an address as it is, a name DNS
+// knows as it is, else a Windows PC's name made its address.
+bool reachable(const std::string &server, std::string *host, std::string *error)
+{
+    *host = server;
+    in_addr ip = {};
+    if (::inet_pton(AF_INET, server.c_str(), &ip) == 1 || server.find(':') != std::string::npos)
+        return true;
+    addrinfo hints = {};
+    hints.ai_family = AF_INET;
+    addrinfo *found = nullptr;
+    if (::getaddrinfo(server.c_str(), nullptr, &hints, &found) == 0)
+    {
+        ::freeaddrinfo(found);
+        return true;
+    }
+    if (netbios_address(server, host))
+        return true;
+    *error = "could not find " + server +
+             " on the network: use its IP address instead, like "
+             "192.168.1.20 (on Windows: Settings, Network, your connection, IPv4 address)";
+    return false;
+}
+
+} // namespace
+
 SmbConnection::~SmbConnection()
 {
     if (smb2_ == nullptr)
@@ -42,6 +143,9 @@ SmbConnection::~SmbConnection()
 
 bool SmbConnection::open(const SmbLogin &login, std::string *error)
 {
+    std::string host;
+    if (!reachable(login.server, &host, error))
+        return false;
     smb2_ = smb2_init_context();
     if (smb2_ == nullptr)
     {
@@ -57,7 +161,7 @@ bool SmbConnection::open(const SmbLogin &login, std::string *error)
     const std::string user = login.user.empty() ? std::string("guest") : login.user;
     smb2_set_user(smb2_, user.c_str());
     smb2_set_password(smb2_, login.password.c_str());
-    if (smb2_connect_share(smb2_, login.server.c_str(), login.share.c_str(), user.c_str()) < 0)
+    if (smb2_connect_share(smb2_, host.c_str(), login.share.c_str(), user.c_str()) < 0)
     {
         *error = said();
         return false;

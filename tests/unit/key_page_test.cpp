@@ -171,7 +171,8 @@ TEST(KeyPage, AddsANetworkDrive)
     const std::string page = orion::answer_key_request(post, dir, &saved, &shares);
     EXPECT_FALSE(saved);
     EXPECT_TRUE(shares);
-    EXPECT_NE(page.find("Added"), std::string::npos);
+    EXPECT_NE(page.find("it is added"), std::string::npos);
+    EXPECT_NE(page.find("data-tab=\"smb\""), std::string::npos); // the answer opens its tab
     EXPECT_EQ(page.find("hunter2"), std::string::npos);
     EXPECT_NE(page.find("\\\\nas\\games\\roms"), std::string::npos); // listed now
     const std::vector<orion::Share> added = orion::load_shares(dir);
@@ -186,6 +187,40 @@ TEST(KeyPage, AddsANetworkDrive)
         "POST /smb HTTP/1.1\r\nContent-Length: " + std::to_string(bad.size()) + "\r\n\r\n" + bad,
         dir, &saved, &shares);
     EXPECT_FALSE(shares);
+    EXPECT_EQ(orion::load_shares(dir).size(), 1u);
+}
+
+// With a check, a drive that does not open is not kept, and the page says
+// why in plain words; one that opens is.
+TEST(KeyPage, TriesANetworkDriveBeforeAddingIt)
+{
+    const std::string dir = ::testing::TempDir() + "orion-key-page-smb-check";
+    ASSERT_TRUE(save::ensure_directory(dir));
+    std::remove((dir + "/shares.json").c_str());
+    std::string asked;
+    bool opens = false;
+    const orion::SmbLister check = [&](const hui::sys::SmbLogin &login, const std::string &folder,
+                                       int, std::size_t, std::vector<hui::sys::SmbEntry> *,
+                                       std::string *error)
+    {
+        asked = login.server + "|" + login.share + "|" + folder + "|" + login.password;
+        if (!opens)
+            *error = "Session setup failed (STATUS_ACCOUNT_RESTRICTION)";
+        return opens;
+    };
+    const std::string body = "smb_address=%5C%5Cmedia-pc%5CGames.&smb_user=me&smb_password=";
+    const std::string post =
+        "POST /smb HTTP/1.1\r\nContent-Length: " + std::to_string(body.size()) + "\r\n\r\n" + body;
+    bool saved = false;
+    bool shares = true;
+    const std::string refused = orion::answer_key_request(post, dir, &saved, &shares, &check);
+    EXPECT_EQ(asked, "media-pc|Games||"); // the full stop typed after it is gone
+    EXPECT_FALSE(shares);
+    EXPECT_TRUE(orion::load_shares(dir).empty());
+    EXPECT_NE(refused.find("empty password"), std::string::npos);
+    opens = true;
+    orion::answer_key_request(post, dir, &saved, &shares, &check);
+    EXPECT_TRUE(shares);
     EXPECT_EQ(orion::load_shares(dir).size(), 1u);
 }
 

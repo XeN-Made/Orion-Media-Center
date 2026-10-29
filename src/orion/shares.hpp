@@ -41,6 +41,10 @@ bool parse_share_address(std::string_view text, Share *share);
 std::string share_address(const Share &share);
 // keys.txt's line for a share's password.
 std::string share_password_key(const std::string &id);
+// What to do about an error a share gave (a refused sign-in, a wrong share
+// name), in plain words; "" when there is nothing to add. Marked for
+// translation.
+const char *share_hint(std::string_view error);
 
 // <state_dir>/shares.json. Unknown or broken entries are left out.
 std::vector<Share> load_shares(const std::string &state_dir);

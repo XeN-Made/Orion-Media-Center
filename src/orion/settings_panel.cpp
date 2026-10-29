@@ -2172,7 +2172,7 @@ void SettingsPanel::draw_key_code(ui::Canvas &canvas) const
     const bool art = section_ == Section::art;
     const bool logs = section_ == Section::about;
     const bool network = section_ == Section::network;
-    const QrCode &code = logs ? logs_qr_ : key_qr_;
+    const QrCode &code = logs ? logs_qr_ : art ? key_qr_ : network ? smb_qr_ : romm_qr_;
     if ((!art && !logs && !network && section_ != Section::romm) || code.size == 0 ||
         wide_ < 0.5f || (network && !share_page_.empty()))
         return;

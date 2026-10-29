@@ -39,6 +39,7 @@ author =
 "Bringing {0}'s save state from RomM…" = ""
 "Cancel" = ""
 "Checking and unpacking ORION {0}…" = ""
+"Checking {0}…" = ""
 "Choose a picture" = ""
 "Choose music" = ""
 "Choose music…" = ""
@@ -56,6 +57,7 @@ author =
 "Could not download {0}: {1}" = ""
 "Could not get box art: {0}" = ""
 "Could not install {0}: {1}" = ""
+"Could not open {0}: {1}" = ""
 "Could not pair with RomM: {0}" = ""
 "Could not read {0}" = ""
 "Could not remove {0}: {1}" = ""
@@ -751,6 +753,12 @@ author =
 "Where covers go: {0}" = ""
 "You're set" = ""
 "{0}: install it, then scan" = ""
+
+# src/orion/shares.cpp
+"That user may not open this folder: add them in its Sharing permissions" = ""
+"The user name or password is wrong. A Microsoft account signs in with its email address and its password, not the PIN" = ""
+"There is no share by that name on it: check the share's name" = ""
+"Windows lets no one in over the network with an empty password: give the user a password, or make a user for sharing" = ""
 
 # src/orion/title_details.cpp
 "Added" = ""

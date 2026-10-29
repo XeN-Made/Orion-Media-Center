@@ -216,8 +216,12 @@ class SettingsPanel
         key_page_ = std::move(address);
         // Box art shows it as a code a phone scans, too, and About the
         // address of the logs.
-        if (key_page_.empty() || !make_qr(key_page_, &key_qr_))
+        if (key_page_.empty() || !make_qr(key_page_ + "/#art", &key_qr_))
             key_qr_ = QrCode();
+        if (key_page_.empty() || !make_qr(key_page_ + "/#romm", &romm_qr_))
+            romm_qr_ = QrCode();
+        if (key_page_.empty() || !make_qr(key_page_ + "/#smb", &smb_qr_))
+            smb_qr_ = QrCode();
         if (key_page_.empty() || !make_qr(key_page_ + "/logs", &logs_qr_))
             logs_qr_ = QrCode();
     }
@@ -438,6 +442,8 @@ class SettingsPanel
     std::string key_page_; // the key page address, or empty
     QrCode key_qr_;        // that address as a QR code (empty with none)
     QrCode logs_qr_;       // and its logs' address (About)
+    QrCode romm_qr_;       // ... opened on its RomM tab
+    QrCode smb_qr_;        // ... and on its Network drive tab
     std::string romm_address_;
     bool romm_paired_ = false;
     std::string romm_status_;

@@ -107,36 +107,50 @@ std::string escaped(std::string_view text)
     return out;
 }
 
-std::string page(const Shown &now, std::string_view note, bool good)
+// The page: a tab for each thing it sets, the one asked for open. A QR
+// code names its tab after a "#" (".../#smb"); a form's answer opens the
+// form's own. Without scripts every tab shows, one under another.
+std::string page(const Shown &now, std::string_view note, bool good, std::string_view tab = "art")
 {
     std::string html =
         "<!doctype html><html><head><meta charset=\"utf-8\">"
         "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
-        "<title>ORION key</title><style>"
+        "<title>ORION</title><style>"
         "body{font-family:system-ui,sans-serif;background:#0b1020;color:#e8ecf6;margin:0;"
-        "display:flex;min-height:100vh;align-items:center;justify-content:center}"
-        "main{width:min(30rem,calc(100% - 2rem))}h1{font-size:1.4rem;margin:0 0 .4rem}"
+        "display:flex;min-height:100vh;align-items:flex-start;justify-content:center}"
+        "main{width:min(30rem,calc(100% - 2rem));padding:2rem 0}"
+        "h1{font-size:1.4rem;margin:0 0 .8rem}h2{font-size:1.15rem;margin:0 0 .4rem}"
         "p{color:#aab3c8;line-height:1.45}input{width:100%;box-sizing:border-box;padding:.8rem;"
         "border-radius:.6rem;border:1px solid #2c3550;background:#141b31;color:#fff;"
         "font-size:1rem}button{margin-top:.8rem;padding:.75rem 1.4rem;border:0;"
         "border-radius:.6rem;background:#5b7cfa;color:#fff;font-size:1rem}"
+        "nav{display:flex;flex-wrap:wrap;gap:.4rem;margin:0 0 1.2rem}"
+        "nav a{padding:.5rem .9rem;border-radius:999px;background:#141b31;color:#aab3c8;"
+        "text-decoration:none}nav a.on{background:#5b7cfa;color:#fff}"
+        "section{display:none}section.on{display:block}"
         ".note{padding:.7rem .9rem;border-radius:.6rem;margin:.8rem 0}"
         ".good{background:#14351f;color:#a6f0bd}.bad{background:#3a1820;color:#f6b0bd}"
-        "</style></head><body><main><h1>ORION Media Center</h1>"
-        "<p>Your SteamGridDB key (free at steamgriddb.com: your profile, Preferences, API). "
-        "ORION uses it for covers no other source has, and for Find other art.</p>";
+        "</style><noscript><style>section{display:block;margin-bottom:2rem}nav{display:none}"
+        "</style></noscript></head><body data-tab=\"" +
+        std::string(tab) +
+        "\"><main><h1>ORION Media Center</h1><nav><a href=\"#art\">Box art</a>"
+        "<a href=\"#romm\">RomM</a><a href=\"#smb\">Network drive</a><a href=\"#logs\">Logs</a>"
+        "</nav>";
     if (!note.empty())
         html += std::string("<div class=\"note ") + (good ? "good" : "bad") + "\">" +
-                std::string(note) + "</div>";
-    html += std::string("<p>Now: ") + (now.grid_key ? "a key is set." : "no key yet.") + "</p>";
-    html += "<form method=\"post\" action=\"/key\"><input name=\"steamgriddb\" "
+                escaped(std::string(note)) + "</div>";
+    html += std::string("<section id=\"art\"><h2>SteamGridDB key</h2><p>Free at steamgriddb.com: "
+                        "your profile, Preferences, API. ORION uses it for covers no other "
+                        "source has, and for Find other art.</p><p>Now: ") +
+            (now.grid_key ? "a key is set." : "no key yet.") +
+            "</p><form method=\"post\" action=\"/key\"><input name=\"steamgriddb\" "
             "autocomplete=\"off\" autocapitalize=\"off\" spellcheck=\"false\" "
             "placeholder=\"Paste the key here; empty removes it\"><button>Save</button>"
-            "</form>";
+            "</form></section>";
     html +=
-        "<h1 style=\"margin-top:2rem\">RomM</h1><p>Your RomM server, and the code RomM "
-        "shows to pair a device (your profile, Client tokens, a new token, Pair). Its games "
-        "then show on their systems' tabs.</p><p>Now: " +
+        "<section id=\"romm\"><h2>RomM</h2><p>Your RomM server, and the code RomM shows to pair "
+        "a device (your profile, Client tokens, a new token, Pair). Its games then show on "
+        "their systems' tabs.</p><p>Now: " +
         (now.romm.empty() ? std::string("no server.")
                           : escaped(now.romm) + (now.paired ? ", paired." : ", not paired yet.")) +
         "</p><form method=\"post\" action=\"/romm\"><input name=\"romm_url\" "
@@ -144,26 +158,37 @@ std::string page(const Shown &now, std::string_view note, bool good)
         "placeholder=\"Address with the port, like 192.168.1.20:8080 (empty keeps it)\">"
         "<input name=\"romm_code\" style=\"margin-top:.6rem\" autocomplete=\"off\" "
         "autocapitalize=\"characters\" spellcheck=\"false\" placeholder=\"Pairing code\">"
-        "<button>Save and pair</button></form>";
+        "<button>Save and pair</button></form></section>";
     std::string drives;
     for (const std::string &address : now.shares)
         drives += (drives.empty() ? "" : ", ") + escaped(address);
     html +=
-        "<h1 style=\"margin-top:2rem\">Network drive</h1><p>A folder on a Windows share or a "
+        "<section id=\"smb\"><h2>Network drive</h2><p>A shared folder on a Windows PC or a "
         "NAS (SMB) with your games in folders named for their systems (gba, snes, psx...). "
-        "ORION lists them and copies one to the console the first time you play it.</p><p>Now: " +
+        "ORION lists them and copies one to the console the first time you play it, and "
+        "installs PS5 games from it (Settings, Network drives).</p><p>Now: " +
         (drives.empty() ? std::string("none.") : drives + ".") +
         "</p><form method=\"post\" action=\"/smb\"><input name=\"smb_address\" "
         "autocomplete=\"off\" autocapitalize=\"off\" spellcheck=\"false\" "
-        "placeholder=\"\\\\nas\\games\\roms or smb://192.168.1.20/games\">"
+        "placeholder=\"\\\\192.168.1.20\\games or smb://192.168.1.20/games\">"
         "<input name=\"smb_user\" style=\"margin-top:.6rem\" autocomplete=\"off\" "
         "autocapitalize=\"off\" spellcheck=\"false\" placeholder=\"User (empty: guest)\">"
         "<input name=\"smb_password\" type=\"password\" style=\"margin-top:.6rem\" "
-        "autocomplete=\"off\" placeholder=\"Password\"><button>Add it</button></form>"
-        "<h1 style=\"margin-top:2rem\">Logs</h1><p>Something not working? Download ORION's "
-        "logs and attach the file to your report on GitHub. They hold no keys or tokens; "
-        "they do show your console's and your servers' local addresses.</p>"
-        "<p><a style=\"color:#9db4ff\" href=\"/logs\">Download ORION's logs</a></p>"
+        "autocomplete=\"off\" placeholder=\"Password\"><button>Check and add it</button></form>"
+        "<p>A Windows PC: its IP address works best (Settings, Network, your connection). "
+        "Its user must have a password: Windows lets no one in over the network without "
+        "one. A Microsoft account signs in with its email address and its password.</p>"
+        "</section>"
+        "<section id=\"logs\"><h2>Logs</h2><p>Something not working? Download ORION's logs and "
+        "attach the file to your report on GitHub. They hold no keys or tokens; they do show "
+        "your console's and your servers' local addresses.</p>"
+        "<p><a style=\"color:#9db4ff\" href=\"/logs\">Download ORION's logs</a></p></section>"
+        "<script>function show(){var t=location.hash.slice(1)||document.body.dataset.tab;"
+        "if(!document.getElementById(t))t='art';"
+        "document.querySelectorAll('section').forEach(function(s){s.className=s.id==t?'on':''});"
+        "document.querySelectorAll('nav a').forEach(function(a){"
+        "a.className=a.getAttribute('href')=='#'+t?'on':''})}"
+        "addEventListener('hashchange',show);show()</script>"
         "</main></body></html>";
     return html;
 }
@@ -246,7 +271,7 @@ bool form_value(std::string_view body, std::string_view name, std::string *value
 }
 
 std::string answer_key_request(std::string_view request, const std::string &state_dir, bool *saved,
-                               bool *shares)
+                               bool *shares, const SmbLister *check)
 {
     *saved = false;
     if (shares != nullptr)
@@ -259,10 +284,15 @@ std::string answer_key_request(std::string_view request, const std::string &stat
     if (line.rfind("GET /logs ", 0) == 0)
         return download("application/zip", "orion-logs.zip", logs_zip(state_dir));
     if (line.rfind("GET ", 0) == 0)
-        return line.rfind("GET / ", 0) == 0 || line.rfind("GET /key ", 0) == 0 ||
-                       line.rfind("GET /romm ", 0) == 0
-                   ? response("200 OK", page(shown(state_dir), "", true))
-                   : response("404 Not Found", "<p>Not here: try the address alone.</p>");
+    {
+        if (line.rfind("GET / ", 0) == 0 || line.rfind("GET /key ", 0) == 0)
+            return response("200 OK", page(shown(state_dir), "", true));
+        if (line.rfind("GET /romm ", 0) == 0)
+            return response("200 OK", page(shown(state_dir), "", true, "romm"));
+        if (line.rfind("GET /smb ", 0) == 0)
+            return response("200 OK", page(shown(state_dir), "", true, "smb"));
+        return response("404 Not Found", "<p>Not here: try the address alone.</p>");
+    }
     const bool grid = line.rfind("POST /key ", 0) == 0;
     const bool romm = line.rfind("POST /romm ", 0) == 0;
     const bool smb = line.rfind("POST /smb ", 0) == 0;
@@ -284,19 +314,38 @@ std::string answer_key_request(std::string_view request, const std::string &stat
             return response("200 OK", page(shown(state_dir),
                                            "That is not a share's address: \\\\server\\share, "
                                            "or smb://server/share",
-                                           false));
+                                           false, "smb"));
         share.user = user;
+        // Tried before it is kept: signed in and its folder opened.
+        if (check != nullptr && *check)
+        {
+            sys::SmbLogin login;
+            login.server = share.server;
+            login.share = share.share;
+            login.user = share.user;
+            login.password = password;
+            std::vector<sys::SmbEntry> entries;
+            std::string error;
+            if (!(*check)(login, share.folder, 0, 1, &entries, &error))
+            {
+                const std::string hint = share_hint(error);
+                return response("200 OK", page(shown(state_dir),
+                                               "Could not open " + share_address(share) + ": " +
+                                                   error + (hint.empty() ? "" : ". " + hint + "."),
+                                               false, "smb"));
+            }
+        }
         std::vector<Share> all = load_shares(state_dir);
         const std::string id = add_share(all, share).id;
         if (!save_shares(state_dir, all))
-            return response("200 OK", page(shown(state_dir), "Could not save it.", false));
+            return response("200 OK", page(shown(state_dir), "Could not save it.", false, "smb"));
         write_service_key(state_dir, share_password_key(id), password);
         if (shares != nullptr)
             *shares = true;
         return response("200 OK", page(shown(state_dir),
-                                       "Added. ORION is looking for its games now: watch the "
-                                       "console.",
-                                       true));
+                                       "It opened, and it is added. ORION is looking for its "
+                                       "games now: watch the console.",
+                                       true, "smb"));
     }
     if (romm)
     {
@@ -433,7 +482,8 @@ void KeyPage::serve(int listener, std::string state_dir)
     {
         bool saved = false;
         bool shares = false;
-        const std::string answer = answer_key_request(client.request, state_dir, &saved, &shares);
+        const std::string answer = answer_key_request(client.request, state_dir, &saved, &shares,
+                                                      check_ ? &check_ : nullptr);
         std::size_t sent = 0;
         while (sent < answer.size())
         {
