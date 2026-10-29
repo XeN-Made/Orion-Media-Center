@@ -50,9 +50,9 @@ struct SmbServer
     std::string name;    // its Windows (NetBIOS) name, when it says: "MEDIA-PC"
 };
 
-// The machines on the console's local network (the 256 addresses around
-// `own`, "192.168.1.30") that take SMB connections, with their names. About
-// two seconds, never more than ten. *trace says what each way found. Blocking.
+// The machines on the console's local network (`own` is the console's
+// address, "192.168.1.30") that answer a NetBIOS query for the workgroup,
+// with their names. About two seconds. *trace says what was found. Blocking.
 // On a PC: none.
 // `step`, when given, hears each step as it starts.
 std::vector<SmbServer> smb_find_servers(const std::string &own, std::string *trace,

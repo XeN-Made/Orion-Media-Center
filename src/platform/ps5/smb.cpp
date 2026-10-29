@@ -290,11 +290,13 @@ std::vector<SmbServer> smb_find_servers(const std::string &own, std::string *tra
     // The whole search ends by then, whatever the network does.
     const auto deadline = started + std::chrono::seconds(8);
     const std::uint32_t me = ntohl(self.s_addr);
-    const std::uint32_t base = me & 0xffffff00u;
     say("search around " + own + ": asking the workgroup");
 
-    // Windows PCs: a broadcast NetBIOS query for the workgroup most are in,
-    // answered by each of them with its address.
+    // Windows PCs (and NAS drives that speak NetBIOS): a broadcast query for
+    // the workgroup most are in, answered by each with its address. Knocking
+    // on port 445 of every address around is no way here: the console's
+    // connects wait about 75 s for an address with nothing on it, whatever
+    // the socket is told.
     int workgroup = 0;
     const int u = ::socket(AF_INET, SOCK_DGRAM, 0);
     if (u >= 0 && never_waits(u))
@@ -338,83 +340,9 @@ std::vector<SmbServer> smb_find_servers(const std::string &own, std::string *tra
         }
     }
 
-    // Anything taking SMB on the 256 addresses around: port 445 knocked on
-    // a batch at a time; an open one completes its connection. A connect
-    // that waits means the socket does not take "never wait": the rest is
-    // left, or the search would take minutes.
-    say("search: workgroup answers " + std::to_string(workgroup) + "; knocking on port 445");
-    bool waited = false;
-    int knocked = 0;
-    int open = 0;
-    constexpr int kBatch = 64;
-    for (int first = 1; first < 255 && ms_left(deadline) > 0 && !waited; first += kBatch)
-    {
-        std::vector<std::pair<int, std::uint32_t>> trying;
-        for (int host = first; host < std::min(255, first + kBatch); ++host)
-        {
-            const std::uint32_t address = base | static_cast<std::uint32_t>(host);
-            if (address == me)
-                continue;
-            const int s = ::socket(AF_INET, SOCK_STREAM, 0);
-            if (s < 0)
-                continue;
-            if (!never_waits(s))
-            {
-                ::close(s);
-                continue;
-            }
-            sockaddr_in to = {};
-            to.sin_family = AF_INET;
-            to.sin_port = htons(445);
-            to.sin_addr.s_addr = htonl(address);
-            ++knocked;
-            const auto before = Clock::now();
-            const bool started =
-                ::connect(s, reinterpret_cast<const sockaddr *>(&to), sizeof(to)) == 0 ||
-                errno == EINPROGRESS;
-            if (Clock::now() - before > std::chrono::milliseconds(300))
-            {
-                say("search: a connect to " + text_of(address) + " waited; the knocking stops");
-                waited = true;
-            }
-            if (started)
-                trying.emplace_back(s, address);
-            else
-                ::close(s);
-            if (waited)
-                break;
-        }
-        const auto until = std::min(deadline, Clock::now() + std::chrono::milliseconds(700));
-        while (!trying.empty() && ms_left(until) > 0)
-        {
-            std::vector<pollfd> waits;
-            for (const auto &[s, address] : trying)
-                waits.push_back({s, POLLOUT, 0});
-            if (::poll(waits.data(), static_cast<nfds_t>(waits.size()), ms_left(until)) <= 0)
-                break;
-            for (std::size_t i = waits.size(); i-- > 0;)
-            {
-                if (waits[i].revents == 0)
-                    continue;
-                int problem = 0;
-                socklen_t size = sizeof(problem);
-                ::getsockopt(trying[i].first, SOL_SOCKET, SO_ERROR, &problem, &size);
-                if (problem == 0 && (waits[i].revents & POLLOUT) != 0)
-                {
-                    add_server(&servers, text_of(trying[i].second));
-                    ++open;
-                }
-                ::close(trying[i].first);
-                trying.erase(trying.begin() + static_cast<std::ptrdiff_t>(i));
-            }
-        }
-        for (const auto &[s, address] : trying)
-            ::close(s);
-    }
-
     // Each one's name: a NetBIOS node status query ("*"), answered with the
     // names it holds; the first unique workstation name is the machine's.
-    say("search: port 445 open on " + std::to_string(open) + "; asking their names");
+    say("search: workgroup answers " + std::to_string(workgroup) + "; asking their names");
     int named = 0;
     if (u >= 0)
     {
@@ -466,10 +394,8 @@ std::vector<SmbServer> smb_find_servers(const std::string &own, std::string *tra
         ::close(u);
     const auto took =
         std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now() - started).count();
-    *trace = "around " + own + ": workgroup answers " + std::to_string(workgroup) +
-             ", port 445 knocked on " + std::to_string(knocked) + " addresses" +
-             (waited ? " (stopped: connects wait)" : "") + ", open on " + std::to_string(open) +
-             ", named " + std::to_string(named) + ", " + std::to_string(took) + " ms";
+    *trace = "around " + own + ": workgroup answers " + std::to_string(workgroup) + ", named " +
+             std::to_string(named) + ", " + std::to_string(took) + " ms";
     return servers;
 }
 
