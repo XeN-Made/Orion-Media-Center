@@ -37,7 +37,8 @@ bool parse_whats_new(std::string_view text, WhatsNewNotes *notes);
 bool show_whats_new(const WhatsNewNotes &notes, const std::string &version, const std::string &seen,
                     bool set_up);
 
-// The notes as a sheet from the right, read by scrolling; Circle closes.
+// The notes in a large panel in the middle of the screen, read by
+// scrolling; Circle closes, as the hint at its foot says.
 //
 //   WhatsNew whats_new;
 //   whats_new.open(notes, feedback);

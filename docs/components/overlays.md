@@ -134,7 +134,8 @@ focus ring glides between the buttons. The exit never bounces.
 
 ## Sheet
 
-A drawer that slides in from the left, right or bottom edge over a scrim. It
+A drawer that slides in from the left, right or bottom edge over a scrim, or
+a panel that rises into the middle of the screen (`center`). It
 has a title and a content slot, so any other component can live inside: a
 list of options, a filter form, a detail view.
 
@@ -169,8 +170,10 @@ it to the component inside).
 
 | Knob | Default | Effect |
 | --- | --- | --- |
-| `edge` | `right` | `SheetEdge::left`, `right` or `bottom` |
-| `size` | 560 | Width of a side sheet, height of a bottom sheet |
+| `edge` | `right` | `SheetEdge::left`, `right`, `bottom` or `center` |
+| `size` | 560 | Width of a side sheet or a centred one, height of a bottom sheet |
+| `height` | 0 | `center`: the panel's height; 0 fills the bounds less the margin |
+| `rise` | 56 | `center`: how far below its place it starts |
 | `margin` | 0 | Above 0 the sheet floats this far from the edges, fully rounded |
 | `padding` | 36 | Between the panel's edge and the title and content |
 | `overhang` | 96 | Attached sheets: how far the panel continues off screen |

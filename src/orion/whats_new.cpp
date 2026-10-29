@@ -5,6 +5,7 @@
 #include "orion/whats_new.hpp"
 
 #include "core/i18n.hpp"
+#include "ui/components/action_glyph.hpp"
 
 #include <cctype>
 
@@ -74,15 +75,54 @@ bool show_whats_new(const WhatsNewNotes &notes, const std::string &version, cons
     return set_up && !notes.version.empty() && notes.version == version && seen != version;
 }
 
+namespace
+{
+
+constexpr float kHintSize = 34.0f;
+constexpr float kHintRoom = 62.0f; // under the notes, for the hint
+
+// Where the notes go: the sheet's content less a row for the hint.
+gfx::Rect notes_rect(const gfx::Rect &content)
+{
+    return {content.x, content.y, content.w, std::max(content.h - kHintRoom, 0.0f)};
+}
+
+} // namespace
+
 WhatsNew::WhatsNew()
 {
-    sheet_.style.edge = ui::SheetEdge::right;
-    sheet_.style.size = 760.0f;
-    sheet_.style.title_size = 34.0f;
-    sheet_.content = [this](ui::Canvas &canvas, const gfx::Rect &, float) { rows_.draw(canvas); };
+    // Read once, start to end: big type in the middle of the screen, not a
+    // drawer at its edge.
+    sheet_.style.edge = ui::SheetEdge::center;
+    sheet_.style.size = 1280.0f;
+    sheet_.style.height = 860.0f;
+    sheet_.style.padding = 48.0f;
+    sheet_.style.title_size = 42.0f;
+    sheet_.content = [this](ui::Canvas &canvas, const gfx::Rect &area, float)
+    {
+        rows_.draw(canvas);
+        // Circle closes: the glyph and the word, at the panel's foot.
+        const ui::Theme &theme = sheet_.style.theme;
+        ui::Painter paint(canvas.list, canvas.fonts, theme, canvas.glass);
+        const std::string label = i18n::tr("Close");
+        const float text = 24.0f;
+        const float label_w = paint.label_width(label, text);
+        const float glyph_w = ui::action_glyph_width(Action::back, kHintSize);
+        const float right = area.x + area.w;
+        const float cy = area.y + area.h - kHintSize * 0.5f;
+        ui::draw_action_glyph(canvas, theme, Action::back, right - label_w - 12.0f - glyph_w, cy,
+                              kHintSize);
+        paint.label(label, right - label_w, cy + text * 0.36f, text, theme.text);
+    };
     rows_.style.panel = false;
     rows_.style.copy_mark = false;
     rows_.style.layout = ui::DetailLayout::stacked;
+    rows_.style.label_size = 27.0f;
+    rows_.style.value_size = 25.0f;
+    rows_.style.header_size = 21.0f;
+    rows_.style.header_height = 56.0f;
+    rows_.style.padding_y = 12.0f;
+    rows_.style.stack_gap = 6.0f;
     rows_.style.max_lines = 6;
 }
 
@@ -97,7 +137,7 @@ void WhatsNew::open(const WhatsNewNotes &notes, ui::Feedback &feedback)
     sheet_.set_title(i18n::trf("What's new in ORION {0}", {notes.version}));
     rows_.set_items(notes.items);
     rows_.set_active(true);
-    rows_.set_bounds(sheet_.content_rect());
+    rows_.set_bounds(notes_rect(sheet_.content_rect()));
     rows_.enter();
     sheet_.open(feedback);
 }
@@ -120,7 +160,7 @@ bool WhatsNew::handle(const InputFrame &input, ui::Feedback &feedback)
 
 void WhatsNew::update(float dt)
 {
-    rows_.set_bounds(sheet_.content_rect());
+    rows_.set_bounds(notes_rect(sheet_.content_rect()));
     sheet_.update(dt);
     rows_.update(dt);
 }

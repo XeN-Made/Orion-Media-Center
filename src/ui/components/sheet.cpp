@@ -72,6 +72,13 @@ Rect Sheet::panel_rect() const
         const float width = std::min(style.size, b.w - 2.0f * m);
         return {b.x + b.w - m - width, b.y + m, width, b.h - 2.0f * m};
     }
+    case SheetEdge::center:
+    {
+        const float width = std::min(style.size, b.w - 2.0f * m);
+        const float height =
+            style.height > 0.0f ? std::min(style.height, b.h - 2.0f * m) : b.h - 2.0f * m;
+        return {b.cx() - width * 0.5f, b.cy() - height * 0.5f, width, height};
+    }
     case SheetEdge::bottom:
         break;
     }
@@ -140,7 +147,8 @@ void Sheet::draw(Canvas &canvas) const
     list.rounded_rect(bounds_, 0.0f, style.scrim_color.with_alpha(style.scrim * fade));
 
     const Rect panel = panel_rect();
-    const bool attached = style.margin <= 0.0f;
+    // A centred panel touches no edge: it is always whole.
+    const bool attached = style.margin <= 0.0f && style.edge != SheetEdge::center;
     const float over = attached ? std::max(style.overhang, 0.0f) : 0.0f;
     Rect shape = panel;
     switch (style.edge)
@@ -154,13 +162,17 @@ void Sheet::draw(Canvas &canvas) const
     case SheetEdge::bottom:
         shape = {panel.x - over, panel.y, panel.w + 2.0f * over, panel.h + over};
         break;
+    case SheetEdge::center:
+        break;
     }
 
     // Closed, the sheet is one whole size (and its shadow) beyond the edge.
     const bool still = style.reduced_motion;
     const float hidden = still ? 0.0f : 1.0f - slide_.value;
-    const float travel = (style.edge == SheetEdge::bottom ? panel.h : panel.w) +
-                         std::max(style.margin, 0.0f) + 48.0f;
+    const float travel = style.edge == SheetEdge::center
+                             ? std::max(style.rise, 0.0f)
+                             : (style.edge == SheetEdge::bottom ? panel.h : panel.w) +
+                                   std::max(style.margin, 0.0f) + 48.0f;
     float dx = shake(refusal_.value, canvas.time, 10.0f);
     float dy = 0.0f;
     if (style.edge == SheetEdge::left)
@@ -180,7 +192,7 @@ void Sheet::draw(Canvas &canvas) const
     draw_overlay_panel(canvas, theme, shape, style.frosted, style.frost);
     Painter paint(list, canvas.fonts, theme, canvas.glass);
 
-    if (style.handle)
+    if (style.handle && style.edge != SheetEdge::center)
     {
         const Color bar = theme.text_muted.with_alpha(0.45f);
         const float radius = theme.corner == Corner::round ? kHandleThickness * 0.5f : 0.0f;

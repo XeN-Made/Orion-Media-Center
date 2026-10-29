@@ -18,13 +18,16 @@ enum class SheetEdge : std::uint8_t
     left,
     right,
     bottom,
+    center, // a floating panel in the middle that rises into place: size wide, height high
 };
 
 struct SheetStyle : ComponentStyle
 {
     // ---- geometry ----
     SheetEdge edge = SheetEdge::right;
-    float size = 560.0f;    // width of a side sheet, height of a bottom sheet
+    float size = 560.0f;    // width of a side sheet or a centred one, height of a bottom sheet
+    float height = 0.0f;    // center: the panel's height; 0 fills the bounds less the margin
+    float rise = 56.0f;     // center: how far below its place it starts
     float margin = 0.0f;    // above 0 the sheet floats this far from the edges, fully rounded
     float padding = 36.0f;  // between the panel's edge and the title and content
     float overhang = 96.0f; // margin 0: how far the panel continues off screen (see below)

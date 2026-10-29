@@ -223,6 +223,18 @@ TEST_F(ComponentsOverlays, SheetSlidesFromItsEdgeAndOnlyWantsBack)
     EXPECT_FLOAT_EQ(low.h, sheet.style.size);
     sheet.style.margin = 30.0f;
     EXPECT_FLOAT_EQ(sheet.panel_rect().x, 30.0f);
+    // Centred: in the middle of the room above the footer, as big as asked.
+    sheet.style.edge = SheetEdge::center;
+    sheet.style.size = 1200.0f;
+    sheet.style.height = 700.0f;
+    const Rect middle = sheet.panel_rect();
+    EXPECT_FLOAT_EQ(middle.cx(), 960.0f);
+    EXPECT_FLOAT_EQ(middle.cy(), 490.0f);
+    EXPECT_FLOAT_EQ(middle.w, 1200.0f);
+    EXPECT_FLOAT_EQ(middle.h, 700.0f);
+    sheet.style.height = 0.0f;
+    EXPECT_FLOAT_EQ(sheet.panel_rect().h, 980.0f - 60.0f);
+    sheet.style.edge = SheetEdge::bottom;
 
     // Everything but back belongs to what is inside.
     feedback_.clear();
@@ -357,7 +369,8 @@ TEST_F(ComponentsOverlays, DrawInEveryThemeAndVariant)
 {
     const StatusKind kinds[] = {StatusKind::info,   StatusKind::success,  StatusKind::warning,
                                 StatusKind::danger, StatusKind::question, StatusKind::none};
-    const SheetEdge edges[] = {SheetEdge::left, SheetEdge::right, SheetEdge::bottom};
+    const SheetEdge edges[] = {SheetEdge::left, SheetEdge::right, SheetEdge::bottom,
+                               SheetEdge::center};
     const ToastAnchor anchors[] = {ToastAnchor::top_left,      ToastAnchor::top_center,
                                    ToastAnchor::top_right,     ToastAnchor::bottom_left,
                                    ToastAnchor::bottom_center, ToastAnchor::bottom_right};
@@ -393,7 +406,7 @@ TEST_F(ComponentsOverlays, DrawInEveryThemeAndVariant)
 
             Sheet sheet;
             sheet.style.theme = theme;
-            sheet.style.edge = edges[round % 3];
+            sheet.style.edge = edges[round % 4];
             sheet.style.margin = odd ? 24.0f : 0.0f;
             sheet.style.frosted = high;
             sheet.style.handle = !odd;

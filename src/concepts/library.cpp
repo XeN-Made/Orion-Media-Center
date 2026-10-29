@@ -349,7 +349,14 @@ constexpr app::TourStep kTour[] = {
     {0.3f, action_bit(Action::jump_next)},
     {0.2f, 0, Direction::right},
     {0.8f, 0, Direction::none, "settings-about"},
-    {0.2f, action_bit(Action::back)},
+    // What's new, from About (up from Check now): it closes Settings, and
+    // Circle closes it.
+    {0.2f, 0, Direction::up},
+    {0.2f, 0, Direction::up},
+    {0.2f, 0, Direction::up},
+    {0.2f, 0, Direction::up},
+    {0.2f, action_bit(Action::confirm)},
+    {1.2f, 0, Direction::none, "whats-new"},
     {0.5f, action_bit(Action::back)},
     {0.6f, action_bit(Action::north)},
     {0.7f, 0, Direction::none, "search"},
@@ -2654,7 +2661,9 @@ class Library final : public app::Concept
     {
         std::string text;
         orion::WhatsNewNotes notes;
-        if (save::read_file("/app0/assets/whats-new.txt", &text, 256u << 10))
+        // The PC preview has no /app0: it runs in the repository.
+        if (save::read_file("/app0/assets/whats-new.txt", &text, 256u << 10) ||
+            save::read_file("assets/whats-new.txt", &text, 256u << 10))
             orion::parse_whats_new(text, &notes);
         return notes;
     }
