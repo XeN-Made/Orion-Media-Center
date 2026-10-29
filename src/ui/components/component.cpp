@@ -48,17 +48,23 @@ Event refuse(Feedback &feedback, const ComponentStyle &style, const InputFrame &
 namespace
 {
 
-// Removes whole UTF-8 characters from the end until the text and "..." fit.
-template <typename Measure> std::string fit(std::string_view text, float width, Measure measure)
+} // namespace
+
+std::string fit_text(std::string_view text, float width,
+                     const std::function<float(std::string_view)> &measure)
 {
     if (measure(text) <= width)
         return std::string(text);
     std::string cut(text);
     while (!cut.empty())
     {
-        do
+        // A whole character: its continuation bytes (10xxxxxx), then the
+        // byte that starts it. Stopping at the continuation bytes alone left
+        // half an "ü" behind, drawn as a "?".
+        while (!cut.empty() && (static_cast<unsigned char>(cut.back()) & 0xc0) == 0x80)
             cut.pop_back();
-        while (!cut.empty() && (static_cast<unsigned char>(cut.back()) & 0xc0) == 0x80);
+        if (!cut.empty())
+            cut.pop_back();
         while (!cut.empty() && cut.back() == ' ')
             cut.pop_back();
         if (measure(cut + "...") <= width)
@@ -67,16 +73,14 @@ template <typename Measure> std::string fit(std::string_view text, float width, 
     return cut + "...";
 }
 
-} // namespace
-
 std::string fit_label(const Painter &paint, std::string_view text, float size, float width)
 {
-    return fit(text, width, [&](std::string_view s) { return paint.label_width(s, size); });
+    return fit_text(text, width, [&](std::string_view s) { return paint.label_width(s, size); });
 }
 
 std::string fit_body(const Painter &paint, std::string_view text, float size, float width)
 {
-    return fit(text, width, [&](std::string_view s) { return paint.body_width(s, size); });
+    return fit_text(text, width, [&](std::string_view s) { return paint.body_width(s, size); });
 }
 
 void Highlight::snap(const Rect &r)

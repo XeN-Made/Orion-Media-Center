@@ -33,6 +33,7 @@
 #include "ui/widgets.hpp"
 
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <string_view>
 
@@ -116,6 +117,10 @@ Event refuse(Feedback &feedback, const ComponentStyle &style, const InputFrame &
 // Text cut to fit a width, ending in "..." when something was removed. The
 // label and body faces differ per theme, hence the two.
 std::string fit_label(const Painter &paint, std::string_view text, float size, float width);
+// The same with any measure: whole UTF-8 characters come off the end until
+// the text and "..." fit `width`.
+std::string fit_text(std::string_view text, float width,
+                     const std::function<float(std::string_view)> &measure);
 std::string fit_body(const Painter &paint, std::string_view text, float size, float width);
 
 // ---- the focus highlight ---------------------------------------------------

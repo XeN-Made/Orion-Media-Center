@@ -365,6 +365,24 @@ TEST_F(ComponentsOverlays, TooltipWaitsForItsDelayAndFollowsTheAnchor)
     EXPECT_FALSE(tip.visible());
 }
 
+// A label cut to fit loses whole characters: an "ü" goes whole, or stays.
+TEST(FitText, CutsWholeCharacters)
+{
+    // One unit a character, whatever its bytes.
+    const auto characters = [](std::string_view s)
+    {
+        float n = 0.0f;
+        for (const char c : s)
+            n += (static_cast<unsigned char>(c) & 0xc0) != 0x80 ? 1.0f : 0.0f;
+        return n;
+    };
+    const std::string text = "Zu Favoriten hinzuf\xc3\xbc"
+                             "gen!!";
+    EXPECT_EQ(hui::ui::fit_text(text, 40.0f, characters), text);
+    EXPECT_EQ(hui::ui::fit_text(text, 23.0f, characters), "Zu Favoriten hinzuf\xc3\xbc...");
+    EXPECT_EQ(hui::ui::fit_text(text, 22.0f, characters), "Zu Favoriten hinzuf...");
+}
+
 TEST_F(ComponentsOverlays, DrawInEveryThemeAndVariant)
 {
     const StatusKind kinds[] = {StatusKind::info,   StatusKind::success,  StatusKind::warning,
