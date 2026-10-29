@@ -158,8 +158,10 @@ TEST(Shares, AScanListsEveryShareAndKeepsOneAsleep)
 TEST(Shares, AreFoundOnTheNetworkThenTheirFoldersListed)
 {
     orion::DriveFinder finder(
-        [](const std::string &own, std::string *trace)
+        [](const std::string &own, std::string *trace,
+           const std::function<void(const std::string &)> &step)
         {
+            step("search: knocking");
             EXPECT_EQ(own, "192.168.1.30");
             *trace = "one open";
             return std::vector<hui::sys::SmbServer>{{"192.168.1.20", "MEDIA-PC"}};
@@ -175,13 +177,19 @@ TEST(Shares, AreFoundOnTheNetworkThenTheirFoldersListed)
             return true;
         });
     orion::DriveFinder::Result result;
-    ASSERT_TRUE(finder.find("192.168.1.30"));
+    const std::string dir = ::testing::TempDir() + "orion-shares-find";
+    ASSERT_TRUE(hui::save::ensure_directory(dir));
+    std::remove((dir + "/shares.txt").c_str());
+    ASSERT_TRUE(finder.find("192.168.1.30", dir));
     finder.wait();
     ASSERT_TRUE(finder.take_finished(&result));
     EXPECT_TRUE(result.servers_asked);
     ASSERT_EQ(result.servers.size(), 1u);
     EXPECT_EQ(result.servers[0].name, "MEDIA-PC");
     EXPECT_EQ(result.trace, "one open");
+    std::string log;
+    ASSERT_TRUE(hui::save::read_file(dir + "/shares.txt", &log));
+    EXPECT_NE(log.find("search: knocking"), std::string::npos); // said as it went
 
     hui::sys::SmbLogin login;
     login.server = "192.168.1.20";

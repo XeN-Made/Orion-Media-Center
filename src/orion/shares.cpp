@@ -14,6 +14,7 @@
 #include <cctype>
 #include <cstdlib>
 #include <ctime>
+#include <mutex>
 #include <utility>
 
 namespace hui::orion
@@ -313,6 +314,9 @@ void log_share(const std::string &state_dir, std::string_view line)
 {
     if (state_dir.empty())
         return;
+    // The search writes from its thread while the screen writes from its own.
+    static std::mutex writing;
+    const std::lock_guard<std::mutex> lock(writing);
     std::string text;
     const std::string file = state_dir + "/shares.txt";
     save::read_file(file, &text, 256u << 10);
@@ -360,14 +364,15 @@ bool DriveFinder::run(std::function<Result()> work)
     return true;
 }
 
-bool DriveFinder::find(std::string own)
+bool DriveFinder::find(std::string own, std::string state_dir)
 {
     return run(
-        [this, own = std::move(own)]()
+        [this, own = std::move(own), state_dir = std::move(state_dir)]()
         {
             Result result;
             result.servers_asked = true;
-            result.servers = find_(own, &result.trace);
+            result.servers = find_(own, &result.trace,
+                                   [&](const std::string &line) { log_share(state_dir, line); });
             return result;
         });
 }

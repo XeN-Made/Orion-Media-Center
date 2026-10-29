@@ -270,8 +270,14 @@ void add_server(std::vector<SmbServer> *servers, const std::string &address)
 
 } // namespace
 
-std::vector<SmbServer> smb_find_servers(const std::string &own, std::string *trace)
+std::vector<SmbServer> smb_find_servers(const std::string &own, std::string *trace,
+                                        const std::function<void(const std::string &)> &step)
 {
+    const auto say = [&](const std::string &line)
+    {
+        if (step)
+            step(line);
+    };
     std::vector<SmbServer> servers;
     trace->clear();
     in_addr self = {};
@@ -285,6 +291,7 @@ std::vector<SmbServer> smb_find_servers(const std::string &own, std::string *tra
     const auto deadline = started + std::chrono::seconds(8);
     const std::uint32_t me = ntohl(self.s_addr);
     const std::uint32_t base = me & 0xffffff00u;
+    say("search around " + own + ": asking the workgroup");
 
     // Windows PCs: a broadcast NetBIOS query for the workgroup most are in,
     // answered by each of them with its address.
@@ -332,11 +339,15 @@ std::vector<SmbServer> smb_find_servers(const std::string &own, std::string *tra
     }
 
     // Anything taking SMB on the 256 addresses around: port 445 knocked on
-    // a batch at a time; an open one completes its connection.
+    // a batch at a time; an open one completes its connection. A connect
+    // that waits means the socket does not take "never wait": the rest is
+    // left, or the search would take minutes.
+    say("search: workgroup answers " + std::to_string(workgroup) + "; knocking on port 445");
+    bool waited = false;
     int knocked = 0;
     int open = 0;
     constexpr int kBatch = 64;
-    for (int first = 1; first < 255 && ms_left(deadline) > 0; first += kBatch)
+    for (int first = 1; first < 255 && ms_left(deadline) > 0 && !waited; first += kBatch)
     {
         std::vector<std::pair<int, std::uint32_t>> trying;
         for (int host = first; host < std::min(255, first + kBatch); ++host)
@@ -357,11 +368,21 @@ std::vector<SmbServer> smb_find_servers(const std::string &own, std::string *tra
             to.sin_port = htons(445);
             to.sin_addr.s_addr = htonl(address);
             ++knocked;
-            if (::connect(s, reinterpret_cast<const sockaddr *>(&to), sizeof(to)) == 0 ||
-                errno == EINPROGRESS)
+            const auto before = Clock::now();
+            const bool started =
+                ::connect(s, reinterpret_cast<const sockaddr *>(&to), sizeof(to)) == 0 ||
+                errno == EINPROGRESS;
+            if (Clock::now() - before > std::chrono::milliseconds(300))
+            {
+                say("search: a connect to " + text_of(address) + " waited; the knocking stops");
+                waited = true;
+            }
+            if (started)
                 trying.emplace_back(s, address);
             else
                 ::close(s);
+            if (waited)
+                break;
         }
         const auto until = std::min(deadline, Clock::now() + std::chrono::milliseconds(700));
         while (!trying.empty() && ms_left(until) > 0)
@@ -393,6 +414,7 @@ std::vector<SmbServer> smb_find_servers(const std::string &own, std::string *tra
 
     // Each one's name: a NetBIOS node status query ("*"), answered with the
     // names it holds; the first unique workstation name is the machine's.
+    say("search: port 445 open on " + std::to_string(open) + "; asking their names");
     int named = 0;
     if (u >= 0)
     {
@@ -445,9 +467,9 @@ std::vector<SmbServer> smb_find_servers(const std::string &own, std::string *tra
     const auto took =
         std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now() - started).count();
     *trace = "around " + own + ": workgroup answers " + std::to_string(workgroup) +
-             ", port 445 knocked on " + std::to_string(knocked) + " addresses, open on " +
-             std::to_string(open) + ", named " + std::to_string(named) + ", " +
-             std::to_string(took) + " ms";
+             ", port 445 knocked on " + std::to_string(knocked) + " addresses" +
+             (waited ? " (stopped: connects wait)" : "") + ", open on " + std::to_string(open) +
+             ", named " + std::to_string(named) + ", " + std::to_string(took) + " ms";
     return servers;
 }
 

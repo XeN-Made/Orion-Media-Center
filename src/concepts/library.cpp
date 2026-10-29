@@ -2782,7 +2782,7 @@ class Library final : public app::Concept
                 feedback.play(audio::Cue::error);
                 break;
             }
-            finder_.find(own);
+            finder_.find(own, context_.library.state_dir);
             waiting_menu(tr("Looking for drives on your network…"), feedback);
             break;
         }

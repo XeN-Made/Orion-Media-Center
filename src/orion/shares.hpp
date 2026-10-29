@@ -107,8 +107,9 @@ void log_share(const std::string &state_dir, std::string_view line);
 class DriveFinder
 {
   public:
-    using FindServers =
-        std::function<std::vector<sys::SmbServer>(const std::string &own, std::string *trace)>;
+    using FindServers = std::function<std::vector<sys::SmbServer>(
+        const std::string &own, std::string *trace,
+        const std::function<void(const std::string &)> &step)>;
     using ListShares = std::function<bool(const sys::SmbLogin &login,
                                           std::vector<std::string> *shares, std::string *error)>;
     struct Result
@@ -125,7 +126,8 @@ class DriveFinder
     DriveFinder(const DriveFinder &) = delete;
     DriveFinder &operator=(const DriveFinder &) = delete;
 
-    bool find(std::string own);
+    // Each step of the search goes to <state_dir>/shares.txt as it starts.
+    bool find(std::string own, std::string state_dir);
     bool list(sys::SmbLogin login);
     bool running() const
     {

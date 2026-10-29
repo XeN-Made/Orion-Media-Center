@@ -6,6 +6,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -53,7 +54,9 @@ struct SmbServer
 // `own`, "192.168.1.30") that take SMB connections, with their names. About
 // two seconds, never more than ten. *trace says what each way found. Blocking.
 // On a PC: none.
-std::vector<SmbServer> smb_find_servers(const std::string &own, std::string *trace);
+// `step`, when given, hears each step as it starts.
+std::vector<SmbServer> smb_find_servers(const std::string &own, std::string *trace,
+                                        const std::function<void(const std::string &)> &step = {});
 
 // The folders a server shares with this user (login.share is not used):
 // disk shares only, not the hidden ones ending in "$". Blocking.
