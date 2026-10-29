@@ -8,6 +8,7 @@
 #include "orion/languages.hpp"
 #include "orion/look.hpp"
 #include "orion/prefs.hpp"
+#include "orion/settings_panel.hpp"
 #include "ui/components/form.hpp"
 #include "ui/components/sheet.hpp"
 #include "ui/components/wizard.hpp"
@@ -24,14 +25,18 @@ namespace hui::orion
 //   Welcome     what ORION found; get started, or skip setup
 //   Look        theme, game backgrounds
 //   Emulators   the emulators found (scan again), group their tabs
+//   Tabs        every tab shown or hidden, and new tabs of the player's
+//   Your games  the tab each console title sits on
+//   Labels      new labels, and the one each title wears
 //   Box art     find it by itself, where it goes
 //   Library     return to ORION after a game, reopen on the last tab, sort
 //   Autoboot    ORION opens on its own after the jailbreak, and the payload for it
 //   Done        where everything is
 //
 // Up and down move in the rows, Cross takes one, left and right change a
-// choice; Circle goes back a step. It edits the Look and the LibraryPrefs it
-// is handed and says what changed, as SettingsPanel does; Finish sets
+// choice; Circle goes back a step. New tab and New label ask the screen for a
+// name (Change::new_tab, new_label); it adds them and calls refresh(). It edits the Look and the
+// LibraryPrefs it is handed and says what changed, as SettingsPanel does; Finish sets
 // prefs.setup_done.
 //
 //   orion::SetupPanel setup;
@@ -59,6 +64,16 @@ class SetupPanel
         scan_emulators, // "Scan for emulators" was chosen
         finished,       // the last step (or Skip setup): setup_done is set, the sheet closes
         language,       // the Language row changed (prefs.language)
+        new_tab,        // "New tab…": the screen asks for a name, adds it, refresh()
+        new_label,      // "New label…": the same, for a label
+    };
+
+    // A console title as Your games and Labels list it.
+    struct Game
+    {
+        std::string id;
+        std::string name;
+        std::string shelf; // the built-in shelf it is on by itself: "games", "homebrew", "media"
     };
 
     enum class Step : std::uint8_t
@@ -66,6 +81,9 @@ class SetupPanel
         welcome,
         look,
         emulators,
+        tabs,
+        games,
+        labels,
         art,
         library,
         autostart,
@@ -89,6 +107,16 @@ class SetupPanel
     void set_emulator(const library::Emulator &emulator)
     {
         emulator_ = &emulator;
+    }
+    // Every tab, in the tab bar's order (SettingsPanel::set_tabs takes the same).
+    void set_tabs(std::vector<TabEntry> tabs)
+    {
+        tabs_ = std::move(tabs);
+    }
+    // The console's titles, in the order Your games lists them.
+    void set_games(std::vector<Game> games)
+    {
+        games_ = std::move(games);
     }
     // How many console titles the Welcome step says were found.
     void set_titles(int titles)
@@ -137,6 +165,8 @@ class SetupPanel
     void build(const Look &look, const LibraryPrefs &prefs);
     void layout();
     void draw_content(ui::Canvas &canvas, float opacity) const;
+    std::string tab_name(const std::string &key, const char *own) const;
+    const library::System *system_of(const std::string &key) const;
 
     ui::Sheet sheet_;
     ui::Wizard steps_;
@@ -147,6 +177,8 @@ class SetupPanel
     std::string on_word_; // the switches' On and Off (form_.style holds pointers)
     std::string off_word_;
     const library::Emulator *emulator_ = nullptr;
+    std::vector<TabEntry> tabs_;
+    std::vector<Game> games_;
     int titles_ = 0;
     std::string scan_status_; // empty until a scan reports: what a scan finds
     std::string payload_ = "/data/homebrew/PPSA99062/assets/payloads/orion-autostart.elf";

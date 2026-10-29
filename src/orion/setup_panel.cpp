@@ -39,13 +39,28 @@ enum : int
     kPayload,
     kPayloadFolder,
     kTip,
+    kNewTab,
+    kNewLabel,
+    kNoLabels,
+    kNoGames,
     kEmulatorRow = 100, // + the emulator's index, or a missing one's past them
+    kTabRow = 1000,     // + the tab's index in tabs_
+    kGameRow = 10000,   // + the game's index in games_
+    kLabelRow = 20000,  // + the game's index in games_
 };
 
-constexpr const char *kStepNames[] = {i18n::marked("Welcome"),   i18n::marked("Look"),
-                                      i18n::marked("Emulators"), i18n::marked("Box art"),
-                                      i18n::marked("Library"),   i18n::marked("Autoboot"),
-                                      i18n::marked("Done")};
+// The built-in shelves a title can sit on, in the order Your games offers
+// them; the player's own tabs follow.
+constexpr const char *kShelfKeys[] = {"games", "homebrew", "media"};
+constexpr const char *kShelfNames[] = {i18n::marked("Games"), i18n::marked("Homebrew"),
+                                       i18n::marked("Media")};
+constexpr int kShelfCount = 3;
+
+constexpr const char *kStepNames[] = {i18n::marked("Welcome"),    i18n::marked("Look"),
+                                      i18n::marked("Emulators"),  i18n::marked("Tabs"),
+                                      i18n::marked("Your games"), i18n::marked("Labels"),
+                                      i18n::marked("Box art"),    i18n::marked("Library"),
+                                      i18n::marked("Autoboot"),   i18n::marked("Done")};
 
 int sort_index(const std::string &key)
 {
@@ -134,13 +149,37 @@ void SetupPanel::go(Step step, const Look &look, const LibraryPrefs &prefs)
     form_.enter();
 }
 
+std::string SetupPanel::tab_name(const std::string &key, const char *own) const
+{
+    for (const TabEntry &tab : tabs_)
+    {
+        if (tab.key == key)
+            return tab.name;
+    }
+    return tr(own);
+}
+
+const library::System *SetupPanel::system_of(const std::string &key) const
+{
+    if (emulator_ == nullptr || key.rfind("sys:", 0) != 0)
+        return nullptr;
+    for (const library::System &system : emulator_->systems)
+    {
+        if (key.compare(4, std::string::npos, system.name) == 0)
+            return &system;
+    }
+    return nullptr;
+}
+
 void SetupPanel::layout()
 {
     const gfx::Rect area = sheet_.content_rect();
     constexpr float kHints = 70.0f;
     const float width = std::min(area.w, 1180.0f);
     const float left = area.x + (area.w - width) * 0.5f;
-    steps_.set_bounds({left, area.y + 4.0f, width, 96.0f});
+    // Ten steps: the bar is wider than the rows, so each name has room.
+    const float bar = std::min(area.w, 1640.0f);
+    steps_.set_bounds({area.x + (area.w - bar) * 0.5f, area.y + 4.0f, bar, 96.0f});
     form_.set_bounds({left, area.y + 128.0f, width, area.h - 128.0f - kHints});
 }
 
@@ -252,6 +291,98 @@ void SetupPanel::build(const Look &look, const LibraryPrefs &prefs)
         next(tr("Continue"), tr("Game folders of your own: Settings, Emulators"));
         break;
     }
+    case Step::tabs:
+    {
+        form_.add_header(tr("Tabs"));
+        form_.add_action(kNewTab, tr("New tab…")).description =
+            tr("A shelf of your own, named as you like; the next step fills it");
+        // The Hidden tab is for titles put out of the way: Settings shows it.
+        for (std::size_t i = 0; i < tabs_.size(); ++i)
+        {
+            const TabEntry &tab = tabs_[i];
+            if (tab.key == kHiddenTabKey)
+                continue;
+            const library::System *system = system_of(tab.key);
+            const bool shown =
+                system != nullptr ? prefs.system_enabled(system->name) : !prefs.tab_hidden(tab.key);
+            ui::FormRow &row = form_.add_toggle(kTabRow + static_cast<int>(i), tab.name, shown);
+            row.description = system != nullptr               ? tr("Off leaves its games out too")
+                              : tab.key == "all"              ? tr("Every title in one place")
+                              : tab.key == "favourites"       ? tr("The titles you star")
+                              : tab.key.rfind("tab:", 0) == 0 ? tr("One of your own")
+                                                              : std::string();
+        }
+        next(tr("Continue"), tr("Rename, reorder and theme them: Settings, Tabs"));
+        break;
+    }
+    case Step::games:
+    {
+        form_.add_header(tr("Your games"));
+        std::vector<std::string> places;
+        for (int i = 0; i < kShelfCount; ++i)
+            places.push_back(tab_name(kShelfKeys[i], kShelfNames[i]));
+        for (const CustomTab &tab : prefs.tabs)
+            places.push_back(tab.name);
+        for (std::size_t i = 0; i < games_.size(); ++i)
+        {
+            const Game &game = games_[i];
+            int at = 0;
+            std::string shelf = prefs.placed_shelf(game.id);
+            if (shelf.empty())
+                shelf = game.shelf;
+            for (int s = 0; s < kShelfCount; ++s)
+            {
+                if (shelf == kShelfKeys[s])
+                    at = s;
+            }
+            if (const CustomTab *placed = prefs.placement(game.id))
+            {
+                for (std::size_t t = 0; t < prefs.tabs.size(); ++t)
+                {
+                    if (prefs.tabs[t].id == placed->id)
+                        at = kShelfCount + static_cast<int>(t);
+                }
+            }
+            form_.add_choice(kGameRow + static_cast<int>(i), game.name, places, at);
+        }
+        if (games_.empty())
+            form_.add_value(kNoGames, tr("No console titles yet"), "");
+        next(tr("Continue"), tr("Later: Options on a title, Move to tab…"));
+        break;
+    }
+    case Step::labels:
+    {
+        form_.add_header(tr("Labels"));
+        form_.add_action(kNewLabel, tr("New label…")).description =
+            tr("A banner of your own for covers: CO-OP, RPG, Kids…");
+        std::vector<std::string> names = {tr("Its own")};
+        std::vector<std::string> ids = {""};
+        for (const Label &label : prefs.labels)
+        {
+            if (!label.custom)
+                continue;
+            names.push_back(label.text);
+            ids.push_back(label.id);
+        }
+        if (ids.size() == 1)
+            form_.add_value(kNoLabels, tr("Each title wears ORION's label"), tr("GAME, APP…"));
+        else
+        {
+            for (std::size_t i = 0; i < games_.size(); ++i)
+            {
+                const std::string worn = prefs.title_label(games_[i].id);
+                int at = 0;
+                for (std::size_t l = 1; l < ids.size(); ++l)
+                {
+                    if (ids[l] == worn)
+                        at = static_cast<int>(l);
+                }
+                form_.add_choice(kLabelRow + static_cast<int>(i), games_[i].name, names, at);
+            }
+        }
+        next(tr("Continue"), tr("Colours and ORION's own labels: Settings, Labels"));
+        break;
+    }
     case Step::art:
     {
         form_.add_header(tr("Box art"));
@@ -349,10 +480,49 @@ SetupPanel::Change SetupPanel::handle(const InputFrame &input, ui::Feedback &fee
         }
         if (id == kScan)
             return Change::scan_emulators;
+        if (id == kNewTab)
+            return Change::new_tab;
+        if (id == kNewLabel)
+            return Change::new_label;
         return Change::none;
     }
     if (event != ui::Event::changed)
         return Change::none;
+    if (id >= kTabRow && id - kTabRow < static_cast<int>(tabs_.size()))
+    {
+        const std::string &key = tabs_[static_cast<std::size_t>(id - kTabRow)].key;
+        if (const library::System *system = system_of(key))
+            prefs->set_system_enabled(system->name, form_.toggle_value(id));
+        else
+            prefs->set_tab_hidden(key, !form_.toggle_value(id));
+        return Change::prefs;
+    }
+    if (id >= kGameRow && id - kGameRow < static_cast<int>(games_.size()))
+    {
+        const Game &game = games_[static_cast<std::size_t>(id - kGameRow)];
+        const int at = form_.choice_index(id);
+        if (at >= kShelfCount && at - kShelfCount < static_cast<int>(prefs->tabs.size()))
+            prefs->place(game.id, prefs->tabs[static_cast<std::size_t>(at - kShelfCount)].id);
+        else if (at >= 0 && at < kShelfCount && kShelfKeys[at] == game.shelf)
+            prefs->unplace(game.id); // its own shelf: no move kept
+        else if (at >= 0 && at < kShelfCount)
+            prefs->place(game.id, kShelfKeys[at]);
+        return Change::prefs;
+    }
+    if (id >= kLabelRow && id - kLabelRow < static_cast<int>(games_.size()))
+    {
+        const Game &game = games_[static_cast<std::size_t>(id - kLabelRow)];
+        const int at = form_.choice_index(id);
+        std::string label;
+        int seen = 0;
+        for (const Label &own : prefs->labels)
+        {
+            if (own.custom && ++seen == at)
+                label = own.id;
+        }
+        prefs->set_title_label(game.id, label);
+        return Change::prefs;
+    }
     switch (id)
     {
     case kBase:

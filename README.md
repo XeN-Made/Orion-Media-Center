@@ -59,7 +59,8 @@ most played.
 
 **Made for the controller**
 - Every setting in one place, Settings (R3), with a first-run setup that
-  walks through the language, the look, emulators, box art and autoboot.
+  walks through the language, the look, emulators, which tabs show (and new
+  ones of your own), the tab each game sits on, labels, box art and autoboot.
 - In English, German, Spanish, Portuguese (Brazil), Hungarian or Swedish, following the console's language
   or the one you pick; other languages can be added as files.
 - Themes and a look of your own: colours, the galaxy sky, glass, corners,
@@ -112,7 +113,9 @@ by ORION's helper, no FTP server needed.
 3. Wait about ten seconds: ShadowMountPlus registers the new title, and ORION
    appears on the home screen. If it does not, run ShadowMountPlus again.
 4. Open ORION. The first time, a short setup walks you through the look,
-   your emulators, box art, how the library is sorted and autoboot.
+   your emulators, your tabs (show, hide or make new ones), which tab each
+   game goes on, labels for your covers, box art, how the library is sorted
+   and autoboot.
 
 If an older `PPSA99062.ffpkg` or `.ffpfsc` image is in `/data/homebrew`,
 delete it first: a folder and an image with the same title ID must not both

@@ -770,6 +770,8 @@ class Library final : public app::Concept
         setup_.set_titles(static_cast<int>(std::count_if(
             titles().begin(), titles().end(), [](const Title &t) { return !t.is_rom(); })));
         setup_.set_autostart_payload(autostart_payload());
+        setup_.set_tabs(every_tab());
+        setup_.set_games(setup_games());
         // Where the folder browser starts; the ones not plugged in are left out.
         set_browse_places();
         settings_.set_app_settings(context_.settings);
@@ -1272,7 +1274,8 @@ class Library final : public app::Concept
         // A keyboard Settings asked for (a folder to type) goes over it: the
         // sheet covers the whole screen.
         // And over the RomM Games screen (its search).
-        const bool over_settings = settings_.visible() || romm_browser_.is_open();
+        const bool over_settings =
+            settings_.visible() || romm_browser_.is_open() || setup_.visible();
         if (keyboard_shown_.value > 0.01f && !over_settings)
             draw_keyboard(canvas, paint);
         else if (keyboard_shown_.value <= 0.01f)
@@ -2778,6 +2781,26 @@ class Library final : public app::Concept
         settings_.set_version(context_.version);
         if (settings_.is_open())
             settings_.refresh(look_, prefs_);
+        setup_.set_tabs(every_tab());
+        setup_.set_games(setup_games());
+        if (setup_.is_open())
+            setup_.refresh(look_, prefs_);
+    }
+
+    // The console's titles, by name, as the setup's Your games and Labels
+    // list them; games for an emulator stay on their system's tab.
+    std::vector<orion::SetupPanel::Game> setup_games() const
+    {
+        std::vector<orion::SetupPanel::Game> games;
+        for (const Title &title : titles())
+        {
+            if (!title.is_rom())
+                games.push_back({title.id, title.name, shelf_key_of(title)});
+        }
+        std::sort(games.begin(), games.end(),
+                  [](const orion::SetupPanel::Game &a, const orion::SetupPanel::Game &b)
+                  { return a.name < b.name; });
+        return games;
     }
 
     // The language the prefs ask for, everywhere: the text built ahead of
@@ -2857,6 +2880,12 @@ class Library final : public app::Concept
             break;
         case orion::SetupPanel::Change::finished:
             tabs_changed();
+            break;
+        case orion::SetupPanel::Change::new_tab:
+            start_typing(Typing::new_tab, "");
+            break;
+        case orion::SetupPanel::Change::new_label:
+            start_typing(Typing::new_label, "");
             break;
         case orion::SetupPanel::Change::none:
             break;

@@ -112,19 +112,20 @@ TEST_F(LibraryDesign, TheSetupWalksThroughEveryStep)
     // Welcome: Language first, then Get started.
     send(*design, nav(Direction::down));
     send(*design, press(hui::Action::confirm));
-    // Look, Emulators, Box art, Library, Autostart: Continue is the last row.
-    for (int step = 0; step < 5; ++step)
+    // Look, Emulators, Tabs, Your games, Labels, Box art, Library, Autostart:
+    // Continue is the last row.
+    for (int step = 0; step < 8; ++step)
     {
         // Circle on a later step goes back one, Get started comes forward again.
         if (step == 2)
         {
             send(*design, press(hui::Action::back));
             EXPECT_TRUE(played(Cue::back));
-            for (int i = 0; i < 10; ++i)
+            for (int i = 0; i < 20; ++i)
                 send(*design, nav(Direction::down));
             send(*design, press(hui::Action::confirm));
         }
-        for (int i = 0; i < 10; ++i)
+        for (int i = 0; i < 20; ++i)
             send(*design, nav(Direction::down));
         expect_drawable(*design);
         EXPECT_FALSE(hui::orion::load_prefs(dir).setup_done) << step;
@@ -133,6 +134,51 @@ TEST_F(LibraryDesign, TheSetupWalksThroughEveryStep)
     // Done: Start using ORION is the first row.
     send(*design, press(hui::Action::confirm));
     EXPECT_TRUE(hui::orion::load_prefs(dir).setup_done);
+}
+
+// The setup's Tabs, Your games and Labels steps: a tab hidden, a title moved
+// to the player's own tab, a label of theirs given to a title, each saved as
+// it is chosen.
+TEST_F(LibraryDesign, TheSetupHidesTabsMovesGamesAndGivesLabels)
+{
+    const std::string dir = ::testing::TempDir() + "orion-design-setup-tabs";
+    ASSERT_TRUE(hui::save::ensure_directory(dir));
+    ASSERT_TRUE(hui::save::write_atomic(
+                    dir + "/library.json",
+                    "{\"tabs\": [{\"id\": \"t1\", \"name\": \"RPGs\"}], \"labels\": [{\"id\": "
+                    "\"l1\", \"text\": \"CO-OP\", \"fill\": \"#3fe0c5\", \"ink\": \"#08101c\", "
+                    "\"custom\": true}]}\n")
+                    .empty());
+    library_.state_dir = dir;
+    library_.offer_setup = true;
+    auto design = with_fixture();
+    send(*design, hui::InputFrame());
+    const auto next_step = [&]
+    {
+        for (int i = 0; i < 20; ++i)
+            send(*design, nav(Direction::down));
+        send(*design, press(hui::Action::confirm));
+    };
+    send(*design, nav(Direction::down)); // Welcome: Get started
+    send(*design, press(hui::Action::confirm));
+    next_step(); // Look
+    next_step(); // Emulators
+    // Tabs: New tab, then All, switched off.
+    send(*design, nav(Direction::down));
+    send(*design, press(hui::Action::confirm));
+    EXPECT_TRUE(hui::orion::load_prefs(dir).tab_hidden("all"));
+    next_step();
+    // Your games: the first title one place along from its own shelf.
+    EXPECT_TRUE(hui::orion::load_prefs(dir).placements.empty());
+    send(*design, nav(Direction::right));
+    EXPECT_FALSE(hui::orion::load_prefs(dir).placements.empty());
+    expect_drawable(*design);
+    next_step();
+    // Labels: New label, then the first title, given CO-OP.
+    send(*design, nav(Direction::down));
+    send(*design, nav(Direction::right));
+    EXPECT_FALSE(hui::orion::load_prefs(dir).title_labels.empty());
+    expect_drawable(*design);
 }
 
 // With something played, the All tab has a Continue playing row between the

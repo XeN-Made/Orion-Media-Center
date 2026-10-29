@@ -795,3 +795,19 @@ author = Deutsche ORION-Mitwirkende
 
 # src/orion/whats_new.cpp
 "What's new in ORION {0}" = "Neuigkeiten in ORION {0}"
+
+# src/orion/setup_panel.cpp (tabs, games, labels)
+"A banner of your own for covers: CO-OP, RPG, Kids…" = "Ein eigenes Band für Cover: CO-OP, RPG, Kinder…"
+"A shelf of your own, named as you like; the next step fills it" = "Ein eigenes Regal mit beliebigem Namen; der nächste Schritt füllt es"
+"Colours and ORION's own labels: Settings, Labels" = "Farben und ORIONs eigene Etiketten: Einstellungen, Etiketten"
+"Each title wears ORION's label" = "Jeder Titel trägt ORIONs Etikett"
+"Every title in one place" = "Alle Titel an einem Ort"
+"GAME, APP…" = "SPIEL, APP…"
+"Its own" = "Sein eigenes"
+"Later: Options on a title, Move to tab…" = "Später: Optionen auf einem Titel, In Tab…"
+"No console titles yet" = "Noch keine Konsolentitel"
+"Off leaves its games out too" = "Aus lässt auch seine Spiele weg"
+"One of your own" = "Einer deiner eigenen"
+"Rename, reorder and theme them: Settings, Tabs" = "Umbenennen, ordnen und gestalten: Einstellungen, Tabs"
+"The titles you star" = "Die Titel mit Stern"
+"Your games" = "Deine Spiele"
