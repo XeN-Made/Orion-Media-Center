@@ -6,6 +6,7 @@
 
 #include "third_party/stb/image.h"
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -89,12 +90,19 @@ bool decode_png(std::string_view bytes, int max_size, Image *out)
     int factor = 1;
     while (width / factor > max_size || height / factor > max_size)
         ++factor;
+    shrink_rgba(pixels, width, height, factor, out);
+    return !out->rgba.empty();
+}
+
+void shrink_rgba(const std::uint8_t *pixels, int width, int height, int factor, Image *out)
+{
+    factor = std::max(factor, 1);
     out->width = width / factor;
     out->height = height / factor;
     if (out->width < 1 || out->height < 1)
     {
         *out = Image();
-        return false;
+        return;
     }
     out->rgba.resize(static_cast<std::size_t>(out->width) * out->height * 4);
     if (factor == 1)
@@ -124,7 +132,6 @@ bool decode_png(std::string_view bytes, int max_size, Image *out)
             }
         }
     }
-    return true;
 }
 
 } // namespace hui::library

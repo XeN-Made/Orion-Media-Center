@@ -34,6 +34,8 @@ struct Image
 // down by a whole factor until neither side exceeds max_size. False, with
 // *out emptied, for anything that is not a readable PNG.
 bool decode_png(std::string_view bytes, int max_size, Image *out);
+// Box-filters RGBA8 pixels down by a whole factor (1: a plain copy) into *out.
+void shrink_rgba(const std::uint8_t *pixels, int width, int height, int factor, Image *out);
 // Why the last decode_png failed, as stb_image says it ("outofmem", ...).
 const char *png_failure();
 

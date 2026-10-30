@@ -138,9 +138,10 @@ replace the pinned SDK or install files globally. PacBrew recipes and every
 linked third-party library retain their upstream licenses; applications must
 review those terms before redistribution.
 
-ORION links these ports statically (`PACBREW_PACKAGES=libcurl libwebp libsmb2
-libarchive` in the Makefile) to download box art over HTTPS, to read WebP
-pictures, to read games off SMB shares and to unpack PS5 games from archives:
+ORION links these ports statically (`PACBREW_PACKAGES=libcurl libwebp
+libwebpdemux libsmb2 libarchive` in the Makefile) to download box art over
+HTTPS, to read WebP pictures (still and moving), to read games off SMB shares
+and to unpack PS5 games from archives:
 
 | Library | Version | License |
 | --- | --- | --- |
