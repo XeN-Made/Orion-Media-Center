@@ -17,10 +17,10 @@
 // The calls and their structures are as etaHEN's write-up on package
 // installs describes them; the authid is the one other installers use for
 // it, and fake packages need kstuff, as for any installer. The installer's
-// library is opened here (dlopen) rather than linked: linked, a loader
-// process without it ends the payload before main, with nothing said.
+// library is linked: opened with dlopen in the ELF loader's process, the
+// payload ended inside dlopen. "started" is logged first, so a payload the
+// loader cannot link shows as one that never started.
 
-#include <dlfcn.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <stdarg.h>
@@ -64,9 +64,9 @@ typedef struct
     unsigned char unknown[6480];
 } PlayGoInfo;
 
-static int (*sceAppInstUtilInitialize)(void);
-static int (*sceAppInstUtilInstallByPackage)(MetaInfo *meta, PkgInfo *info, PlayGoInfo *playgo);
-static int (*sceAppInstUtilTerminate)(void);
+int sceAppInstUtilInitialize(void);
+int sceAppInstUtilInstallByPackage(MetaInfo *meta, PkgInfo *info, PlayGoInfo *playgo);
+int sceAppInstUtilTerminate(void);
 
 static void say(const char *format, ...)
 {
@@ -113,39 +113,6 @@ static void answer(const char *token, int code)
     rename(RESULT_PATH ".part", RESULT_PATH);
 }
 
-// The installer's three calls, from its library; 0 when one is missing.
-static int open_installer(void)
-{
-    // By name as the SDK's sample opens a system library, then by its place.
-    static const char *const kNames[] = {"libSceAppInstUtil.sprx",
-                                         "/system/common/lib/libSceAppInstUtil.sprx"};
-    void *library = NULL;
-    for (size_t i = 0; i < sizeof(kNames) / sizeof(kNames[0]) && library == NULL; ++i)
-    {
-        say("opening %s", kNames[i]);
-        library = dlopen(kNames[i], RTLD_LAZY);
-        if (library == NULL)
-        {
-            const char *why = dlerror();
-            say("cannot open %s: %s", kNames[i], why != NULL ? why : "?");
-        }
-    }
-    if (library == NULL)
-        return 0;
-    say("opened; looking up the install calls");
-    sceAppInstUtilInitialize = (int (*)(void))dlsym(library, "sceAppInstUtilInitialize");
-    sceAppInstUtilInstallByPackage = (int (*)(MetaInfo *, PkgInfo *, PlayGoInfo *))dlsym(
-        library, "sceAppInstUtilInstallByPackage");
-    sceAppInstUtilTerminate = (int (*)(void))dlsym(library, "sceAppInstUtilTerminate");
-    if (sceAppInstUtilInitialize == NULL || sceAppInstUtilInstallByPackage == NULL ||
-        sceAppInstUtilTerminate == NULL)
-    {
-        say("libSceAppInstUtil.sprx lacks the install calls");
-        return 0;
-    }
-    return 1;
-}
-
 int main(void)
 {
     say("started");
@@ -175,14 +142,7 @@ int main(void)
     const pid_t self = getpid();
     const uint64_t authid = kernel_get_ucred_authid(self);
     kernel_set_ucred_authid(self, INSTALL_AUTHID);
-    say("authid %016llx set", (unsigned long long)INSTALL_AUTHID);
-    if (!open_installer())
-    {
-        answer(kept, -1);
-        kernel_set_ucred_authid(self, authid);
-        return 1;
-    }
-    say("initializing the installer");
+    say("authid %016llx set; initializing the installer", (unsigned long long)INSTALL_AUTHID);
     int code = sceAppInstUtilInitialize();
     if (code != 0)
     {
