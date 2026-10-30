@@ -46,7 +46,7 @@ class Weather
     void draw(gfx::DrawList &list) const;
 
     // How many particles each kind keeps (for tests and the cost in
-    // docs/PERFORMANCE.md): each is one or two quads.
+    // docs/PERFORMANCE.md): each is one or two quads, a snow crystal five.
     static int count(Kind kind);
 
   private:

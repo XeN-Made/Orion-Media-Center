@@ -59,11 +59,12 @@ TEST(OrionWeather, EveryKindIsOnScreenAtOnceAndCheap)
         for (const gfx::Instance &instance : list.instances())
             low += instance.rect[1] > gfx::kVirtualHeight * 0.5f ? 1 : 0;
         EXPECT_GT(low, 0) << static_cast<int>(kind);
-        // One or two quads a particle: a few hundred, one batch.
+        // One to five quads a particle (a snow crystal is five): a few
+        // hundred, one batch.
         const auto count = static_cast<int>(list.instances().size());
         EXPECT_GE(count, orion::Weather::count(kind));
-        EXPECT_LE(count, 2 * orion::Weather::count(kind));
-        EXPECT_LE(count, 600);
+        EXPECT_LE(count, 5 * orion::Weather::count(kind));
+        EXPECT_LE(count, 700);
     }
 }
 

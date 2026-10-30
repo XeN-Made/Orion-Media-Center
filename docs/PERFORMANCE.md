@@ -70,7 +70,7 @@ in all, refused when that would leave them under 320), queued (at most 8 MB
 waiting, since the app's heap is fixed), uploaded about 4 MB a frame and its
 pixels let go. Playing it then only changes which texture one image uses:
 no decoding and no uploads on the frame. The weather over the player's
-picture (`orion/weather.hpp`) is at most 480 SDF shapes in the scene's one
+picture (`orion/weather.hpp`) is at most 700 SDF shapes in the scene's one
 run, laid out in the virtual canvas, so 4K costs no more than 1080p. Neither
 has been timed on a console yet.
 
