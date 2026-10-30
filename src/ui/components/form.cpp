@@ -318,6 +318,13 @@ int Form::next(int from, int direction) const
     return -1;
 }
 
+void Form::scroll_by(float pixels)
+{
+    const float most = std::max(0.0f, target_height() - inner().h);
+    scroll_.position.target = std::clamp(scroll_.position.target + pixels, 0.0f, most);
+    looking_ = true;
+}
+
 void Form::retarget(bool snap)
 {
     const int count = static_cast<int>(rows_.size());
@@ -336,8 +343,10 @@ void Form::retarget(bool snap)
         // Reveal the section header above the first row of a section too.
         const bool under_header =
             focus_ > 0 && rows_[static_cast<std::size_t>(focus_ - 1)].kind == FormRowKind::header;
-        scroll_.reveal(under_header ? target_top(focus_ - 1) : top, top + size, in.h,
-                       style.row_height * scale() * 0.5f, target_height());
+        // Scrolled by hand (scroll_by): left where it was until the focus moves.
+        if (!looking_)
+            scroll_.reveal(under_header ? target_top(focus_ - 1) : top, top + size, in.h,
+                           style.row_height * scale() * 0.5f, target_height());
         // The highlight lives in content space: scrolling must not make it lag.
         const Rect target{0.0f, top, in.w, size};
         highlight_.target(target);
@@ -365,6 +374,7 @@ void Form::set_focus(int index, bool snap)
         return;
     focus_ = index;
     held_ = 0;
+    looking_ = false;
     retarget(snap);
 }
 
@@ -509,6 +519,7 @@ Event Form::handle(const InputFrame &input, Feedback &feedback)
             return refuse(feedback, style, input, highlight_.refusal(), x);
         focus_ = to;
         held_ = 0;
+        looking_ = false;
         retarget(false);
         const float along = rows_.size() > 1
                                 ? static_cast<float>(focus_) / static_cast<float>(rows_.size() - 1)

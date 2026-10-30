@@ -1600,6 +1600,12 @@ SettingsPanel::Change SettingsPanel::handle(const InputFrame &input, ui::Feedbac
         return Change::none;
     }
 
+    // The right stick looks down a section's rows from the rail too, without
+    // going into them: about 1400 points a second at full tilt (handle runs
+    // once a frame).
+    if (std::fabs(input.stick2_y) > 0.0f)
+        form_.scroll_by(input.stick2_y * 1400.0f / 60.0f);
+
     if (!in_rows_)
     {
         if (input.nav == Direction::right)

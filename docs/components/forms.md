@@ -89,6 +89,11 @@ Focus: `focus()` (row index), `focus_id()`, `set_focus(index, snap)`,
 `focus_row(id, snap)`, `set_active(bool)`, `enter()` (replays the entrance),
 `row_rect(index)`.
 
+`scroll_by(pixels)` scrolls the rows (positive: further down), within them,
+without moving the focus: a screen whose focus is elsewhere, such as a rail
+beside the form, lets the right stick look through the rows. The focus is not
+kept in view until it next moves.
+
 `help_text()` is the focused row's description, for a help area of the screen's
 own: turn `description_inline` off and draw it where you like.
 

@@ -235,6 +235,11 @@ class Form
     void enter();
     // Where a row is on screen right now (scroll applied).
     gfx::Rect row_rect(int index) const;
+    // Scrolls the rows by this much (positive: further down), within them,
+    // without moving the focus: a screen whose focus is elsewhere (a rail
+    // beside the form) lets the right stick look through the rows. The next
+    // focus move brings its row back into view.
+    void scroll_by(float pixels);
     // What a slider row shows for its value ("70 %").
     std::string slider_text(const FormRow &row) const;
 
@@ -270,6 +275,7 @@ class Form
     float age_ = 10.0f;
     Highlight highlight_;
     Scroller scroll_;
+    bool looking_ = false; // scrolled by hand: the focus is not kept in view until it moves
     tween::Spring active_amount_{1.0f, 0.0f, 1.0f};
 };
 

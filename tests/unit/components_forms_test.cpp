@@ -104,6 +104,27 @@ TEST_F(ComponentsForms, FocusSkipsHeadersAndReadOnlyRows)
     EXPECT_EQ(send(press(Action::confirm)), Event::refused);
 }
 
+// scroll_by looks through the rows without moving the focus, and stops at
+// either end of them.
+TEST_F(ComponentsForms, ScrollByMovesTheRowsNotTheFocus)
+{
+    const float top = form_.row_rect(1).y;
+    form_.scroll_by(80.0f);
+    for (int i = 0; i < 60; ++i)
+        form_.update(kFrame);
+    EXPECT_LT(form_.row_rect(1).y, top - 40.0f);
+    EXPECT_EQ(form_.focus_id(), kSwitch);
+    form_.scroll_by(100000.0f); // past the end: the last row stays in view
+    for (int i = 0; i < 60; ++i)
+        form_.update(kFrame);
+    const hui::gfx::Rect last = form_.row_rect(form_.row_count() - 1);
+    EXPECT_LE(last.y + last.h, 100.0f + 260.0f + 1.0f);
+    form_.scroll_by(-100000.0f);
+    for (int i = 0; i < 60; ++i)
+        form_.update(kFrame);
+    EXPECT_NEAR(form_.row_rect(1).y, top, 1.0f);
+}
+
 TEST_F(ComponentsForms, ToggleFlipsWithConfirmAndDirections)
 {
     EXPECT_EQ(send(press(Action::confirm)), Event::changed);
