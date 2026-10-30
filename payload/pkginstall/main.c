@@ -116,13 +116,23 @@ static void answer(const char *token, int code)
 // The installer's three calls, from its library; 0 when one is missing.
 static int open_installer(void)
 {
-    void *library = dlopen("libSceAppInstUtil.sprx", RTLD_LAZY);
-    if (library == NULL)
+    // By name as the SDK's sample opens a system library, then by its place.
+    static const char *const kNames[] = {"libSceAppInstUtil.sprx",
+                                         "/system/common/lib/libSceAppInstUtil.sprx"};
+    void *library = NULL;
+    for (size_t i = 0; i < sizeof(kNames) / sizeof(kNames[0]) && library == NULL; ++i)
     {
-        const char *why = dlerror();
-        say("cannot open libSceAppInstUtil.sprx: %s", why != NULL ? why : "?");
-        return 0;
+        say("opening %s", kNames[i]);
+        library = dlopen(kNames[i], RTLD_LAZY);
+        if (library == NULL)
+        {
+            const char *why = dlerror();
+            say("cannot open %s: %s", kNames[i], why != NULL ? why : "?");
+        }
     }
+    if (library == NULL)
+        return 0;
+    say("opened; looking up the install calls");
     sceAppInstUtilInitialize = (int (*)(void))dlsym(library, "sceAppInstUtilInitialize");
     sceAppInstUtilInstallByPackage = (int (*)(MetaInfo *, PkgInfo *, PlayGoInfo *))dlsym(
         library, "sceAppInstUtilInstallByPackage");
@@ -159,15 +169,20 @@ int main(void)
     name[strcspn(name, "\r\n")] = '\0';
     char kept[64];
     snprintf(kept, sizeof(kept), "%s", token);
-    if (!open_installer())
-    {
-        answer(kept, -1);
-        return 1;
-    }
+    say("job %s: %s", kept, name);
 
+    // The installer's rights first: a system library may want them to open.
     const pid_t self = getpid();
     const uint64_t authid = kernel_get_ucred_authid(self);
     kernel_set_ucred_authid(self, INSTALL_AUTHID);
+    say("authid %016llx set", (unsigned long long)INSTALL_AUTHID);
+    if (!open_installer())
+    {
+        answer(kept, -1);
+        kernel_set_ucred_authid(self, authid);
+        return 1;
+    }
+    say("initializing the installer");
     int code = sceAppInstUtilInitialize();
     if (code != 0)
     {
@@ -181,6 +196,7 @@ int main(void)
     static PlayGoInfo playgo;
     memset(&info, 0, sizeof(info));
     memset(&playgo, 0, sizeof(playgo));
+    say("asking for %s", url);
     code = sceAppInstUtilInstallByPackage(&meta, &info, &playgo);
     say("%s from %s: %08x %s", name, url, (unsigned)code, info.content_id);
     answer(kept, code);
