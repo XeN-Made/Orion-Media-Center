@@ -6,6 +6,7 @@
 
 #include "core/stack_thread.hpp"
 #include "orion/package_server.hpp"
+#include "orion/drives.hpp"
 #include "orion/packages.hpp"
 #include "orion/shares.hpp"
 #include "platform/ps5/game_copy.hpp"
@@ -53,7 +54,11 @@ struct InstallPlace
     std::string drive;      // "/mnt/usb0", or "/data" for the console's own
     std::uint64_t free = 0; // bytes
 };
-std::vector<InstallPlace> install_places();
+// The drives a game can go to, with what is free on each, as space_of
+// says (space_from_report on a console: inside ORION's sandbox the system
+// refuses statfs, and asking it there ended ORION). A drive slot with less
+// than a gigabyte is an empty one.
+std::vector<InstallPlace> install_places(const SpaceOf &space_of);
 
 // One folder of a share listed on a thread of its own (SMB waits on the
 // network), for the install browser: its folders first, then its files.

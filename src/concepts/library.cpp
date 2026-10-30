@@ -2254,7 +2254,10 @@ class Library final : public app::Concept
     // one with too little for what is copied cannot be chosen.
     void open_place_menu(app::Feedback &feedback)
     {
-        install_places_ = orion::install_places();
+        std::string report;
+        save::read_file(context_.library.state_dir + "/drives-space.txt", &report, 64u << 10);
+        install_places_ = orion::install_places(sys::on_console() ? orion::space_from_report(report)
+                                                                  : orion::SpaceOf(preview_space));
         orion::log_share(context_.library.state_dir,
                          "install: " + std::to_string(install_places_.size()) + " place(s)");
         if (install_places_.empty())
@@ -2384,6 +2387,8 @@ class Library final : public app::Concept
                 feedback.play(audio::Cue::error);
                 return true;
             }
+            if (settings_.is_open())
+                settings_.close(feedback); // the status line shows the progress
             show_note(true, trf("Installing {0}…", {install_name_}));
             feedback.play(audio::Cue::select);
             return true;
@@ -2484,6 +2489,10 @@ class Library final : public app::Concept
                            token + "\t" + package_server_.url() + "\t" + entry.path + "\n");
         orion::log_share(state, "package " + entry.path + " (" + id.content_id + "): asked");
         std::thread([elf = std::move(elf)]() { sys::send_payload(elf, kLoaderPort); }).detach();
+        // The status line under the header shows how far it is: Settings,
+        // drawn over it, steps aside.
+        if (settings_.is_open())
+            settings_.close(feedback);
         show_note(true, trf("Asking the console's installer for {0}…", {entry.path}));
         feedback.play(audio::Cue::select);
     }

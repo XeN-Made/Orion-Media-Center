@@ -11,7 +11,6 @@
 #include <cerrno>
 #include <cstdio>
 #include <sys/stat.h>
-#include <sys/statvfs.h>
 #include <utility>
 
 namespace hui::orion
@@ -225,30 +224,24 @@ std::string install_name(std::string_view source)
     return name.empty() ? std::string("Game") : name;
 }
 
-std::vector<InstallPlace> install_places()
+std::vector<InstallPlace> install_places(const SpaceOf &space_of)
 {
+    constexpr std::uint64_t kEmptySlot = 1ull << 30;
     std::vector<std::string> drives = {"/data", "/mnt/ext0", "/mnt/ext1"};
     for (int i = 0; i < 8; ++i)
         drives.push_back("/mnt/usb" + std::to_string(i));
-    struct stat mnt = {};
-    const bool have_mnt = ::stat("/mnt", &mnt) == 0;
     std::vector<InstallPlace> places;
     for (const std::string &drive : drives)
     {
         struct stat info = {};
-        if (::stat(drive.c_str(), &info) != 0 || !S_ISDIR(info.st_mode))
-            continue;
-        // A drive slot with nothing in it is a folder of /mnt itself.
-        if (drive != "/data" && have_mnt && info.st_dev == mnt.st_dev)
-            continue;
-        struct statvfs space = {};
-        if (::statvfs(drive.c_str(), &space) != 0 || space.f_blocks == 0)
+        DriveSpace space;
+        if (::stat(drive.c_str(), &info) != 0 || !S_ISDIR(info.st_mode) || !space_of ||
+            !space_of(drive, &space) || space.capacity < kEmptySlot)
             continue;
         InstallPlace place;
         place.drive = drive;
         place.path = drive + "/homebrew";
-        place.free =
-            static_cast<std::uint64_t>(space.f_bavail) * static_cast<std::uint64_t>(space.f_frsize);
+        place.free = space.free;
         places.push_back(std::move(place));
     }
     return places;
