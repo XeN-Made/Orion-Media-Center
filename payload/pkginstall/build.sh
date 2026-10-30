@@ -19,4 +19,4 @@ export PS5_PAYLOAD_SDK="$sdk"
 }
 mkdir -p "$(dirname -- "$output")"
 "$compiler" -Wall -Wextra -Werror -O2 -o "$output" "$here/main.c" \
-    -lSceAppInstUtil -lkernel_sys
+    -lkernel_sys

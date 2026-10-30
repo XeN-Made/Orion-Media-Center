@@ -16,8 +16,11 @@
 //
 // The calls and their structures are as etaHEN's write-up on package
 // installs describes them; the authid is the one other installers use for
-// it, and fake packages need kstuff, as for any installer.
+// it, and fake packages need kstuff, as for any installer. The installer's
+// library is opened here (dlopen) rather than linked: linked, a loader
+// process without it ends the payload before main, with nothing said.
 
+#include <dlfcn.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <stdarg.h>
@@ -61,9 +64,9 @@ typedef struct
     unsigned char unknown[6480];
 } PlayGoInfo;
 
-int sceAppInstUtilInitialize(void);
-int sceAppInstUtilInstallByPackage(MetaInfo *meta, PkgInfo *info, PlayGoInfo *playgo);
-int sceAppInstUtilTerminate(void);
+static int (*sceAppInstUtilInitialize)(void);
+static int (*sceAppInstUtilInstallByPackage)(MetaInfo *meta, PkgInfo *info, PlayGoInfo *playgo);
+static int (*sceAppInstUtilTerminate)(void);
 
 static void say(const char *format, ...)
 {
@@ -110,8 +113,32 @@ static void answer(const char *token, int code)
     rename(RESULT_PATH ".part", RESULT_PATH);
 }
 
+// The installer's three calls, from its library; 0 when one is missing.
+static int open_installer(void)
+{
+    void *library = dlopen("libSceAppInstUtil.sprx", RTLD_LAZY);
+    if (library == NULL)
+    {
+        const char *why = dlerror();
+        say("cannot open libSceAppInstUtil.sprx: %s", why != NULL ? why : "?");
+        return 0;
+    }
+    sceAppInstUtilInitialize = (int (*)(void))dlsym(library, "sceAppInstUtilInitialize");
+    sceAppInstUtilInstallByPackage = (int (*)(MetaInfo *, PkgInfo *, PlayGoInfo *))dlsym(
+        library, "sceAppInstUtilInstallByPackage");
+    sceAppInstUtilTerminate = (int (*)(void))dlsym(library, "sceAppInstUtilTerminate");
+    if (sceAppInstUtilInitialize == NULL || sceAppInstUtilInstallByPackage == NULL ||
+        sceAppInstUtilTerminate == NULL)
+    {
+        say("libSceAppInstUtil.sprx lacks the install calls");
+        return 0;
+    }
+    return 1;
+}
+
 int main(void)
 {
+    say("started");
     static char job[2048];
     if (read_job(job, sizeof(job)) == 0)
     {
@@ -132,6 +159,11 @@ int main(void)
     name[strcspn(name, "\r\n")] = '\0';
     char kept[64];
     snprintf(kept, sizeof(kept), "%s", token);
+    if (!open_installer())
+    {
+        answer(kept, -1);
+        return 1;
+    }
 
     const pid_t self = getpid();
     const uint64_t authid = kernel_get_ucred_authid(self);
