@@ -4,6 +4,7 @@
 
 #include "platform/ps5/game_copy.hpp"
 
+#include "core/rar5.hpp"
 #include "platform/ps5/smb_connection.hpp"
 
 // smb2.h first: libsmb2.h uses its types.
@@ -13,6 +14,7 @@
 #include <archive.h>
 #include <archive_entry.h>
 
+#include <algorithm>
 #include <cerrno>
 #include <cstring>
 #include <fcntl.h>
@@ -348,9 +350,188 @@ int volume_switch(archive *a, void *from, void *to)
     return volume_open(a, to);
 }
 
+// A RAR5 whose files are all stored as they are, copied piece by piece with
+// no decoder (core/rar5.hpp says why). False in *handled when it is not one,
+// before anything is written: libarchive takes it then.
+bool copy_stored_rar(SmbConnection &smb, const std::vector<std::string> &volumes,
+                     const std::string &into, CopyProgress *progress, std::string *error,
+                     bool *handled)
+{
+    *handled = false;
+    const auto note = [progress](const std::string &line)
+    {
+        if (progress != nullptr && progress->note)
+            progress->note(line);
+    };
+    // As much as the server takes in one read, up to kMostRead.
+    std::uint32_t chunk = smb2_get_max_read_size(smb.get());
+    if (chunk == 0 || chunk > kMostRead)
+        chunk = kMostRead;
+    // One volume open at a time: they are read in order.
+    std::size_t open_volume = 0;
+    smb2fh *file = nullptr;
+    const auto close_volume = [&]()
+    {
+        if (file != nullptr)
+            smb2_close(smb.get(), file);
+        file = nullptr;
+    };
+    const auto read_at = [&](std::size_t volume, std::uint64_t offset, void *into_buffer,
+                             std::uint32_t size) -> int
+    {
+        if (file == nullptr || volume != open_volume)
+        {
+            close_volume();
+            file = smb2_open(smb.get(), volumes[volume].c_str(), O_RDONLY);
+            if (file == nullptr)
+                return -1;
+            open_volume = volume;
+        }
+        return smb2_pread(smb.get(), file, static_cast<std::uint8_t *>(into_buffer),
+                          std::min(size, chunk), offset);
+    };
+    std::vector<Rar5File> files;
+    std::string why;
+    const Rar5Plan plan = plan_rar5(
+        volumes.size(),
+        [&](std::size_t volume, std::uint64_t offset, std::size_t size, std::string *out)
+        {
+            out->resize(size);
+            std::size_t got = 0;
+            while (got < size)
+            {
+                const int read = read_at(volume, offset + got, out->data() + got,
+                                         static_cast<std::uint32_t>(size - got));
+                if (read < 0)
+                    return false;
+                if (read == 0)
+                    break;
+                got += static_cast<std::size_t>(read);
+            }
+            out->resize(got);
+            return true;
+        },
+        &files, &why);
+    if (plan != Rar5Plan::stored)
+    {
+        close_volume();
+        note("not a stored RAR5 (" + why + "): unpacking");
+        if (plan == Rar5Plan::damaged)
+        {
+            *handled = true;
+            *error = "the archive is damaged: " + why;
+            return false;
+        }
+        return false;
+    }
+    *handled = true;
+    std::uint64_t total = 0;
+    for (const Rar5File &entry : files)
+        total += entry.size;
+    if (progress != nullptr)
+        progress->total = total;
+    note("stored RAR5: " + std::to_string(files.size()) + " files and folders, " +
+         std::to_string(total) + " bytes, copied as they are");
+
+    std::vector<std::uint8_t> buffer(chunk);
+    int count = 0;
+    bool ok = true;
+    for (const Rar5File &entry : files)
+    {
+        std::string path;
+        if (!inside(entry.name.c_str(), &path))
+            continue;
+        const std::string to = into + "/" + path;
+        if (entry.directory)
+        {
+            if (!make_folders(to))
+            {
+                *error = "cannot make " + to;
+                ok = false;
+                break;
+            }
+            continue;
+        }
+        if (count < 5 || count % 100 == 0)
+            note("file " + std::to_string(count) + ": " + path + " (" + std::to_string(entry.size) +
+                 " bytes)");
+        ++count;
+        if (!make_folders(to.substr(0, to.find_last_of('/'))))
+        {
+            *error = "cannot make the folder of " + to;
+            ok = false;
+            break;
+        }
+        const int fd = ::open(to.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0666);
+        if (fd < 0)
+        {
+            *error = "cannot write " + to + " (errno " + std::to_string(errno) + ")";
+            ok = false;
+            break;
+        }
+        std::int64_t written = 0;
+        for (const Rar5Piece &piece : entry.pieces)
+        {
+            std::uint64_t left = piece.size;
+            std::uint64_t at = piece.offset;
+            while (ok && left > 0)
+            {
+                if (stopped(progress))
+                {
+                    *error = "stopped";
+                    ok = false;
+                    break;
+                }
+                const auto want = static_cast<std::uint32_t>(std::min<std::uint64_t>(chunk, left));
+                const int got = read_at(piece.volume, at, buffer.data(), want);
+                if (got <= 0)
+                {
+                    *error = volumes[piece.volume] + ": " +
+                             (got < 0 ? smb.said() : std::string("ends early"));
+                    ok = false;
+                    break;
+                }
+                if (!write_at(fd, buffer.data(), static_cast<std::size_t>(got), written))
+                {
+                    *error = "could not write " + to + " (disk full?)";
+                    ok = false;
+                    break;
+                }
+                // Every 256 MB of a file: how far it got, if the app ends.
+                if ((static_cast<std::uint64_t>(written) >> 28) !=
+                    ((static_cast<std::uint64_t>(written) + static_cast<std::uint64_t>(got)) >> 28))
+                    note("  " + std::to_string((written + got) >> 20) + " MB of " + path);
+                written += got;
+                at += static_cast<std::uint64_t>(got);
+                left -= static_cast<std::uint64_t>(got);
+                add_done(progress, static_cast<std::uint64_t>(got));
+            }
+            if (!ok)
+                break;
+        }
+        if (::close(fd) != 0 && ok)
+        {
+            *error = "could not finish " + to;
+            ok = false;
+        }
+        if (!ok)
+            break;
+    }
+    close_volume();
+    return ok;
+}
+
 bool unpack(SmbConnection &smb, const std::vector<std::string> &volumes, const std::string &into,
             CopyProgress *progress, std::string *error)
 {
+    if (lower(last_part(volumes.front())).find(".rar") != std::string::npos)
+    {
+        bool handled = false;
+        const bool copied = copy_stored_rar(smb, volumes, into, progress, error, &handled);
+        if (handled)
+            return copied;
+    }
+
     // The size to read is the volumes' sizes together.
     std::uint64_t total = 0;
     for (const std::string &path : volumes)
@@ -485,6 +666,9 @@ bool unpack(SmbConnection &smb, const std::vector<std::string> &volumes, const s
             std::size_t size = 0;
             la_int64_t offset = 0;
             const int got = archive_read_data_block(a, &block, &size, &offset);
+            // A decoder makes its window as the first file's data starts.
+            if (got == ARCHIVE_OK && written == 0 && files <= 2)
+                note("  first bytes of " + path + "; " + heap());
             // Every 256 MB of a file: how far it got, if the app ends.
             if (got == ARCHIVE_OK && (written >> 28) != ((written + size) >> 28))
                 note("  " + std::to_string((written + size) >> 20) + " MB of " + path + "; " +
