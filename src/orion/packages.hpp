@@ -71,4 +71,9 @@ enum class PackageState : unsigned char
 };
 PackageState package_state(const PackageId &id, const Installed &installed);
 
+// A package the console's installer took and read whole, counted as in
+// before the helper's next list (it lists /user/addcont as ORION starts):
+// an add-on of a game that is here, else the game itself.
+void mark_installed(const PackageId &id, Installed *installed);
+
 } // namespace hui::orion

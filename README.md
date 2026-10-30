@@ -369,7 +369,16 @@ drive. It offers:
   does not have. Choosing one hands it to the console's own installer, which
   reads it straight off the drive (keep ORION open until it has been read
   whole; the console's Downloads shows the rest). Fake packages need kstuff
-  running, as with any package installer.
+  running, as with any package installer. Choosing another while one is
+  being read queues it; **Install all not installed** queues every package
+  in the folder whose game is on the console and that it lacks. They go to
+  the installer one after another.
+
+**Activity** (L3, from anywhere in ORION) lists what is running, with its
+speed and time left, then what waits its turn (packages, RomM downloads),
+then what finished or failed since ORION started. Box art shows the game it
+is looking for and the next ones. Up and down scroll a long list; Square
+clears the finished ones.
 
 Then choose where it goes: the console's storage, extended storage or a USB
 drive, each with its free space (`homebrew` on that drive, where

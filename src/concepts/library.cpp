@@ -235,6 +235,7 @@ enum : int
     kItemInstallMore,         // its next page
     kItemInstallLess,         // its page before
     kItemInstallHere,         // Install this game folder
+    kItemInstallMissing,      // Install every package here that is not in
     kItemMove = 100,          // + the tab's index
     kItemShelf = 250,         // + a built-in shelf's index in kShelves
     kItemPlayer = 300,        // 0: the default, then 1 + an index in library::players_for
@@ -1101,6 +1102,8 @@ class Library final : public app::Concept
         {
             if (activity_.handle(input, feedback))
                 activity_.close(feedback);
+            if (activity_.take_clear())
+                finished_.clear();
         }
         else if (input.is_pressed(Action::l3) && !dialog_.is_open() && typing_ == Typing::none &&
                  !previewing())
@@ -1780,11 +1783,26 @@ class Library final : public app::Concept
         }
         if (art_.running())
         {
+            // The game looked for now, and under the bar the next few.
             const orion::ArtFetcher::Progress now = art_.progress();
-            add(trf("Downloading box art  ·  {0} of {1}",
-                    {std::to_string(now.done), std::to_string(now.total)}),
+            const std::vector<std::string> waiting = art_.waiting(4);
+            add(waiting.empty() ? trf("Downloading box art  ·  {0} of {1}",
+                                      {std::to_string(now.done), std::to_string(now.total)})
+                                : trf("Downloading box art for {0}  ·  {1} of {2}",
+                                      {waiting.front(), std::to_string(now.done + 1),
+                                       std::to_string(now.total)}),
                 now.total > 0 ? static_cast<float>(now.done) / static_cast<float>(now.total)
                               : -1.0f);
+            if (waiting.size() > 1)
+            {
+                std::string next = waiting[1];
+                for (std::size_t i = 2; i < waiting.size(); ++i)
+                    next += ", " + waiting[i];
+                const int more = now.total - now.done - static_cast<int>(waiting.size());
+                out.back().detail =
+                    more > 0 ? trf("Next: {0} and {1} more", {next, std::to_string(more)})
+                             : trf("Next: {0}", {next});
+            }
         }
         if (romm_sync_.running())
         {
@@ -1802,18 +1820,44 @@ class Library final : public app::Concept
             add(tr("Copying game backgrounds…"));
         if (icon_copies_.running())
             add(tr("Copying HD pictures…"));
+        // Then what waits its turn, then what ended, the latest first.
+        for (const PackageJob &job : package_queue_)
+        {
+            add(trf("Install {0}", {job.entry.path}));
+            out.back().state = orion::ActivityState::waiting;
+        }
+        for (const orion::RommEntry &entry : romm_queue_)
+        {
+            add(trf("Download {0} from RomM", {entry.game.name}));
+            out.back().state = orion::ActivityState::waiting;
+        }
+        out.insert(out.end(), finished_.begin(), finished_.end());
         return out;
+    }
+
+    // A job that ended, kept for Activity until Square clears it.
+    void remember(std::string text, bool ok)
+    {
+        orion::ActivityJob job;
+        job.text = std::move(text);
+        job.state = ok ? orion::ActivityState::done : orion::ActivityState::failed;
+        finished_.insert(finished_.begin(), std::move(job));
+        if (finished_.size() > 50)
+            finished_.pop_back();
     }
 
     void update_status(float dt)
     {
-        const std::vector<orion::ActivityJob> now = jobs();
-        if (!now.empty())
+        // The status line follows what runs; what waits or ended is Activity's.
+        const std::vector<orion::ActivityJob> all = jobs();
+        const auto now = std::find_if(all.begin(), all.end(), [](const orion::ActivityJob &job)
+                                      { return job.state == orion::ActivityState::running; });
+        if (now != all.end())
         {
-            status_ = now.front().text;
-            status_progress_ = now.front().progress;
+            status_ = now->text;
+            status_progress_ = now->progress;
         }
-        status_shown_.target = now.empty() ? 0.0f : 1.0f;
+        status_shown_.target = now == all.end() ? 0.0f : 1.0f;
         status_shown_.update(dt, context_.settings.reduced_motion ? 60.0f : 6.0f);
     }
 
@@ -2285,6 +2329,10 @@ class Library final : public app::Concept
         }
         if (game)
             add(trf("Install {0}", {install_folder_name()}), kItemInstallHere);
+        const int missing = static_cast<int>(missing_packages().size());
+        if (missing > 0)
+            add(trf("Install all not installed ({0})", {std::to_string(missing)}),
+                kItemInstallMissing);
         const int total = static_cast<int>(shown.size());
         install_page_ = std::clamp(install_page_, 0, std::max(0, (total - 1) / kPickPage));
         if (install_page_ > 0)
@@ -2372,6 +2420,23 @@ class Library final : public app::Concept
             open_install_menu(feedback);
             return true;
         }
+        if (tag == kItemInstallMissing)
+        {
+            const std::vector<std::size_t> missing = missing_packages();
+            for (const std::size_t at : missing)
+            {
+                const sys::SmbEntry &entry = install_entries_[at];
+                install_package(package_job(entry), feedback, true);
+            }
+            install_browsing_ = false;
+            if (settings_.is_open())
+                settings_.close(feedback);
+            show_note(true, i18n::plural(static_cast<int>(missing.size()),
+                                         "{0} package queued: Activity (L3) shows them",
+                                         "{0} packages queued: Activity (L3) shows them"));
+            feedback.play(audio::Cue::select);
+            return true;
+        }
         if (tag == kItemInstallHere)
         {
             install_source_ = sys::GameSource();
@@ -2393,10 +2458,9 @@ class Library final : public app::Concept
                 list_share_folder(feedback);
                 return true;
             }
-            const auto package = install_listing_.packages().find(entry.path);
-            if (package != install_listing_.packages().end())
+            if (install_listing_.packages().count(entry.path) != 0)
             {
-                install_package(on_share(entry.path), entry, package->second, feedback);
+                install_package(package_job(entry), feedback);
                 return true;
             }
             // Each step to shares.txt: an install that ends ORION says how far it got.
@@ -2491,12 +2555,74 @@ class Library final : public app::Concept
 
     // ---- packages (.pkg) handed to the console's installer ----
 
+    // A package on a network drive to hand to the console's installer.
+    struct PackageJob
+    {
+        orion::Share share;
+        std::string path; // on the share
+        sys::SmbEntry entry;
+        orion::PackageId id;
+    };
+
+    PackageJob package_job(const sys::SmbEntry &entry) const
+    {
+        PackageJob job;
+        job.share = install_share_;
+        job.path = install_dir_.empty() ? entry.path : install_dir_ + "/" + entry.path;
+        job.entry = entry;
+        const auto package = install_listing_.packages().find(entry.path);
+        if (package != install_listing_.packages().end())
+            job.id = package->second;
+        return job;
+    }
+
+    // Going to the installer now, or waiting its turn.
+    bool package_busy(const PackageJob &job) const
+    {
+        const auto same = [&](const PackageJob &other)
+        { return other.share.id == job.share.id && other.path == job.path; };
+        return (package_server_.running() && same(package_job_)) ||
+               std::any_of(package_queue_.begin(), package_queue_.end(), same);
+    }
+
+    // The packages in the folder listed whose game is here and they are not:
+    // indexes in install_entries_.
+    std::vector<std::size_t> missing_packages() const
+    {
+        std::vector<std::size_t> out;
+        for (std::size_t i = 0; i < install_entries_.size(); ++i)
+        {
+            const sys::SmbEntry &entry = install_entries_[i];
+            const auto package = install_listing_.packages().find(entry.path);
+            if (entry.directory || package == install_listing_.packages().end() ||
+                orion::package_state(package->second, installed_content_) !=
+                    orion::PackageState::not_installed ||
+                package_busy(package_job(entry)))
+                continue;
+            out.push_back(i);
+        }
+        return out;
+    }
+
+    // What the helper listed as ORION started, and the packages the
+    // installer took since (the helper lists them at the next start).
+    void refresh_installed()
+    {
+        installed_content_ = orion::read_installed(context_.library.state_dir);
+        for (const orion::PackageId &id : packages_taken_)
+            orion::mark_installed(id, &installed_content_);
+    }
+
     // A file in the install browser: a package says whether it is in.
     std::string item_note(const sys::SmbEntry &entry) const
     {
         const auto package = install_listing_.packages().find(entry.path);
         if (package == install_listing_.packages().end())
             return size_text(entry.size);
+        if (package_busy(package_job(entry)))
+            return package_server_.running() && package_job_.entry.path == entry.path
+                       ? tr("Installing")
+                       : tr("Waiting to install");
         switch (orion::package_state(package->second, installed_content_))
         {
         case orion::PackageState::installed:
@@ -2511,31 +2637,61 @@ class Library final : public app::Concept
         return trf("Not a package ORION can read  ·  {0}", {size_text(entry.size)});
     }
 
+    // A package for the installer: now when nothing else is going to it,
+    // else after the ones before it (quietly, when a whole folder is queued).
+    void install_package(PackageJob job, app::Feedback &feedback, bool quiet = false)
+    {
+        const auto refuse = [&](std::string why)
+        {
+            if (quiet)
+                return;
+            show_note(false, std::move(why));
+            feedback.play(audio::Cue::error);
+        };
+        const std::string name = job.entry.path;
+        if (job.id.kind == orion::PackageKind::none)
+            return refuse(trf("{0} is not a PS4 or PS5 package ORION can read", {name}));
+        if (orion::package_state(job.id, installed_content_) == orion::PackageState::installed)
+            return refuse(trf("{0} is already installed", {name}));
+        if (package_busy(job))
+            return refuse(trf("{0} is already on its way to the installer", {name}));
+        if (package_server_.running())
+        {
+            package_queue_.push_back(std::move(job));
+            if (quiet)
+                return;
+            install_browsing_ = false;
+            if (settings_.is_open())
+                settings_.close(feedback);
+            show_note(true, trf("{0} waits its turn: Activity (L3) shows the queue", {name}));
+            feedback.play(audio::Cue::select);
+            return;
+        }
+        if (!start_package(job, feedback))
+            remember(trf("Could not install {0}", {name}), false);
+    }
+
     // The package served from the drive, the job written, the go-between
     // sent to the ELF loader; follow_package does the rest.
-    void install_package(const std::string &path, const sys::SmbEntry &entry,
-                         const orion::PackageId &id, app::Feedback &feedback)
+    bool start_package(const PackageJob &job, app::Feedback &feedback)
     {
         const auto refuse = [&](std::string why)
         {
             show_note(false, std::move(why));
             feedback.play(audio::Cue::error);
+            return false;
         };
-        if (package_server_.running())
-            return refuse(trf("Still sending {0} to the installer", {package_name_}));
-        if (id.kind == orion::PackageKind::none)
-            return refuse(trf("{0} is not a PS4 or PS5 package ORION can read", {entry.path}));
-        if (orion::package_state(id, installed_content_) == orion::PackageState::installed)
-            return refuse(trf("{0} is already installed", {entry.path}));
+        const sys::SmbEntry &entry = job.entry;
         std::string elf;
         if (!sys::on_console() || !save::read_file(kPkgInstallPath, &elf, 8u << 20) || elf.empty())
             return refuse(tr("Packages are installed on the console"));
-        const sys::SmbLogin login = orion::share_login(install_share_, context_.library.state_dir);
+        const sys::SmbLogin login = orion::share_login(job.share, context_.library.state_dir);
         const std::string token = "p" + std::to_string(static_cast<long long>(std::time(nullptr)));
-        if (!package_server_.start(token, entry.size, [login, path](std::string *error)
+        if (!package_server_.start(token, entry.size, [login, path = job.path](std::string *error)
                                    { return orion::open_share_package(login, path, error); }))
             return refuse(tr("Could not start the package server"));
         install_browsing_ = false;
+        package_job_ = job;
         package_token_ = token;
         package_name_ = entry.path;
         package_asked_ = clock_;
@@ -2544,7 +2700,7 @@ class Library final : public app::Concept
         std::remove((state + "/pkg-install-result.txt").c_str());
         save::write_atomic(state + "/pkg-install.txt",
                            token + "\t" + package_server_.url() + "\t" + entry.path + "\n");
-        orion::log_share(state, "package " + entry.path + " (" + id.content_id + "): asked");
+        orion::log_share(state, "package " + entry.path + " (" + job.id.content_id + "): asked");
         std::thread([elf = std::move(elf)]() { sys::send_payload(elf, kLoaderPort); }).detach();
         // The status line under the header shows how far it is: Settings,
         // drawn over it, steps aside.
@@ -2552,6 +2708,21 @@ class Library final : public app::Concept
             settings_.close(feedback);
         show_note(true, trf("Asking the console's installer for {0}…", {entry.path}));
         feedback.play(audio::Cue::select);
+        return true;
+    }
+
+    // The next package waiting, if one can start.
+    void next_package(app::Feedback &feedback)
+    {
+        while (!package_queue_.empty() && !package_server_.running())
+        {
+            const PackageJob job = std::move(package_queue_.front());
+            package_queue_.pop_front();
+            if (orion::package_state(job.id, installed_content_) == orion::PackageState::installed)
+                continue;
+            if (!start_package(job, feedback))
+                remember(trf("Could not install {0}", {job.entry.path}), false);
+        }
     }
 
     // The installer's answer, then the package read whole (or abandoned).
@@ -2570,8 +2741,10 @@ class Library final : public app::Concept
                 orion::log_share(state, "  package server: " + request);
             std::remove((state + "/pkg-install.txt").c_str()); // the go-between ends
             orion::log_share(state, "package " + package_name_ + ": " + note);
+            remember(ok ? trf("Installed {0}", {package_name_}) : note, ok);
             show_note(ok, std::move(note));
             feedback.play(ok ? audio::Cue::saved : audio::Cue::error);
+            next_package(feedback);
         };
         if (!package_answered_)
         {
@@ -2597,7 +2770,8 @@ class Library final : public app::Concept
         if (package_server_.sent() >= package_server_.size() &&
             package_server_.connections() == 0 && package_server_.quiet_seconds() >= 20)
         {
-            installed_content_ = orion::read_installed(state);
+            packages_taken_.push_back(package_job_.id);
+            refresh_installed();
             return finish(true, trf("{0} went to the console whole: it finishes installing there",
                                     {package_name_}));
         }
@@ -2623,7 +2797,7 @@ class Library final : public app::Concept
             else
             {
                 install_entries_ = std::move(entries);
-                installed_content_ = orion::read_installed(context_.library.state_dir);
+                refresh_installed();
                 open_install_menu(feedback);
             }
         }
@@ -2638,6 +2812,10 @@ class Library final : public app::Concept
                                   ? "into " + done.installed
                                   : "problem " + std::to_string(static_cast<int>(done.problem)) +
                                         " " + done.detail));
+        remember(done.ok                            ? trf("Installed {0}", {name})
+                 : done.problem == Problem::stopped ? trf("Stopped installing {0}", {name})
+                                                    : trf("Could not install {0}", {name}),
+                 done.ok);
         if (done.ok)
         {
             show_note(true, trf("Installed {0}", {name}));
@@ -4094,6 +4272,10 @@ class Library final : public app::Concept
         {
             const std::string error = romm_download_.error();
             const std::string save = std::exchange(romm_save_target_, std::string());
+            remember(error.empty()
+                         ? trf("Downloaded {0} from RomM", {romm_downloading_name_})
+                         : trf("Could not download {0}: {1}", {romm_downloading_name_, error}),
+                     error.empty());
             if (!error.empty())
             {
                 show_note(false,
@@ -5889,6 +6071,7 @@ class Library final : public app::Concept
         if (done.failed > 0)
             summary += trf(", {0} failed ({1})", {std::to_string(done.failed), done.error});
         settings_.set_art_status(trf("Last run: {0}", {summary}));
+        remember(trf("Box art: {0}", {summary}), done.found > 0 || done.failed == 0);
         if (done.found == 0 && done.failed > 0)
             show_note(false, trf("Could not get box art: {0}", {done.error}));
         else if (art_manual_ || done.found > 0)
@@ -8769,7 +8952,11 @@ class Library final : public app::Concept
     std::string package_name_;
     float package_asked_ = 0.0f;
     bool package_answered_ = false;
-    orion::Installed installed_content_; // what the console has, for the browser
+    orion::Installed installed_content_;           // what the console has, for the browser
+    PackageJob package_job_;                       // the one going to the installer now
+    std::deque<PackageJob> package_queue_;         // the ones waiting their turn
+    std::vector<orion::PackageId> packages_taken_; // read whole by the installer this session
+    std::vector<orion::ActivityJob> finished_;     // ended this session, the latest first
     int pick_page_ = 0;
     float check_started_ = 0.0f;       // clock_ when the running check began
     bool update_asked_ = false;        // the check this launch makes by itself has started

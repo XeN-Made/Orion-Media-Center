@@ -101,6 +101,21 @@ TEST(Packages, AreMatchedAgainstWhatIsInstalled)
     EXPECT_EQ(state("EP9000-CUSA00495_00-BEYONDTWOSOULS00"), PackageState::installed);
     EXPECT_EQ(state("UP0000-PPSA99999_00-0000000000000000"), PackageState::no_game);
     EXPECT_EQ(hui::orion::package_state(PackageId(), installed), PackageState::unknown);
+
+    // Taken by the installer this session: in, before the helper lists it.
+    hui::orion::Installed now = installed;
+    PackageId soundtrack;
+    hui::orion::read_package(head(kCnt, 0x40, "UP0000-PPSA08560_00-SOUNDTRACK000000", 0x100),
+                             &soundtrack);
+    hui::orion::mark_installed(soundtrack, &now);
+    EXPECT_EQ(hui::orion::package_state(soundtrack, now), PackageState::installed);
+    EXPECT_EQ(now.apps.at("PPSA08560"), "UP0000-PPSA08560_00-0000000000000000");
+    PackageId game;
+    hui::orion::read_package(head(kCnt, 0x40, "UP0000-PPSA99999_00-0000000000000000", 0x100),
+                             &game);
+    hui::orion::mark_installed(game, &now);
+    EXPECT_EQ(hui::orion::package_state(game, now), PackageState::installed);
+    EXPECT_TRUE(now.addcont.count("PPSA99999/0000000000000000") == 0);
 }
 
 } // namespace

@@ -44,7 +44,16 @@ TEST_F(OrionActivity, DrawsItsJobsInEveryTheme)
         install.detail = "24.3 MB/s  ·  about 21 min left";
         ActivityJob art;
         art.text = "Copying game backgrounds…";
-        panel.set_jobs({install, art});
+        ActivityJob waiting;
+        waiting.text = "Install Moon Garden Soundtrack.pkg";
+        waiting.state = hui::orion::ActivityState::waiting;
+        ActivityJob done;
+        done.text = "Installed Harbour Lights";
+        done.state = hui::orion::ActivityState::done;
+        ActivityJob failed;
+        failed.text = "Could not install Paper Kites";
+        failed.state = hui::orion::ActivityState::failed;
+        panel.set_jobs({install, art, waiting, done, failed});
         panel.update(kFrame);
         const std::size_t before = list_.instances().size();
         auto busy = canvas();
@@ -69,6 +78,54 @@ TEST(OrionActivitySpeed, SaysTheAverageAndTheTimeLeft)
     EXPECT_EQ(transfer_speed(240 * kMb, 36240 * kMb, 10.0), "24.0 MB/s  ·  about 25 min left");
     // 10 MB/s with 50,000 MB to go: 84 minutes (83.3, rounded up).
     EXPECT_EQ(transfer_speed(100 * kMb, 50100 * kMb, 10.0), "10.0 MB/s  ·  about 1 h 24 min left");
+}
+
+// A queue longer than the sheet scrolls, refusing at its ends; Square asks
+// for the finished jobs to go, and refuses when there are none.
+TEST_F(OrionActivity, ScrollsAQueueAndClearsWhatEnded)
+{
+    using hui::orion::ActivityState;
+    ActivityPanel panel;
+    panel.open(feedback_);
+    std::vector<ActivityJob> jobs;
+    for (int i = 0; i < 20; ++i)
+    {
+        ActivityJob job;
+        job.text = "Install add-on " + std::to_string(i);
+        job.state = ActivityState::waiting;
+        jobs.push_back(job);
+    }
+    panel.set_jobs(jobs);
+    settle(panel);
+    auto first = canvas();
+    panel.draw(first); // lays the rows out
+
+    feedback_.cues.clear();
+    EXPECT_FALSE(panel.handle(press(Action::west), feedback_));
+    EXPECT_FALSE(panel.take_clear());
+    EXPECT_TRUE(asked(hui::audio::Cue::error));
+
+    EXPECT_FALSE(panel.handle(nav(hui::Direction::up), feedback_));
+    EXPECT_EQ(panel.first_shown(), 0);
+    for (int i = 0; i < 40; ++i)
+        panel.handle(nav(hui::Direction::down), feedback_);
+    const int last = panel.first_shown();
+    EXPECT_GT(last, 0);
+    EXPECT_LT(last, 20);
+    panel.handle(nav(hui::Direction::down), feedback_);
+    EXPECT_EQ(panel.first_shown(), last);
+
+    jobs[19].state = ActivityState::done;
+    panel.set_jobs(jobs);
+    EXPECT_FALSE(panel.handle(press(Action::west), feedback_));
+    EXPECT_TRUE(panel.take_clear());
+    EXPECT_FALSE(panel.take_clear());
+
+    // Fewer jobs: the top row comes back into the list.
+    jobs.resize(3);
+    panel.set_jobs(jobs);
+    panel.update(kFrame);
+    EXPECT_EQ(panel.first_shown(), 0);
 }
 
 // Circle closes it, and so does L3, the button that opened it.

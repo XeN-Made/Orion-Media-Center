@@ -164,6 +164,10 @@ bool ArtFetcher::start(std::vector<ArtJob> jobs, std::string log_path)
         progress_ = Progress();
         progress_.total = static_cast<int>(jobs.size());
         finished_ = false;
+        names_.clear();
+        for (const ArtJob &job : jobs)
+            names_.push_back(!job.name.empty() ? job.name
+                                               : job.rom_file.substr(0, job.rom_file.rfind('.')));
     }
     running_ = true;
     worker_ = std::thread([this, jobs = std::move(jobs), log = std::move(log_path)]() mutable
@@ -175,6 +179,15 @@ ArtFetcher::Progress ArtFetcher::progress() const
 {
     const std::lock_guard<std::mutex> lock(mutex_);
     return progress_;
+}
+
+std::vector<std::string> ArtFetcher::waiting(std::size_t most) const
+{
+    const std::lock_guard<std::mutex> lock(mutex_);
+    const auto from = std::min(names_.size(), static_cast<std::size_t>(progress_.done));
+    const auto to = std::min(names_.size(), from + most);
+    return {names_.begin() + static_cast<std::ptrdiff_t>(from),
+            names_.begin() + static_cast<std::ptrdiff_t>(to)};
 }
 
 std::vector<ArtFound> ArtFetcher::take_found()

@@ -91,6 +91,9 @@ class ArtFetcher
         return running_.load();
     }
     Progress progress() const;
+    // The run's games not looked for yet, as the library names them: the
+    // first is the one being looked for now. At most `most` of them.
+    std::vector<std::string> waiting(std::size_t most) const;
     // Pictures written since the last call.
     std::vector<ArtFound> take_found();
     // True once after a run ended.
@@ -125,6 +128,7 @@ class ArtFetcher
     std::atomic<bool> cancel_{false};
     mutable std::mutex mutex_;
     Progress progress_;
+    std::vector<std::string> names_; // the run's games, in its order
     std::vector<ArtFound> found_;
     std::vector<std::string> missing_;
     bool finished_ = false;

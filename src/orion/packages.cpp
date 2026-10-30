@@ -167,4 +167,15 @@ PackageState package_state(const PackageId &id, const Installed &installed)
     return PackageState::not_installed;
 }
 
+void mark_installed(const PackageId &id, Installed *installed)
+{
+    if (id.kind == PackageKind::none)
+        return;
+    const auto app = installed->apps.find(id.title_id);
+    if (app == installed->apps.end())
+        installed->apps[id.title_id] = id.content_id;
+    else if (app->second != id.content_id)
+        installed->addcont.insert(id.title_id + "/" + id.label);
+}
+
 } // namespace hui::orion

@@ -23,11 +23,20 @@ namespace
 constexpr float kHintSize = 34.0f;
 constexpr float kHintRoom = 62.0f; // under the jobs, for the hint
 constexpr float kRow = 116.0f;     // the name, the bar, and the speed under it
+constexpr float kBarRow = 84.0f;   // the name and the bar
+constexpr float kLine = 56.0f;     // waiting or finished: the name and a word
 constexpr float kText = 26.0f;
 constexpr float kDetail = 22.0f;
 
 // Under this, an average says more about the start than the speed.
 constexpr double kFirstSeconds = 3.0;
+
+float row_height(const ActivityJob &job)
+{
+    if (job.state != ActivityState::running)
+        return kLine;
+    return job.detail.empty() ? kBarRow : kRow;
+}
 
 } // namespace
 
@@ -82,18 +91,65 @@ void ActivityPanel::close(ui::Feedback &feedback)
     sheet_.close(feedback);
 }
 
+bool ActivityPanel::has_finished() const
+{
+    return std::any_of(
+        jobs_.begin(), jobs_.end(), [](const ActivityJob &job)
+        { return job.state == ActivityState::done || job.state == ActivityState::failed; });
+}
+
+int ActivityPanel::last_first() const
+{
+    float below = 0.0f;
+    int first = static_cast<int>(jobs_.size());
+    while (first > 0 &&
+           below + row_height(jobs_[static_cast<std::size_t>(first - 1)]) <= rows_height_ + 0.5f)
+    {
+        --first;
+        below += row_height(jobs_[static_cast<std::size_t>(first)]);
+    }
+    return first;
+}
+
 bool ActivityPanel::handle(const InputFrame &input, ui::Feedback &feedback)
 {
     if (!sheet_.is_open())
         return false;
     if (input.is_pressed(Action::l3))
         return true;
+    if (input.is_pressed(Action::west))
+    {
+        if (!has_finished())
+            ui::refuse(feedback, sheet_.style, input, pulse_);
+        else
+        {
+            clear_asked_ = true;
+            ui::play_cue(feedback, sheet_.style, audio::Cue::erase);
+        }
+        return false;
+    }
+    if (input.nav == Direction::up || input.nav == Direction::down)
+    {
+        const int to = std::clamp(first_ + (input.nav == Direction::down ? 1 : -1), 0,
+                                  std::max(0, last_first()));
+        if (to == first_)
+            ui::refuse(feedback, sheet_.style, input, pulse_);
+        else
+        {
+            first_ = to;
+            ui::play_cue(feedback, sheet_.style, audio::Cue::focus);
+        }
+        return false;
+    }
     return sheet_.handle(input, feedback) == ui::Event::cancelled;
 }
 
 void ActivityPanel::update(float dt)
 {
     clock_ += dt;
+    // Jobs end and finished ones are cleared: the top row stays in the list.
+    first_ = std::clamp(first_, 0, std::max(0, last_first()));
+    pulse_.update(dt, 9.0f);
     sheet_.update(dt);
 }
 
@@ -109,14 +165,41 @@ void ActivityPanel::draw_content(ui::Canvas &canvas, const gfx::Rect &area) cons
     if (jobs_.empty())
         paint.body(i18n::tr("Nothing is installing or downloading"), area.x, area.y + 40.0f, kText,
                    theme.text_muted);
-    const int fit = std::max(1, static_cast<int>((area.h - kHintRoom) / kRow));
-    for (int i = 0; i < static_cast<int>(jobs_.size()) && i < fit; ++i)
+    rows_height_ = area.h - kHintRoom;
+    // A refused scroll nudges the rows, as a list does at its ends.
+    const float nudge =
+        reduced_motion_ ? 0.0f : std::sin(pulse_.value * 18.0f) * 8.0f * pulse_.value;
+    const float bottom = area.y + rows_height_ + 0.5f;
+    float top = area.y;
+    int last = first_ - 1;
+    for (int i = first_; i < static_cast<int>(jobs_.size()); ++i)
     {
         const ActivityJob &job = jobs_[static_cast<std::size_t>(i)];
-        const float top = area.y + static_cast<float>(i) * kRow;
+        const float height = row_height(job);
+        if (top + height > bottom)
+            break;
+        last = i;
+        const float y = top + nudge;
+        top += height;
+        if (job.state != ActivityState::running)
+        {
+            // A line: the name, and at the right what became of it.
+            const bool waiting = job.state == ActivityState::waiting;
+            const std::string word = waiting                            ? i18n::tr("Waiting")
+                                     : job.state == ActivityState::done ? i18n::tr("Done")
+                                                                        : i18n::tr("Failed");
+            const gfx::Color tone = waiting                            ? theme.text_muted
+                                    : job.state == ActivityState::done ? theme.accent
+                                                                       : theme.text;
+            const float word_w = paint.label_width(word, kDetail);
+            paint.body(ui::fit_body(paint, job.text, kDetail, area.w - word_w - 32.0f), area.x,
+                       y + 34.0f, kDetail, waiting ? theme.text_muted : theme.text);
+            paint.label(word, area.x + area.w - word_w, y + 34.0f, kDetail, tone);
+            continue;
+        }
         const std::string text = ui::fit_body(paint, job.text, kText, area.w);
-        paint.body(text, area.x, top + 34.0f, kText, theme.text);
-        const gfx::Rect track{area.x, top + 54.0f, area.w, 10.0f};
+        paint.body(text, area.x, y + 34.0f, kText, theme.text);
+        const gfx::Rect track{area.x, y + 54.0f, area.w, 10.0f};
         if (job.progress >= 0.0f)
             paint.progress(track, std::clamp(job.progress, 0.0f, 1.0f));
         else
@@ -129,19 +212,31 @@ void ActivityPanel::draw_content(ui::Canvas &canvas, const gfx::Rect &area) cons
             canvas.list.rounded_rect({x, track.y, span, track.h}, track.h * 0.5f, theme.accent);
         }
         if (!job.detail.empty())
-            paint.body(ui::fit_body(paint, job.detail, kDetail, area.w), area.x, top + 92.0f,
-                       kDetail, theme.text_muted);
+            paint.body(ui::fit_body(paint, job.detail, kDetail, area.w), area.x, y + 92.0f, kDetail,
+                       theme.text_muted);
     }
-    // Circle closes: the glyph and the word, at the panel's foot.
-    const std::string label = i18n::tr("Close");
+    // The foot: which rows show when not all fit, Square to clear the
+    // finished ones, Circle to close.
     const float size = 24.0f;
-    const float label_w = paint.label_width(label, size);
-    const float glyph_w = ui::action_glyph_width(Action::back, kHintSize);
-    const float right = area.x + area.w;
     const float cy = area.y + area.h - kHintSize * 0.5f;
-    ui::draw_action_glyph(canvas, theme, Action::back, right - label_w - 12.0f - glyph_w, cy,
-                          kHintSize);
-    paint.label(label, right - label_w, cy + size * 0.36f, size, theme.text);
+    const int count = static_cast<int>(jobs_.size());
+    if (count > 0 && (first_ > 0 || last < count - 1))
+        paint.label(i18n::trf("{0}–{1} of {2}", {std::to_string(first_ + 1),
+                                                 std::to_string(last + 1), std::to_string(count)}),
+                    area.x, cy + size * 0.36f, size, theme.text_muted);
+    float right = area.x + area.w;
+    const auto hint = [&](Action action, const std::string &label)
+    {
+        const float label_w = paint.label_width(label, size);
+        const float glyph_w = ui::action_glyph_width(action, kHintSize);
+        ui::draw_action_glyph(canvas, theme, action, right - label_w - 12.0f - glyph_w, cy,
+                              kHintSize);
+        paint.label(label, right - label_w, cy + size * 0.36f, size, theme.text);
+        right -= label_w + 12.0f + glyph_w + 36.0f;
+    };
+    hint(Action::back, i18n::tr("Close"));
+    if (has_finished())
+        hint(Action::west, i18n::tr("Clear finished"));
 }
 
 } // namespace hui::orion
