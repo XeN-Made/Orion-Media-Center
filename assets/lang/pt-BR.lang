@@ -843,3 +843,7 @@ author = ORION
 "VR" = "VR"
 "Your own words on a cover; colours later in Settings, Labels" = "Suas próprias palavras numa capa; cores depois em Configurações, Etiquetas"
 "Yours; off takes it off every game" = "Sua; desligada, sai de todos os jogos"
+
+# src/orion/activity_panel.cpp
+"Activity" = "Atividade"
+"Nothing is installing or downloading" = "Nada está sendo instalado ou baixado"

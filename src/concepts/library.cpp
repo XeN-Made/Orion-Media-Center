@@ -47,6 +47,7 @@
 #include "orion/title_details.hpp"
 #include "orion/updates.hpp"
 #include "orion/weather.hpp"
+#include "orion/activity_panel.hpp"
 #include "orion/whats_new.hpp"
 #include "platform/ps5/system.hpp"
 #include "ui/components/carousel.hpp"
@@ -1092,9 +1093,19 @@ class Library final : public app::Concept
             setup_.open(look_, prefs_, feedback);
         }
         // One layer has the input: the keyboard, then a menu, then the setup
-        // or Settings, then the library itself.
+        // or Settings, then the library itself. Activity (L3) opens over any
+        // of them but a question or the keyboard.
         poll_preview(feedback);
-        if (dialog_.is_open())
+        activity_.set_jobs(jobs());
+        if (activity_.is_open())
+        {
+            if (activity_.handle(input, feedback))
+                activity_.close(feedback);
+        }
+        else if (input.is_pressed(Action::l3) && !dialog_.is_open() && typing_ == Typing::none &&
+                 !previewing())
+            activity_.open(feedback);
+        else if (dialog_.is_open())
             update_dialog(input, dt, feedback);
         else if (previewing())
             update_preview(input, feedback);
@@ -1144,6 +1155,7 @@ class Library final : public app::Concept
         settings_.update(dt);
         details_.update(dt);
         whats_new_.update(dt);
+        activity_.update(dt);
         romm_browser_.update(dt);
         // After an update, once: what changed (orion/whats_new.hpp).
         if (!whats_new_checked_ && clock_ > 2.0f && !setup_.is_open() && !dialog_.is_open() &&
@@ -1305,6 +1317,8 @@ class Library final : public app::Concept
         details_.draw(canvas);
         settings_.draw(canvas);
         whats_new_.draw(canvas);
+        draw_activity_badge(canvas);
+        activity_.draw(canvas);
         romm_browser_.draw(canvas);
         setup_.draw(canvas);
         if (keyboard_shown_.value > 0.01f && over_settings)
@@ -1370,6 +1384,7 @@ class Library final : public app::Concept
         setup_.set_theme(theme_, reduced_);
         details_.set_theme(theme_, reduced_);
         whats_new_.set_theme(theme_, reduced_);
+        activity_.set_theme(theme_, reduced_);
         romm_browser_.set_theme(theme_, reduced_);
     }
 
@@ -1706,63 +1721,41 @@ class Library final : public app::Concept
         return std::to_string((bytes + 512u * 1024u) / (1024u * 1024u)) + " MB";
     }
 
-    void update_status(float dt)
+    // Everything running in the background, the most wanted first: the
+    // status line shows the first, Activity (L3) all of them.
+    std::vector<orion::ActivityJob> jobs() const
     {
-        std::string status;
-        float progress = -1.0f;
-        if (context_.rescan_requested)
-            status = tr("Looking for emulators and their games…");
-        else if (package_server_.running())
-        {
-            const std::uint64_t size = package_server_.size();
-            const std::uint64_t sent = std::min(package_server_.sent(), size);
-            status = trf("Sending {0} to the console's installer  ·  {1} of {2}",
-                         {package_name_, size_text(sent), size_text(size)});
-            if (size > 0)
-                progress = static_cast<float>(sent) / static_cast<float>(size);
-        }
-        else if (game_install_.running())
+        std::vector<orion::ActivityJob> out;
+        const auto add = [&out](std::string text, float progress = -1.0f)
+        { out.push_back({std::move(text), progress}); };
+        if (game_install_.running())
         {
             // A 7z is read in more than one pass: never more than all of it.
             const std::uint64_t total = game_install_.total();
             const std::uint64_t done =
                 total > 0 ? std::min(game_install_.done(), total) : game_install_.done();
-            status = total > 0 ? trf("Installing {0}  ·  {1} of {2}",
-                                     {game_install_.name(), size_text(done), size_text(total)})
-                               : trf("Installing {0}…", {game_install_.name()});
-            if (total > 0)
-                progress = std::min(1.0f, static_cast<float>(done) / static_cast<float>(total));
+            add(total > 0 ? trf("Installing {0}  ·  {1} of {2}",
+                                {game_install_.name(), size_text(done), size_text(total)})
+                          : trf("Installing {0}…", {game_install_.name()}),
+                total > 0 ? std::min(1.0f, static_cast<float>(done) / static_cast<float>(total))
+                          : -1.0f);
         }
-        else if (romm_download_.running())
-            status = trf("Downloading {0} from RomM  ·  {1}",
-                         {romm_downloading_name_, megabytes(romm_download_.written())});
-        else if (art_.running())
+        if (package_server_.running())
         {
-            const orion::ArtFetcher::Progress now = art_.progress();
-            status = trf("Downloading box art  ·  {0} of {1}",
-                         {std::to_string(now.done), std::to_string(now.total)});
-            if (now.total > 0)
-                progress = static_cast<float>(now.done) / static_cast<float>(now.total);
+            const std::uint64_t size = package_server_.size();
+            const std::uint64_t sent = std::min(package_server_.sent(), size);
+            add(trf("Sending {0} to the console's installer  ·  {1} of {2}",
+                    {package_name_, size_text(sent), size_text(size)}),
+                size > 0 ? static_cast<float>(sent) / static_cast<float>(size) : -1.0f);
         }
-        else if (romm_sync_.running())
-        {
-            const orion::RommSync::Progress now = romm_sync_.progress();
-            status = now.total > 0 ? trf("Listing RomM's games  ·  {0} of {1}",
-                                         {std::to_string(now.games), std::to_string(now.total)})
-                                   : tr("Asking RomM for its games…");
-            if (now.total > 0)
-                progress =
-                    std::min(1.0f, static_cast<float>(now.games) / static_cast<float>(now.total));
-        }
-        else if (backdrop_copies_.running())
-            status = tr("Copying game backgrounds…");
-        else if (icon_copies_.running())
-            status = tr("Copying HD pictures…");
-        else if (updating())
+        if (romm_download_.running())
+            add(trf("Downloading {0} from RomM  ·  {1}",
+                    {romm_downloading_name_, megabytes(romm_download_.written())}));
+        if (updating())
         {
             const orion::Release release = installer_.release();
             if (installer_.state() == orion::UpdateInstaller::State::unpacking)
-                status = trf("Checking and unpacking ORION {0}…", {release.version});
+                add(trf("Checking and unpacking ORION {0}…", {release.version}));
             else
             {
                 // The file as it grows, against the size GitHub lists.
@@ -1770,28 +1763,86 @@ class Library final : public app::Concept
                 const std::size_t done = ::stat(installer_.download_path().c_str(), &part) == 0
                                              ? static_cast<std::size_t>(part.st_size)
                                              : 0;
-                status =
-                    release.zip_size > 0
+                add(release.zip_size > 0
                         ? trf("Downloading ORION {0}  ·  {1} of {2}",
                               {release.version, megabytes(done), megabytes(release.zip_size)})
-                        : trf("Downloading ORION {0}  ·  {1}", {release.version, megabytes(done)});
-                if (release.zip_size > 0)
-                {
-                    progress = static_cast<float>(done) / static_cast<float>(release.zip_size);
-                }
+                        : trf("Downloading ORION {0}  ·  {1}", {release.version, megabytes(done)}),
+                    release.zip_size > 0
+                        ? static_cast<float>(done) / static_cast<float>(release.zip_size)
+                        : -1.0f);
             }
         }
-        if (!status.empty())
+        if (art_.running())
         {
-            status_ = std::move(status);
-            status_progress_ = progress;
+            const orion::ArtFetcher::Progress now = art_.progress();
+            add(trf("Downloading box art  ·  {0} of {1}",
+                    {std::to_string(now.done), std::to_string(now.total)}),
+                now.total > 0 ? static_cast<float>(now.done) / static_cast<float>(now.total)
+                              : -1.0f);
         }
-        status_shown_.target = art_.running() || backdrop_copies_.running() ||
-                                       icon_copies_.running() || context_.rescan_requested ||
-                                       updating()
-                                   ? 1.0f
-                                   : 0.0f;
+        if (romm_sync_.running())
+        {
+            const orion::RommSync::Progress now = romm_sync_.progress();
+            add(now.total > 0 ? trf("Listing RomM's games  ·  {0} of {1}",
+                                    {std::to_string(now.games), std::to_string(now.total)})
+                              : tr("Asking RomM for its games…"),
+                now.total > 0
+                    ? std::min(1.0f, static_cast<float>(now.games) / static_cast<float>(now.total))
+                    : -1.0f);
+        }
+        if (context_.rescan_requested)
+            add(tr("Looking for emulators and their games…"));
+        if (backdrop_copies_.running())
+            add(tr("Copying game backgrounds…"));
+        if (icon_copies_.running())
+            add(tr("Copying HD pictures…"));
+        return out;
+    }
+
+    void update_status(float dt)
+    {
+        const std::vector<orion::ActivityJob> now = jobs();
+        if (!now.empty())
+        {
+            status_ = now.front().text;
+            status_progress_ = now.front().progress;
+        }
+        status_shown_.target = now.empty() ? 0.0f : 1.0f;
         status_shown_.update(dt, context_.settings.reduced_motion ? 60.0f : 6.0f);
+    }
+
+    // Over Settings and the setup, which cover the status line: a small
+    // card in the top corner with the first job, its bar, and L3 for all.
+    void draw_activity_badge(ui::Canvas &canvas) const
+    {
+        if (status_.empty() || status_shown_.value < 0.01f || activity_.visible() ||
+            !(settings_.visible() || setup_.visible()))
+            return;
+        gfx::DrawList &list = canvas.list;
+        const ui::Painter paint(list, canvas.fonts, theme_, canvas.glass);
+        const ui::Fonts &fonts = context_.fonts;
+        constexpr float kWidth = 520.0f;
+        const Rect card{gfx::kVirtualWidth - 48.0f - kWidth, 40.0f, kWidth, 64.0f};
+        list.push_opacity(std::min(status_shown_.value, 1.0f));
+        list.shadow({card.x, card.y + 6.0f, card.w, card.h}, 18.0f, 18.0f,
+                    Color::rgb(0x000000, 0.35f));
+        list.rounded_rect(card, 18.0f, theme_.surface.with_alpha(0.96f));
+        const float glyph = ui::button_width(ui::Button::left_stick, 30.0f);
+        ui::draw_button(list, fonts, ui::GlyphStyle::dark(), ui::Button::left_stick, card.x + 16.0f,
+                        card.y + 32.0f, 30.0f);
+        const float text_x = card.x + 28.0f + glyph;
+        const std::string text =
+            ui::fit_body(paint, status_, 18.0f, card.x + card.w - 16.0f - text_x);
+        ui::text(list, fonts.regular, text.c_str(), text_x, card.y + 33.0f, 18.0f, theme_.text);
+        const Rect track{text_x, card.y + 44.0f, card.x + card.w - 16.0f - text_x, 5.0f};
+        list.rounded_rect(track, 2.5f, theme_.text.with_alpha(0.15f));
+        const float part =
+            status_progress_ >= 0.0f ? std::clamp(status_progress_, 0.0f, 1.0f) : 0.25f;
+        const float sweep = status_progress_ >= 0.0f || reduced_
+                                ? 0.0f
+                                : std::fmod(clock_ * 0.45f, 1.0f) * track.w * 0.75f;
+        list.rounded_rect({track.x + sweep, track.y, track.w * part, track.h}, 2.5f, theme_.accent);
+        list.pop_opacity();
     }
 
     // A header picker wide enough for its longest choice, never narrower than
@@ -8625,10 +8676,11 @@ class Library final : public app::Concept
     std::string preview_name_;
     std::string preview_query_; // the name searched for
     std::string preview_was_;
-    bool preview_asked_ = false; // false: waiting for the picker to be free
-    std::string grid_key_;       // keys.txt's, as last read
-    orion::KeyPage key_page_;    // the key typed on a phone or PC (http://<console>:9062)
-    orion::WhatsNew whats_new_;  // this version's notes, once after an update
+    bool preview_asked_ = false;    // false: waiting for the picker to be free
+    std::string grid_key_;          // keys.txt's, as last read
+    orion::KeyPage key_page_;       // the key typed on a phone or PC (http://<console>:9062)
+    orion::WhatsNew whats_new_;     // this version's notes, once after an update
+    orion::ActivityPanel activity_; // L3: every install and download, with its progress
     bool whats_new_checked_ = false;
     // RomM: the sync, a game being downloaded, a pairing under way.
     orion::RommSync romm_sync_{[](const std::string &url, const std::vector<std::string> &headers,

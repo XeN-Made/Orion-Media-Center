@@ -838,3 +838,7 @@ author = ORION
 "VR" = "VR"
 "Your own words on a cover; colours later in Settings, Labels" = "Saját szavaid a borítón; színek később: Beállítások, Címkék"
 "Yours; off takes it off every game" = "A tiéd; kikapcsolva minden játékról lekerül"
+
+# src/orion/activity_panel.cpp
+"Activity" = "Tevékenység"
+"Nothing is installing or downloading" = "Semmi nem települ és nem töltődik le"

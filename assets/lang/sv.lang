@@ -838,3 +838,7 @@ author = Svenska ORION-bidragsgivare
 "VR" = "VR"
 "Your own words on a cover; colours later in Settings, Labels" = "Dina egna ord på ett omslag; färger senare i Inställningar, Etiketter"
 "Yours; off takes it off every game" = "Din; av tar bort den från alla spel"
+
+# src/orion/activity_panel.cpp
+"Activity" = "Aktivitet"
+"Nothing is installing or downloading" = "Inget installeras eller laddas ner"

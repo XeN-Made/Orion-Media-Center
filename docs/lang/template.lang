@@ -369,6 +369,11 @@ author =
 "Wii U, 3DS, DS, Switch" = ""
 "Xbox 360" = ""
 
+# src/orion/activity_panel.cpp
+"Activity" = ""
+"Close" = ""
+"Nothing is installing or downloading" = ""
+
 # src/orion/look.cpp
 "Aurora" = ""
 "Black" = ""
@@ -520,7 +525,6 @@ author =
 "Check now" = ""
 "Chosen under Storage" = ""
 "Circle does the same" = ""
-"Close" = ""
 "Close a game from the PS button menu and ORION opens again" = ""
 "Clouds" = ""
 "Copy them again" = ""

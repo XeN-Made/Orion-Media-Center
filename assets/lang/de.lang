@@ -844,3 +844,7 @@ author = Deutsche ORION-Mitwirkende
 "VR" = "VR"
 "Your own words on a cover; colours later in Settings, Labels" = "Deine eigenen Worte auf einem Cover; Farben später in Einstellungen, Etiketten"
 "Yours; off takes it off every game" = "Deins; aus nimmt es von allen Spielen"
+
+# src/orion/activity_panel.cpp
+"Activity" = "Aktivität"
+"Nothing is installing or downloading" = "Gerade wird nichts installiert oder heruntergeladen"
