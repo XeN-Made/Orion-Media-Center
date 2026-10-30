@@ -6,8 +6,13 @@
 // --wrap for the malloc family whenever this file exists, routing allocations
 // into a fixed 128 MiB sceLibcMspace that is never unmapped. When it is full
 // an allocation goes to the system's heap instead (free tells them apart by
-// address): an archive's decoder wants 64 MB at once, and a failed
-// allocation under C++ without exceptions ends the app.
+// address): a failed allocation under C++ without exceptions ends the app.
+//
+// A block of 16 MiB or more gets a mapping of its own, unmapped when freed.
+// An archive's decoder wants two such at once (a RAR's 32 MiB window and its
+// copy, made as its first file starts); with the app's own 60-odd MiB in the
+// mspace the second one did not fit, the system's heap is small, and the app
+// ended there, twice, at the same place.
 
 #include <errno.h>
 #include <stdatomic.h>
@@ -116,12 +121,106 @@ static int hui_heap_owns(const void *address)
     return value >= base && value - base < HUI_HEAP_SIZE;
 }
 
+/* Blocks with a mapping of their own: few, large, and short-lived. */
+#define HUI_BIG_BLOCK (16u * 1024u * 1024u)
+#define HUI_BIG_SLOTS 32
+
+static struct
+{
+    void *address;
+    size_t size;
+} hui_big[HUI_BIG_SLOTS];
+static atomic_flag hui_big_lock = ATOMIC_FLAG_INIT;
+
+static void hui_big_take(void)
+{
+    while (atomic_flag_test_and_set_explicit(&hui_big_lock, memory_order_acquire))
+    {
+    }
+}
+
+static void hui_big_give(void)
+{
+    atomic_flag_clear_explicit(&hui_big_lock, memory_order_release);
+}
+
+/* A zeroed mapping of its own, or NULL (none left, or no slot). */
+static void *hui_big_alloc(size_t size)
+{
+    void *address = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
+    if (address == MAP_FAILED)
+        return NULL;
+    hui_big_take();
+    for (int slot = 0; slot < HUI_BIG_SLOTS; ++slot)
+    {
+        if (hui_big[slot].address == NULL)
+        {
+            hui_big[slot].address = address;
+            hui_big[slot].size = size;
+            hui_big_give();
+            hui_heap_resize_stats(0, size);
+            atomic_fetch_add_explicit(&hui_heap_blocks, 1, memory_order_relaxed);
+            return address;
+        }
+    }
+    hui_big_give();
+    munmap(address, size);
+    return NULL;
+}
+
+/* The size of a block mapped by hui_big_alloc, or 0 when it is not one. */
+static size_t hui_big_size(const void *address)
+{
+    size_t size = 0;
+    hui_big_take();
+    for (int slot = 0; slot < HUI_BIG_SLOTS; ++slot)
+    {
+        if (hui_big[slot].address == address)
+        {
+            size = hui_big[slot].size;
+            break;
+        }
+    }
+    hui_big_give();
+    return size;
+}
+
+/* Unmaps a block of hui_big_alloc's; false when it is not one. */
+static int hui_big_free(void *address)
+{
+    size_t size = 0;
+    hui_big_take();
+    for (int slot = 0; slot < HUI_BIG_SLOTS; ++slot)
+    {
+        if (hui_big[slot].address == address)
+        {
+            size = hui_big[slot].size;
+            hui_big[slot].address = NULL;
+            hui_big[slot].size = 0;
+            break;
+        }
+    }
+    hui_big_give();
+    if (size == 0)
+        return 0;
+    munmap(address, size);
+    hui_heap_resize_stats(size, 0);
+    atomic_fetch_sub_explicit(&hui_heap_blocks, 1, memory_order_relaxed);
+    return 1;
+}
+
 void __wrap_free(void *address);
 
 void *__wrap_malloc(size_t size)
 {
     if (!hui_heap_ready())
         return __real_malloc(size);
+    if (size >= HUI_BIG_BLOCK)
+    {
+        void *big = hui_big_alloc(size);
+        if (big != NULL)
+            return big;
+    }
     void *address =
         hui_heap_record_allocation(sceLibcMspaceMalloc(hui_heap_mspace, size), size != 0);
     return address != NULL || size == 0 ? address : __real_malloc(size);
@@ -131,6 +230,12 @@ void *__wrap_calloc(size_t count, size_t size)
 {
     if (!hui_heap_ready())
         return __real_calloc(count, size);
+    if (size != 0 && count >= HUI_BIG_BLOCK / size && count <= SIZE_MAX / size)
+    {
+        void *big = hui_big_alloc(count * size); // a fresh mapping is zeroed
+        if (big != NULL)
+            return big;
+    }
     void *address = hui_heap_record_allocation(sceLibcMspaceCalloc(hui_heap_mspace, count, size),
                                                count != 0 && size != 0);
     return address != NULL || count == 0 || size == 0 ? address : __real_calloc(count, size);
@@ -140,6 +245,22 @@ void *__wrap_realloc(void *address, size_t size)
 {
     if (address == NULL)
         return __wrap_malloc(size);
+    const size_t big = hui_big_size(address);
+    if (big != 0)
+    {
+        if (size == 0)
+        {
+            hui_big_free(address);
+            return NULL;
+        }
+        void *result = __wrap_malloc(size);
+        if (result != NULL)
+        {
+            memcpy(result, address, big < size ? big : size);
+            hui_big_free(address);
+        }
+        return result;
+    }
     if (!hui_heap_owns(address))
         return __real_realloc(address, size);
     size_t before = sceLibcMspaceMallocUsableSize(address);
@@ -149,8 +270,11 @@ void *__wrap_realloc(void *address, size_t size)
     else if (size)
     {
         atomic_fetch_add_explicit(&hui_heap_failures, 1, memory_order_relaxed);
-        // Moved to the system's heap; the old block stays valid on failure.
-        result = __real_malloc(size);
+        // Moved out (a mapping of its own, or the system's heap); the old
+        // block stays valid on failure.
+        result = size >= HUI_BIG_BLOCK ? hui_big_alloc(size) : NULL;
+        if (result == NULL)
+            result = __real_malloc(size);
         if (result)
         {
             memcpy(result, address, before < size ? before : size);
@@ -168,7 +292,7 @@ void __wrap_free(void *address)
         atomic_fetch_sub_explicit(&hui_heap_blocks, 1, memory_order_relaxed);
         sceLibcMspaceFree(hui_heap_mspace, address);
     }
-    else
+    else if (address != NULL && !hui_big_free(address))
     {
         __real_free(address);
     }
@@ -178,6 +302,15 @@ int __wrap_posix_memalign(void **address, size_t alignment, size_t size)
 {
     if (!hui_heap_ready())
         return __real_posix_memalign(address, alignment, size);
+    if (size >= HUI_BIG_BLOCK && alignment <= 4096)
+    {
+        void *big = hui_big_alloc(size); // mappings start on a page
+        if (big != NULL)
+        {
+            *address = big;
+            return 0;
+        }
+    }
     int result = sceLibcMspacePosixMemalign(hui_heap_mspace, address, alignment, size);
     if (result == 0)
         hui_heap_record_allocation(*address, size != 0);
@@ -191,8 +324,10 @@ int __wrap_posix_memalign(void **address, size_t alignment, size_t size)
 
 size_t __wrap_malloc_usable_size(const void *address)
 {
-    return hui_heap_owns(address) ? sceLibcMspaceMallocUsableSize(address)
-                                  : __real_malloc_usable_size(address);
+    if (hui_heap_owns(address))
+        return sceLibcMspaceMallocUsableSize(address);
+    const size_t big = address != NULL ? hui_big_size(address) : 0;
+    return big != 0 ? big : __real_malloc_usable_size(address);
 }
 
 /* Diagnostics: current heap counters for logs and the diagnostics screen. */
