@@ -95,6 +95,35 @@ TEST(Emulators, TurnsContentFoldersIntoSystemsAndGames)
     EXPECT_EQ(starfall->id, library::rom_id(starfall->rom));
 }
 
+// content/gba beside content/Nintendo - Game Boy Advance: one system, both
+// folders' games on it.
+TEST(Emulators, ShortContentFoldersJoinTheirSystem)
+{
+    const std::filesystem::path root =
+        std::filesystem::temp_directory_path() / "orion-short-folder";
+    std::filesystem::remove_all(root);
+    std::filesystem::copy(std::string(HUI_SOURCE_DIR) + "/tests/fixtures/retroarch/homebrew", root,
+                          std::filesystem::copy_options::recursive);
+    const std::filesystem::path gba = root / "PPSA90120" / "content" / "gba";
+    std::filesystem::create_directories(gba);
+    std::ofstream(gba / "Paper Kite (USA).gba") << "rom";
+    library::ScanOptions options;
+    options.roots = {root.string()};
+    const std::vector<library::Title> titles = library::scan(options);
+    ASSERT_EQ(titles.size(), 1u);
+    std::vector<library::Title> roms;
+    const library::Emulator emulator = library::scan_retroarch(titles.front(), &roms);
+    ASSERT_EQ(emulator.systems.size(), 2u);
+    EXPECT_EQ(emulator.systems[1].short_name, "GBA");
+    EXPECT_EQ(emulator.systems[1].games, 3);
+    const auto kite = std::find_if(roms.begin(), roms.end(), [](const library::Title &rom)
+                                   { return rom.name == "Paper Kite"; });
+    ASSERT_NE(kite, roms.end());
+    EXPECT_EQ(kite->system, "Nintendo - Game Boy Advance");
+    EXPECT_EQ(kite->rom, "/app0/content/gba/Paper Kite (USA).gba");
+    std::filesystem::remove_all(root);
+}
+
 TEST(Emulators, ListsWhatRetroArchsPlaylistsList)
 {
     std::vector<library::Title> roms;

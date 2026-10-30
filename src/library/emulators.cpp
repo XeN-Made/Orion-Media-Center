@@ -508,9 +508,14 @@ Emulator scan_retroarch(const Title &retroarch, std::vector<Title> *roms)
 
     for (const save::DirectoryEntry &folder : save::list_directory(retroarch.path + "/content"))
     {
-        if (folder.directory && folder.name.front() != '.')
-            add_system_folder(emulator, folder.name, retroarch.path + "/content/" + folder.name,
-                              "/app0/content/" + folder.name, roms);
+        // A folder named as ES-DE names them (content/gba) joins the system
+        // of its full name: one GBA tab, not a GBA and a gba.
+        if (!folder.directory || folder.name.front() == '.')
+            continue;
+        const std::string known = system_of_folder(folder.name, emulator);
+        add_system_folder(emulator, known.empty() ? folder.name : known,
+                          retroarch.path + "/content/" + folder.name,
+                          "/app0/content/" + folder.name, roms);
     }
     sort_systems(emulator);
     return emulator;
