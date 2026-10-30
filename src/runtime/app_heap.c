@@ -4,13 +4,17 @@
 //
 // Adapted from ps5-opengl native-app/app_heap.c. tools/build.sh links with
 // --wrap for the malloc family whenever this file exists, routing allocations
-// into a fixed 128 MiB sceLibcMspace that is never unmapped.
+// into a fixed 128 MiB sceLibcMspace that is never unmapped. When it is full
+// an allocation goes to the system's heap instead (free tells them apart by
+// address): an archive's decoder wants 64 MB at once, and a failed
+// allocation under C++ without exceptions ends the app.
 
 #include <errno.h>
 #include <stdatomic.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/mman.h>
 
 void *__real_malloc(size_t size);
@@ -112,19 +116,24 @@ static int hui_heap_owns(const void *address)
     return value >= base && value - base < HUI_HEAP_SIZE;
 }
 
+void __wrap_free(void *address);
+
 void *__wrap_malloc(size_t size)
 {
-    return hui_heap_ready()
-               ? hui_heap_record_allocation(sceLibcMspaceMalloc(hui_heap_mspace, size), size != 0)
-               : __real_malloc(size);
+    if (!hui_heap_ready())
+        return __real_malloc(size);
+    void *address =
+        hui_heap_record_allocation(sceLibcMspaceMalloc(hui_heap_mspace, size), size != 0);
+    return address != NULL || size == 0 ? address : __real_malloc(size);
 }
 
 void *__wrap_calloc(size_t count, size_t size)
 {
-    return hui_heap_ready()
-               ? hui_heap_record_allocation(sceLibcMspaceCalloc(hui_heap_mspace, count, size),
-                                            count != 0 && size != 0)
-               : __real_calloc(count, size);
+    if (!hui_heap_ready())
+        return __real_calloc(count, size);
+    void *address = hui_heap_record_allocation(sceLibcMspaceCalloc(hui_heap_mspace, count, size),
+                                               count != 0 && size != 0);
+    return address != NULL || count == 0 || size == 0 ? address : __real_calloc(count, size);
 }
 
 void *__wrap_realloc(void *address, size_t size)
@@ -138,7 +147,16 @@ void *__wrap_realloc(void *address, size_t size)
     if (result)
         hui_heap_resize_stats(before, sceLibcMspaceMallocUsableSize(result));
     else if (size)
+    {
         atomic_fetch_add_explicit(&hui_heap_failures, 1, memory_order_relaxed);
+        // Moved to the system's heap; the old block stays valid on failure.
+        result = __real_malloc(size);
+        if (result)
+        {
+            memcpy(result, address, before < size ? before : size);
+            __wrap_free(address);
+        }
+    }
     return result;
 }
 
@@ -164,7 +182,10 @@ int __wrap_posix_memalign(void **address, size_t alignment, size_t size)
     if (result == 0)
         hui_heap_record_allocation(*address, size != 0);
     else if (result == ENOMEM)
+    {
         atomic_fetch_add_explicit(&hui_heap_failures, 1, memory_order_relaxed);
+        result = __real_posix_memalign(address, alignment, size);
+    }
     return result;
 }
 
