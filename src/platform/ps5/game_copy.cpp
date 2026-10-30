@@ -86,6 +86,11 @@ namespace
 {
 
 constexpr std::size_t kMostEntries = 200000; // files and folders in one game folder
+// One read off the share: as much as the server hands over at once (Windows
+// takes 8 MB), so the network waits for fewer round trips. Writes to the
+// drive are gathered to the same size, not the decoder's small blocks.
+constexpr std::uint32_t kMostRead = 8u << 20;
+constexpr std::size_t kWriteBatch = 8u << 20;
 
 bool stopped(const CopyProgress *progress)
 {
@@ -185,10 +190,10 @@ bool copy_one(SmbConnection &smb, const std::string &from, const std::string &to
         *error = "cannot write " + to + " (errno " + std::to_string(errno) + ")";
         return false;
     }
-    // As much as the server takes in one read, up to 1 MB.
+    // As much as the server takes in one read, up to kMostRead.
     std::uint32_t chunk = smb2_get_max_read_size(smb.get());
-    if (chunk == 0 || chunk > (1u << 20))
-        chunk = 1u << 20;
+    if (chunk == 0 || chunk > kMostRead)
+        chunk = kMostRead;
     std::vector<std::uint8_t> buffer(chunk);
     std::int64_t at = 0;
     bool ok = true;
@@ -361,8 +366,8 @@ bool unpack(SmbConnection &smb, const std::vector<std::string> &volumes, const s
     reading.smb = &smb;
     reading.progress = progress;
     std::uint32_t chunk = smb2_get_max_read_size(smb.get());
-    if (chunk == 0 || chunk > (1u << 20))
-        chunk = 1u << 20;
+    if (chunk == 0 || chunk > kMostRead)
+        chunk = kMostRead;
     reading.buffer.resize(chunk);
     std::vector<Volume> parts(volumes.size());
     for (std::size_t i = 0; i < volumes.size(); ++i)
@@ -415,6 +420,9 @@ bool unpack(SmbConnection &smb, const std::vector<std::string> &volumes, const s
             : std::string("archive did not open: ") +
                   (archive_error_string(a) != nullptr ? archive_error_string(a) : "?"));
     int files = 0;
+    // The batch for the drive, kept between files so it is made once.
+    std::vector<char> pending;
+    pending.reserve(kWriteBatch);
     archive_entry *entry = nullptr;
     while (ok)
     {
@@ -462,6 +470,15 @@ bool unpack(SmbConnection &smb, const std::vector<std::string> &volumes, const s
             break;
         }
         std::uint64_t written = 0;
+        // What is waiting to be written, from pending_at on.
+        std::int64_t pending_at = 0;
+        const auto flush = [&]()
+        {
+            const bool put =
+                pending.empty() || write_at(fd, pending.data(), pending.size(), pending_at);
+            pending.clear();
+            return put;
+        };
         for (;;)
         {
             const void *block = nullptr;
@@ -480,13 +497,27 @@ bool unpack(SmbConnection &smb, const std::vector<std::string> &volumes, const s
                 ok = false;
                 break;
             }
-            if (!write_at(fd, block, size, offset))
+            // Joined to what waits when it follows it and fits; else what
+            // waits goes first.
+            const bool follows = !pending.empty() &&
+                                 offset == pending_at + static_cast<std::int64_t>(pending.size());
+            if ((!follows || pending.size() + size > kWriteBatch) && !flush())
             {
                 *error = "could not write " + to + " (disk full?)";
                 ok = false;
                 break;
             }
+            if (pending.empty())
+                pending_at = offset;
+            const char *bytes = static_cast<const char *>(block);
+            pending.insert(pending.end(), bytes, bytes + size);
         }
+        if (ok && !flush())
+        {
+            *error = "could not write " + to + " (disk full?)";
+            ok = false;
+        }
+        pending.clear();
         if (::close(fd) != 0 && ok)
         {
             *error = "could not finish " + to;
