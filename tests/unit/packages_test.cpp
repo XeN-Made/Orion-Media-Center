@@ -48,6 +48,17 @@ TEST(Packages, ReadTheirContentIdWhereverItIs)
     EXPECT_EQ(id.kind, PackageKind::ps5);
     EXPECT_EQ(id.content_id, "UP0000-PPSA08560_00-FULLGAMEUNLOCK00");
 
+    // Most PS5 packages: nothing in the head, the PS4 header at 512 KiB.
+    const std::string bare = head(kFih, 0x10, "", 0x1000);
+    EXPECT_FALSE(hui::orion::read_package(bare, &id));
+    EXPECT_TRUE(hui::orion::is_ps5_package(bare));
+    ASSERT_TRUE(hui::orion::read_ps5_header(
+        head(kCnt, 0x40, "UP1018-PPSA07570_00-KRMOVIE4K0000000", 0x1000), &id));
+    EXPECT_EQ(id.kind, PackageKind::ps5);
+    EXPECT_EQ(id.title_id, "PPSA07570");
+    EXPECT_EQ(id.label, "KRMOVIE4K0000000");
+    EXPECT_FALSE(hui::orion::read_ps5_header(bare, &id));
+
     ASSERT_TRUE(hui::orion::read_package(
         head("PS5MPKG1", 0x10, "UP0000-PPSA08560_00-PART_ONE_0000000", 0x100), &id));
     EXPECT_EQ(id.kind, PackageKind::parts);

@@ -27,9 +27,11 @@
 // console's has not got. ORION has no locale but UTF-8 names, one byte per
 // character as far as the C library's own conversions go (it writes no more
 // than that), and file times are kept as they are, in UTC.
+// The most bytes a character takes: libarchive sizes its buffers by it when
+// it turns names into this "UTF-8" locale's text, and one overran them.
 extern "C" int ___mb_cur_max(void)
 {
-    return 1;
+    return 4;
 }
 
 extern "C" char *nl_langinfo(nl_item item)
@@ -374,8 +376,19 @@ bool unpack(SmbConnection &smb, const std::vector<std::string> &volumes, const s
     for (std::size_t i = 1; i < parts.size(); ++i)
         archive_read_append_callback_data(a, &parts[i]);
 
+    const auto note = [progress](const std::string &line)
+    {
+        if (progress != nullptr && progress->note)
+            progress->note(line);
+    };
+    note("unpacking " + std::to_string(volumes.size()) + " volume(s), " + std::to_string(total) +
+         " bytes");
     bool ok = archive_read_open1(a) == ARCHIVE_OK;
-    std::vector<char> data;
+    note(ok ? std::string("archive opened: ") +
+                  (archive_format_name(a) != nullptr ? archive_format_name(a) : "?")
+            : std::string("archive did not open: ") +
+                  (archive_error_string(a) != nullptr ? archive_error_string(a) : "?"));
+    int files = 0;
     archive_entry *entry = nullptr;
     while (ok)
     {
@@ -404,6 +417,11 @@ bool unpack(SmbConnection &smb, const std::vector<std::string> &volumes, const s
         }
         if (type != AE_IFREG)
             continue; // links and devices have no place in a game
+        // The first few and then every hundredth: where it was, if it stops.
+        if (files < 5 || files % 100 == 0)
+            note("file " + std::to_string(files) + ": " + path + " (" +
+                 std::to_string(archive_entry_size(entry)) + " bytes)");
+        ++files;
         if (!make_folders(to.substr(0, to.find_last_of('/'))))
         {
             *error = "cannot make the folder of " + to;

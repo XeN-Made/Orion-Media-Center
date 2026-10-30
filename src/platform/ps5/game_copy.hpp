@@ -8,6 +8,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -35,6 +36,8 @@ struct CopyProgress
     std::atomic<std::uint64_t> done{0};  // bytes read off the share
     std::atomic<std::uint64_t> total{0}; // what there is to read (an archive's size)
     std::atomic<bool> cancel{false};
+    // Each step, for a log (called on the copying thread); may be empty.
+    std::function<void(const std::string &line)> note;
 };
 
 // The game copied, or unpacked, into the folder `into` (which exists): a

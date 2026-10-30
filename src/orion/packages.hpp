@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include <cstdint>
+#include <cstddef>
 #include <map>
 #include <set>
 #include <string>
@@ -41,6 +43,14 @@ std::string find_content_id(std::string_view bytes);
 
 // What a package's first bytes (kPackageHead of them, or fewer) say it is.
 bool read_package(std::string_view head, PackageId *id);
+
+// A PS5 package ("\x7fFIH") whose head names nothing keeps its PS4 header
+// at 512 KiB, past kPackageHead: read kPs5HeaderSize bytes there and give
+// them to read_ps5_header. Every PS5 package seen so far has it there.
+inline constexpr std::uint64_t kPs5Header = 0x80000;
+inline constexpr std::size_t kPs5HeaderSize = 4096;
+bool is_ps5_package(std::string_view head);
+bool read_ps5_header(std::string_view header, PackageId *id);
 
 // What the console has: each app's content ID (from its param.json or
 // param.sfo, as ORION's helper copies them into <state>/system-apps) and

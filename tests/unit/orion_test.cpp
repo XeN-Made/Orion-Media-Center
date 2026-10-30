@@ -235,7 +235,8 @@ TEST(OrionPrefs, TitlesKeepThePlayersNames)
 
 // The player's labels and their changes to ORION's come back from the file;
 // a built-in label put back as it was is not kept, and a label deleted takes
-// its titles with it.
+// its titles and the tabs that default to it with it. A title can wear one
+// of ORION's labels for another kind (a homebrew app wearing GAME).
 TEST(OrionPrefs, LabelsKeepTheirTextColoursAndTitles)
 {
     const std::string dir = fresh_dir("orion-prefs-labels");
@@ -247,8 +248,10 @@ TEST(OrionPrefs, LabelsKeepTheirTextColoursAndTitles)
     const std::string coop = prefs.add_label("  CO-OP  ", 0x3fe0c5, 0x08101c).id;
     EXPECT_EQ(coop, "l1");
     prefs.set_title_label("PPSA90180", coop);
-    prefs.set_title_label("PPSA90181", "gba");     // a built-in one is not worn
-    prefs.set_title_label("PPSA90182", "missing"); // nor an unknown one
+    prefs.set_title_label("PPSA90181", "ps5");        // ORION's GAME on another kind
+    prefs.set_title_label("PPSA90182", "Not an id!"); // not a label's id: not kept
+    prefs.set_tab_label("homebrew", coop);
+    prefs.set_tab_label("media", "Not an id!");
     ASSERT_TRUE(orion::save_prefs(dir, prefs));
 
     orion::LibraryPrefs back = orion::load_prefs(dir);
@@ -261,14 +264,19 @@ TEST(OrionPrefs, LabelsKeepTheirTextColoursAndTitles)
     EXPECT_TRUE(back.label(coop)->custom);
     EXPECT_EQ(back.label(coop)->ink, 0x08101cu);
     EXPECT_EQ(back.title_label("PPSA90180"), coop);
-    EXPECT_EQ(back.title_labels.size(), 1u);
+    EXPECT_EQ(back.title_label("PPSA90181"), "ps5");
+    EXPECT_EQ(back.title_labels.size(), 2u);
+    EXPECT_EQ(back.tab_label("homebrew"), coop);
+    EXPECT_TRUE(back.tab_label("media").empty());
 
     gba.fill = orion::kOwnColour; // ORION's again: nothing to keep
     back.set_label(gba);
     EXPECT_EQ(back.label("gba"), nullptr);
     EXPECT_FALSE(back.remove_label("gba"));
     EXPECT_TRUE(back.remove_label(coop));
-    EXPECT_TRUE(back.title_labels.empty());
+    EXPECT_EQ(back.title_labels.size(), 1u);
+    EXPECT_TRUE(back.tab_label("homebrew").empty());
+    EXPECT_TRUE(back.tab_prefs.empty()); // nothing else kept for it
     EXPECT_EQ(back.add_label("", 0, 0).text, "New label");
 }
 

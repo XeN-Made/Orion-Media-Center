@@ -67,10 +67,11 @@ TEST_F(LibraryDesign, ANewConsoleStartsOnTheSetupAndCanSkipIt)
     auto design = with_fixture();
     send(*design, hui::InputFrame());
     expect_drawable(*design);
-    // The shoulders belong to the setup now: no shelf turns.
-    send(*design, press(hui::Action::page_next));
+    // The shoulders belong to the setup now: no shelf turns (L1 on the
+    // first step is refused).
+    send(*design, press(hui::Action::page_prev));
     EXPECT_FALSE(played(Cue::tab));
-    // Get started, what was found, Skip setup: the last row.
+    // Get started (where it starts), Skip setup: the last row.
     for (int i = 0; i < 4; ++i)
         send(*design, nav(Direction::down));
     send(*design, press(hui::Action::confirm));
@@ -109,10 +110,9 @@ TEST_F(LibraryDesign, TheSetupWalksThroughEveryStep)
     library_.offer_setup = true;
     auto design = with_fixture();
     send(*design, hui::InputFrame());
-    // Welcome: Language first, then Get started.
-    send(*design, nav(Direction::down));
+    // Welcome starts on Get started.
     send(*design, press(hui::Action::confirm));
-    // Look, Emulators, Tabs, Your games, Labels, Box art, Library, Autostart:
+    // Look, Emulators, Labels, Tabs, Your games, Box art, Library, Autostart:
     // Continue is the last row.
     for (int step = 0; step < 8; ++step)
     {
@@ -136,49 +136,55 @@ TEST_F(LibraryDesign, TheSetupWalksThroughEveryStep)
     EXPECT_TRUE(hui::orion::load_prefs(dir).setup_done);
 }
 
-// The setup's Tabs, Your games and Labels steps: a tab hidden, a title moved
-// to the player's own tab, a label of theirs given to a title, each saved as
-// it is chosen.
-TEST_F(LibraryDesign, TheSetupHidesTabsMovesGamesAndGivesLabels)
+// The setup's Labels, Tabs and Your games steps, R1 going on from any row:
+// a ready-made label switched on, a tab hidden, a title moved to the
+// player's own tab and given the label with Square, each saved as chosen.
+TEST_F(LibraryDesign, TheSetupMakesLabelsHidesTabsAndPlacesGames)
 {
     const std::string dir = ::testing::TempDir() + "orion-design-setup-tabs";
     ASSERT_TRUE(hui::save::ensure_directory(dir));
-    ASSERT_TRUE(hui::save::write_atomic(
-                    dir + "/library.json",
-                    "{\"tabs\": [{\"id\": \"t1\", \"name\": \"RPGs\"}], \"labels\": [{\"id\": "
-                    "\"l1\", \"text\": \"CO-OP\", \"fill\": \"#3fe0c5\", \"ink\": \"#08101c\", "
-                    "\"custom\": true}]}\n")
+    ASSERT_TRUE(hui::save::write_atomic(dir + "/library.json",
+                                        "{\"tabs\": [{\"id\": \"t1\", \"name\": \"RPGs\"}]}\n")
                     .empty());
     library_.state_dir = dir;
     library_.offer_setup = true;
     auto design = with_fixture();
     send(*design, hui::InputFrame());
-    const auto next_step = [&]
-    {
-        for (int i = 0; i < 20; ++i)
-            send(*design, nav(Direction::down));
-        send(*design, press(hui::Action::confirm));
-    };
-    send(*design, nav(Direction::down)); // Welcome: Get started
-    send(*design, press(hui::Action::confirm));
+    const auto next_step = [&] { send(*design, press(hui::Action::page_next)); };
+    next_step(); // Welcome
     next_step(); // Look
+    // L1 goes back a step, R1 on again.
+    send(*design, press(hui::Action::page_prev));
+    EXPECT_TRUE(played(Cue::back));
+    next_step();
     next_step(); // Emulators
+    // Labels: CO-OP, the first ready-made one, switched on.
+    send(*design, press(hui::Action::confirm));
+    ASSERT_EQ(hui::orion::load_prefs(dir).labels.size(), 1u);
+    EXPECT_EQ(hui::orion::load_prefs(dir).labels[0].text, "CO-OP");
+    expect_drawable(*design);
+    next_step();
     // Tabs: New tab, then All, switched off.
     send(*design, nav(Direction::down));
     send(*design, press(hui::Action::confirm));
     EXPECT_TRUE(hui::orion::load_prefs(dir).tab_hidden("all"));
     next_step();
-    // Your games: the first title one place along from its own shelf.
+    // Your games: the first title one place along from its own shelf, and
+    // Square gives it CO-OP, then its own again.
     EXPECT_TRUE(hui::orion::load_prefs(dir).placements.empty());
     send(*design, nav(Direction::right));
     EXPECT_FALSE(hui::orion::load_prefs(dir).placements.empty());
-    expect_drawable(*design);
-    next_step();
-    // Labels: New label, then the first title, given CO-OP.
-    send(*design, nav(Direction::down));
-    send(*design, nav(Direction::right));
+    send(*design, press(hui::Action::west));
     EXPECT_FALSE(hui::orion::load_prefs(dir).title_labels.empty());
     expect_drawable(*design);
+    send(*design, press(hui::Action::west));
+    EXPECT_TRUE(hui::orion::load_prefs(dir).title_labels.empty());
+    // R1 to the end finishes the setup.
+    for (int i = 0; i < 4; ++i)
+        next_step();
+    EXPECT_FALSE(hui::orion::load_prefs(dir).setup_done);
+    next_step();
+    EXPECT_TRUE(hui::orion::load_prefs(dir).setup_done);
 }
 
 // With something played, the All tab has a Continue playing row between the

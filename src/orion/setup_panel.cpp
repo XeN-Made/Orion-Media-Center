@@ -7,8 +7,10 @@
 #include "core/i18n.hpp"
 #include "library/emulators.hpp"
 #include "ui/glyphs.hpp"
+#include "ui/widgets.hpp"
 
 #include <algorithm>
+#include <span>
 
 namespace hui::orion
 {
@@ -41,13 +43,46 @@ enum : int
     kTip,
     kNewTab,
     kNewLabel,
-    kNoLabels,
     kNoGames,
+    kBackground,
+    kClearBackground,
     kEmulatorRow = 100, // + the emulator's index, or a missing one's past them
+    kPresetRow = 500,   // + the ready-made label's index in kPresets
+    kOwnLabelRow = 600, // + the label's index in prefs.labels
     kTabRow = 1000,     // + the tab's index in tabs_
     kGameRow = 10000,   // + the game's index in games_
-    kLabelRow = 20000,  // + the game's index in games_
 };
+
+// Ready-made labels the Labels step offers: on makes one, off takes it away.
+constexpr const char *kPresets[] = {i18n::marked("CO-OP"),    i18n::marked("RPG"),
+                                    i18n::marked("RACING"),   i18n::marked("SHOOTER"),
+                                    i18n::marked("FIGHTING"), i18n::marked("SPORTS"),
+                                    i18n::marked("HORROR"),   i18n::marked("KIDS"),
+                                    i18n::marked("PARTY"),    i18n::marked("VR")};
+constexpr int kPresetCount = static_cast<int>(std::size(kPresets));
+// Dark text: the palette's first colours are light ones.
+constexpr std::uint32_t kLabelInk = 0x08101c;
+
+// The player's label with this text, or nullptr.
+const Label *label_named(const LibraryPrefs &prefs, const std::string &text)
+{
+    for (const Label &label : prefs.labels)
+    {
+        if (label.custom && label.text == text)
+            return &label;
+    }
+    return nullptr;
+}
+
+bool is_preset(const std::string &text)
+{
+    for (const char *preset : kPresets)
+    {
+        if (text == tr(preset))
+            return true;
+    }
+    return false;
+}
 
 // The built-in shelves a title can sit on, in the order Your games offers
 // them; the player's own tabs follow.
@@ -56,11 +91,12 @@ constexpr const char *kShelfNames[] = {i18n::marked("Games"), i18n::marked("Home
                                        i18n::marked("Media")};
 constexpr int kShelfCount = 3;
 
-constexpr const char *kStepNames[] = {i18n::marked("Welcome"),    i18n::marked("Look"),
-                                      i18n::marked("Emulators"),  i18n::marked("Tabs"),
-                                      i18n::marked("Your games"), i18n::marked("Labels"),
-                                      i18n::marked("Box art"),    i18n::marked("Library"),
-                                      i18n::marked("Autoboot"),   i18n::marked("Done")};
+constexpr const char *kStepNames[] = {i18n::marked("Welcome"),   i18n::marked("Look"),
+                                      i18n::marked("Emulators"), i18n::marked("Labels"),
+                                      i18n::marked("Tabs"),      i18n::marked("Your games"),
+                                      i18n::marked("Box art"),   i18n::marked("Library"),
+                                      i18n::marked("Autoboot"),  i18n::marked("Done")};
+constexpr int kStepCount = static_cast<int>(std::size(kStepNames));
 
 int sort_index(const std::string &key)
 {
@@ -146,6 +182,9 @@ void SetupPanel::go(Step step, const Look &look, const LibraryPrefs &prefs)
     layout();
     form_.set_active(true);
     form_.set_focus(0, true);
+    // Welcome starts on Get started: Cross is all it takes to go on.
+    if (step == Step::welcome)
+        form_.focus_row(kNext, true);
     form_.enter();
 }
 
@@ -197,6 +236,7 @@ void SetupPanel::build(const Look &look, const LibraryPrefs &prefs)
     steps_.set_steps(std::move(steps));
     steps_.set_step(static_cast<int>(step_), true);
     form_.clear();
+    pills_.clear();
     const auto next = [&](const std::string &label, const std::string &description)
     {
         ui::FormRow &row = form_.add_action(kNext, label);
@@ -258,6 +298,14 @@ void SetupPanel::build(const Look &look, const LibraryPrefs &prefs)
         form_.add_toggle(kGameBackgrounds, tr("Game backgrounds"), prefs.game_backgrounds)
             .description =
             tr("The focused game's picture behind the covers, as the home screen shows it");
+        ui::FormRow &picture = form_.add_action(kBackground, tr("Background picture"));
+        picture.chevron = true;
+        picture.text = own_background_ ? tr("Your picture") : tr("None");
+        picture.description =
+            tr("A picture of yours behind the library: a USB drive, or your screenshots");
+        if (own_background_)
+            form_.add_action(kClearBackground, tr("Use the sky")).description =
+                tr("The galaxy behind the library again");
         next(tr("Continue"), tr("Colours, glass and more are in Settings, Appearance"));
         break;
     }
@@ -291,26 +339,88 @@ void SetupPanel::build(const Look &look, const LibraryPrefs &prefs)
         next(tr("Continue"), tr("Game folders of your own: Settings, Emulators"));
         break;
     }
+    case Step::labels:
+    {
+        // A label is the banner across a cover (GAME, APP...): one of the
+        // player's own says what they want it to, on the games they give it.
+        form_.add_header(tr("Labels"));
+        const std::span<const Swatch> colours = label_colours();
+        const std::size_t light = std::min<std::size_t>(10, colours.size());
+        for (int i = 0; i < kPresetCount; ++i)
+        {
+            const std::string text = tr(kPresets[i]);
+            const Label *own = label_named(prefs, text);
+            ui::FormRow &row = form_.add_toggle(kPresetRow + i, text, own != nullptr);
+            row.description = tr("On: give it to games in Your games with Square");
+            pills_.push_back({kPresetRow + i, text,
+                              own != nullptr ? own->fill
+                              : light > 0    ? colours[static_cast<std::size_t>(i) % light].first
+                                             : 0xffffffu,
+                              own != nullptr ? own->ink : kLabelInk});
+        }
+        for (std::size_t i = 0; i < prefs.labels.size(); ++i)
+        {
+            const Label &label = prefs.labels[i];
+            if (!label.custom || is_preset(label.text))
+                continue;
+            ui::FormRow &row =
+                form_.add_toggle(kOwnLabelRow + static_cast<int>(i), label.text, true);
+            row.description = tr("Yours; off takes it off every game");
+            pills_.push_back({row.id, label.text, label.fill, label.ink});
+        }
+        form_.add_action(kNewLabel, tr("New label…")).description =
+            tr("Your own words on a cover; colours later in Settings, Labels");
+        next(tr("Continue"), tr("Next: which tabs show, then where each game goes"));
+        break;
+    }
     case Step::tabs:
     {
         form_.add_header(tr("Tabs"));
         form_.add_action(kNewTab, tr("New tab…")).description =
-            tr("A shelf of your own, named as you like; the next step fills it");
-        // The Hidden tab is for titles put out of the way: Settings shows it.
-        for (std::size_t i = 0; i < tabs_.size(); ++i)
+            tr("A shelf of your own, named as you like; Your games fills it");
+        const auto add_tab = [&](std::size_t i, const std::string &description)
         {
             const TabEntry &tab = tabs_[i];
-            if (tab.key == kHiddenTabKey)
-                continue;
             const library::System *system = system_of(tab.key);
             const bool shown =
                 system != nullptr ? prefs.system_enabled(system->name) : !prefs.tab_hidden(tab.key);
-            ui::FormRow &row = form_.add_toggle(kTabRow + static_cast<int>(i), tab.name, shown);
-            row.description = system != nullptr               ? tr("Off leaves its games out too")
-                              : tab.key == "all"              ? tr("Every title in one place")
-                              : tab.key == "favourites"       ? tr("The titles you star")
-                              : tab.key.rfind("tab:", 0) == 0 ? tr("One of your own")
-                                                              : std::string();
+            form_.add_toggle(kTabRow + static_cast<int>(i), tab.name, shown).description =
+                description;
+        };
+        // The Hidden tab is for titles put out of the way: Settings shows it.
+        bool emulated = false;
+        for (std::size_t i = 0; i < tabs_.size(); ++i)
+        {
+            const std::string &key = tabs_[i].key;
+            if (key == kHiddenTabKey)
+                continue;
+            if (key == "emulators" || system_of(key) != nullptr)
+            {
+                emulated = true;
+                continue;
+            }
+            add_tab(i, key == "all"                ? tr("Every title in one place")
+                       : key == "favourites"       ? tr("The titles you star")
+                       : key.rfind("tab:", 0) == 0 ? tr("One of your own")
+                                                   : std::string());
+        }
+        // The systems under their own heading: under the Emulators tab
+        // when they are grouped, a tab each when not.
+        if (emulated)
+        {
+            form_.add_header(tr("Emulators"));
+            for (std::size_t i = 0; i < tabs_.size(); ++i)
+            {
+                if (tabs_[i].key == "emulators")
+                    add_tab(i, tr("One tab with every system under it (L2 and R2)"));
+            }
+            for (std::size_t i = 0; i < tabs_.size(); ++i)
+            {
+                if (system_of(tabs_[i].key) != nullptr)
+                    add_tab(i, prefs.group_systems
+                                   ? tr("A system under Emulators; off leaves its games out")
+                                   : tr("Off leaves its games out too"));
+            }
         }
         next(tr("Continue"), tr("Rename, reorder and theme them: Settings, Tabs"));
         break;
@@ -323,6 +433,9 @@ void SetupPanel::build(const Look &look, const LibraryPrefs &prefs)
             places.push_back(tab_name(kShelfKeys[i], kShelfNames[i]));
         for (const CustomTab &tab : prefs.tabs)
             places.push_back(tab.name);
+        labels_to_give_ = std::any_of(prefs.labels.begin(), prefs.labels.end(),
+                                      [](const Label &label) { return label.custom; });
+        const bool labels = labels_to_give_;
         for (std::size_t i = 0; i < games_.size(); ++i)
         {
             const Game &game = games_[i];
@@ -343,44 +456,16 @@ void SetupPanel::build(const Look &look, const LibraryPrefs &prefs)
                         at = kShelfCount + static_cast<int>(t);
                 }
             }
-            form_.add_choice(kGameRow + static_cast<int>(i), game.name, places, at);
+            const int id = kGameRow + static_cast<int>(i);
+            form_.add_choice(id, game.name, places, at).description =
+                labels ? tr("Left and right: its tab · Square: its label")
+                       : tr("Left and right: its tab");
+            if (const Label *worn = prefs.label(prefs.title_label(game.id)))
+                pills_.push_back({id, worn->text, worn->fill, worn->ink});
         }
         if (games_.empty())
             form_.add_value(kNoGames, tr("No console titles yet"), "");
         next(tr("Continue"), tr("Later: Options on a title, Move to tab…"));
-        break;
-    }
-    case Step::labels:
-    {
-        form_.add_header(tr("Labels"));
-        form_.add_action(kNewLabel, tr("New label…")).description =
-            tr("A banner of your own for covers: CO-OP, RPG, Kids…");
-        std::vector<std::string> names = {tr("Its own")};
-        std::vector<std::string> ids = {""};
-        for (const Label &label : prefs.labels)
-        {
-            if (!label.custom)
-                continue;
-            names.push_back(label.text);
-            ids.push_back(label.id);
-        }
-        if (ids.size() == 1)
-            form_.add_value(kNoLabels, tr("Each title wears ORION's label"), tr("GAME, APP…"));
-        else
-        {
-            for (std::size_t i = 0; i < games_.size(); ++i)
-            {
-                const std::string worn = prefs.title_label(games_[i].id);
-                int at = 0;
-                for (std::size_t l = 1; l < ids.size(); ++l)
-                {
-                    if (ids[l] == worn)
-                        at = static_cast<int>(l);
-                }
-                form_.add_choice(kLabelRow + static_cast<int>(i), games_[i].name, names, at);
-            }
-        }
-        next(tr("Continue"), tr("Colours and ORION's own labels: Settings, Labels"));
         break;
     }
     case Step::art:
@@ -449,18 +534,13 @@ SetupPanel::Change SetupPanel::handle(const InputFrame &input, ui::Feedback &fee
 {
     if (!sheet_.is_open())
         return Change::none;
+    if (input.is_pressed(Action::page_next))
+        return step_by(1, feedback, look, prefs);
     const bool left_out = input.nav == Direction::left && !form_.uses_horizontal();
-    if (input.is_pressed(Action::back) || left_out)
-    {
-        if (step_ == Step::welcome)
-        {
-            feedback.play(audio::Cue::error);
-            return Change::none;
-        }
-        feedback.play(audio::Cue::back);
-        go(static_cast<Step>(static_cast<int>(step_) - 1), *look, *prefs);
-        return Change::none;
-    }
+    if (input.is_pressed(Action::back) || input.is_pressed(Action::page_prev) || left_out)
+        return step_by(-1, feedback, look, prefs);
+    if (input.is_pressed(Action::west) && step_ == Step::games)
+        return next_label(feedback, look, prefs);
 
     const ui::Event event = form_.handle(input, feedback);
     const int id = form_.changed_id();
@@ -473,17 +553,17 @@ SetupPanel::Change SetupPanel::handle(const InputFrame &input, ui::Feedback &fee
             return Change::finished;
         }
         if (id == kNext)
-        {
-            go(static_cast<Step>(static_cast<int>(step_) + 1), *look, *prefs);
-            feedback.play(audio::Cue::select);
-            return Change::none;
-        }
+            return step_by(1, feedback, look, prefs);
         if (id == kScan)
             return Change::scan_emulators;
         if (id == kNewTab)
             return Change::new_tab;
         if (id == kNewLabel)
             return Change::new_label;
+        if (id == kBackground)
+            return Change::choose_background;
+        if (id == kClearBackground)
+            return Change::clear_background;
         return Change::none;
     }
     if (event != ui::Event::changed)
@@ -509,18 +589,31 @@ SetupPanel::Change SetupPanel::handle(const InputFrame &input, ui::Feedback &fee
             prefs->place(game.id, kShelfKeys[at]);
         return Change::prefs;
     }
-    if (id >= kLabelRow && id - kLabelRow < static_cast<int>(games_.size()))
+    if (id >= kPresetRow && id - kPresetRow < kPresetCount)
     {
-        const Game &game = games_[static_cast<std::size_t>(id - kLabelRow)];
-        const int at = form_.choice_index(id);
-        std::string label;
-        int seen = 0;
-        for (const Label &own : prefs->labels)
+        const int index = id - kPresetRow;
+        const std::string text = tr(kPresets[index]);
+        if (form_.toggle_value(id))
         {
-            if (own.custom && ++seen == at)
-                label = own.id;
+            const std::span<const Swatch> colours = label_colours();
+            const std::size_t light = std::min<std::size_t>(10, colours.size());
+            if (label_named(*prefs, text) == nullptr)
+                prefs->add_label(text,
+                                 light > 0 ? colours[static_cast<std::size_t>(index) % light].first
+                                           : 0xffffffu,
+                                 kLabelInk);
         }
-        prefs->set_title_label(game.id, label);
+        else if (const Label *own = label_named(*prefs, text))
+            prefs->remove_label(own->id);
+        refresh(*look, *prefs);
+        return Change::prefs;
+    }
+    if (id >= kOwnLabelRow && id - kOwnLabelRow < static_cast<int>(prefs->labels.size()))
+    {
+        // Off is the end of it: a label of the player's own is not kept off.
+        if (!form_.toggle_value(id))
+            prefs->remove_label(prefs->labels[static_cast<std::size_t>(id - kOwnLabelRow)].id);
+        refresh(*look, *prefs);
         return Change::prefs;
     }
     switch (id)
@@ -577,6 +670,54 @@ SetupPanel::Change SetupPanel::handle(const InputFrame &input, ui::Feedback &fee
     }
 }
 
+// R1 and L1 (and Next, Circle) move a step; on to the end finishes.
+SetupPanel::Change SetupPanel::step_by(int direction, ui::Feedback &feedback, Look *look,
+                                       LibraryPrefs *prefs)
+{
+    const int to = static_cast<int>(step_) + direction;
+    if (to < 0)
+    {
+        feedback.play(audio::Cue::error);
+        return Change::none;
+    }
+    if (to >= kStepCount)
+    {
+        prefs->setup_done = true;
+        close(feedback);
+        return Change::finished;
+    }
+    feedback.play(direction > 0 ? audio::Cue::select : audio::Cue::back);
+    go(static_cast<Step>(to), *look, *prefs);
+    return Change::none;
+}
+
+// Square on a game in Your games: the next of the player's labels, then
+// none (its own) again.
+SetupPanel::Change SetupPanel::next_label(ui::Feedback &feedback, Look *look, LibraryPrefs *prefs)
+{
+    const int index = form_.focus_id() - kGameRow;
+    std::vector<std::string> ids;
+    for (const Label &label : prefs->labels)
+    {
+        if (label.custom)
+            ids.push_back(label.id);
+    }
+    if (index < 0 || index >= static_cast<int>(games_.size()) || ids.empty())
+    {
+        feedback.play(audio::Cue::error);
+        return Change::none;
+    }
+    const std::string &game = games_[static_cast<std::size_t>(index)].id;
+    const auto worn = std::find(ids.begin(), ids.end(), prefs->title_label(game));
+    const std::string next = worn == ids.end()       ? ids.front()
+                             : worn + 1 == ids.end() ? std::string()
+                                                     : *(worn + 1);
+    prefs->set_title_label(game, next);
+    feedback.play(audio::Cue::toggle);
+    refresh(*look, *prefs);
+    return Change::prefs;
+}
+
 void SetupPanel::update(float dt)
 {
     sheet_.update(dt);
@@ -589,6 +730,7 @@ void SetupPanel::draw_content(ui::Canvas &canvas, float opacity) const
     (void)opacity;
     steps_.draw(canvas);
     form_.draw(canvas);
+    draw_pills(canvas);
     const ui::Theme &theme = form_.style.theme;
     ui::GlyphStyle glyphs = ui::GlyphStyle::dark();
     glyphs.body = theme.text.with_alpha(0.14f);
@@ -596,20 +738,58 @@ void SetupPanel::draw_content(ui::Canvas &canvas, float opacity) const
     glyphs.ink = theme.text;
     glyphs.label = theme.text_muted;
     // Hints hold pointers: their words live until the hints are drawn.
+    const std::string label = tr("Label");
     const std::string select = tr("Select");
+    const std::string next = step_ == Step::done ? tr("Finish") : tr("Next step");
     const std::string previous = tr("Previous step");
-    const ui::Hint hints[] = {
-        {ui::Button::cross, select.c_str()},
-        {ui::Button::circle, previous.c_str()},
-    };
+    std::vector<ui::Hint> hints;
+    // Square says what it does only once there is a label to give.
+    if (step_ == Step::games && labels_to_give_)
+        hints.push_back({ui::Button::square, label.c_str()});
+    hints.push_back({ui::Button::cross, select.c_str()});
+    hints.push_back({ui::Button::r1, next.c_str()});
+    // On the first step there is no step before it.
+    if (step_ != Step::welcome)
+        hints.push_back({ui::Button::l1, previous.c_str(), ui::Button::circle});
     ui::HintLayout layout;
     layout.size = 38.0f;
     layout.text_size = 22.0f;
     const gfx::Rect area = sheet_.content_rect();
     layout.cy = area.y + area.h - 26.0f;
-    // On the first step there is no step before it.
-    ui::draw_hints(canvas.list, canvas.fonts, glyphs, hints, step_ == Step::welcome ? 1 : 2,
+    ui::draw_hints(canvas.list, canvas.fonts, glyphs, hints.data(), static_cast<int>(hints.size()),
                    area.x + area.w, true, layout);
+}
+
+// Each label as the covers wear it: a pill after its row's name, faded with
+// the row as it scrolls out.
+void SetupPanel::draw_pills(ui::Canvas &canvas) const
+{
+    const gfx::Rect &bounds = form_.bounds();
+    ui::Painter paint(canvas.list, canvas.fonts, form_.style.theme, canvas.glass);
+    const ui::FontRef &font = canvas.fonts.semibold;
+    constexpr float kSize = 16.0f;
+    constexpr float kTracking = 1.6f;
+    for (int i = 0; i < form_.row_count(); ++i)
+    {
+        const ui::FormRow &row = form_.row_at(i);
+        const auto pill = std::find_if(pills_.begin(), pills_.end(),
+                                       [&](const Pill &p) { return p.row == row.id; });
+        if (pill == pills_.end() || font.font == nullptr)
+            continue;
+        const gfx::Rect rect = form_.row_rect(i);
+        if (rect.y < bounds.y || rect.y + rect.h > bounds.y + bounds.h)
+            continue;
+        const float x = rect.x + form_.style.padding +
+                        (i == form_.focus() ? form_.style.focus_shift : 0.0f) +
+                        paint.label_width(row.label, form_.style.label_size) + 22.0f;
+        const float width = font.font->measure(pill->text, kSize) +
+                            kTracking * static_cast<float>(pill->text.size()) + 24.0f;
+        // On the name's line: a focused row unfolds its description below it.
+        const float top = rect.y + form_.style.row_height * 0.5f - 15.0f;
+        canvas.list.rounded_rect({x, top, width, 30.0f}, 15.0f, gfx::Color::rgb(pill->fill));
+        ui::text(canvas.list, font, pill->text.c_str(), x + width * 0.5f, top + 21.0f, kSize,
+                 gfx::Color::rgb(pill->ink), gfx::Align::center, kTracking);
+    }
 }
 
 void SetupPanel::draw(ui::Canvas &canvas) const

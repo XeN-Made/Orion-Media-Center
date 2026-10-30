@@ -25,18 +25,19 @@ namespace hui::orion
 //   Welcome     what ORION found; get started, or skip setup
 //   Look        theme, game backgrounds
 //   Emulators   the emulators found (scan again), group their tabs
-//   Tabs        every tab shown or hidden, and new tabs of the player's
-//   Your games  the tab each console title sits on
-//   Labels      new labels, and the one each title wears
+//   Labels      ready-made labels to switch on (CO-OP, RPG...), and new ones
+//   Tabs        every tab shown or hidden, the systems under Emulators, new tabs
+//   Your games  the tab each console title sits on; Square gives it a label
 //   Box art     find it by itself, where it goes
 //   Library     return to ORION after a game, reopen on the last tab, sort
 //   Autoboot    ORION opens on its own after the jailbreak, and the payload for it
 //   Done        where everything is
 //
 // Up and down move in the rows, Cross takes one, left and right change a
-// choice; Circle goes back a step. New tab and New label ask the screen for a
-// name (Change::new_tab, new_label); it adds them and calls refresh(). It edits the Look and the
-// LibraryPrefs it is handed and says what changed, as SettingsPanel does; Finish sets
+// choice; Circle goes back a step. R1 goes on to the next step from any row
+// and L1 back, so a long list of games never stands in the way. New tab and New label ask the
+// screen for a name (Change::new_tab, new_label); it adds them and calls refresh(). It edits the
+// Look and the LibraryPrefs it is handed and says what changed, as SettingsPanel does; Finish sets
 // prefs.setup_done.
 //
 //   orion::SetupPanel setup;
@@ -58,14 +59,16 @@ class SetupPanel
     enum class Change : std::uint8_t
     {
         none,
-        look,           // the Look was edited
-        prefs,          // the LibraryPrefs were edited
-        art_folder,     // the box art folder changed (prefs.art_dir)
-        scan_emulators, // "Scan for emulators" was chosen
-        finished,       // the last step (or Skip setup): setup_done is set, the sheet closes
-        language,       // the Language row changed (prefs.language)
-        new_tab,        // "New tab…": the screen asks for a name, adds it, refresh()
-        new_label,      // "New label…": the same, for a label
+        look,              // the Look was edited
+        prefs,             // the LibraryPrefs were edited
+        art_folder,        // the box art folder changed (prefs.art_dir)
+        scan_emulators,    // "Scan for emulators" was chosen
+        finished,          // the last step (or Skip setup): setup_done is set, the sheet closes
+        language,          // the Language row changed (prefs.language)
+        new_tab,           // "New tab…": the screen asks for a name, adds it, refresh()
+        new_label,         // "New label…": the same, for a label
+        choose_background, // "Background picture": the screen opens its picture browser
+        clear_background,  // "Use the sky": the screen drops the picture
     };
 
     // A console title as Your games and Labels list it.
@@ -81,9 +84,9 @@ class SetupPanel
         welcome,
         look,
         emulators,
+        labels,
         tabs,
         games,
-        labels,
         art,
         library,
         autostart,
@@ -117,6 +120,11 @@ class SetupPanel
     void set_games(std::vector<Game> games)
     {
         games_ = std::move(games);
+    }
+    // Whether a picture of the player's is the background (Look step).
+    void set_background(bool own)
+    {
+        own_background_ = own;
     }
     // How many console titles the Welcome step says were found.
     void set_titles(int titles)
@@ -166,6 +174,18 @@ class SetupPanel
     void layout();
     void draw_content(ui::Canvas &canvas, float opacity) const;
     std::string tab_name(const std::string &key, const char *own) const;
+    Change step_by(int direction, ui::Feedback &feedback, Look *look, LibraryPrefs *prefs);
+    Change next_label(ui::Feedback &feedback, Look *look, LibraryPrefs *prefs);
+    void draw_pills(ui::Canvas &canvas) const;
+
+    // A label as the covers wear it, drawn after a row's name.
+    struct Pill
+    {
+        int row = 0;
+        std::string text;
+        std::uint32_t fill = 0;
+        std::uint32_t ink = 0;
+    };
     const library::System *system_of(const std::string &key) const;
 
     ui::Sheet sheet_;
@@ -179,6 +199,9 @@ class SetupPanel
     const library::Emulator *emulator_ = nullptr;
     std::vector<TabEntry> tabs_;
     std::vector<Game> games_;
+    std::vector<Pill> pills_;
+    bool labels_to_give_ = false;
+    bool own_background_ = false; // Your games: Square has a label to give
     int titles_ = 0;
     std::string scan_status_; // empty until a scan reports: what a scan finds
     std::string payload_ = "/data/homebrew/PPSA99062/assets/payloads/orion-autostart.elf";

@@ -423,6 +423,7 @@ class SettingsPanel
     std::string label_page_;                       // the label whose page is open; empty: the list
     std::vector<std::string> label_rows_;          // the list's labels, by row (kLabelRow + i)
     std::vector<std::pair<int, LabelLook>> pills_; // rows that show a label, and how
+    std::vector<std::string> tab_label_ids_;       // the Default label row's choices, by id
     std::string state_dir_ = "/data/orion";
     std::string self_path_;
     int backdrops_ = 0;

@@ -239,6 +239,7 @@ enum : int
     kItemPickDir = 1000,      // + an index in pick_dirs_
     kItemPickFile = 3000,     // + an index in pick_files_
     kItemLabel = 5000,        // + an index in custom_labels()
+    kItemLabelBuiltin = 5400, // + an index in every_label()
     kItemInstallPlace = 6000, // + an index in install_places_
     kItemInstallItem = 6100,  // + an index in install_entries_
     kItemFoundServer = 11000, // + an index in found_servers_
@@ -772,6 +773,10 @@ class Library final : public app::Concept
         setup_.set_autostart_payload(autostart_payload());
         setup_.set_tabs(every_tab());
         setup_.set_games(setup_games());
+        setup_.set_background(!background_file().empty());
+        // An install that ends the app leaves its last step in shares.txt.
+        game_install_.set_log([dir = context_.library.state_dir](const std::string &line)
+                              { orion::log_share(dir, line); });
         // Where the folder browser starts; the ones not plugged in are left out.
         set_browse_places();
         settings_.set_app_settings(context_.settings);
@@ -2569,6 +2574,7 @@ class Library final : public app::Concept
     {
         settings_.set_installing(game_install_.running() ? game_install_.name() : std::string());
         settings_.set_background(!background_file().empty());
+        setup_.set_background(!background_file().empty());
         settings_.set_shares(orion::load_shares(context_.library.state_dir), share_status_);
         settings_.set_tabs(every_tab());
         settings_.set_labels(every_label());
@@ -2887,6 +2893,12 @@ class Library final : public app::Concept
         case orion::SetupPanel::Change::new_label:
             start_typing(Typing::new_label, "");
             break;
+        case orion::SetupPanel::Change::choose_background:
+            pick_background(feedback);
+            break;
+        case orion::SetupPanel::Change::clear_background:
+            clear_background();
+            break;
         case orion::SetupPanel::Change::none:
             break;
         }
@@ -3009,19 +3021,10 @@ class Library final : public app::Concept
             break;
         case orion::SettingsPanel::Change::choose_background:
             settings_.close(feedback);
-            picking_music_ = false;
-            picking_background_ = true;
-            pick_dir_.clear();
-            pick_page_ = 0;
-            open_picture_menu(feedback);
+            pick_background(feedback);
             break;
         case orion::SettingsPanel::Change::clear_background:
-            for (const char *kind : kBackgroundKinds)
-                std::remove((context_.library.state_dir + "/background" + kind).c_str());
-            context_.wallpaper_path.clear();
-            settings_.set_background(false);
-            settings_.refresh(look_, prefs_);
-            show_note(true, tr("The sky is back"));
+            clear_background();
             feedback.play(audio::Cue::saved);
             break;
         case orion::SettingsPanel::Change::type_grid_key:
@@ -4231,6 +4234,17 @@ class Library final : public app::Concept
             }
             else
                 pick_places_.emplace_back(tr("Your pictures"), custom_art_folder());
+            // The console's screenshots: those ORION's helper copied (JPG and
+            // PNG ones), and those the Media Gallery copied to a USB drive.
+            if (picking_background_)
+            {
+                pick_places_.emplace_back(tr("Your screenshots"),
+                                          context_.library.state_dir + "/screenshots");
+                for (int i = 0; i < 8; ++i)
+                    pick_places_.emplace_back(
+                        trf("Screenshots on USB drive {0}", {std::to_string(i + 1)}),
+                        "/mnt/usb" + std::to_string(i) + "/PS5/CREATE/Screenshots");
+            }
             for (int i = 0; i < 8; ++i)
                 pick_places_.emplace_back(trf("USB drive {0}", {std::to_string(i + 1)}),
                                           "/mnt/usb" + std::to_string(i));
@@ -4477,6 +4491,30 @@ class Library final : public app::Concept
 
     // A copy, so the picture stays when its drive is taken out; it must be
     // a picture ORION can read, or the sky would vanish for nothing.
+    // The picture browser, for a background: over Settings' place, or over
+    // the setup, which stays open under it.
+    void pick_background(app::Feedback &feedback)
+    {
+        picking_music_ = false;
+        picking_background_ = true;
+        pick_dir_.clear();
+        pick_page_ = 0;
+        open_picture_menu(feedback);
+    }
+
+    void clear_background()
+    {
+        for (const char *kind : kBackgroundKinds)
+            std::remove((context_.library.state_dir + "/background" + kind).c_str());
+        context_.wallpaper_path.clear();
+        settings_.set_background(false);
+        setup_.set_background(false);
+        settings_.refresh(look_, prefs_);
+        if (setup_.is_open())
+            setup_.refresh(look_, prefs_);
+        show_note(true, tr("The sky is back"));
+    }
+
     void choose_background(const std::string &file, app::Feedback &feedback)
     {
         std::string bytes;
@@ -4503,6 +4541,10 @@ class Library final : public app::Concept
         }
         context_.wallpaper_path = background_file();
         ++context_.wallpaper_version;
+        settings_.set_background(true);
+        setup_.set_background(true);
+        if (setup_.is_open())
+            setup_.refresh(look_, prefs_);
         show_note(true, tr("Your picture is the background now"));
         feedback.play(audio::Cue::saved);
     }
@@ -5105,6 +5147,16 @@ class Library final : public app::Concept
         {
             start_typing(Typing::new_label_for_title, "");
             feedback.play(audio::Cue::modal_open);
+            return;
+        }
+        if (tag >= kItemLabelBuiltin &&
+            tag - kItemLabelBuiltin < static_cast<int>(every_label().size()))
+        {
+            prefs_.set_title_label(
+                menu_title_, every_label()[static_cast<std::size_t>(tag - kItemLabelBuiltin)].id);
+            save_prefs();
+            rebuild();
+            feedback.play(audio::Cue::place);
             return;
         }
         if (tag == kItemLabelOwn ||
@@ -7340,31 +7392,97 @@ class Library final : public app::Concept
             return {id, name, text, 0xcdb6ff, kLabelInk};
         }
         if (title.platform == library::Platform::ps4)
-            return {"ps4", tr("PS4 games"), "PS4", 0x8fb0ff, kLabelInk};
+            return console_label("ps4");
         if (library::shelf_of(title) == library::Shelf::media)
-            return {"media", tr("Media"), tr("MEDIA"), 0xffc94a, kLabelInk};
+            return console_label("media");
         if (library::shelf_of(title) == library::Shelf::homebrew)
+            return console_label("homebrew");
+        return console_label("ps5");
+    }
+
+    // ORION's label for one of the console's kinds of title; any other id
+    // gives the PS5 games' one.
+    static orion::LabelEntry console_label(std::string_view id)
+    {
+        if (id == "ps4")
+            return {"ps4", tr("PS4 games"), "PS4", 0x8fb0ff, kLabelInk};
+        if (id == "media")
+            return {"media", tr("Media"), tr("MEDIA"), 0xffc94a, kLabelInk};
+        if (id == "homebrew")
             return {"homebrew", tr("Homebrew"), tr("HOMEBREW"), 0x86efb4, kLabelInk};
         return {"ps5", tr("PS5 games"), tr("GAME"), 0x8fe3ff, kLabelInk};
     }
 
+    // The tab a title belongs on: the one it was moved to, else its shelf
+    // or its system's.
+    std::string home_tab(const Title &title) const
+    {
+        if (const orion::CustomTab *placed = prefs_.placement(title.id))
+            return "tab:" + placed->id;
+        if (std::string shelf = prefs_.placed_shelf(title.id); !shelf.empty())
+            return shelf;
+        return title.is_rom() ? "sys:" + title.system : shelf_key_of(title);
+    }
+
+    // The label id a title wears: the one it was given, else its tab's
+    // Default label; empty for ORION's own for it.
+    std::string worn_label(const Title &title) const
+    {
+        if (std::string worn = prefs_.title_label(title.id); !worn.empty())
+            return worn;
+        return prefs_.tab_label(home_tab(title));
+    }
+
+    // One of ORION's labels by its id ("homebrew", "gba"); false for any
+    // other. Covers ask for it every frame: no walk over the titles.
+    bool builtin_by_id(const std::string &id, orion::LabelEntry *entry) const
+    {
+        if (id == "ps5" || id == "ps4" || id == "homebrew" || id == "media")
+        {
+            *entry = console_label(id);
+            return true;
+        }
+        for (const library::System &system : context_.library.emulator.systems)
+        {
+            Title probe;
+            probe.system = system.name;
+            probe.rom = "x";
+            if (const orion::LabelEntry known = builtin_label(probe); known.id == id)
+            {
+                *entry = known;
+                return true;
+            }
+        }
+        return false;
+    }
+
     // The player's label on a title: one of their own it wears, else their
-    // changes to ORION's; nullptr for ORION's as it is.
+    // changes to the label of ORION's it wears; nullptr for ORION's as it is.
+    // own_only: as if it wore nothing given (its tab's default still counts).
     const orion::Label *label_for(const Title &title, bool own_only = false) const
     {
-        if (!own_only)
-        {
-            if (const std::string worn = prefs_.title_label(title.id); !worn.empty())
-                if (const orion::Label *label = prefs_.label(worn))
-                    return label;
-        }
-        return prefs_.label(builtin_label(title).id);
+        const std::string worn = own_only ? prefs_.tab_label(home_tab(title)) : worn_label(title);
+        if (!worn.empty())
+            if (const orion::Label *label = prefs_.label(worn); label != nullptr && label->custom)
+                return label;
+        return prefs_.label(base_label(title, own_only).id);
+    }
+
+    // ORION's label a title shows under any changes: another kind's when
+    // given one (a homebrew app wearing GAME), else its own.
+    orion::LabelEntry base_label(const Title &title, bool own_only = false) const
+    {
+        const std::string worn = own_only ? prefs_.tab_label(home_tab(title)) : worn_label(title);
+        orion::LabelEntry entry;
+        if (!worn.empty() && builtin_by_id(worn, &entry))
+            return entry;
+        return builtin_label(title);
     }
 
     // The label a cover wears: ORION's, with the player's text and colours over it.
     orion::LabelEntry banner_of(const Title &title, bool own_only = false) const
     {
-        orion::LabelEntry banner = builtin_label(title);
+        orion::LabelEntry banner = base_label(title, own_only);
         if (const orion::Label *label = label_for(title, own_only))
         {
             if (!label->text.empty())
@@ -7437,13 +7555,34 @@ class Library final : public app::Concept
             return;
         const std::string worn = prefs_.title_label(menu_title_);
         std::vector<ui::MenuItem> items;
-        ui::MenuItem own = menu_item(trf("ORION's ({0})", {banner_of(*title, true).text}));
+        // Automatic: its tab's Default label, or ORION's for it.
+        ui::MenuItem own = menu_item(trf("Automatic ({0})", {banner_of(*title, true).text}));
         own.tag = kItemLabelOwn;
         own.disabled = worn.empty();
         own.shortcut = worn.empty() ? tr("Here") : "";
         items.push_back(own);
+        // ORION's labels for the console's kinds of title (GAME, PS4,
+        // HOMEBREW, MEDIA): a homebrew app can wear GAME. Systems' labels
+        // are for their own games.
+        const std::vector<orion::LabelEntry> builtins = every_label();
+        std::size_t shown = 0;
+        for (std::size_t i = 0; i < builtins.size() && shown < 4; ++i)
+        {
+            const std::string &id = builtins[i].id;
+            if (id != "ps5" && id != "ps4" && id != "homebrew" && id != "media")
+                continue;
+            ++shown;
+            const bool here = id == worn;
+            const orion::Label *changed = prefs_.label(id);
+            ui::MenuItem item = menu_item(
+                changed != nullptr && !changed->text.empty() ? changed->text : builtins[i].text);
+            item.tag = kItemLabelBuiltin + static_cast<int>(i);
+            item.disabled = here;
+            item.shortcut = here ? tr("Here") : "";
+            items.push_back(item);
+        }
         const std::vector<const orion::Label *> labels = custom_labels();
-        for (std::size_t i = 0; i < labels.size() && i < kPickPage; ++i)
+        for (std::size_t i = 0; i < labels.size() && i + shown < kPickPage; ++i)
         {
             const bool here = labels[i]->id == worn;
             ui::MenuItem item = menu_item(labels[i]->text);
@@ -7515,6 +7654,13 @@ class Library final : public app::Concept
     CaseBand case_band(const Title &title) const
     {
         CaseBand band = case_band_own(title);
+        // Another kind's label of ORION's: its text and colours on the band.
+        if (orion::LabelEntry other = base_label(title); other.id != builtin_label(title).id)
+        {
+            band.label = other.text;
+            band.fill = Color::rgb(other.fill);
+            band.ink = Color::rgb(other.ink);
+        }
         if (const orion::Label *label = label_for(title))
         {
             if (!label->text.empty())

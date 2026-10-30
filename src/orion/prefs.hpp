@@ -81,6 +81,9 @@ struct TabPrefs
     std::string view; // a view key; empty: the Library's
     bool hidden = false;
     std::string name; // the player's name for a built-in tab; empty: its own
+    // The label its titles wear when not given one of their own (a label id,
+    // ORION's or the player's); empty: each wears ORION's for it.
+    std::string label;
 };
 
 // How a tab shows its titles: covers in a grid, big cases three to a screen
@@ -151,7 +154,7 @@ struct Placement
 //     "systems": {"Nintendo - Game Boy Advance": {"enabled": true, "core": "mgba_libretro.so"}},
 //     "tab_settings": {"sys:Nintendo - Sony - PlayStation 2": {"theme": "sunset-nebula",
 //                      "cover": "portrait", "sort": "recent", "view": "cases",
-//                      "hidden": false}}
+//                      "hidden": false, "label": "l1"}}
 //
 // (Files from before tab_settings kept themes alone in "tab_themes", which is
 // still read.)
@@ -293,6 +296,10 @@ struct LibraryPrefs
     std::string tab_name(const std::string &tab) const;
     // Empty gives the tab its own name back. One line, up to kMaxTitleName.
     void set_tab_name(const std::string &tab, const std::string &name);
+    // The label a tab's titles wear by default, or empty for ORION's.
+    std::string tab_label(const std::string &tab) const;
+    // A label id (valid_label_id); anything else, empty included, clears it.
+    void set_tab_label(const std::string &tab, const std::string &label);
 
     // Titles (and games for an emulator) the player hid: they leave every
     // tab but Hidden. By item id (library::is_item_id).
@@ -326,10 +333,14 @@ struct LibraryPrefs
     const Label &add_label(const std::string &text, std::uint32_t fill, std::uint32_t ink);
     // A label of the player's, and every title wearing it, goes.
     bool remove_label(const std::string &id);
-    // The player's own label a title wears, or empty for its built-in one.
+    // The label a title was given (one of the player's or ORION's for
+    // another kind: a homebrew app can wear GAME), or empty for its own.
     std::string title_label(const std::string &id) const;
-    // An empty or unknown label id gives the title its built-in one back.
+    // An empty or invalid label id gives the title its built-in one back.
     void set_title_label(const std::string &id, const std::string &label_id);
+    // One of the player's labels, or what an id of ORION's looks like:
+    // lower-case letters and digits, at most 24 ("ps5", "homebrew", "gba").
+    bool valid_label_id(const std::string &id) const;
 };
 
 // A folder box art may live in: absolute, under /data/ or /mnt/, no "..",

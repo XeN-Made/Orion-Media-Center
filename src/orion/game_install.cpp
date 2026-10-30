@@ -269,19 +269,19 @@ class SharePackage : public PackageSource
 
 } // namespace
 
-bool read_share_head(const sys::SmbLogin &login, const std::string &path, std::size_t most,
-                     std::string *bytes)
+bool read_share_head(const sys::SmbLogin &login, const std::string &path, std::uint64_t offset,
+                     std::size_t most, std::string *bytes)
 {
     bytes->clear();
     sys::SmbFile file;
     std::string error;
-    if (!file.open(login, path, &error))
+    if (!file.open(login, path, &error) || offset >= file.size())
         return false;
-    bytes->resize(static_cast<std::size_t>(std::min<std::uint64_t>(most, file.size())));
+    bytes->resize(static_cast<std::size_t>(std::min<std::uint64_t>(most, file.size() - offset)));
     std::size_t have = 0;
     while (have < bytes->size())
     {
-        const long long got = file.read(have, bytes->data() + have, bytes->size() - have);
+        const long long got = file.read(offset + have, bytes->data() + have, bytes->size() - have);
         if (got <= 0)
             break;
         have += static_cast<std::size_t>(got);
@@ -342,11 +342,12 @@ bool ShareListing::start(sys::SmbLogin login, std::string folder)
                 if (!heads_ || entry.directory || !ends(lower(entry.path), ".pkg") ||
                     packages.size() >= 60)
                     continue;
+                const std::string path = folder.empty() ? entry.path : folder + "/" + entry.path;
                 std::string head;
                 PackageId id;
-                if (heads_(login, folder.empty() ? entry.path : folder + "/" + entry.path,
-                           kPackageHead, &head))
-                    read_package(head, &id);
+                if (heads_(login, path, 0, kPackageHead, &head) && !read_package(head, &id) &&
+                    is_ps5_package(head) && heads_(login, path, kPs5Header, kPs5HeaderSize, &head))
+                    read_ps5_header(head, &id);
                 packages[entry.path] = id;
             }
             {
@@ -399,7 +400,8 @@ bool GameInstall::start(sys::GameSource source, std::string name, std::string pl
     progress_.total = 0;
     progress_.cancel = false;
     running_ = true;
-    worker_ = std::thread(
+    progress_.note = log_;
+    const bool started = worker_.start(
         [this, source = std::move(source), place = std::move(place), name = name_]()
         {
             Result result = run(source, place, name);
@@ -410,7 +412,9 @@ bool GameInstall::start(sys::GameSource source, std::string name, std::string pl
             }
             running_ = false;
         });
-    return true;
+    if (!started)
+        running_ = false;
+    return started;
 }
 
 bool GameInstall::take_finished(Result *result)
@@ -439,6 +443,8 @@ GameInstall::Result GameInstall::run(const sys::GameSource &source, const std::s
     const bool beside = ::stat(place.c_str(), &here) == 0 && ::stat(parent.c_str(), &above) == 0 &&
                         here.st_dev == above.st_dev;
     const std::string staging = (beside ? parent : place) + "/.orion-install";
+    if (log_)
+        log_("install " + name + " into " + place + " (staging " + staging + ")");
     save::remove_tree(staging);
     if (!save::ensure_directory(staging))
     {
@@ -447,7 +453,10 @@ GameInstall::Result GameInstall::run(const sys::GameSource &source, const std::s
         return result;
     }
     std::string error;
-    if (!copy_(source, staging, &progress_, &error))
+    const bool copied = copy_(source, staging, &progress_, &error);
+    if (log_)
+        log_(copied ? std::string("install: copied") : "install: failed: " + error);
+    if (!copied)
     {
         save::remove_tree(staging);
         result.problem = progress_.cancel.load() ? Problem::stopped : Problem::copy;

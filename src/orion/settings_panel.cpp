@@ -123,6 +123,7 @@ enum : int
     kPageCover,
     kPageSort,
     kPageView,
+    kPageLabel,
     kPageCore,
     kPageRename,
     kPageLeft,
@@ -849,6 +850,35 @@ void SettingsPanel::build_tab_page(const LibraryPrefs &prefs)
         .add_choice(kPageView, tr("View"), std::move(views),
                     view.empty() ? 0 : view_index(view) + 1)
         .description = tr("Grid, Cases or List on this tab");
+    // Default label: what its titles wear unless given one of their own,
+    // ORION's labels and the player's alike.
+    {
+        std::vector<std::string> choices = {tr("Each its own")};
+        tab_label_ids_ = {""};
+        for (const LabelEntry &entry : label_entries_)
+        {
+            const Label *changed = prefs.label(entry.id);
+            choices.push_back(changed != nullptr && !changed->text.empty() ? changed->text
+                                                                           : entry.text);
+            tab_label_ids_.push_back(entry.id);
+        }
+        for (const Label &label : prefs.labels)
+        {
+            if (!label.custom)
+                continue;
+            choices.push_back(label.text);
+            tab_label_ids_.push_back(label.id);
+        }
+        const std::string chosen_label = prefs.tab_label(page_);
+        int at = 0;
+        for (std::size_t i = 1; i < tab_label_ids_.size(); ++i)
+        {
+            if (tab_label_ids_[i] == chosen_label)
+                at = static_cast<int>(i);
+        }
+        form_.add_choice(kPageLabel, tr("Default label"), std::move(choices), at).description =
+            tr("Titles on this tab wear it, unless you gave one a label of its own");
+    }
     if (system != nullptr && emulator_ != nullptr && system->cores.size() >= 2)
     {
         std::vector<std::string> cores;
@@ -1989,6 +2019,14 @@ SettingsPanel::Change SettingsPanel::edit_tab_page(int id, LibraryPrefs *prefs)
         const int index = form_.choice_index(kPageSort);
         prefs->set_tab_sort(page_, index <= 0 ? std::string()
                                               : kSortKeys[std::min(index - 1, kSortCount - 1)]);
+        return Change::prefs;
+    }
+    case kPageLabel:
+    {
+        const int index = form_.choice_index(kPageLabel);
+        prefs->set_tab_label(page_, index > 0 && index < static_cast<int>(tab_label_ids_.size())
+                                        ? tab_label_ids_[static_cast<std::size_t>(index)]
+                                        : std::string());
         return Change::prefs;
     }
     case kPageView:

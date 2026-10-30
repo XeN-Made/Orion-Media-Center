@@ -2,10 +2,14 @@
 ## New
 Network drives | Settings, Network drives: games on a Windows shared folder or a NAS (SMB) show on their systems' tabs and copy to the console the first time you play them.
 Install PS5 games | From a network drive: a game's folder, a .ffpkg or .exfat image, or a ZIP, 7z or RAR archive (in parts too), unpacked as it comes off the network, to the drive you choose.
-Background picture | Settings, Appearance: a picture of your own behind the library in place of the sky.
+Background picture | Settings, Appearance (or the setup's Look step): a picture of your own behind the library in place of the sky, from a USB drive or your screenshots saved as JPG or PNG.
 PS4 and PS5 packages | Settings, Network drives, a drive, Install from this drive: .pkg games, add-ons and updates show whether they are installed and go to the console's installer straight from the drive.
 Deutsch | ORION in German: Settings, Library, Language, or a console set to German.
-A fuller setup | The first-run setup now shows or hides each tab, makes tabs of your own, puts each game on the tab you choose and gives games labels of your own. Settings, System, Run setup again opens it any time.
+A fuller setup | Ready-made labels (CO-OP, RPG, RACING...) and your own, every tab shown or hidden with the systems under Emulators, and each game's tab and label (Square). R1 goes on to the next step from anywhere. Settings, System, Run setup again opens it any time.
+Default tab label | Settings, Tabs, a tab, Default label: its titles wear it unless you gave one a label of its own.
+Any label on any title | Options, Label: ORION's GAME, PS4, HOMEBREW and MEDIA labels as well as yours.
 ## Fixed
 Games installed on extended storage are looked for as well as the console's own.
 ORION's helper tries again when the ELF loader is not ready yet, and says so when installed games cannot be read.
+PS5 packages that keep their name further in (most add-ons) are recognised.
+A RetroArch folder named the short way (content/gba) no longer makes a second tab for its system.

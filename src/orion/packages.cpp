@@ -64,6 +64,24 @@ std::string find_content_id(std::string_view bytes)
     return {};
 }
 
+bool is_ps5_package(std::string_view head)
+{
+    return head.substr(0, 4) == std::string_view("\x7f"
+                                                 "FIH",
+                                                 4);
+}
+
+bool read_ps5_header(std::string_view header, PackageId *id)
+{
+    if (!read_package(header, id) || id->kind != PackageKind::ps4)
+    {
+        *id = PackageId();
+        return false;
+    }
+    id->kind = PackageKind::ps5;
+    return true;
+}
+
 bool read_package(std::string_view head, PackageId *id)
 {
     *id = PackageId();

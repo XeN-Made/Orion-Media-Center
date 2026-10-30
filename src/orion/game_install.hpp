@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "core/stack_thread.hpp"
 #include "orion/package_server.hpp"
 #include "orion/packages.hpp"
 #include "orion/shares.hpp"
@@ -56,11 +57,12 @@ std::vector<InstallPlace> install_places();
 
 // One folder of a share listed on a thread of its own (SMB waits on the
 // network), for the install browser: its folders first, then its files.
-// The first `most` bytes of a file on a share (a package's head).
-using ShareHeadReader = std::function<bool(const sys::SmbLogin &login, const std::string &path,
-                                           std::size_t most, std::string *bytes)>;
-bool read_share_head(const sys::SmbLogin &login, const std::string &path, std::size_t most,
-                     std::string *bytes);
+// Up to `most` bytes of a file on a share from `offset` (a package's head).
+using ShareHeadReader =
+    std::function<bool(const sys::SmbLogin &login, const std::string &path, std::uint64_t offset,
+                       std::size_t most, std::string *bytes)>;
+bool read_share_head(const sys::SmbLogin &login, const std::string &path, std::uint64_t offset,
+                     std::size_t most, std::string *bytes);
 // A package on a share, read where the installer asks (sys::SmbFile).
 std::unique_ptr<PackageSource> open_share_package(const sys::SmbLogin &login,
                                                   const std::string &path, std::string *error);
@@ -139,6 +141,12 @@ class GameInstall
 
     // False while one is going.
     bool start(sys::GameSource source, std::string name, std::string place);
+    // Each step goes to log (on the worker thread): what it did last, if
+    // the app ends while it works.
+    void set_log(std::function<void(const std::string &line)> log)
+    {
+        log_ = std::move(log);
+    }
     bool running() const
     {
         return running_.load();
@@ -170,7 +178,8 @@ class GameInstall
     Copier copy_;
     std::string name_;
     sys::CopyProgress progress_;
-    std::thread worker_;
+    std::function<void(const std::string &line)> log_;
+    StackThread worker_; // unpacking runs deep: a stack of its own size
     std::atomic<bool> running_{false};
     std::mutex mutex_;
     bool finished_ = false;
