@@ -26,15 +26,27 @@
 //     before;
 //   - InstallByPackage under ShellCore's authid before firmware 11
 //     (others are refused: 0x80B22404), SYSTEM from 11.
+//   - the whole process raised first (root, the real root folder, every
+//     capability) as ps5upload's installer does: the SYSTEM authid alone
+//     still had the installer refuse its http:// address (0x80B22404);
+//   - MetaInfo carries a zeroed tail: the installer reads 8 bytes past the
+//     six pointers, and stack leftovers there turn the install into a patch
+//     install or a refusal.
 // "started" is logged first, so a payload the loader cannot link shows as
-// one that never started.
+// one that never started. Before asking, it asks ORION's package server for
+// the same address itself, so the log tells "the server did not answer"
+// from "the installer would not take it".
 
+#include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <netinet/in.h>
 #include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <sys/socket.h>
 #include <sys/sysctl.h>
 #include <sys/stat.h>
 #include <time.h>
@@ -57,7 +69,10 @@ typedef struct
     const char *content_id;
     const char *content_name;
     const char *icon_url;
+    uint64_t read_by_the_installer; // 0 for a plain install
+    uint64_t reserved[7];
 } MetaInfo;
+_Static_assert(sizeof(MetaInfo) == 0x70, "MetaInfo carries the tail the installer reads");
 
 typedef struct
 {
@@ -141,6 +156,87 @@ static int firmware_major(void)
     return major;
 }
 
+// Root, the real root folder, the SYSTEM authid and every capability for
+// this process, as ps5upload's installer takes before any installer call.
+static int raise_self(void)
+{
+    const pid_t pid = getpid();
+    int failed = 0;
+    failed |= kernel_set_ucred_uid(pid, 0);
+    failed |= kernel_set_ucred_ruid(pid, 0);
+    failed |= kernel_set_ucred_svuid(pid, 0);
+    failed |= kernel_set_ucred_rgid(pid, 0);
+    failed |= kernel_set_ucred_svgid(pid, 0);
+    const intptr_t root = kernel_get_root_vnode();
+    if (root != 0)
+    {
+        failed |= kernel_set_proc_rootdir(pid, root);
+        failed |= kernel_set_proc_jaildir(pid, root);
+    }
+    failed |= kernel_set_ucred_authid(pid, SYSTEM_AUTHID);
+    uint8_t caps[16];
+    memset(caps, 0xff, sizeof(caps));
+    failed |= kernel_set_ucred_caps(pid, caps);
+    uint8_t attrs[32];
+    memset(attrs, 0, sizeof(attrs));
+    attrs[0] = 0x80;
+    failed |= kernel_set_ucred_attrs(pid, attrs);
+    return failed;
+}
+
+// What ORION's package server answers this address with: its status line,
+// or why there was none. The address is http://127.0.0.1:<port>/<path>.
+static void probe(const char *url, char *said, size_t size)
+{
+    snprintf(said, size, "not an address it can try");
+    const char *at = strstr(url, "127.0.0.1:");
+    if (at == NULL)
+        return;
+    at += strlen("127.0.0.1:");
+    const int port = atoi(at);
+    const char *path = strchr(at, '/');
+    if (port <= 0 || path == NULL)
+        return;
+    const int fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (fd < 0)
+    {
+        snprintf(said, size, "no socket: %d", errno);
+        return;
+    }
+    struct sockaddr_in to;
+    memset(&to, 0, sizeof(to));
+    to.sin_family = AF_INET;
+    to.sin_port = htons((uint16_t)port);
+    to.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    if (connect(fd, (const struct sockaddr *)&to, sizeof(to)) != 0)
+    {
+        snprintf(said, size, "could not connect: %d", errno);
+        close(fd);
+        return;
+    }
+    char request[600];
+    const int length =
+        snprintf(request, sizeof(request), "HEAD %s HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n", path);
+    if (length <= 0 || length >= (int)sizeof(request) ||
+        send(fd, request, (size_t)length, 0) != length)
+    {
+        snprintf(said, size, "could not send");
+        close(fd);
+        return;
+    }
+    char reply[256];
+    const ssize_t got = recv(fd, reply, sizeof(reply) - 1, 0);
+    close(fd);
+    if (got <= 0)
+    {
+        snprintf(said, size, "no answer");
+        return;
+    }
+    reply[got] = '\0';
+    reply[strcspn(reply, "\r\n")] = '\0';
+    snprintf(said, size, "%s", reply);
+}
+
 int main(void)
 {
     say("started");
@@ -170,6 +266,11 @@ int main(void)
     const pid_t self = getpid();
     const uint64_t authid = kernel_get_ucred_authid(self);
     const int firmware = firmware_major();
+    if (raise_self() != 0)
+        say("some of the process's rights could not be raised");
+    char said[256];
+    probe(url, said, sizeof(said));
+    say("the package server says: %s", said);
     // Unknown firmware: the newer rules, as most consoles run 10 or later.
     const uint64_t init_as = firmware == 0 || firmware >= 10 ? SYSTEM_AUTHID : SHELLCORE_AUTHID;
     const uint64_t install_as =
@@ -185,7 +286,14 @@ int main(void)
         kernel_set_ucred_authid(self, authid);
         return 1;
     }
-    MetaInfo meta = {url, "", "", "", name, ""};
+    static MetaInfo meta;
+    memset(&meta, 0, sizeof(meta));
+    meta.uri = url;
+    meta.ex_uri = "";
+    meta.playgo_scenario_id = "";
+    meta.content_id = "";
+    meta.content_name = name;
+    meta.icon_url = "";
     static PkgInfo info;
     static PlayGoInfo playgo;
     memset(&info, 0, sizeof(info));
