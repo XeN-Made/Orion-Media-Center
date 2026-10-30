@@ -490,6 +490,19 @@ int main(int argc, char **argv)
         if (const char *theme = std::getenv("HUI_THEME"))
             hui::save::write_atomic(data_root + "/theme.json",
                                     std::string("{\"base\": \"") + theme + "\"}\n");
+        // HUI_BACKGROUND=<file>: the player's own background picture (a PNG,
+        // JPEG or a GIF that moves), as if chosen in Settings; none otherwise.
+        for (const char *kind : {".png", ".jpg", ".jpeg", ".webp", ".gif"})
+            std::remove((data_root + "/background" + kind).c_str());
+        if (const char *background = std::getenv("HUI_BACKGROUND"))
+        {
+            std::string bytes;
+            const std::string file = background;
+            if (hui::save::read_file(file, &bytes, 32u << 20) &&
+                file.rfind('.') != std::string::npos)
+                hui::save::write_atomic(data_root + "/background" + file.substr(file.rfind('.')),
+                                        bytes);
+        }
         if (const char *prefs = std::getenv("HUI_PREFS"))
             hui::save::write_atomic(data_root + "/library.json", std::string(prefs) + "\n");
         // The emulators' games, with the folders HUI_PREFS names.

@@ -78,6 +78,7 @@ enum : int
     kSaveTheme,
     kOwnBackground,
     kClearBackground,
+    kPictureEffect,
     kNewTab,
     kArtAuto,
     kReturn,
@@ -1517,11 +1518,19 @@ void SettingsPanel::build_appearance(const Look &look, const LibraryPrefs &prefs
     ui::FormRow &picture = form_.add_action(kOwnBackground, tr("Background picture"));
     picture.chevron = true;
     picture.text = own_background_ ? tr("Your picture") : tr("None");
-    picture.description =
-        tr("A PNG, JPEG or WebP of your own behind the library, in place of the drawn sky");
+    picture.description = tr("A PNG, JPEG or WebP of your own behind the library, in place of the "
+                             "drawn sky; a GIF or WebP that moves plays over and over");
     if (own_background_)
+    {
+        form_
+            .add_choice(
+                kPictureEffect, tr("Effect over your picture"),
+                i18n::tr_range(kPictureEffectNames, kPictureEffectNames + kPictureEffectCount),
+                picture_effect_index(prefs.picture_effect))
+            .description = tr("Snow, rain or fireflies drifting over your background picture");
         form_.add_action(kClearBackground, tr("Use the sky")).description =
             tr("Your picture goes; game backgrounds still show over the sky");
+    }
     ui::FormRow &save = form_.add_action(kSaveTheme, tr("Save as new theme"));
     save.description =
         tr("Keeps this look as a theme file in /data/orion/themes, to reuse or share");
@@ -1959,6 +1968,10 @@ SettingsPanel::Change SettingsPanel::handle(const InputFrame &input, ui::Feedbac
         return Change::prefs;
     case kBackgroundStrength:
         prefs->background_strength = form_.slider_value(kBackgroundStrength) / 100.0f;
+        return Change::prefs;
+    case kPictureEffect:
+        prefs->picture_effect = kPictureEffects[std::clamp(form_.choice_index(kPictureEffect), 0,
+                                                           kPictureEffectCount - 1)];
         return Change::prefs;
     case kArtFolder:
     {

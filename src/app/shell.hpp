@@ -7,14 +7,17 @@
 #include "app/concept.hpp"
 #include "core/tween.hpp"
 
+#include "library/animation.hpp"
 #include "library/icon.hpp"
 
 #include <atomic>
 #include <cstddef>
+#include <deque>
 #include <memory>
 #include <mutex>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 namespace hui::gfx
@@ -175,15 +178,33 @@ class Shell
     {
         std::thread worker;
         std::atomic<bool> busy{false};
+        std::atomic<bool> cancel{false}; // another picture is wanted: the worker stops
         std::mutex mutex;
         std::string decoding; // what the worker was asked for (path and version)
         library::Image image; // what it made, waiting for compose()
         std::string made;     // ... and for which request
         bool ready = false;
-        std::string shown;         // the request the texture holds
-        std::uint32_t retired = 0; // freed a frame later: lists may still use it
+        // A picture that moves (library/animation.hpp): the worker queues
+        // its frames (and their delays) as it decodes them, compose() makes
+        // each a texture and lets its pixels go.
+        bool moving = false;
+        bool moving_done = false; // the worker queued its last frame
+        std::deque<std::pair<library::Image, int>> frames;
+        std::size_t frame_bytes = 0; // the pixels waiting in frames
+        // The main thread's side, no lock: the frames' textures so far and
+        // which shows (advanced by update()).
+        std::vector<std::uint32_t> textures;
+        library::AnimationClock clock;
+        std::string shown;                  // the request the texture holds
+        std::vector<std::uint32_t> retired; // freed a frame later: lists may still use them
     };
-    void load_picture(PictureLoad &load, const std::string &path, int version, int size);
+    // may_move: an animated GIF or WebP plays (the player's own background);
+    // otherwise its first frame is the picture.
+    void load_picture(PictureLoad &load, const std::string &path, int version, int size,
+                      bool may_move);
+    static bool stream_frames(PictureLoad &load, const std::string &bytes,
+                              const library::AnimationPlan &plan, const std::string &wanted,
+                              bool bounded);
     // Uploads what was made; with let_go, frees the texture instead.
     void upload_picture(PictureLoad &load, gfx::Renderer &renderer, bool let_go,
                         std::uint32_t *texture, float *aspect);

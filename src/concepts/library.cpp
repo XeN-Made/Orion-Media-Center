@@ -15,6 +15,7 @@
 
 #include "core/save_file.hpp"
 #include "core/tween.hpp"
+#include "library/animation.hpp"
 #include "library/art_match.hpp"
 #include "library/case_templates.hpp"
 #include "library/emulators.hpp"
@@ -45,6 +46,7 @@
 #include "orion/drives.hpp"
 #include "orion/title_details.hpp"
 #include "orion/updates.hpp"
+#include "orion/weather.hpp"
 #include "orion/whats_new.hpp"
 #include "platform/ps5/system.hpp"
 #include "ui/components/carousel.hpp"
@@ -262,6 +264,10 @@ constexpr const char *kTechniques[] = {
 };
 
 constexpr app::TourStep kTour[] = {
+    // The background as it is; with a picture of the player's
+    // (HUI_BACKGROUND) and an effect (HUI_PREFS), the weather twice, moving.
+    {0.3f, 0, Direction::none, "wallpaper"},
+    {0.5f, 0, Direction::none, "wallpaper-later"},
     {0.5f, 0, Direction::right},
     {0.2f, 0, Direction::right},
     {0.2f, 0, Direction::right},
@@ -1031,6 +1037,12 @@ class Library final : public app::Concept
         }
         age_ += dt;
         clock_ += dt;
+        // The weather falls only over the player's own picture, never the sky.
+        weather_.set_kind(context_.wallpaper_texture != 0 && !context_.wallpaper_path.empty()
+                              ? static_cast<orion::Weather::Kind>(
+                                    orion::picture_effect_index(prefs_.picture_effect))
+                              : orion::Weather::Kind::none);
+        weather_.update(dt, context_.settings.reduced_motion || !shown_.motion);
         // A message waiting (the new title ID), once nothing else is up.
         if (!info_title_.empty() && clock_ > 1.5f && !dialog_.is_open() && !setup_.is_open() &&
             !settings_.is_open() && !menu_.is_open() && typing_ == Typing::none)
@@ -1230,7 +1242,10 @@ class Library final : public app::Concept
             frame.glass = true;
         }
         if (own)
+        {
             draw_wallpaper(frame.scene);
+            weather_.draw(frame.scene);
+        }
         draw_backdrop(frame.scene);
 
         gfx::DrawList &list = frame.overlay;
@@ -4277,9 +4292,10 @@ class Library final : public app::Concept
                 };
                 if (entry.directory)
                     pick_dirs_.push_back(entry.name);
-                else if (picking_music_ ? ends(".ogg") || ends(".at9")
-                                        : ends(".png") || ends(".jpg") || ends(".jpeg") ||
-                                              (picking_background_ && ends(".webp")))
+                else if (picking_music_
+                             ? ends(".ogg") || ends(".at9")
+                             : ends(".png") || ends(".jpg") || ends(".jpeg") ||
+                                   (picking_background_ && (ends(".webp") || ends(".gif"))))
                     pick_files_.push_back(entry.name);
             }
             std::sort(pick_dirs_.begin(), pick_dirs_.end());
@@ -4472,7 +4488,8 @@ class Library final : public app::Concept
     // the title (library::apply_custom_art).
     // The player's own background: <state>/background.<kind>, put there from
     // Settings or by hand (FTP). The first kind found is the one shown.
-    static constexpr const char *kBackgroundKinds[] = {".png", ".jpg", ".jpeg", ".webp"};
+    // A GIF (or a WebP) that moves plays over and over (library/animation.hpp).
+    static constexpr const char *kBackgroundKinds[] = {".png", ".jpg", ".jpeg", ".webp", ".gif"};
 
     std::string background_file() const
     {
@@ -4517,13 +4534,53 @@ class Library final : public app::Concept
 
     void choose_background(const std::string &file, app::Feedback &feedback)
     {
-        std::string bytes;
-        library::Image probe;
-        if (!save::read_file(file, &bytes, 32u << 20) || bytes.empty() ||
-            !library::decode_png(bytes, 64, &probe))
+        const auto refuse = [&](const std::string &why)
         {
-            show_note(false, trf("Could not read {0}", {file}));
+            show_note(false, why);
             feedback.play(audio::Cue::error);
+        };
+        struct stat info = {};
+        if (::stat(file.c_str(), &info) == 0 &&
+            static_cast<std::size_t>(info.st_size) > library::kAnimationFile)
+        {
+            refuse(trf("{0} is over 32 MB: too large for a background", {file}));
+            return;
+        }
+        std::string bytes;
+        if (!save::read_file(file, &bytes, library::kAnimationFile) || bytes.empty())
+        {
+            refuse(trf("Could not read {0}", {file}));
+            return;
+        }
+        // One that moves must fit the frame caps, and its first frame must
+        // decode (a WebP that moves needs the console's libwebp).
+        library::AnimationInfo moving;
+        library::AnimationPlan plan;
+        library::Image probe;
+        int delay = 0;
+        if (library::probe_animation(bytes, &moving))
+        {
+            switch (library::plan_animation(moving, &plan))
+            {
+            case library::AnimationRefusal::canvas:
+                refuse(trf("{0} is too large to move: at most 1920 x 1080", {file}));
+                return;
+            case library::AnimationRefusal::length:
+                refuse(trf("{0} has too many frames to keep: make it shorter or smaller", {file}));
+                return;
+            case library::AnimationRefusal::none:
+                break;
+            }
+            library::AnimationDecoder decoder;
+            if (!decoder.open(bytes, plan.factor) || !decoder.next(&probe, &delay))
+            {
+                refuse(trf("Could not read {0}", {file}));
+                return;
+            }
+        }
+        else if (!library::decode_png(bytes, 64, &probe))
+        {
+            refuse(trf("Could not read {0}", {file}));
             return;
         }
         std::string extension = file.substr(file.rfind('.'));
@@ -4545,7 +4602,8 @@ class Library final : public app::Concept
         setup_.set_background(true);
         if (setup_.is_open())
             setup_.refresh(look_, prefs_);
-        show_note(true, tr("Your picture is the background now"));
+        show_note(true, moving.frames > 0 ? tr("Your moving picture is the background now")
+                                          : tr("Your picture is the background now"));
         feedback.play(audio::Cue::saved);
     }
 
@@ -8508,6 +8566,7 @@ class Library final : public app::Concept
     tween::Spring launch_card_;
     float age_ = 0.0f;
     float clock_ = 0.0f;
+    orion::Weather weather_;  // over the player's own picture (prefs_.picture_effect)
     bool art_manual_ = false; // the run was asked for in Settings: report it
     int art_sweep_ = 0;       // frames until the covers take new textures
     int generation_ = 0;      // the library's, as last rebuilt for

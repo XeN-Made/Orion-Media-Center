@@ -6,6 +6,8 @@
 
 #include "gfx/renderer.hpp"
 
+#include <algorithm>
+
 namespace hui::app
 {
 
@@ -18,36 +20,69 @@ constexpr float kSlide = 90.0f;
 void Shell::upload_picture(PictureLoad &load, gfx::Renderer &renderer, bool let_go,
                            std::uint32_t *texture, float *aspect)
 {
-    if (load.retired != 0)
+    // A moving picture's frames go up a few at a time, while its first
+    // already shows: about 4 MB of pixels a frame keeps each upload short.
+    constexpr std::size_t kUploadBytes = 4u << 20;
+    for (const std::uint32_t old : load.retired)
+        renderer.batch().delete_texture(old);
+    load.retired.clear();
+    const auto retire = [&]
     {
-        renderer.batch().delete_texture(load.retired);
-        load.retired = 0;
-    }
+        if (load.textures.empty() && *texture != 0)
+            load.retired.push_back(*texture);
+        load.retired.insert(load.retired.end(), load.textures.begin(), load.textures.end());
+        load.textures.clear();
+        load.clock = library::AnimationClock();
+        *texture = 0;
+    };
     if (let_go)
     {
         // Let go: the texture goes, and the same picture asked for again
         // is read again.
-        if (*texture != 0)
-            load.retired = *texture;
-        *texture = 0;
+        retire();
         if (!load.busy.load())
             load.decoding.clear();
+        const std::lock_guard<std::mutex> lock(load.mutex);
+        load.frames.clear();
+        load.frame_bytes = 0;
+        load.ready = false;
         return;
     }
-    const std::lock_guard<std::mutex> lock(load.mutex);
-    if (!load.ready)
-        return;
-    load.ready = false;
-    load.retired = *texture;
-    *texture = 0;
-    if (!load.image.rgba.empty())
     {
-        *texture = renderer.batch().create_texture(load.image.width, load.image.height,
-                                                   load.image.rgba.data());
-        *aspect = static_cast<float>(load.image.width) / static_cast<float>(load.image.height);
+        const std::lock_guard<std::mutex> lock(load.mutex);
+        if (load.ready)
+        {
+            load.ready = false;
+            retire();
+            if (!load.moving && !load.image.rgba.empty())
+            {
+                *texture = renderer.batch().create_texture(load.image.width, load.image.height,
+                                                           load.image.rgba.data());
+                *aspect =
+                    static_cast<float>(load.image.width) / static_cast<float>(load.image.height);
+            }
+            load.shown = load.made;
+            load.image = library::Image();
+        }
+        if (load.moving)
+        {
+            std::size_t sent = 0;
+            while (!load.frames.empty() && sent < kUploadBytes)
+            {
+                const library::Image &frame = load.frames.front().first;
+                load.textures.push_back(
+                    renderer.batch().create_texture(frame.width, frame.height, frame.rgba.data()));
+                load.clock.delays.push_back(load.frames.front().second);
+                *aspect = static_cast<float>(frame.width) / static_cast<float>(frame.height);
+                sent += frame.rgba.size();
+                load.frame_bytes -= frame.rgba.size();
+                load.frames.pop_front();
+            }
+            load.clock.complete = load.moving_done && load.frames.empty();
+        }
     }
-    load.shown = load.made;
-    load.image = library::Image();
+    if (!load.textures.empty())
+        *texture = load.textures[std::min(load.clock.frame, load.textures.size() - 1)];
 }
 
 void Shell::upload_backdrop(gfx::Renderer &renderer)

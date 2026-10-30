@@ -3,6 +3,8 @@
 Network drives | Settings, Network drives: games on a Windows shared folder or a NAS (SMB) show on their systems' tabs and copy to the console the first time you play them.
 Install PS5 games | From a network drive: a game's folder, a .ffpkg or .exfat image, or a ZIP, 7z or RAR archive (in parts too), unpacked as it comes off the network, to the drive you choose.
 Background picture | Settings, Appearance (or the setup's Look step): a picture of your own behind the library in place of the sky, from a USB drive or your screenshots saved as JPG or PNG.
+Weather over your picture | Settings, Appearance (or the setup's Look step), Effect over your picture: snow, rain or fireflies drift over your own background.
+Moving backgrounds | A GIF or WebP that moves can be your background and plays over and over; long or large ones are shown smaller to fit the console's memory.
 PS4 and PS5 packages | Settings, Network drives, a drive, Install from this drive: .pkg games, add-ons and updates show whether they are installed and go to the console's installer straight from the drive.
 Deutsch | ORION in German: Settings, Library, Language, or a console set to German.
 A fuller setup | Ready-made labels (CO-OP, RPG, RACING...) and your own, every tab shown or hidden with the systems under Emulators, and each game's tab and label (Square). R1 goes on to the next step from anywhere. Settings, System, Run setup again opens it any time.

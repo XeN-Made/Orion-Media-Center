@@ -63,6 +63,17 @@ fonts are baked offline; sounds are decoded at launch.
 recording allocates nothing once the lists have grown. Avoid building many
 `std::string`s per frame; format numbers with `snprintf` into a stack buffer.
 
+**Pictures that move are textures, not video.** A moving background
+(`library/animation.hpp`) is decoded once, on a worker thread, one frame at
+a time; each frame is shrunk to fit (at most 1280 on a side, 64 MB of frames
+in all, refused when that would leave them under 320), queued (at most 8 MB
+waiting, since the app's heap is fixed), uploaded about 4 MB a frame and its
+pixels let go. Playing it then only changes which texture one image uses:
+no decoding and no uploads on the frame. The weather over the player's
+picture (`orion/weather.hpp`) is at most 480 SDF shapes in the scene's one
+run, laid out in the virtual canvas, so 4K costs no more than 1080p. Neither
+has been timed on a console yet.
+
 **Frame time, not frame count.** Animation advances by measured time, clamped
 to 50 ms, so a hitch (a system notification, a screenshot) costs one late
 frame and no visible jump.

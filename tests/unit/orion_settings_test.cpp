@@ -181,7 +181,8 @@ TEST_F(OrionSettings, ALabelsPageChangesItsColours)
 }
 
 // Appearance, near its end: Background picture asks the screen for a
-// picture; with one set, Use the sky takes it away.
+// picture; with one set, Use the sky takes it away and an effect can fall
+// over it.
 TEST_F(OrionSettings, ABackgroundPictureIsChosenAndTakenAway)
 {
     for (const bool own : {false, true})
@@ -203,6 +204,11 @@ TEST_F(OrionSettings, ABackgroundPictureIsChosenAndTakenAway)
         {
             EXPECT_EQ(send_to(panel, press(Action::confirm)),
                       SettingsPanel::Change::clear_background);
+            // Effect over your picture, just above: right picks the next one.
+            send_to(panel, nav(Direction::up));
+            EXPECT_EQ(prefs_.picture_effect, "none");
+            EXPECT_EQ(send_to(panel, nav(Direction::right)), SettingsPanel::Change::prefs);
+            EXPECT_EQ(prefs_.picture_effect, "snow");
             send_to(panel, nav(Direction::up));
         }
         EXPECT_EQ(send_to(panel, press(Action::confirm)), SettingsPanel::Change::choose_background);

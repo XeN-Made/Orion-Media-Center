@@ -11,6 +11,7 @@
 #include "ui/motion.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cstdio>
 
 namespace hui::app
@@ -117,25 +118,103 @@ Shell::~Shell()
 {
     for (PictureLoad *load : {&backdrop_, &wallpaper_})
     {
+        load->cancel = true; // a worker waiting for room in its queue stops
         if (load->worker.joinable())
             load->worker.join();
     }
 }
 
-void Shell::load_picture(PictureLoad &load, const std::string &path, int version, int size)
+bool Shell::stream_frames(PictureLoad &load, const std::string &bytes,
+                          const library::AnimationPlan &plan, const std::string &wanted,
+                          bool bounded)
+{
+    // On the console the worker waits while this much is queued: the app's
+    // heap is a fixed 128 MiB, and each frame leaves it once uploaded.
+    constexpr std::size_t kQueued = 8u << 20;
+    library::AnimationDecoder decoder;
+    library::Image frame;
+    int delay = 0;
+    if (!decoder.open(bytes, plan.factor) || !decoder.next(&frame, &delay))
+        return false;
+    {
+        const std::lock_guard<std::mutex> lock(load.mutex);
+        load.image = library::Image();
+        load.moving = true;
+        load.moving_done = false;
+        load.made = wanted;
+        load.ready = true;
+        // The first frame with the news, so compose() never has a frame
+        // with neither the old picture nor the new one.
+        load.frame_bytes += frame.rgba.size();
+        load.frames.emplace_back(std::move(frame), delay);
+    }
+    int count = 1;
+    while (count < library::kAnimationFrames && !load.cancel.load() && decoder.next(&frame, &delay))
+    {
+        while (bounded && !load.cancel.load())
+        {
+            {
+                const std::lock_guard<std::mutex> lock(load.mutex);
+                if (load.frame_bytes < kQueued)
+                    break;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(4));
+        }
+        if (load.cancel.load())
+            break;
+        const std::lock_guard<std::mutex> lock(load.mutex);
+        load.frame_bytes += frame.rgba.size();
+        load.frames.emplace_back(std::move(frame), delay);
+        ++count;
+    }
+    {
+        const std::lock_guard<std::mutex> lock(load.mutex);
+        load.moving_done = true;
+    }
+    const std::string note = "backdrop moving: " + std::to_string(plan.width) + "x" +
+                             std::to_string(plan.height) + ", " + std::to_string(count) +
+                             " frames" + (load.cancel.load() ? " (stopped)" : "");
+    sys::art_trace(note.c_str());
+    return true;
+}
+
+void Shell::load_picture(PictureLoad &load, const std::string &path, int version, int size,
+                         bool may_move)
 {
     const std::string wanted = path + "\n" + std::to_string(version);
+    // A moving picture decodes for as long as it has frames: a new choice
+    // (or none) stops it rather than waiting for it.
+    if (load.busy.load() && wanted != load.decoding)
+        load.cancel = true;
     if (path.empty() || wanted == load.decoding || load.busy.load())
         return;
     if (load.worker.joinable())
         load.worker.join();
     load.decoding = wanted;
+    load.cancel = false;
+    {
+        const std::lock_guard<std::mutex> lock(load.mutex);
+        load.frames.clear();
+        load.frame_bytes = 0;
+    }
     load.busy = true;
-    const auto work = [&load, path, wanted, size]
+    const bool bounded = sys::on_console();
+    const auto work = [&load, path, wanted, size, may_move, bounded]
     {
         std::string bytes;
         library::Image image;
-        const bool read = save::read_file(path, &bytes, 32u << 20);
+        const bool read = save::read_file(path, &bytes, library::kAnimationFile);
+        library::AnimationInfo info;
+        library::AnimationPlan plan;
+        // One that cannot fit the caps (library/animation.hpp) shows its
+        // first frame, still; ORION's picture browser refuses those anyway.
+        if (read && may_move && library::probe_animation(bytes, &info) &&
+            library::plan_animation(info, &plan) == library::AnimationRefusal::none &&
+            stream_frames(load, bytes, plan, wanted, bounded))
+        {
+            load.busy = false;
+            return;
+        }
         const bool ok = read && library::decode_png(bytes, size, &image);
         // Which pictures came in, in the console's step log.
         const std::string note =
@@ -147,14 +226,16 @@ void Shell::load_picture(PictureLoad &load, const std::string &path, int version
         {
             const std::lock_guard<std::mutex> lock(load.mutex);
             load.image = ok ? std::move(image) : library::Image();
+            load.moving = false;
             load.made = wanted;
             load.ready = true;
         }
         load.busy = false;
     };
     // On a PC the tour runs faster than the clock: load on the spot there, so
-    // pictures and tests see the same thing every time.
-    if (sys::on_console())
+    // pictures and tests see the same thing every time (every frame of a
+    // moving picture queued at once: a PC's memory has room).
+    if (bounded)
         load.worker = std::thread(work);
     else
         work();
@@ -165,8 +246,8 @@ void Shell::load_backdrop()
     // Home-screen pictures are 3840 x 2160: a third of that is enough under
     // a veil, and a sixth of the memory. The player's own picture is shown
     // whole, so it keeps the screen's size.
-    load_picture(backdrop_, context_.backdrop_path, 0, 1280);
-    load_picture(wallpaper_, context_.wallpaper_path, context_.wallpaper_version, 1920);
+    load_picture(backdrop_, context_.backdrop_path, 0, 1280, false);
+    load_picture(wallpaper_, context_.wallpaper_path, context_.wallpaper_version, 1920, true);
 }
 
 void Shell::update(const InputFrame &input, float dt)
@@ -217,6 +298,8 @@ void Shell::update(const InputFrame &input, float dt)
     }
     concepts_[current_]->update(forwarded, dt, feedback_);
     load_backdrop();
+    // A moving background holds its first frame for reduced motion.
+    wallpaper_.clock.advance(settings_.reduced_motion ? 0.0f : dt);
 
     if (context_.settings_changed)
     {

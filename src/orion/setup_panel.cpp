@@ -46,6 +46,7 @@ enum : int
     kNoGames,
     kBackground,
     kClearBackground,
+    kPictureEffect,
     kEmulatorRow = 100, // + the emulator's index, or a missing one's past them
     kPresetRow = 500,   // + the ready-made label's index in kPresets
     kOwnLabelRow = 600, // + the label's index in prefs.labels
@@ -304,8 +305,16 @@ void SetupPanel::build(const Look &look, const LibraryPrefs &prefs)
         picture.description =
             tr("A picture of yours behind the library: a USB drive, or your screenshots");
         if (own_background_)
+        {
+            form_
+                .add_choice(
+                    kPictureEffect, tr("Effect over your picture"),
+                    i18n::tr_range(kPictureEffectNames, kPictureEffectNames + kPictureEffectCount),
+                    picture_effect_index(prefs.picture_effect))
+                .description = tr("Snow, rain or fireflies drifting over your background picture");
             form_.add_action(kClearBackground, tr("Use the sky")).description =
                 tr("The galaxy behind the library again");
+        }
         next(tr("Continue"), tr("Colours, glass and more are in Settings, Appearance"));
         break;
     }
@@ -637,6 +646,10 @@ SetupPanel::Change SetupPanel::handle(const InputFrame &input, ui::Feedback &fee
     }
     case kGameBackgrounds:
         prefs->game_backgrounds = form_.toggle_value(id);
+        return Change::prefs;
+    case kPictureEffect:
+        prefs->picture_effect =
+            kPictureEffects[std::clamp(form_.choice_index(id), 0, kPictureEffectCount - 1)];
         return Change::prefs;
     case kGroup:
         prefs->group_systems = form_.toggle_value(id);
