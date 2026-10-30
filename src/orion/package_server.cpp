@@ -11,6 +11,7 @@
 #include <chrono>
 #include <cstdlib>
 #include <cstring>
+#include <ctime>
 #include <netinet/in.h>
 #include <poll.h>
 #include <sys/socket.h>
@@ -93,7 +94,55 @@ std::string header_value(const std::string &head, const char *name)
     return head.substr(start, end == std::string::npos ? std::string::npos : end - start);
 }
 
+// A date as HTTP writes it: "Wed, 01 Jan 2025 00:00:00 GMT".
+std::string http_date(std::time_t when)
+{
+    std::tm parts = {};
+    gmtime_r(&when, &parts);
+    char text[64];
+    const std::size_t size = std::strftime(text, sizeof(text), "%a, %d %b %Y %H:%M:%S GMT", &parts);
+    return std::string(text, size);
+}
+
+// Sony's installer is answered as ps5upload's server answers it: a Date, and a
+// Last-Modified that never changes (a package that seems to change between
+// ranges is read again from the start).
+constexpr std::time_t kFixedModified = 1735689600; // 2025-01-01
+
 } // namespace
+
+std::string request_path(const std::string &line)
+{
+    const std::size_t space = line.find(' ');
+    if (space == std::string::npos)
+        return {};
+    const std::size_t end = line.find(' ', space + 1);
+    std::string target =
+        line.substr(space + 1, end == std::string::npos ? std::string::npos : end - space - 1);
+    const std::size_t scheme = target.find("://");
+    if (scheme != std::string::npos)
+    {
+        const std::size_t path = target.find('/', scheme + 3);
+        target = path == std::string::npos ? std::string("/") : target.substr(path);
+    }
+    const std::size_t query = target.find_first_of("?#");
+    if (query != std::string::npos)
+        target.erase(query);
+    return target;
+}
+
+std::vector<std::string> PackageServer::requests() const
+{
+    const std::lock_guard<std::mutex> lock(requests_mutex_);
+    return requests_;
+}
+
+void PackageServer::note_request(const std::string &line, const std::string &answer)
+{
+    const std::lock_guard<std::mutex> lock(requests_mutex_);
+    if (requests_.size() < 24)
+        requests_.push_back(line.substr(0, 200) + " -> " + answer);
+}
 
 bool parse_range(const std::string &header, std::uint64_t size, std::uint64_t *first,
                  std::uint64_t *last)
@@ -162,6 +211,10 @@ bool PackageServer::start(std::string token, std::uint64_t size, PackageOpener o
         return false;
     }
     token_ = std::move(token);
+    {
+        const std::lock_guard<std::mutex> lock(requests_mutex_);
+        requests_.clear();
+    }
     size_ = size;
     port_ = port;
     open_ = std::move(open);
@@ -238,13 +291,19 @@ void PackageServer::serve(int client)
         const std::string line = head.substr(0, line_end);
         const bool get = line.rfind("GET ", 0) == 0;
         const bool only_head = line.rfind("HEAD ", 0) == 0;
-        const std::string path = "/" + token_ + "/package.pkg";
-        if ((!get && !only_head) || line.find(" " + path + " ") == std::string::npos)
+        std::string closing = header_value(head, "connection");
+        for (char &c : closing)
+            c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        const bool keep = closing.find("close") == std::string::npos;
+        if ((!get && !only_head) || request_path(line) != "/" + token_ + "/package.pkg")
         {
-            const std::string answer =
-                "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
-            send_all(client, answer.data(), answer.size());
-            break;
+            note_request(line, "404");
+            const std::string answer = std::string("HTTP/1.1 404 Not Found\r\nContent-Length: "
+                                                   "0\r\nConnection: ") +
+                                       (keep ? "keep-alive" : "close") + "\r\n\r\n";
+            if (!send_all(client, answer.data(), answer.size()) || !keep)
+                break;
+            continue;
         }
         std::uint64_t first = 0;
         std::uint64_t last = size_ == 0 ? 0 : size_ - 1;
@@ -252,27 +311,36 @@ void PackageServer::serve(int client)
         const bool ranged = !range.empty() && parse_range(range, size_, &first, &last);
         if (!range.empty() && !ranged)
         {
+            note_request(line, "416 (" + range + ")");
             const std::string answer =
                 "HTTP/1.1 416 Range Not Satisfiable\r\nContent-Range: bytes */" +
-                std::to_string(size_) + "\r\nContent-Length: 0\r\n\r\n";
+                std::to_string(size_) + "\r\nAccept-Ranges: bytes\r\nContent-Length: 0\r\n\r\n";
             if (!send_all(client, answer.data(), answer.size()))
                 break;
             continue;
         }
+        note_request(line, ranged ? "206 " + std::to_string(first) + "-" + std::to_string(last)
+                                  : std::string("200"));
         const std::uint64_t length = size_ == 0 ? 0 : last - first + 1;
         std::string answer =
             std::string(ranged ? "HTTP/1.1 206 Partial Content\r\n" : "HTTP/1.1 200 OK\r\n") +
-            "Content-Type: application/octet-stream\r\nAccept-Ranges: bytes\r\n"
+            "Date: " + http_date(std::time(nullptr)) +
+            "\r\nLast-Modified: " + http_date(kFixedModified) +
+            "\r\nContent-Type: application/octet-stream\r\nAccept-Ranges: bytes\r\n"
             "Content-Length: " +
             std::to_string(length) + "\r\n";
         if (ranged)
             answer += "Content-Range: bytes " + std::to_string(first) + "-" + std::to_string(last) +
                       "/" + std::to_string(size_) + "\r\n";
-        answer += "\r\n";
+        answer += std::string("Connection: ") + (keep ? "keep-alive" : "close") + "\r\n\r\n";
         if (!send_all(client, answer.data(), answer.size()))
             break;
         if (only_head || length == 0)
+        {
+            if (!keep)
+                break;
             continue;
+        }
         if (!source)
         {
             source = open_(&error);
@@ -295,7 +363,7 @@ void PackageServer::serve(int client)
             sent_ += static_cast<std::uint64_t>(got);
             last_ms_ = now_ms();
         }
-        if (!ok || stopping_.load())
+        if (!ok || stopping_.load() || !keep)
             break;
     }
     ::close(client);

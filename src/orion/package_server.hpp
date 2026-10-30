@@ -69,8 +69,13 @@ class PackageServer
     {
         return connections_.load();
     }
+    // The first requests and what each was answered ("GET /t1/package.pkg
+    // HTTP/1.1 -> 206 0-65535"), for the install log: when the installer
+    // refuses an address, they say what it asked for.
+    std::vector<std::string> requests() const;
 
   private:
+    void note_request(const std::string &line, const std::string &answer);
     void listen_loop(int listener);
     void serve(int client);
 
@@ -87,7 +92,14 @@ class PackageServer
     std::thread listener_thread_;
     std::mutex clients_mutex_;
     std::vector<std::thread> clients_;
+    mutable std::mutex requests_mutex_;
+    std::vector<std::string> requests_;
 };
+
+// The path a request line asks for: "/t1/package.pkg" from "GET
+// /t1/package.pkg?x=1 HTTP/1.1" or from "GET http://127.0.0.1:9063/t1/package.pkg
+// HTTP/1.1" (an absolute address, which HTTP/1.1 servers must take).
+std::string request_path(const std::string &line);
 
 // The parts of a Range header: "bytes=100-199" (both), "bytes=100-"
 // (from), "bytes=-100" (the last 100). False when there is none to

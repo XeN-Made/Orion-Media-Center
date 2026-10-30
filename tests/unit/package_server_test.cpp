@@ -140,4 +140,30 @@ TEST(PackageServer, ServesTheOnePackageInRanges)
     EXPECT_FALSE(server.running());
 }
 
+TEST(PackageServer, TakesAnAbsoluteAddressAndSaysWhatItWasAsked)
+{
+    using hui::orion::request_path;
+    EXPECT_EQ(request_path("GET /t1/package.pkg HTTP/1.1"), "/t1/package.pkg");
+    EXPECT_EQ(request_path("GET /t1/package.pkg?x=1 HTTP/1.1"), "/t1/package.pkg");
+    EXPECT_EQ(request_path("GET http://127.0.0.1:9063/t1/package.pkg HTTP/1.1"), "/t1/package.pkg");
+    EXPECT_EQ(request_path("GET http://127.0.0.1:9063 HTTP/1.1"), "/");
+    EXPECT_EQ(request_path("nonsense"), "");
+
+    PackageServer server;
+    ASSERT_TRUE(server.start(
+        "t7", 100, [](std::string *) { return std::make_unique<Pattern>(100); }, kPort));
+    const std::string head = ask("HEAD http://127.0.0.1:19063/t7/package.pkg HTTP/1.1\r\n");
+    EXPECT_EQ(head.rfind("HTTP/1.1 200 OK", 0), 0u);
+    EXPECT_NE(head.find("Last-Modified: Wed, 01 Jan 2025 00:00:00 GMT"), std::string::npos);
+    EXPECT_NE(head.find("Date: "), std::string::npos);
+    ask("GET /t7/package.pkg.crc HTTP/1.1\r\n");
+    ask("GET /t7/package.pkg HTTP/1.1\r\nRange: bytes=10-19\r\n");
+    const std::vector<std::string> requests = server.requests();
+    ASSERT_EQ(requests.size(), 3u);
+    EXPECT_EQ(requests[0], "HEAD http://127.0.0.1:19063/t7/package.pkg HTTP/1.1 -> 200");
+    EXPECT_EQ(requests[1], "GET /t7/package.pkg.crc HTTP/1.1 -> 404");
+    EXPECT_EQ(requests[2], "GET /t7/package.pkg HTTP/1.1 -> 206 10-19");
+    server.stop();
+}
+
 } // namespace
