@@ -2255,6 +2255,8 @@ class Library final : public app::Concept
     void open_place_menu(app::Feedback &feedback)
     {
         install_places_ = orion::install_places();
+        orion::log_share(context_.library.state_dir,
+                         "install: " + std::to_string(install_places_.size()) + " place(s)");
         if (install_places_.empty())
         {
             show_note(false, tr("No drive to install to"));
@@ -2337,6 +2339,8 @@ class Library final : public app::Concept
                 install_package(on_share(entry.path), entry, package->second, feedback);
                 return true;
             }
+            // Each step to shares.txt: an install that ends ORION says how far it got.
+            orion::log_share(context_.library.state_dir, "install: chose " + on_share(entry.path));
             install_source_ = sys::GameSource();
             install_source_.kind = orion::install_kind(entry.path);
             // An archive is named for its game; an image keeps its file's name.
@@ -2360,6 +2364,9 @@ class Library final : public app::Concept
                 for (const sys::SmbEntry &other : install_entries_)
                     install_size_ += other.path == volume ? other.size : 0;
             }
+            orion::log_share(context_.library.state_dir,
+                             "install: " + std::to_string(volumes.size()) + " volume(s), " +
+                                 std::to_string(install_size_) + " bytes, as " + install_name_);
             open_place_menu(feedback);
             return true;
         }
@@ -2370,6 +2377,7 @@ class Library final : public app::Concept
                 install_places_[static_cast<std::size_t>(tag - kItemInstallPlace)];
             install_browsing_ = false;
             install_source_.login = orion::share_login(install_share_, context_.library.state_dir);
+            orion::log_share(context_.library.state_dir, "install: starting into " + place.path);
             if (!game_install_.start(install_source_, install_name_, place.path))
             {
                 show_note(false, trf("Still installing {0}", {game_install_.name()}));
