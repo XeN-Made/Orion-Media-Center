@@ -31,6 +31,23 @@ inline constexpr const char *kSortNames[kSortCount] = {
     i18n::marked("Platform"),   i18n::marked("Tag"),      i18n::marked("Recently played"),
     i18n::marked("Most played")};
 
+// The weather that can fall over the player's own background picture: the
+// keys library.json keeps, and their names.
+inline constexpr int kPictureEffectCount = 4;
+inline constexpr const char *kPictureEffects[kPictureEffectCount] = {"none", "snow", "rain",
+                                                                     "fireflies"};
+inline constexpr const char *kPictureEffectNames[kPictureEffectCount] = {
+    i18n::marked("None"), i18n::marked("Snow"), i18n::marked("Rain"), i18n::marked("Fireflies")};
+
+// The place of a kPictureEffects key; 0 (none) for one not there.
+inline int picture_effect_index(std::string_view key)
+{
+    for (int i = 0; i < kPictureEffectCount; ++i)
+        if (key == kPictureEffects[i])
+            return i;
+    return 0;
+}
+
 // A shelf the player made. The id is stable across renames; the name is shown.
 struct CustomTab
 {
@@ -237,6 +254,8 @@ struct LibraryPrefs
     bool game_backgrounds = true;
     bool blurred_covers = false;
     float background_strength = 1.0f;
+    // Weather over the player's own background picture: a kPictureEffects key.
+    std::string picture_effect = "none";
     // Where box art is looked for first and downloaded to; empty: ORION's
     // own <state_dir>/art. Always a folder under /data or /mnt.
     std::string art_dir;

@@ -333,6 +333,19 @@ TEST(OrionPrefs, BackgroundsCanBeToldApart)
     EXPECT_FLOAT_EQ(orion::load_prefs(dir).background_strength, 1.0f);
 }
 
+TEST(OrionPrefs, PictureEffectIsKeptAndCheckedOnLoad)
+{
+    const std::string dir = fresh_dir("orion-prefs-picture-effect");
+    orion::LibraryPrefs prefs;
+    EXPECT_EQ(prefs.picture_effect, "none"); // the picture as it is, unless asked
+    prefs.picture_effect = "snow";
+    ASSERT_TRUE(orion::save_prefs(dir, prefs));
+    EXPECT_EQ(orion::load_prefs(dir).picture_effect, "snow");
+    // A key ORION does not know (by hand, or from a newer ORION) reads as none.
+    ASSERT_TRUE(save::write_atomic(dir + "/library.json", R"({"picture_effect": "hail"})").empty());
+    EXPECT_EQ(orion::load_prefs(dir).picture_effect, "none");
+}
+
 TEST(OrionPrefs, RemovingATabSendsItsTitlesHome)
 {
     orion::LibraryPrefs prefs;

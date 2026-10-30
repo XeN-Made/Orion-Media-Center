@@ -738,6 +738,10 @@ LibraryPrefs load_prefs(const std::string &state_dir)
     prefs.background_strength = std::clamp(
         static_cast<float>(root["background_strength"].number_or(prefs.background_strength)), 0.2f,
         1.0f);
+    if (const std::string effect = root["picture_effect"].string_or("");
+        std::find(std::begin(kPictureEffects), std::end(kPictureEffects), effect) !=
+        std::end(kPictureEffects))
+        prefs.picture_effect = effect;
     for (const json::Value &value : root["rom_folders"].elements())
     {
         RomFolder folder;
@@ -793,6 +797,7 @@ bool save_prefs(const std::string &state_dir, const LibraryPrefs &prefs)
     text += "  \"background_strength\": " +
             std::to_string(static_cast<int>(prefs.background_strength * 100.0f + 0.5f) / 100.0) +
             ",\n";
+    text += "  \"picture_effect\": " + json::quote(prefs.picture_effect) + ",\n";
     text += "  \"art_dir\": " + json::quote(prefs.art_dir) + ",\n";
     text += "  \"rom_folders\": [";
     for (std::size_t i = 0; i < prefs.rom_folders.size(); ++i)
