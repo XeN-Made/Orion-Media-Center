@@ -842,3 +842,7 @@ author = ORION
 # src/orion/activity_panel.cpp
 "Activity" = "Tevékenység"
 "Nothing is installing or downloading" = "Semmi nem települ és nem töltődik le"
+"{0} MB/s" = "{0} MB/s"
+"about a minute left" = "nagyjából egy perc van hátra"
+"about {0} min left" = "nagyjából {0} perc van hátra"
+"about {0} h {1} min left" = "nagyjából {0} óra {1} perc van hátra"

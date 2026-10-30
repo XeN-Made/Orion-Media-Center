@@ -6,6 +6,7 @@
 
 #include "ui/components/sheet.hpp"
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -18,7 +19,13 @@ struct ActivityJob
 {
     std::string text;       // "Installing Moon Garden  ·  1.2 GB of 31.8 GB"
     float progress = -1.0f; // 0..1, or below 0 when the end is not known
+    std::string detail;     // under the bar: its speed and time left, or empty
 };
+
+// "24.3 MB/s  ·  about 26 min left": the average speed since a transfer
+// started and the time that leaves at it (no estimate without a total).
+// Empty in its first seconds, before there is a speed to tell.
+std::string transfer_speed(std::uint64_t done, std::uint64_t total, double seconds);
 
 // A sheet in the middle of the screen with every job, a bar under each, the
 // way the console's Downloads lists them. L3 opens it from anywhere in

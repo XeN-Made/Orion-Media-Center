@@ -1727,7 +1727,12 @@ class Library final : public app::Concept
     {
         std::vector<orion::ActivityJob> out;
         const auto add = [&out](std::string text, float progress = -1.0f)
-        { out.push_back({std::move(text), progress}); };
+        {
+            orion::ActivityJob job;
+            job.text = std::move(text);
+            job.progress = progress;
+            out.push_back(std::move(job));
+        };
         if (game_install_.running())
         {
             // A 7z is read in more than one pass: never more than all of it.
@@ -1739,6 +1744,7 @@ class Library final : public app::Concept
                           : trf("Installing {0}…", {game_install_.name()}),
                 total > 0 ? std::min(1.0f, static_cast<float>(done) / static_cast<float>(total))
                           : -1.0f);
+            out.back().detail = orion::transfer_speed(done, total, game_install_.seconds());
         }
         if (package_server_.running())
         {
@@ -2557,6 +2563,11 @@ class Library final : public app::Concept
         const auto finish = [&](bool ok, std::string note)
         {
             package_server_.stop();
+            const std::vector<std::string> requests = package_server_.requests();
+            if (requests.empty())
+                orion::log_share(state, "  package server: nothing was asked for");
+            for (const std::string &request : requests)
+                orion::log_share(state, "  package server: " + request);
             std::remove((state + "/pkg-install.txt").c_str()); // the go-between ends
             orion::log_share(state, "package " + package_name_ + ": " + note);
             show_note(ok, std::move(note));

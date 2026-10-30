@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 
 namespace hui::orion
 {
@@ -21,10 +22,35 @@ namespace
 
 constexpr float kHintSize = 34.0f;
 constexpr float kHintRoom = 62.0f; // under the jobs, for the hint
-constexpr float kRow = 96.0f;
+constexpr float kRow = 116.0f;     // the name, the bar, and the speed under it
 constexpr float kText = 26.0f;
+constexpr float kDetail = 22.0f;
+
+// Under this, an average says more about the start than the speed.
+constexpr double kFirstSeconds = 3.0;
 
 } // namespace
+
+std::string transfer_speed(std::uint64_t done, std::uint64_t total, double seconds)
+{
+    if (seconds < kFirstSeconds || done == 0)
+        return {};
+    const double per_second = static_cast<double>(done) / seconds;
+    char speed[32];
+    std::snprintf(speed, sizeof(speed), "%.1f", per_second / (1024.0 * 1024.0));
+    std::string text = i18n::trf("{0} MB/s", {speed});
+    if (total <= done)
+        return text;
+    const auto minutes =
+        static_cast<long long>(std::ceil(static_cast<double>(total - done) / per_second / 60.0));
+    text += "  ·  ";
+    if (minutes <= 1)
+        return text + i18n::tr("about a minute left");
+    if (minutes < 60)
+        return text + i18n::trf("about {0} min left", {std::to_string(minutes)});
+    return text + i18n::trf("about {0} h {1} min left",
+                            {std::to_string(minutes / 60), std::to_string(minutes % 60)});
+}
 
 ActivityPanel::ActivityPanel()
 {
@@ -102,6 +128,9 @@ void ActivityPanel::draw_content(ui::Canvas &canvas, const gfx::Rect &area) cons
             const float x = track.x + (track.w - span) * sweep;
             canvas.list.rounded_rect({x, track.y, span, track.h}, track.h * 0.5f, theme.accent);
         }
+        if (!job.detail.empty())
+            paint.body(ui::fit_body(paint, job.detail, kDetail, area.w), area.x, top + 92.0f,
+                       kDetail, theme.text_muted);
     }
     // Circle closes: the glyph and the word, at the panel's foot.
     const std::string label = i18n::tr("Close");

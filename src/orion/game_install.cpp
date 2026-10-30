@@ -389,6 +389,7 @@ bool GameInstall::start(sys::GameSource source, std::string name, std::string pl
         return false;
     wait();
     name_ = std::move(name);
+    started_ = std::chrono::steady_clock::now();
     progress_.done = 0;
     progress_.total = 0;
     progress_.cancel = false;

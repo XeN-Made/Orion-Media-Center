@@ -847,3 +847,7 @@ author = ORION
 # src/orion/activity_panel.cpp
 "Activity" = "Actividad"
 "Nothing is installing or downloading" = "No se está instalando ni descargando nada"
+"{0} MB/s" = "{0} MB/s"
+"about a minute left" = "queda un minuto más o menos"
+"about {0} min left" = "quedan unos {0} min"
+"about {0} h {1} min left" = "quedan unas {0} h {1} min"

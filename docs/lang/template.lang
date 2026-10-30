@@ -370,9 +370,13 @@ author =
 "Xbox 360" = ""
 
 # src/orion/activity_panel.cpp
+"about a minute left" = ""
+"about {0} h {1} min left" = ""
+"about {0} min left" = ""
 "Activity" = ""
 "Close" = ""
 "Nothing is installing or downloading" = ""
+"{0} MB/s" = ""
 
 # src/orion/look.cpp
 "Aurora" = ""

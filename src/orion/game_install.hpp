@@ -12,6 +12,7 @@
 #include "platform/ps5/game_copy.hpp"
 
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <functional>
 #include <map>
@@ -168,6 +169,11 @@ class GameInstall
     {
         return progress_.total.load();
     }
+    // Seconds since it started: with done(), its average speed.
+    double seconds() const
+    {
+        return std::chrono::duration<double>(std::chrono::steady_clock::now() - started_).count();
+    }
     // The name of the game going (or gone) in: main thread only.
     const std::string &name() const
     {
@@ -182,6 +188,7 @@ class GameInstall
 
     Copier copy_;
     std::string name_;
+    std::chrono::steady_clock::time_point started_ = std::chrono::steady_clock::now();
     sys::CopyProgress progress_;
     std::function<void(const std::string &line)> log_;
     StackThread worker_; // unpacking runs deep: a stack of its own size

@@ -842,3 +842,7 @@ author = Svenska ORION-bidragsgivare
 # src/orion/activity_panel.cpp
 "Activity" = "Aktivitet"
 "Nothing is installing or downloading" = "Inget installeras eller laddas ner"
+"{0} MB/s" = "{0} MB/s"
+"about a minute left" = "ungefär en minut kvar"
+"about {0} min left" = "ungefär {0} min kvar"
+"about {0} h {1} min left" = "ungefär {0} h {1} min kvar"
