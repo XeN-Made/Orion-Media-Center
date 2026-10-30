@@ -15,11 +15,19 @@
 // file away once the package has been read whole, or for twelve hours.
 //
 // The calls and their structures are as etaHEN's write-up on package
-// installs describes them; the authid is the one other installers use for
-// it, and fake packages need kstuff, as for any installer. The installer's
-// library is linked: opened with dlopen in the ELF loader's process, the
-// payload ended inside dlopen. "started" is logged first, so a payload the
-// loader cannot link shows as one that never started.
+// installs describes them; fake packages need kstuff, as for any installer.
+// What the system wants around them follows ps5upload (phantomptr, GPL-3),
+// which installs packages from a payload on firmware 9 to 12:
+//   - libSceIpmi linked before libSceAppInstUtil (the SDK's install_app
+//     sample, ps5-payload-dev/sdk#26): without it the loader refuses the
+//     ELF before main, and dlopen at run time ends the payload;
+//   - Initialize under the SYSTEM authid on firmware 10 and later
+//     (ShellCore's left the installer half-wedged there), ShellCore's
+//     before;
+//   - InstallByPackage under ShellCore's authid before firmware 11
+//     (others are refused: 0x80B22404), SYSTEM from 11.
+// "started" is logged first, so a payload the loader cannot link shows as
+// one that never started.
 
 #include <errno.h>
 #include <fcntl.h>
@@ -27,6 +35,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/sysctl.h>
 #include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
@@ -36,7 +45,8 @@
 #define JOB_PATH "/data/orion/pkg-install.txt"
 #define RESULT_PATH "/data/orion/pkg-install-result.txt"
 #define LOG_PATH "/data/orion/launcher.txt"
-#define INSTALL_AUTHID 0x4800000000000006ull
+#define SHELLCORE_AUTHID 0x3800000000000010ull
+#define SYSTEM_AUTHID 0x4801000000000013ull
 #define MOST_SECONDS (12 * 60 * 60)
 
 typedef struct
@@ -113,6 +123,24 @@ static void answer(const char *token, int code)
     rename(RESULT_PATH ".part", RESULT_PATH);
 }
 
+// The firmware's major version from kern.version ("releases/11..."), or 0.
+static int firmware_major(void)
+{
+    char version[256];
+    size_t size = sizeof(version);
+    if (sysctlbyname("kern.version", version, &size, NULL, 0) != 0)
+        return 0;
+    version[sizeof(version) - 1] = '\0';
+    const char *at = strstr(version, "releases/");
+    if (at == NULL)
+        return 0;
+    at += strlen("releases/");
+    int major = 0;
+    while (*at >= '0' && *at <= '9')
+        major = major * 10 + (*at++ - '0');
+    return major;
+}
+
 int main(void)
 {
     say("started");
@@ -141,8 +169,14 @@ int main(void)
     // The installer's rights first: a system library may want them to open.
     const pid_t self = getpid();
     const uint64_t authid = kernel_get_ucred_authid(self);
-    kernel_set_ucred_authid(self, INSTALL_AUTHID);
-    say("authid %016llx set; initializing the installer", (unsigned long long)INSTALL_AUTHID);
+    const int firmware = firmware_major();
+    // Unknown firmware: the newer rules, as most consoles run 10 or later.
+    const uint64_t init_as = firmware == 0 || firmware >= 10 ? SYSTEM_AUTHID : SHELLCORE_AUTHID;
+    const uint64_t install_as =
+        firmware == 0 || firmware >= 11 ? SYSTEM_AUTHID : SHELLCORE_AUTHID;
+    kernel_set_ucred_authid(self, init_as);
+    say("firmware %d; initializing the installer as %016llx", firmware,
+        (unsigned long long)init_as);
     int code = sceAppInstUtilInitialize();
     if (code != 0)
     {
@@ -156,7 +190,8 @@ int main(void)
     static PlayGoInfo playgo;
     memset(&info, 0, sizeof(info));
     memset(&playgo, 0, sizeof(playgo));
-    say("asking for %s", url);
+    kernel_set_ucred_authid(self, install_as);
+    say("asking for %s as %016llx", url, (unsigned long long)install_as);
     code = sceAppInstUtilInstallByPackage(&meta, &info, &playgo);
     say("%s from %s: %08x %s", name, url, (unsigned)code, info.content_id);
     answer(kept, code);
