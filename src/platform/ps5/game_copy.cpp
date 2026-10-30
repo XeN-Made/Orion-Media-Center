@@ -27,6 +27,10 @@
 // console's has not got. ORION has no locale but UTF-8 names, one byte per
 // character as far as the C library's own conversions go (it writes no more
 // than that), and file times are kept as they are, in UTC.
+// The app heap's counters (src/runtime/app_heap.c), for the install log.
+extern "C" void hui_heap_stats(std::size_t *live_bytes, std::size_t *peak_bytes,
+                               std::size_t *blocks, std::size_t *failures);
+
 // The most bytes a character takes: libarchive sizes its buffers by it when
 // it turns names into this "UTF-8" locale's text, and one overran them.
 extern "C" int ___mb_cur_max(void)
@@ -155,6 +159,13 @@ std::string last_part(const std::string &path)
 {
     const std::size_t slash = path.find_last_of('/');
     return slash == std::string::npos ? path : path.substr(slash + 1);
+}
+
+std::string lower(std::string text)
+{
+    for (char &c : text)
+        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    return text;
 }
 
 // One file of the share written to `to`.
@@ -368,7 +379,12 @@ bool unpack(SmbConnection &smb, const std::vector<std::string> &volumes, const s
     archive_read_support_filter_all(a);
     archive_read_set_open_callback(a, volume_open);
     archive_read_set_read_callback(a, volume_read);
-    archive_read_set_seek_callback(a, volume_seek);
+    // Only a 7z needs to seek (its list of files is at the end). Given a
+    // seek, libarchive reads a ZIP by its central directory, and calls a
+    // large ZIP64 one made by common tools damaged; read as it comes, it
+    // unpacks.
+    if (lower(last_part(volumes.front())).find(".7z") != std::string::npos)
+        archive_read_set_seek_callback(a, volume_seek);
     archive_read_set_close_callback(a, volume_close);
     archive_read_set_switch_callback(a, volume_switch);
     // Several volumes read as one stream, in order (a .part2.rar after a .part1.rar).
@@ -381,8 +397,18 @@ bool unpack(SmbConnection &smb, const std::vector<std::string> &volumes, const s
         if (progress != nullptr && progress->note)
             progress->note(line);
     };
+    const auto heap = [&]()
+    {
+        std::size_t live = 0;
+        std::size_t peak = 0;
+        std::size_t blocks = 0;
+        std::size_t failures = 0;
+        hui_heap_stats(&live, &peak, &blocks, &failures);
+        return "heap " + std::to_string(live >> 20) + " MB live, " + std::to_string(peak >> 20) +
+               " MB peak, " + std::to_string(failures) + " failed";
+    };
     note("unpacking " + std::to_string(volumes.size()) + " volume(s), " + std::to_string(total) +
-         " bytes");
+         " bytes; " + heap());
     bool ok = archive_read_open1(a) == ARCHIVE_OK;
     note(ok ? std::string("archive opened: ") +
                   (archive_format_name(a) != nullptr ? archive_format_name(a) : "?")
@@ -420,7 +446,7 @@ bool unpack(SmbConnection &smb, const std::vector<std::string> &volumes, const s
         // The first few and then every hundredth: where it was, if it stops.
         if (files < 5 || files % 100 == 0)
             note("file " + std::to_string(files) + ": " + path + " (" +
-                 std::to_string(archive_entry_size(entry)) + " bytes)");
+                 std::to_string(archive_entry_size(entry)) + " bytes); " + heap());
         ++files;
         if (!make_folders(to.substr(0, to.find_last_of('/'))))
         {
@@ -435,12 +461,18 @@ bool unpack(SmbConnection &smb, const std::vector<std::string> &volumes, const s
             ok = false;
             break;
         }
+        std::uint64_t written = 0;
         for (;;)
         {
             const void *block = nullptr;
             std::size_t size = 0;
             la_int64_t offset = 0;
             const int got = archive_read_data_block(a, &block, &size, &offset);
+            // Every 256 MB of a file: how far it got, if the app ends.
+            if (got == ARCHIVE_OK && (written >> 28) != ((written + size) >> 28))
+                note("  " + std::to_string((written + size) >> 20) + " MB of " + path + "; " +
+                     heap());
+            written += size;
             if (got == ARCHIVE_EOF)
                 break;
             if (got != ARCHIVE_OK && got != ARCHIVE_WARN)
