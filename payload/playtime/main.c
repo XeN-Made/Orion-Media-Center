@@ -21,7 +21,10 @@
 // (orion/registered_titles.hpp reads them), and the add-ons in
 // /user/addcont in addcont.txt. Then the home-screen pictures
 // ORION asks for in /data/orion/system-want.txt ("pic0 <ID>" a line) go to
-// /data/orion/backdrops/<ID>.png. On every system software, app.db or not.
+// /data/orion/backdrops/<ID>.png, and the console's screenshots saved as JPG
+// or PNG (/user/av_contents/photo) to /data/orion/screenshots, for ORION's
+// background picture; HDR captures (.jxr) are left. On every system
+// software, app.db or not.
 
 #include <dirent.h>
 #include <errno.h>
@@ -30,6 +33,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
+#include <strings.h>
 #include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
@@ -40,6 +44,9 @@
 #define APPS_DIR "/data/orion/system-apps"
 #define WANT_PATH "/data/orion/system-want.txt"
 #define BACKDROPS_DIR "/data/orion/backdrops"
+#define PHOTOS_DIR "/user/av_contents/photo/NPXS40087"
+#define SHOTS_DIR "/data/orion/screenshots"
+#define MAX_SHOTS 200
 #define MAX_TABLES 16
 #define MAX_APPS 2048
 #define MAX_COPY (32u << 20) // a home-screen picture is 8 to 12 MB
@@ -500,10 +507,73 @@ static int read_play_time(void)
     return write_out();
 }
 
+static int picture_name(const char *name)
+{
+    const size_t length = strlen(name);
+    if (name[0] == '.' || length < 5 || length > 96)
+        return 0;
+    const char *dot = strrchr(name, '.');
+    return dot != NULL && (strcasecmp(dot, ".jpg") == 0 || strcasecmp(dot, ".jpeg") == 0 ||
+                           strcasecmp(dot, ".png") == 0);
+}
+
+// Screenshots: photo/NPXS40087/<title>/<folder>/<file>, each copied once
+// (the name is the moment it was taken), at most MAX_SHOTS in all.
+static void copy_screenshots(void)
+{
+    DIR *games = opendir(PHOTOS_DIR);
+    if (games == NULL)
+        return;
+    mkdir(SHOTS_DIR, 0777);
+    int copied = 0;
+    int kept = 0;
+    struct dirent *game;
+    while ((game = readdir(games)) != NULL && kept < MAX_SHOTS)
+    {
+        if (game->d_name[0] == '.' || strlen(game->d_name) > 32)
+            continue;
+        char game_dir[256];
+        snprintf(game_dir, sizeof(game_dir), PHOTOS_DIR "/%s", game->d_name);
+        DIR *folders = opendir(game_dir);
+        if (folders == NULL)
+            continue;
+        struct dirent *folder;
+        while ((folder = readdir(folders)) != NULL && kept < MAX_SHOTS)
+        {
+            if (folder->d_name[0] == '.' || strlen(folder->d_name) > 32)
+                continue;
+            char dir[320];
+            snprintf(dir, sizeof(dir), "%s/%s", game_dir, folder->d_name);
+            DIR *files = opendir(dir);
+            if (files == NULL)
+                continue;
+            struct dirent *file;
+            while ((file = readdir(files)) != NULL && kept < MAX_SHOTS)
+            {
+                if (!picture_name(file->d_name))
+                    continue;
+                char from[448];
+                char to[256];
+                snprintf(from, sizeof(from), "%s/%s", dir, file->d_name);
+                snprintf(to, sizeof(to), SHOTS_DIR "/%s-%s", game->d_name, file->d_name);
+                ++kept;
+                if (!exists(to) && copy_file(from, to, MAX_COPY) == 0)
+                    ++copied;
+            }
+            closedir(files);
+        }
+        closedir(folders);
+    }
+    closedir(games);
+    if (copied > 0)
+        say("copied %d screenshots to " SHOTS_DIR, copied);
+}
+
 int main(void)
 {
     list_apps();
     list_addcont();
     copy_wanted();
+    copy_screenshots();
     return read_play_time();
 }
