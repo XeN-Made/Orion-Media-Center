@@ -1536,7 +1536,7 @@ void SettingsPanel::build_appearance(const Look &look, const LibraryPrefs &prefs
         tr("Keeps this look as a theme file in /data/orion/themes, to reuse or share");
     save.chevron = true;
     form_.add_action(kRestore, tr("Restore the ORION look")).description =
-        tr("Back to the galaxy glass ORION starts with");
+        tr("Back to the galaxy glass ORION starts with, without your picture");
 }
 
 void SettingsPanel::set_art_status(std::string status)
@@ -1706,8 +1706,9 @@ SettingsPanel::Change SettingsPanel::handle(const InputFrame &input, ui::Feedbac
         if (id == kRestore && themes_ != nullptr)
         {
             *look = default_look(*themes_);
+            prefs->picture_effect = kPictureEffects[0];
             refresh(*look, *prefs);
-            return Change::look;
+            return Change::restore_look;
         }
         if (id == kNewTab)
             return Change::new_tab;

@@ -91,6 +91,8 @@ class SettingsPanel
         save_theme,        // "Save as new theme" was chosen: the screen asks for a name
         choose_background, // "Background picture": the screen opens its picture browser
         clear_background,  // "Use the sky": the player's picture goes
+        restore_look,      // "Restore the ORION look": the Look is ORION's again; the screen
+                           // drops the player's picture and its weather too
         rename_tab,        // "Rename" on a tab's page: tab_id() says which custom tab
         fetch_art,         // "Find box art now" was chosen
         art_folder,        // the box art folder changed (prefs.art_dir)

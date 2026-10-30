@@ -3059,6 +3059,13 @@ class Library final : public app::Concept
             clear_background();
             feedback.play(audio::Cue::saved);
             break;
+        case orion::SettingsPanel::Change::restore_look:
+            restyle();
+            orion::save_look(context_.library.state_dir, look_);
+            save_prefs();
+            clear_background();
+            feedback.play(audio::Cue::saved);
+            break;
         case orion::SettingsPanel::Change::type_grid_key:
             start_typing(Typing::grid_key, grid_key());
             feedback.play(audio::Cue::modal_open);
