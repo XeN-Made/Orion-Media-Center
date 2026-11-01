@@ -80,6 +80,43 @@ What to look at afterwards, in `results/run-1/`:
 | `klog.txt` | The title's start and its clean exit; no crash report |
 | `shadowmount.txt` | The title's lines from the console's lifecycle log: registered, started, released |
 
+## Checking ORION on a console
+
+`tools/console-check.py` asks the ORION already installed (`make deploy`)
+to check itself, without uploading a build or reinstalling it. It writes the
+request `check <design id|-> <token>` to `/data/orion/dev-request.txt` (not
+to the install folder, which the console would register again), starts
+ORION through its own launch helper unless it is running, and reads the
+report from `/data/orion/selftest/report.txt`. That file stays after ORION
+closes, and a copy goes to ORION's own storage for a console where `/data`
+cannot be written.
+
+```bash
+PS5_HOST=<console address> tools/console-check.py results/check-1           # checks only
+PS5_HOST=<console address> tools/console-check.py results/check-1 library   # then the library's tour
+PS5_HOST=<console address> tools/console-check.py results/check-1 --quit    # and close ORION after
+```
+
+The checks (`src/orion/self_test.cpp`), one `PASS`, `FAIL` or `SKIP` line each:
+
+| Check | Fails when |
+| --- | --- |
+| `data-writable` | ORION cannot write and read back `/data/orion` (the "cannot reach /data" report) |
+| `payloads`, `elf-loader` | a payload is missing from the install, or nothing answers on port 9021 |
+| `library` | the library found no titles; the line counts games, homebrew, emulated games and payloads |
+| `drives` | an extended-storage or USB drive has games in its `user/app` and the library has none of them |
+| `network-drive <address>` | a saved network drive does not sign in; the line says why |
+| `console-share` | sharing is on, and the payload reports a problem or a sign-in to `\\127.0.0.1\data` fails |
+| `memory` | the heap has refused an allocation |
+| `pc-reaches-share` | sharing is on and port 445 does not answer from the PC |
+
+ORION stays open afterwards unless `--quit` is given; after a tour it closes
+itself a few minutes later, as with `console-tour.py`. The exit status is 1
+when a check failed. Ask before every run, as for any console run: it starts
+ORION. What the checks cannot see is what a person has to: the system's
+installer prompts, sound, the controller's feel, and other people's
+firmware and jailbreak combinations.
+
 ## Rules for console runs
 
 These come from hard experience with shared development consoles:

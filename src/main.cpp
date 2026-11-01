@@ -25,11 +25,13 @@
 #include "library/library.hpp"
 #include "orion/prefs.hpp"
 #include "orion/romm.hpp"
+#include "orion/self_test.hpp"
 #include "orion/shares.hpp"
 #include "orion/updates.hpp"
 #include "platform/ps5/audio_out.hpp"
 #include "platform/ps5/display_egl.hpp"
 #include "platform/ps5/pad.hpp"
+#include "platform/ps5/smb.hpp"
 #include "platform/ps5/system.hpp"
 
 #include <csignal>
@@ -37,6 +39,9 @@
 
 #include <cstring>
 #include <GL/glcorearb.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -67,9 +72,19 @@ constexpr const char *kDataRoot = "/download0/hui";
 constexpr const char *kDevRoot = "/download0/hui/dev";
 // Requests therefore come in through the install folder, which a PC can
 // write: /data/homebrew/<TITLE_ID>/dev/request.txt is /app0/dev/request.txt
-// here. One line: "tour <design id|all> <token>" or "quit - <token>". A
-// request is honoured once per token (the last one is remembered in kDevRoot).
+// here. One line: "tour <design id|all> <token>", "check <design id|-> <token>"
+// (orion/self_test.hpp, then that design's tour unless "-") or
+// "quit - <token>". A request is honoured once per token (the last one is
+// remembered in kDevRoot).
 constexpr const char *kRequestPath = "/app0/dev/request.txt";
+// The same request in ORION's folder (tools/console-check.py): writing there
+// leaves the install folder alone, which the console registers again after
+// every change.
+constexpr const char *kStateRequestPath = "/data/orion/dev-request.txt";
+// The checks' report, also in ORION's folder: it outlives the app, so a PC
+// can read it after ORION has closed (a copy goes to kDevRoot as well, for a
+// console where /data cannot be written).
+constexpr const char *kCheckReportPath = "/data/orion/selftest/report.txt";
 // How long a finished tour stays up so the PC can copy its evidence (the
 // storage is unmounted when the title closes) before the app closes itself.
 constexpr double kCollectSeconds = 240.0;
@@ -160,6 +175,22 @@ bool save_picture(const std::string &path, int width, int height)
         ok = std::fwrite(line.data(), 1, line.size(), file) == line.size();
     }
     return std::fclose(file) == 0 && ok;
+}
+
+// Something answers on 127.0.0.1:<port> (the ELF loader, for the checks).
+bool local_port_open(int port)
+{
+    const int link = ::socket(AF_INET, SOCK_STREAM, 0);
+    if (link < 0)
+        return false;
+    sockaddr_in address = {};
+    address.sin_family = AF_INET;
+    address.sin_port = htons(static_cast<std::uint16_t>(port));
+    address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    const bool open =
+        ::connect(link, reinterpret_cast<const sockaddr *>(&address), sizeof(address)) == 0;
+    ::close(link);
+    return open;
 }
 
 // How far start-up got, in /data/orion/boot.txt: klog is gone after a crash
@@ -496,32 +527,62 @@ int main()
     const std::string handled_path = std::string(kDevRoot) + "/handled.txt";
     const std::string report_path = std::string(kDevRoot) + "/tour/report.txt";
     bool quit_requested = false;
+    // A check request: the checks run on a thread, then the design named
+    // after them is toured ("-": none).
+    orion::SelfTest self_test;
+    std::string check_token;
+    std::string check_tour;
+    const auto start_tour = [&](const std::string &design)
+    {
+        save::ensure_directory(std::string(kDevRoot) + "/tour");
+        std::remove(report_path.c_str()); // a new report must not be taken for an old one
+        tour = std::make_unique<app::Tour>(shell, design == "all" ? std::string() : design);
+    };
     const auto poll_request = [&]()
     {
-        std::string request;
-        if (!save::read_file(kRequestPath, &request, 256))
-            return;
-        char verb[16] = {};
-        char argument[64] = {};
-        char token[64] = {};
-        if (std::sscanf(request.c_str(), "%15s %63s %63s", verb, argument, token) != 3)
-            return;
-        std::string handled;
-        save::read_file(handled_path, &handled, 128);
-        if (handled == token)
-            return; // this request was honoured by an earlier launch (or frame)
-        save::write_atomic(handled_path, token);
-        if (std::strcmp(verb, "quit") == 0)
+        for (const char *path : {kRequestPath, kStateRequestPath})
         {
-            quit_requested = true;
-        }
-        else if (std::strcmp(verb, "tour") == 0 && !tour)
-        {
-            save::ensure_directory(std::string(kDevRoot) + "/tour");
-            std::remove(report_path.c_str()); // a new report must not be taken for an old one
-            const bool all = std::strcmp(argument, "all") == 0;
-            tour = std::make_unique<app::Tour>(shell, all ? std::string() : std::string(argument));
-            sys::log("[HUI] tour requested: %s token=%s", argument, token);
+            std::string request;
+            if (!save::read_file(path, &request, 256))
+                continue;
+            char verb[16] = {};
+            char argument[64] = {};
+            char token[64] = {};
+            if (std::sscanf(request.c_str(), "%15s %63s %63s", verb, argument, token) != 3)
+                continue;
+            std::string handled;
+            save::read_file(handled_path, &handled, 128);
+            if (handled == token)
+                continue; // this request was honoured by an earlier launch (or frame)
+            save::write_atomic(handled_path, token);
+            if (std::strcmp(verb, "quit") == 0)
+            {
+                quit_requested = true;
+            }
+            else if (std::strcmp(verb, "tour") == 0 && !tour)
+            {
+                start_tour(argument);
+                sys::log("[HUI] tour requested: %s token=%s", argument, token);
+            }
+            else if (std::strcmp(verb, "check") == 0 && !tour && !self_test.running())
+            {
+                orion::SelfTestInput in;
+                in.state_dir = titles.state_dir;
+                in.app_dir = "/app0";
+                in.payloads = {"orion-launcher.elf", "orion-autostart.elf",  "orion-resume.elf",
+                               "orion-playtime.elf", "orion-pkginstall.elf", "orion-smbshare.elf"};
+                in.titles = titles.titles;
+                in.drive_roots = {"/mnt/ext0", "/mnt/ext1"};
+                for (int usb = 0; usb < 8; ++usb)
+                    in.drive_roots.push_back("/mnt/usb" + std::to_string(usb));
+                in.list = sys::smb_list;
+                in.port_open = local_port_open;
+                std::remove(kCheckReportPath); // a new report must not be taken for an old one
+                self_test.start(std::move(in));
+                check_token = token;
+                check_tour = argument;
+                sys::log("[HUI] checks requested: then %s token=%s", argument, token);
+            }
         }
     };
     poll_request();
@@ -812,6 +873,29 @@ int main()
             fps_frames = 0;
         }
 
+        if (std::vector<orion::CheckResult> results; self_test.take_finished(&results))
+        {
+            std::size_t live = 0;
+            std::size_t peak = 0;
+            std::size_t blocks = 0;
+            std::size_t failures = 0;
+            hui_heap_stats(&live, &peak, &blocks, &failures);
+            orion::CheckResult memory;
+            memory.name = "memory";
+            memory.outcome = failures == 0 ? orion::CheckResult::Outcome::pass
+                                           : orion::CheckResult::Outcome::fail;
+            memory.detail = std::to_string(peak >> 20) + " MB at most, " +
+                            std::to_string(failures) + " allocations refused";
+            results.push_back(std::move(memory));
+            const std::string report = orion::self_test_report(check_token, results);
+            save::ensure_directory("/data/orion/selftest");
+            const std::string error = save::write_atomic(kCheckReportPath, report);
+            save::write_atomic(std::string(kDevRoot) + "/selftest.txt", report);
+            sys::log("[HUI] checks finished: %zu, report %s", results.size(),
+                     error.empty() ? "written" : error.c_str());
+            if (check_tour != "-" && !tour)
+                start_tour(check_tour);
+        }
         if (tour && tour->finished())
         {
             std::string report;
