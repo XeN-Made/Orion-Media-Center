@@ -36,6 +36,8 @@ src/library/icon.cpp
 src/library/json.cpp
 src/library/library.cpp
 src/orion/*.cpp
+payload/smbshare/smb_crypto.c
+payload/smbshare/smb_server.c
 src/third_party/stb/image.c
 src/third_party/stb/vorbis.c
 src/third_party/libatrac9/*.c

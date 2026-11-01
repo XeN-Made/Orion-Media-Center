@@ -140,6 +140,9 @@ enum : int
     kShareInstall,
     kFindShares,
     kStopInstall,
+    kConsoleShare,
+    kConsoleShareUser,
+    kConsoleSharePassword,
     kLabelPreview,
     kLabelText,
     kLabelFill,
@@ -637,6 +640,24 @@ void SettingsPanel::build_network()
         row.chevron = true;
         row.text = shares_[i].user.empty() ? tr("Guest") : shares_[i].user;
     }
+    // The other way: this console's drives, opened from a PC.
+    form_.add_header(tr("This console on the network"));
+    ui::FormRow &shared =
+        form_.add_toggle(kConsoleShare, tr("Share this console's drives"), console_share_.on);
+    // Below the switch: what went wrong, else where a PC finds the drives.
+    shared.description =
+        console_share_.on && !console_share_problem_.empty() ? console_share_problem_
+        : console_share_.on && !console_address_.empty()
+            ? trf("On a PC, type \\\\{0} in File Explorer's address bar", {console_address_})
+            : tr("Its storage and USB drives as network drives on a PC: copy games and files "
+                 "both ways. It keeps going after ORION closes");
+    ui::FormRow &user = form_.add_action(kConsoleShareUser, tr("User name"));
+    user.chevron = true;
+    user.text = console_share_.user;
+    ui::FormRow &password = form_.add_action(kConsoleSharePassword, tr("Password"));
+    password.chevron = true;
+    password.text = console_share_.password.empty() ? tr("Not set") : std::string("••••••");
+    password.description = tr("Windows asks for these when it connects");
 }
 
 void SettingsPanel::build_romm(const LibraryPrefs &prefs)
@@ -1814,6 +1835,10 @@ SettingsPanel::Change SettingsPanel::handle(const InputFrame &input, ui::Feedbac
             return Change::install_game;
         if (id == kStopInstall)
             return Change::stop_install;
+        if (id == kConsoleShareUser)
+            return Change::type_console_user;
+        if (id == kConsoleSharePassword)
+            return Change::type_console_password;
         if (section_ == Section::network && id >= kShareRow &&
             id - kShareRow < static_cast<int>(shares_.size()))
         {
@@ -1861,6 +1886,11 @@ SettingsPanel::Change SettingsPanel::handle(const InputFrame &input, ui::Feedbac
     if (event != ui::Event::changed)
         return Change::none;
 
+    if (id == kConsoleShare)
+    {
+        console_share_.on = form_.toggle_value(kConsoleShare);
+        return Change::console_share;
+    }
     if (section_ == Section::labels && !label_page_.empty())
         return edit_label_page(id, prefs);
     if (!page_.empty())

@@ -232,7 +232,8 @@ TEST_F(OrionSettings, ANetworkDriveInstallsAGameAndStopsIt)
     ASSERT_EQ(panel.section(), SettingsPanel::Section::network);
     send_to(panel, nav(Direction::right));
     EXPECT_EQ(send_to(panel, press(Action::confirm)), SettingsPanel::Change::stop_install);
-    for (int i = 0; i < 10; ++i)
+    // Stop installing, Add, Find, Look for games again, then the drive.
+    for (int i = 0; i < 4; ++i)
         send_to(panel, nav(Direction::down));
     send_to(panel, press(Action::confirm)); // the drive's page
     EXPECT_EQ(panel.share_id(), "s1");
@@ -240,6 +241,30 @@ TEST_F(OrionSettings, ANetworkDriveInstallsAGameAndStopsIt)
         send_to(panel, nav(Direction::down));
     send_to(panel, nav(Direction::up));
     EXPECT_EQ(send_to(panel, press(Action::confirm)), SettingsPanel::Change::install_game);
+}
+
+// Under the drives, this console's own: the switch, its user name and its
+// password, each one a change for the screen.
+TEST_F(OrionSettings, SharesThisConsolesDrives)
+{
+    SettingsPanel panel;
+    hui::orion::ConsoleShare share;
+    share.user = "ps5";
+    panel.set_console_share(share, "", "192.168.1.30");
+    panel.open(look_, prefs_, feedback_);
+    for (int i = 0; i < 16 && panel.section() != SettingsPanel::Section::network; ++i)
+        send_to(panel, press(Action::page_next));
+    ASSERT_EQ(panel.section(), SettingsPanel::Section::network);
+    send_to(panel, nav(Direction::right));
+    for (int i = 0; i < 10; ++i)
+        send_to(panel, nav(Direction::down));
+    // From the bottom: Password, User name, then the switch.
+    EXPECT_EQ(send_to(panel, press(Action::confirm)), SettingsPanel::Change::type_console_password);
+    send_to(panel, nav(Direction::up));
+    EXPECT_EQ(send_to(panel, press(Action::confirm)), SettingsPanel::Change::type_console_user);
+    send_to(panel, nav(Direction::up));
+    EXPECT_EQ(send_to(panel, press(Action::confirm)), SettingsPanel::Change::console_share);
+    EXPECT_TRUE(panel.console_share().on);
 }
 
 } // namespace

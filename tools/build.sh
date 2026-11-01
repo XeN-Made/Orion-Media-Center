@@ -274,6 +274,8 @@ bash "$root/payload/playtime/build.sh" "$sdk_root" "$pacbrew_root" \
     "$app/assets/payloads/orion-playtime.elf"
 # And the package installer's go-between (payload/pkginstall/main.c).
 bash "$root/payload/pkginstall/build.sh" "$sdk_root" "$app/assets/payloads/orion-pkginstall.elf"
+# And the server that shares the console's drives with PCs (payload/smbshare/main.c).
+bash "$root/payload/smbshare/build.sh" "$sdk_root" "$app/assets/payloads/orion-smbshare.elf"
 # Directory listing returns nothing under /app0 on the console, so each
 # audio folder carries an index of its files (read by save::list_files).
 for dir in "$app/assets/audio/music" "$app"/assets/audio/sfx/*/; do

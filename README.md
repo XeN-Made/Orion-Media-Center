@@ -387,6 +387,24 @@ so the archive itself is never stored. The progress shows at the top right;
 Settings, Network drives, **Stop installing** stops it and deletes what was
 copied. Encrypted archives (with a password) cannot be unpacked.
 
+### The console's drives on a PC
+
+Settings, Network drives, **Share this console's drives** makes the console
+a network drive for PCs: its storage (`data`) and each USB or extended
+storage drive (`usb0`, `ext0`...) as a share. Choose a password the first
+time (the user name is `ps5` unless you change it). Then, on a PC on the same
+network, type `\\` and the console's address in File Explorer's address bar
+(Settings shows it, like `\\192.168.1.30`), sign in with that user name and
+password, and copy games and files either way, rename and delete them. A game
+folder copied into a drive's `homebrew` folder is found by ShadowMountPlus
+like any other.
+
+It keeps sharing after ORION closes, until you switch it off or the console
+restarts; ORION shares again as it starts while the switch is on. It is
+SMB 2.1 with NTLMv2 sign-in and signing, which Windows 10 and 11 accept as
+they are. Only one app can share on port 445: if another one already does,
+Settings says so.
+
 ## Box art and music
 
 - Box art downloads as the covers scroll into view and is kept in

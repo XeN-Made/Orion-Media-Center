@@ -43,6 +43,7 @@
 #include "orion/setup_panel.hpp"
 #include "orion/storage.hpp"
 #include "orion/theme_file.hpp"
+#include "orion/console_share.hpp"
 #include "orion/drives.hpp"
 #include "orion/title_details.hpp"
 #include "orion/updates.hpp"
@@ -130,6 +131,8 @@ constexpr const char *kResumePath = "/app0/assets/payloads/orion-resume.elf";
 constexpr const char *kPlaytimePath = "/app0/assets/payloads/orion-playtime.elf";
 // The go-between that hands a package to the console's installer (payload/pkginstall).
 constexpr const char *kPkgInstallPath = "/app0/assets/payloads/orion-pkginstall.elf";
+// The server that shares the console's drives with PCs (payload/smbshare).
+constexpr const char *kSmbSharePath = "/app0/assets/payloads/orion-smbshare.elf";
 constexpr float kHoldToDelete = 1.5f; // seconds of Cross on Delete
 // The launch helper reads a request of 4 KiB; a game's path is one line of it.
 constexpr std::size_t kMaxRequestPath = 1024;
@@ -199,6 +202,8 @@ enum class Typing : std::uint8_t
     share_address,       // from Settings > Network drives > Add: its address,
     share_user,          // then the user (empty: a guest),
     share_password,      // then the password (shown as stars)
+    console_user,        // from Settings > Network drives > This console: its user name
+    console_password,    // and its password (shown as stars)
 };
 
 // Tags of the menu items.
@@ -1181,6 +1186,7 @@ class Library final : public app::Concept
         }
         follow_drive_space();
         follow_system_play_time();
+        follow_console_share();
         follow_romm(feedback);
         follow_shares(feedback);
         // A network drive added on a phone or PC: its games are looked for.
@@ -2517,6 +2523,94 @@ class Library final : public app::Concept
         return false;
     }
 
+    // ---- the console's own drives, shared with PCs (payload/smbshare) ----
+
+    void set_console_share_rows()
+    {
+        const std::string &state = context_.library.state_dir;
+        settings_.set_console_share(orion::read_console_share(state),
+                                    orion::console_share_problem(state), orion::local_address());
+    }
+
+    void show_console_share()
+    {
+        set_console_share_rows();
+        if (settings_.is_open())
+            settings_.refresh(look_, prefs_);
+    }
+
+    void send_console_share()
+    {
+        std::string elf;
+        if (!sys::on_console() || !save::read_file(kSmbSharePath, &elf, 8u << 20) || elf.empty())
+            return;
+        console_share_sent_ = clock_;
+        std::thread([elf = std::move(elf)]() { sys::send_payload(elf, kLoaderPort); }).detach();
+    }
+
+    // On asks for a password first when there is none; then the payload's
+    // file is written and the payload sent (one running reads the file
+    // again by itself, and ends when it says off).
+    void console_share_changed(bool on, app::Feedback &feedback)
+    {
+        orion::ConsoleShare share = orion::read_console_share(context_.library.state_dir);
+        if (on && share.password.empty())
+        {
+            console_share_waiting_ = true;
+            start_typing(Typing::console_password, "");
+            show_note(true, tr("Choose a password: Windows asks for it, with the user name"));
+            feedback.play(audio::Cue::modal_open);
+            return;
+        }
+        share.on = on;
+        save_console_share(share, feedback);
+    }
+
+    void save_console_share(const orion::ConsoleShare &share, app::Feedback &feedback)
+    {
+        if (!orion::write_console_share(context_.library.state_dir, share))
+        {
+            show_note(false, tr("Could not save the sharing settings"));
+            feedback.play(audio::Cue::error);
+            show_console_share();
+            return;
+        }
+        if (share.on && !share.password.empty())
+        {
+            send_console_share();
+            const std::string address = orion::local_address();
+            show_note(true,
+                      address.empty()
+                          ? tr("Sharing this console's drives")
+                          : trf("Sharing this console's drives: on a PC, open \\\\{0}", {address}));
+        }
+        else if (!share.on)
+            show_note(true, tr("This console's drives are no longer shared"));
+        feedback.play(audio::Cue::saved);
+        show_console_share();
+    }
+
+    // Shared at the last start: shared again, a little after the play time
+    // reader (the loader takes one at a time); and what the payload says,
+    // shown when it says it.
+    void follow_console_share()
+    {
+        if (!sys::on_console() || data_missing_)
+            return;
+        if (!console_share_checked_ && clock_ > 8.0f && launch_pending_ <= 0.0f)
+        {
+            console_share_checked_ = true;
+            if (orion::read_console_share(context_.library.state_dir).on)
+                send_console_share();
+        }
+        if (console_share_sent_ > 0.0f && clock_ - console_share_sent_ > 3.0f)
+        {
+            console_share_sent_ = 0.0f;
+            if (settings_.is_open())
+                show_console_share();
+        }
+    }
+
     // A network drive typed in: kept once it opened, else what went wrong.
     void follow_share_check(app::Feedback &feedback)
     {
@@ -2848,6 +2942,7 @@ class Library final : public app::Concept
         settings_.set_background(!background_file().empty());
         setup_.set_background(!background_file().empty());
         settings_.set_shares(orion::load_shares(context_.library.state_dir), share_status_);
+        set_console_share_rows();
         settings_.set_tabs(every_tab());
         settings_.set_labels(every_label());
         settings_.set_version(context_.version);
@@ -3208,6 +3303,18 @@ class Library final : public app::Concept
             start_typing(Typing::new_label, "");
             feedback.play(audio::Cue::modal_open);
             break;
+        case orion::SettingsPanel::Change::console_share:
+            console_share_changed(settings_.console_share().on, feedback);
+            break;
+        case orion::SettingsPanel::Change::type_console_user:
+            start_typing(Typing::console_user,
+                         orion::read_console_share(context_.library.state_dir).user);
+            feedback.play(audio::Cue::modal_open);
+            break;
+        case orion::SettingsPanel::Change::type_console_password:
+            start_typing(Typing::console_password, "");
+            feedback.play(audio::Cue::modal_open);
+            break;
         case orion::SettingsPanel::Change::add_share:
             pending_share_ = orion::Share();
             start_typing(Typing::share_address, "");
@@ -3427,7 +3534,8 @@ class Library final : public app::Concept
                : typing == Typing::art_folder || typing == Typing::rom_folder ||
                        typing == Typing::grid_key || typing == Typing::romm_url ||
                        typing == Typing::romm_code || typing == Typing::share_address ||
-                       typing == Typing::share_user || typing == Typing::share_password
+                       typing == Typing::share_user || typing == Typing::share_password ||
+                       typing == Typing::console_user || typing == Typing::console_password
                    ? kMaxPath
                : typing == Typing::rename_title || typing == Typing::art_name ? orion::kMaxTitleName
                                                                               : kMaxName;
@@ -3471,7 +3579,12 @@ class Library final : public app::Concept
         feedback.play(audio::Cue::modal_close);
         // Back keeps a search but abandons a name.
         if (event == ui::Event::cancelled || typing == Typing::search)
+        {
+            // Switched on, then no password given: the switch goes back off.
+            if (std::exchange(console_share_waiting_, false))
+                show_console_share();
             return;
+        }
 
         if (typing == Typing::theme_name)
         {
@@ -3588,6 +3701,20 @@ class Library final : public app::Concept
             const sys::SmbLogin login = orion::share_login_with(pending_share_, pending_password_);
             share_check_.start(login, pending_share_.folder);
             show_note(true, trf("Checking {0}…", {orion::share_address(pending_share_)}));
+            return;
+        }
+        if (typing == Typing::console_user || typing == Typing::console_password)
+        {
+            orion::ConsoleShare share = orion::read_console_share(context_.library.state_dir);
+            if (typing == Typing::console_user)
+                share.user = name_.empty() ? std::string("ps5") : name_;
+            else
+                share.password = name_;
+            name_.clear();
+            // Switched on before there was a password: on now that there is.
+            if (typing == Typing::console_password && std::exchange(console_share_waiting_, false))
+                share.on = !share.password.empty();
+            save_console_share(share, feedback);
             return;
         }
         if (typing == Typing::new_label || typing == Typing::new_label_for_title)
@@ -8722,7 +8849,7 @@ class Library final : public app::Concept
         const bool search = typing_ == Typing::search || typing_ == Typing::none;
         // A password shows as stars, a character each.
         std::string text = search ? query_ : name_;
-        if (typing_ == Typing::share_password)
+        if (typing_ == Typing::share_password || typing_ == Typing::console_password)
         {
             const auto count =
                 std::count_if(text.begin(), text.end(), [](char c)
@@ -8744,8 +8871,10 @@ class Library final : public app::Concept
             : typing_ == Typing::rename_label ? tr("The label's text; empty gives it ORION's back")
             : typing_ == Typing::share_address
                 ? tr("The share's address, like \\\\192.168.1.20\\games\\roms")
-            : typing_ == Typing::share_user     ? tr("Its user name; empty signs in as a guest")
-            : typing_ == Typing::share_password ? tr("Its password")
+            : typing_ == Typing::share_user       ? tr("Its user name; empty signs in as a guest")
+            : typing_ == Typing::share_password   ? tr("Its password")
+            : typing_ == Typing::console_user     ? tr("The user name Windows will ask for")
+            : typing_ == Typing::console_password ? tr("A password Windows will ask for")
             : typing_ == Typing::new_label || typing_ == Typing::new_label_for_title
                 ? tr("Name the new label")
                 : tr("Name the new tab");
@@ -8849,7 +8978,10 @@ class Library final : public app::Concept
     // A check whose request never returns cannot be stopped, only left
     // behind: Check now starts a new one (check_for_updates).
     std::unique_ptr<orion::UpdateCheck> updates_ = new_update_check();
-    bool data_missing_ = false; // no /data in ORION's sandbox (ShadowMountPlus)
+    bool data_missing_ = false;          // no /data in ORION's sandbox (ShadowMountPlus)
+    bool console_share_checked_ = false; // the sharing payload sent at start, if it was on
+    bool console_share_waiting_ = false; // switched on: the password is being asked for
+    float console_share_sent_ = 0.0f;    // clock_ when it was last sent; 0 when it has answered
     // Title music: the player's songs by name, what each title plays (empty:
     // none), the title the focus rests on and for how long, and the copier
     // of the system's snd0.at9 files.

@@ -9,6 +9,7 @@
 #include "core/tween.hpp"
 #include "library/library.hpp"
 #include "orion/languages.hpp"
+#include "orion/console_share.hpp"
 #include "orion/look.hpp"
 #include "orion/drives.hpp"
 #include "orion/prefs.hpp"
@@ -101,28 +102,31 @@ class SettingsPanel
         add_rom_folder,    // "Type a path" in the folder browser: the screen asks for one, for
                            // emulator_page()
         add_folder, // "Use this folder" in the folder browser: browse_result(), for emulator_page()
-        copy_backdrops, // "Copy them again": the screen asks the helper anew
-        folders,        // a game folder changed or went: save and scan again
-        scan_emulators, // "Scan for emulators" was chosen
-        run_setup,      // "Run setup again": the screen closes Settings and opens the setup
-        sound,          // a volume changed in the app's Settings (set_app_settings)
-        skip_song,      // "Next song" was chosen
-        check_updates,  // "Check now" (Library, updates)
-        install_update, // "Install ORION <version>": the screen hands it to the helper
-        language,       // the Language row changed (prefs.language)
-        whats_new,      // "What's new" (About): the screen shows this version's notes
-        type_romm_url,  // "RomM server" was chosen: the screen asks for the address
-        type_romm_code, // "Pair with RomM" was chosen: the screen asks for the code
-        romm_sync,      // "Sync RomM games" was chosen
-        romm_browse,    // "Browse RomM games": the screen opens the RomM Games screen
-        add_share,      // "Add a network drive": the screen asks for its address
-        scan_shares,    // "Look for games again" (Network drives)
-        remove_share,   // "Remove" on a drive's page: share_id() says which
-        install_game,   // "Install a PS5 game" on a drive's page: share_id() says which
-        find_shares,    // "Find drives on this network"
-        stop_install,   // "Stop installing" (Network drives)
-        new_label,      // "New label": the screen asks for its text
-        rename_label,   // "Text" on a label's page: label_id() says which
+        copy_backdrops,        // "Copy them again": the screen asks the helper anew
+        folders,               // a game folder changed or went: save and scan again
+        scan_emulators,        // "Scan for emulators" was chosen
+        run_setup,             // "Run setup again": the screen closes Settings and opens the setup
+        sound,                 // a volume changed in the app's Settings (set_app_settings)
+        skip_song,             // "Next song" was chosen
+        check_updates,         // "Check now" (Library, updates)
+        install_update,        // "Install ORION <version>": the screen hands it to the helper
+        language,              // the Language row changed (prefs.language)
+        whats_new,             // "What's new" (About): the screen shows this version's notes
+        type_romm_url,         // "RomM server" was chosen: the screen asks for the address
+        type_romm_code,        // "Pair with RomM" was chosen: the screen asks for the code
+        romm_sync,             // "Sync RomM games" was chosen
+        romm_browse,           // "Browse RomM games": the screen opens the RomM Games screen
+        add_share,             // "Add a network drive": the screen asks for its address
+        scan_shares,           // "Look for games again" (Network drives)
+        remove_share,          // "Remove" on a drive's page: share_id() says which
+        install_game,          // "Install a PS5 game" on a drive's page: share_id() says which
+        find_shares,           // "Find drives on this network"
+        stop_install,          // "Stop installing" (Network drives)
+        console_share,         // "Share this console's drives" flipped: console_share().on says how
+        type_console_user,     // "User name" under it: the screen asks for one
+        type_console_password, // "Password" under it: the screen asks for one
+        new_label,             // "New label": the screen asks for its text
+        rename_label,          // "Text" on a label's page: label_id() says which
     };
 
     enum class Section : std::uint8_t
@@ -171,6 +175,19 @@ class SettingsPanel
     {
         shares_ = std::move(shares);
         share_status_ = std::move(status);
+    }
+    // The console's own drives shared with PCs (orion/console_share.hpp),
+    // why the payload could not share them (empty: it does), and the
+    // console's address.
+    void set_console_share(ConsoleShare share, std::string problem, std::string address)
+    {
+        console_share_ = std::move(share);
+        console_share_problem_ = std::move(problem);
+        console_address_ = std::move(address);
+    }
+    const ConsoleShare &console_share() const
+    {
+        return console_share_;
     }
     // The drive whose page is open, or empty.
     const std::string &share_id() const
@@ -419,6 +436,9 @@ class SettingsPanel
     std::vector<Share> shares_;
     std::string share_status_;
     std::string share_page_; // the drive whose page is open; empty: the list
+    ConsoleShare console_share_;
+    std::string console_share_problem_;
+    std::string console_address_;
     bool own_background_ = false;
     std::string installing_;
     std::vector<LabelEntry> label_entries_;
