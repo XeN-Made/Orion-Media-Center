@@ -25,6 +25,7 @@
 #include "library/library.hpp"
 #include "orion/prefs.hpp"
 #include "orion/romm.hpp"
+#include "orion/key_page.hpp"
 #include "orion/self_test.hpp"
 #include "orion/shares.hpp"
 #include "orion/updates.hpp"
@@ -579,6 +580,13 @@ int main()
                 in.list = sys::smb_list;
                 in.port_open = local_port_open;
                 in.copy = sys::copy_game;
+                in.own_address = orion::local_address();
+                in.find_servers = [](const std::string &own)
+                {
+                    std::string trace;
+                    return sys::smb_find_servers(own, &trace);
+                };
+                in.list_shares = sys::smb_shares;
                 std::remove(kCheckReportPath); // a new report must not be taken for an old one
                 self_test.start(std::move(in));
                 check_token = token;

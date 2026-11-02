@@ -6,6 +6,8 @@
 
 #include "core/save_file.hpp"
 #include "core/sha256.hpp"
+#include "library/animation.hpp"
+#include "library/icon.hpp"
 #include "orion/console_share.hpp"
 
 #include <sys/stat.h>
@@ -153,6 +155,17 @@ void check_network_drives(const SelfTestInput &in, std::vector<CheckResult> *res
     }
 }
 
+// The console's own share, as a client on the console signs in to it.
+sys::SmbLogin console_login(const ConsoleShare &share)
+{
+    sys::SmbLogin login;
+    login.server = "127.0.0.1";
+    login.share = "data";
+    login.user = share.user;
+    login.password = share.password;
+    return login;
+}
+
 // Signs in to the console's own share the way a PC does, over the loopback:
 // the payload's server, its sign-in and its signing, end to end.
 void check_console_share(const SelfTestInput &in, std::vector<CheckResult> *results)
@@ -173,11 +186,7 @@ void check_console_share(const SelfTestInput &in, std::vector<CheckResult> *resu
             "the payload says \"" + status + "\": " + console_share_problem(in.state_dir));
         return;
     }
-    sys::SmbLogin login;
-    login.server = "127.0.0.1";
-    login.share = "data";
-    login.user = share.user;
-    login.password = share.password;
+    const sys::SmbLogin login = console_login(share);
     std::vector<sys::SmbEntry> entries;
     std::string error;
     const bool listed = in.list && in.list(login, "", 0, 64, &entries, &error);
@@ -320,11 +329,7 @@ void check_installs(const SelfTestInput &in, std::vector<CheckResult> *results)
             "turn sharing on in Settings: the test games are installed off the console's share");
         return;
     }
-    sys::SmbLogin login;
-    login.server = "127.0.0.1";
-    login.share = "data";
-    login.user = share.user;
-    login.password = share.password;
+    const sys::SmbLogin login = console_login(share);
     const std::string on_share = "orion/selftest/fixtures";
     std::vector<sys::SmbEntry> entries;
     std::string error;
@@ -419,6 +424,162 @@ void check_installs(const SelfTestInput &in, std::vector<CheckResult> *results)
     }
 }
 
+// "Find drives on the network": the search Settings runs, from this console.
+void check_network_search(const SelfTestInput &in, std::vector<CheckResult> *results)
+{
+    if (!in.find_servers || in.own_address.empty())
+    {
+        add(results, "network-search", Outcome::skip, "no network address");
+        return;
+    }
+    const std::vector<sys::SmbServer> servers = in.find_servers(in.own_address);
+    std::string found;
+    for (std::size_t i = 0; i < servers.size() && i < 6; ++i)
+        found += (i == 0 ? "" : ", ") + servers[i].address +
+                 (servers[i].name.empty() ? std::string() : " " + servers[i].name);
+    // The machines the saved drives are on should answer the search too.
+    std::string missed;
+    for (const Share &share : load_shares(in.state_dir))
+    {
+        bool seen = false;
+        for (const sys::SmbServer &server : servers)
+            seen = seen || server.address == share.server || server.name == share.server;
+        if (!seen && missed.find(share.server) == std::string::npos)
+            missed += (missed.empty() ? "" : ", ") + share.server;
+    }
+    add(results, "network-search",
+        servers.empty() || !missed.empty() ? Outcome::fail : Outcome::pass,
+        servers.empty() ? "found no machine sharing on " + in.own_address + "'s network"
+                        : std::to_string(servers.size()) + " found: " + found +
+                              (missed.empty() ? "" : "; not found: " + missed));
+}
+
+// What a player sees when a drive will not open: the console's own share
+// is asked for with a wrong password and for a share it has not got, and
+// each must come back with the hint that says why.
+void check_share_errors(const SelfTestInput &in, std::vector<CheckResult> *results)
+{
+    const ConsoleShare share = read_console_share(in.state_dir);
+    if (!share.on || !in.list)
+    {
+        add(results, "drive-errors", Outcome::skip, "sharing is off in Settings");
+        return;
+    }
+    if (in.list_shares)
+    {
+        std::vector<std::string> names;
+        std::string error;
+        const bool listed = in.list_shares(console_login(share), &names, &error);
+        std::string all;
+        bool data = false;
+        for (const std::string &name : names)
+        {
+            all += (all.empty() ? "" : ", ") + name;
+            data = data || name == "data";
+        }
+        add(results, "share-list", listed && data ? Outcome::pass : Outcome::fail,
+            listed ? "the console offers " + all : "no list of shares: " + error);
+    }
+    std::string problems;
+    std::string said;
+    const auto expect = [&](sys::SmbLogin login, const char *wanted, const char *what)
+    {
+        std::vector<sys::SmbEntry> entries;
+        std::string error;
+        if (in.list(login, "", 0, 4, &entries, &error))
+        {
+            problems += std::string(problems.empty() ? "" : "; ") + what + " was let in";
+            return;
+        }
+        const char *hint = share_hint(error);
+        if (error.find(wanted) == std::string::npos || *hint == '\0')
+            problems +=
+                std::string(problems.empty() ? "" : "; ") + what + " said \"" + error + "\"";
+        else
+            said += std::string(said.empty() ? "" : "; ") + what + ": " + hint;
+    };
+    sys::SmbLogin wrong = console_login(share);
+    wrong.password += "-wrong";
+    expect(wrong, "LOGON_FAILURE", "a wrong password");
+    sys::SmbLogin missing = console_login(share);
+    missing.share = "orion-no-such-share";
+    expect(missing, "BAD_NETWORK_NAME", "a share that is not there");
+    add(results, "drive-errors", problems.empty() ? Outcome::pass : Outcome::fail,
+        problems.empty() ? said : problems);
+}
+
+// Pictures a player might make their background, decoded the way
+// choose_background and the shell do: the frame caps, every frame of one
+// that moves, a still one at 1920. pictures/cases.txt: "<ok|refuse>\t<file>".
+void check_pictures(const SelfTestInput &in, std::vector<CheckResult> *results)
+{
+    const std::string dir = in.state_dir + "/selftest/pictures";
+    std::string cases;
+    if (!save::read_file(dir + "/cases.txt", &cases, 64u << 10))
+        return;
+    for (std::size_t start = 0; start < cases.size();)
+    {
+        std::size_t end = cases.find('\n', start);
+        if (end == std::string::npos)
+            end = cases.size();
+        const std::string line = cases.substr(start, end - start);
+        start = end + 1;
+        const std::size_t tab = line.find('\t');
+        if (tab == std::string::npos)
+            continue;
+        const std::string expect = line.substr(0, tab);
+        const std::string file = line.substr(tab + 1);
+        const auto began = std::chrono::steady_clock::now();
+        std::string bytes;
+        std::string outcome; // what a player would be told, or empty
+        std::string shape;
+        if (!save::read_file(dir + "/" + file, &bytes, library::kAnimationFile) || bytes.empty())
+            outcome = "unreadable or over 32 MB";
+        library::AnimationInfo moving;
+        library::AnimationPlan plan;
+        library::Image frame;
+        if (outcome.empty() && library::probe_animation(bytes, &moving))
+        {
+            const library::AnimationRefusal refusal = library::plan_animation(moving, &plan);
+            if (refusal == library::AnimationRefusal::canvas)
+                outcome = "refused: frames over 1920 x 1080";
+            else if (refusal == library::AnimationRefusal::length)
+                outcome = "refused: too many frames";
+            else
+            {
+                library::AnimationDecoder decoder;
+                int frames = 0;
+                int delay = 0;
+                if (decoder.open(bytes, plan.factor))
+                {
+                    while (decoder.next(&frame, &delay))
+                        ++frames;
+                }
+                if (frames != moving.frames)
+                    outcome = "decoded " + std::to_string(frames) + " of " +
+                              std::to_string(moving.frames) + " frames";
+                shape = std::to_string(plan.width) + " x " + std::to_string(plan.height) + ", " +
+                        std::to_string(frames) + " frames, " + std::to_string(plan.bytes >> 20) +
+                        " MB";
+            }
+        }
+        else if (outcome.empty())
+        {
+            if (!library::decode_png(bytes, 1920, &frame))
+                outcome = std::string("does not decode: ") + library::png_failure();
+            else
+                shape = std::to_string(frame.width) + " x " + std::to_string(frame.height);
+        }
+        const double seconds =
+            std::chrono::duration<double>(std::chrono::steady_clock::now() - began).count();
+        char took[32];
+        std::snprintf(took, sizeof(took), ", %.2f s", seconds);
+        const bool good = expect == "ok" ? outcome.empty() : !outcome.empty();
+        add(results, "picture " + file, good ? Outcome::pass : Outcome::fail,
+            (outcome.empty() ? shape : outcome) + took);
+    }
+}
+
 } // namespace
 
 std::vector<CheckResult> run_self_test(const SelfTestInput &in)
@@ -428,8 +589,11 @@ std::vector<CheckResult> run_self_test(const SelfTestInput &in)
     check_payloads(in, &results);
     check_library(in, &results);
     check_network_drives(in, &results);
+    check_network_search(in, &results);
     check_console_share(in, &results);
+    check_share_errors(in, &results);
     check_installs(in, &results);
+    check_pictures(in, &results);
     return results;
 }
 

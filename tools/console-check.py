@@ -5,7 +5,7 @@
 """Runs ORION's checks on a console (src/orion/self_test.hpp) and prints them.
 
 usage: PS5_HOST=<address> tools/console-check.py <results dir> [design id|-] [--quit]
-                                                 [--installs]
+                                                 [--installs] [--pictures]
 
 Uses the ORION already installed (make deploy first); it uploads nothing but
 two request files. Steps: check the console's services; start ORION through
@@ -24,6 +24,11 @@ ORION installs each off its own share (sharing must be on), compares every
 file, installs one twice (refused as already there), stops one half way
 (nothing may be left), and removes them all. The fixtures are deleted from
 the console afterwards.
+
+--pictures makes test pictures with Pillow (a 4K PNG, large and progressive
+JPEGs, moving GIFs and WebPs, and ones that must be refused: frames over
+1920 x 1080, too many frames) and ORION decodes each as it would a
+background, with the time it took. They are deleted afterwards too.
 
 It never kills the app and never retries. If something is wrong it stops
 and says what it saw. Ask the console's owner before every run.
@@ -54,6 +59,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 STATE = "/data/orion"
 FIXTURES = f"{STATE}/selftest/fixtures"
+PICTURES = f"{STATE}/selftest/pictures"
 GAME = "ORION Check Game"  # invented; its title ID is no real product's
 
 
@@ -230,13 +236,66 @@ def make_fixtures(out):
     return out
 
 
-def upload_fixtures(console, local):
-    console.remove_tree(FIXTURES)
-    console.make_dirs(FIXTURES)
+def make_pictures(out):
+    """Pictures a player might choose as a background, and cases.txt."""
+    try:
+        from PIL import Image, ImageDraw
+    except ImportError:
+        stop("--pictures needs Pillow (python3-pil)")
+    shutil.rmtree(out, ignore_errors=True)
+    out.mkdir(parents=True)
+    noise = random.Random(11)
+
+    def picture(width, height, shade):
+        image = Image.new("RGB", (width, height), (20, 24, 40))
+        draw = ImageDraw.Draw(image)
+        for _ in range(60):
+            x, y = noise.randrange(width), noise.randrange(height)
+            r = noise.randrange(8, max(9, width // 6))
+            draw.ellipse((x - r, y - r, x + r, y + r),
+                         fill=(noise.randrange(256), shade % 256, noise.randrange(256)))
+        return image
+
+    def frames(width, height, count):
+        return [picture(width, height, n * 7) for n in range(count)]
+
+    picture(3840, 2160, 90).save(out / "still-4k.png")
+    picture(4000, 3000, 40).save(out / "photo.jpg", quality=90)
+    picture(2400, 1600, 60).save(out / "progressive.jpg", quality=85, progressive=True)
+    moving = frames(640, 360, 40)
+    moving[0].save(out / "moving.gif", save_all=True, append_images=moving[1:], duration=60,
+                   loop=0)
+    moving = frames(1280, 720, 30)
+    moving[0].save(out / "moving.webp", save_all=True, append_images=moving[1:], duration=50,
+                   loop=0, quality=70)
+    moving = frames(1920, 1080, 24)
+    moving[0].save(out / "large-moving.webp", save_all=True, append_images=moving[1:],
+                   duration=80, loop=0, quality=60)
+    moving = frames(2560, 1440, 3)
+    moving[0].save(out / "over-1080p.gif", save_all=True, append_images=moving[1:],
+                   duration=100, loop=0)
+    moving = frames(320, 180, 500)
+    moving[0].save(out / "too-long.gif", save_all=True, append_images=moving[1:], duration=40,
+                   loop=0)
+    (out / "cases.txt").write_text(
+        "ok\tstill-4k.png\n"
+        "ok\tphoto.jpg\n"
+        "ok\tprogressive.jpg\n"
+        "ok\tmoving.gif\n"
+        "ok\tmoving.webp\n"
+        "ok\tlarge-moving.webp\n"
+        "refuse\tover-1080p.gif\n"
+        "refuse\ttoo-long.gif\n")
+    return out
+
+
+def upload_fixtures(console, local, remote_root=FIXTURES):
+    console.remove_tree(remote_root)
+    console.make_dirs(remote_root)
     count = 0
     size = 0
     for path in sorted(local.rglob("*")):
-        remote = f"{FIXTURES}/{path.relative_to(local).as_posix()}"
+        remote = f"{remote_root}/{path.relative_to(local).as_posix()}"
         if path.is_dir():
             console.make_dirs(remote)
         else:
@@ -261,9 +320,10 @@ def launch(host, elf_port, console, title):
 
 
 def main():
-    args = [arg for arg in sys.argv[1:] if arg not in ("--quit", "--installs")]
+    args = [arg for arg in sys.argv[1:] if arg not in ("--quit", "--installs", "--pictures")]
     quit_after = "--quit" in sys.argv[1:]
     installs = "--installs" in sys.argv[1:]
+    pictures = "--pictures" in sys.argv[1:]
     if len(args) not in (1, 2):
         raise SystemExit(__doc__)
     results = Path(args[0])
@@ -287,6 +347,11 @@ def main():
         local = make_fixtures(ROOT / "build" / "install-fixtures")
         say("Uploading the test games to the console")
         count, size = upload_fixtures(console, local)
+        say(f"Uploaded {count} files, {size / 1e6:.0f} MB")
+    if pictures:
+        local = make_pictures(ROOT / "build" / "picture-fixtures")
+        say("Uploading the test pictures to the console")
+        count, size = upload_fixtures(console, local, PICTURES)
         say(f"Uploaded {count} files, {size / 1e6:.0f} MB")
     token = str(int(time.time()))
     # Written before a launch, so ORION finds it on its first look.
@@ -374,6 +439,8 @@ def main():
     console.remove(f"{STATE}/dev-request.txt")
     if installs:
         console.remove_tree(FIXTURES)
+    if pictures:
+        console.remove_tree(PICTURES)
     if quit_after and design == "-":
         console.write(f"{STATE}/dev-request.txt", f"quit - {token}q\n".encode())
         say("Asked ORION to close itself")

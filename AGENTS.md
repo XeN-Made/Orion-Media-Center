@@ -145,6 +145,7 @@ Other outputs of the same program:
 | `HUI_MANIFEST=build/manifest.json tools/host-snapshots.sh build/snapshots aurora` then `python3 tools/gen-docs.py build/manifest.json` | The galleries, the component catalogue, the component index and the counts |
 | `HUI_SHOWCASE=build/showcase tools/host-snapshots.sh out`, then `HUI_LIBRARY=build/showcase` (with `HUI_FAVOURITE_ALL=1` to star everything) | A console library of the catalogue's 24 invented games: PS5, PS4, homebrew, and DS, GBA and SNES games in a RetroArch folder (hide its tile, `PPSA92100`), for pictures with no real product in them (`docs/screenshots/`) |
 | `HUI_HOME_ART=out/art tools/host-snapshots.sh out` | ORION's home-screen art: `icon0.png`, `pic0.png`, `pic1.png` (3840 x 2160; `tools/prepare-assets.sh` makes the DDS files) |
+| `tools/release-check.sh` | Before a release: the version is new and matches `whats-new.txt`, nothing is uncommitted, and the tests, the PS5 build, lint and the music checks pass. Changes nothing |
 | `tools/build-site.sh` | The project site (GitHub Pages) in `build/site`: the pages in `site/` with the screenshots, `docs/themes/template.theme` and the fonts copied in; `.github/workflows/pages.yml` publishes it with each release |
 
 What the preview cannot tell you, and must be reported as not verified until

@@ -8,7 +8,8 @@
 // and does the console's own share (orion/console_share.hpp) let a client
 // in. When the PC has put test games in <state>/selftest/fixtures, each is
 // installed off that share with the installer's own code, compared file by
-// file and removed (check_installs in self_test.cpp). A PC asks with a
+// file and removed (check_installs in self_test.cpp); test pictures in
+// <state>/selftest/pictures are decoded as a background would be. A PC asks with a
 // line "check <what> <token>" (main.cpp) and reads the report from
 // <state>/selftest/report.txt, which outlives the app.
 //
@@ -64,6 +65,13 @@ struct SelfTestInput
     std::function<bool(int port)> port_open; // something answers on 127.0.0.1:<port>
     // sys::copy_game: the installer's own copier, for the install checks.
     GameInstall::Copier copy;
+    // The network search (sys::smb_find_servers) from the console's own
+    // address, and a server's list of shares (sys::smb_shares).
+    std::string own_address;
+    std::function<std::vector<sys::SmbServer>(const std::string &own)> find_servers;
+    std::function<bool(const sys::SmbLogin &login, std::vector<std::string> *shares,
+                       std::string *error)>
+        list_shares;
 };
 
 // Every check, in the report's order. Blocking: network drives are tried.

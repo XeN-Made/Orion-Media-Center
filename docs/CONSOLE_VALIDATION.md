@@ -96,6 +96,7 @@ PS5_HOST=<console address> tools/console-check.py results/check-1           # ch
 PS5_HOST=<console address> tools/console-check.py results/check-1 library   # then the library's tour
 PS5_HOST=<console address> tools/console-check.py results/check-1 --quit    # and close ORION after
 PS5_HOST=<console address> tools/console-check.py results/check-1 --installs # and the installer
+PS5_HOST=<console address> tools/console-check.py results/check-1 --pictures # and backgrounds
 ```
 
 The checks (`src/orion/self_test.cpp`), one `PASS`, `FAIL` or `SKIP` line each:
@@ -107,12 +108,16 @@ The checks (`src/orion/self_test.cpp`), one `PASS`, `FAIL` or `SKIP` line each:
 | `library` | the library found no titles; the line counts games, homebrew, emulated games and payloads |
 | `drives` | an extended-storage or USB drive has games in its `user/app` and the library has none of them |
 | `network-drive <address>` | a saved network drive does not sign in; the line says why |
+| `network-search` | the network search finds no machine, or not the ones the saved drives are on |
 | `console-share` | sharing is on, and the payload reports a problem or a sign-in to `\\127.0.0.1\data` fails |
+| `share-list` | the console's share list (what Windows' `net view` reads) has no `data` |
+| `drive-errors` | a wrong password, or a share that is not there, is let in or does not come back with the hint a player is shown |
 | `memory` | the heap has refused an allocation |
 | `pc-reaches-share` | sharing is on and port 445 does not answer from the PC |
 | `install ok <file>` | with `--installs`: the test game installed off the share differs from what was packed, file by file |
 | `install twice <file>` | the same game installed again is not refused as already there |
 | `install stop <file>` | Stop half way leaves files behind |
+| `picture <file>` | with `--pictures`: a picture a background takes does not decode (all its frames), or one it must refuse is not refused; the line has its size and time |
 
 `--installs` packs an invented game with 7-Zip and WinRAR (Windows' own,
 through WSL; `SEVEN_ZIP` and `RAR` name others): a game folder, ZIP with

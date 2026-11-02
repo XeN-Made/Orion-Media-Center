@@ -165,7 +165,8 @@ TEST_F(SelfTestFixture, SignsInToTheConsolesOwnShare)
     in.list = [&seen](const hui::sys::SmbLogin &login, const std::string &, int, std::size_t,
                       std::vector<hui::sys::SmbEntry> *entries, std::string *)
     {
-        seen = login;
+        if (seen.server.empty())
+            seen = login; // the first sign-in: console-share's own
         entries->resize(5);
         return true;
     };
@@ -201,9 +202,13 @@ TEST_F(SelfTestFixture, InstallsEachTestGameAndComparesIt)
     hui::save::write_atomic(fixtures + "/image.sha256",
                             hui::sha256_hex("image") + "  check.ffpkg\n");
     in.list = [](const hui::sys::SmbLogin &, const std::string &folder, int, std::size_t,
-                 std::vector<hui::sys::SmbEntry> *entries, std::string *)
+                 std::vector<hui::sys::SmbEntry> *entries, std::string *error)
     {
-        EXPECT_EQ(folder, "orion/selftest/fixtures");
+        if (folder != "orion/selftest/fixtures")
+        {
+            *error = "STATUS_OBJECT_NAME_NOT_FOUND"; // the other checks' asks
+            return false;
+        }
         for (const char *name : {"game.zip", "split.part1.rar", "split.part2.rar", "broken.7z",
                                  "big.7z", "check.ffpkg"})
         {
@@ -278,6 +283,104 @@ TEST_F(SelfTestFixture, SkipsInstallsWithoutSharing)
     // No fixtures: no install line at all.
     hui::save::remove_tree(in.state_dir + "/selftest/fixtures");
     EXPECT_EQ(find(hui::orion::run_self_test(in), "installs"), nullptr);
+}
+
+// The search must find the machines the saved drives are on.
+TEST_F(SelfTestFixture, SearchesTheNetwork)
+{
+    std::vector<hui::orion::Share> shares;
+    hui::orion::Share saved;
+    ASSERT_TRUE(hui::orion::parse_share_address("\\\\192.168.1.20\\games", &saved));
+    hui::orion::add_share(shares, saved);
+    ASSERT_TRUE(hui::orion::save_shares(in.state_dir, shares));
+    in.list = [](const hui::sys::SmbLogin &, const std::string &, int, std::size_t,
+                 std::vector<hui::sys::SmbEntry> *, std::string *) { return true; };
+    in.own_address = "192.168.1.30";
+    std::string asked;
+    in.find_servers = [&asked](const std::string &own)
+    {
+        asked = own;
+        hui::sys::SmbServer server;
+        server.address = "192.168.1.20";
+        server.name = "MEDIA-PC";
+        return std::vector<hui::sys::SmbServer>{server};
+    };
+    const std::vector<CheckResult> found = hui::orion::run_self_test(in);
+    EXPECT_EQ(asked, "192.168.1.30");
+    EXPECT_EQ(find(found, "network-search")->outcome, Outcome::pass);
+    EXPECT_EQ(find(found, "network-search")->detail, "1 found: 192.168.1.20 MEDIA-PC");
+
+    in.find_servers = [](const std::string &) { return std::vector<hui::sys::SmbServer>{}; };
+    EXPECT_EQ(find(hui::orion::run_self_test(in), "network-search")->outcome, Outcome::fail);
+}
+
+// A wrong password and a missing share must each come back with the hint
+// a player is shown; one that lets them in fails.
+TEST_F(SelfTestFixture, ChecksWhatABadDriveSays)
+{
+    hui::orion::ConsoleShare share;
+    share.on = true;
+    share.password = "secret";
+    ASSERT_TRUE(hui::orion::write_console_share(in.state_dir, share));
+    hui::save::write_atomic(in.state_dir + "/smb-share-status.txt", "on\tdata\n");
+    bool strict = true;
+    in.list = [&strict](const hui::sys::SmbLogin &login, const std::string &, int, std::size_t,
+                        std::vector<hui::sys::SmbEntry> *, std::string *error)
+    {
+        if (strict && login.password != "secret")
+        {
+            *error = "Session setup failed with (0xc000006d) STATUS_LOGON_FAILURE";
+            return false;
+        }
+        if (login.share != "data")
+        {
+            *error = "Tree Connect failed with (0xc00000cc) STATUS_BAD_NETWORK_NAME";
+            return false;
+        }
+        return true;
+    };
+    in.list_shares = [](const hui::sys::SmbLogin &, std::vector<std::string> *names, std::string *)
+    {
+        *names = {"data", "usb0"};
+        return true;
+    };
+    const std::vector<CheckResult> results = hui::orion::run_self_test(in);
+    ASSERT_NE(find(results, "drive-errors"), nullptr);
+    EXPECT_EQ(find(results, "drive-errors")->outcome, Outcome::pass)
+        << find(results, "drive-errors")->detail;
+    EXPECT_EQ(find(results, "share-list")->outcome, Outcome::pass);
+    EXPECT_EQ(find(results, "share-list")->detail, "the console offers data, usb0");
+
+    strict = false;
+    const std::vector<CheckResult> lax = hui::orion::run_self_test(in);
+    EXPECT_EQ(find(lax, "drive-errors")->outcome, Outcome::fail);
+    EXPECT_EQ(find(lax, "drive-errors")->detail, "a wrong password was let in");
+}
+
+// Pictures decode as a background would, and a broken one is refused.
+TEST_F(SelfTestFixture, DecodesTestPictures)
+{
+    const std::string dir = in.state_dir + "/selftest/pictures";
+    ASSERT_TRUE(make_path(dir));
+    std::string cover;
+    ASSERT_TRUE(hui::save::read_file(
+        std::string(HUI_SOURCE_DIR) + "/tests/fixtures/images/cover.jpg", &cover));
+    hui::save::write_atomic(dir + "/cover.jpg", cover);
+    hui::save::write_atomic(dir + "/broken.png", "not a picture");
+    hui::save::write_atomic(dir + "/cases.txt",
+                            "ok\tcover.jpg\nrefuse\tbroken.png\nok\tbroken.png\n");
+    const std::vector<CheckResult> results = hui::orion::run_self_test(in);
+    std::vector<const CheckResult *> pictures;
+    for (const CheckResult &result : results)
+    {
+        if (result.name.rfind("picture ", 0) == 0)
+            pictures.push_back(&result);
+    }
+    ASSERT_EQ(pictures.size(), 3u);
+    EXPECT_EQ(pictures[0]->outcome, Outcome::pass) << pictures[0]->detail;
+    EXPECT_EQ(pictures[1]->outcome, Outcome::pass) << pictures[1]->detail;
+    EXPECT_EQ(pictures[2]->outcome, Outcome::fail);
+    EXPECT_EQ(pictures[2]->detail.rfind("does not decode", 0), 0u) << pictures[2]->detail;
 }
 
 TEST(OrionSelfTest, WritesALineACheck)
