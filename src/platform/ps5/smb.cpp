@@ -3,6 +3,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "platform/ps5/smb.hpp"
+
+#include "core/ws_discovery.hpp"
 #include "platform/ps5/smb_connection.hpp"
 
 // smb2.h first: libsmb2.h uses its types.
@@ -268,6 +270,67 @@ void add_server(std::vector<SmbServer> *servers, const std::string &address)
     servers->push_back({address, ""});
 }
 
+// A machine's name from its WS-Discovery metadata (core/ws_discovery.hpp):
+// one HTTP request to an address that has just answered, so the connect
+// does not hang the way one to an empty address does. Empty on any trouble.
+std::string wsd_name(const std::string &xaddr, const std::string &endpoint, Clock::time_point until)
+{
+    const std::string rest = xaddr.substr(7);
+    const std::size_t colon = rest.find(':');
+    const std::size_t slash = rest.find('/');
+    if (colon == std::string::npos || slash == std::string::npos || colon > slash)
+        return {};
+    sockaddr_in to = {};
+    to.sin_family = AF_INET;
+    to.sin_port = htons(static_cast<std::uint16_t>(std::atoi(rest.c_str() + colon + 1)));
+    if (::inet_pton(AF_INET, rest.substr(0, colon).c_str(), &to.sin_addr) != 1)
+        return {};
+    const int s = ::socket(AF_INET, SOCK_STREAM, 0);
+    if (s < 0)
+        return {};
+    std::string reply;
+    if (never_waits(s))
+    {
+        ::connect(s, reinterpret_cast<const sockaddr *>(&to), sizeof(to));
+        pollfd ready = {s, POLLOUT, 0};
+        int problem = 0;
+        socklen_t size = sizeof(problem);
+        if (::poll(&ready, 1, ms_left(until)) == 1 &&
+            ::getsockopt(s, SOL_SOCKET, SO_ERROR, &problem, &size) == 0 && problem == 0)
+        {
+            const std::string request = wsd_get(xaddr, endpoint,
+                                                wsd_message_id(static_cast<unsigned long long>(
+                                                    Clock::now().time_since_epoch().count())));
+            std::size_t sent = 0;
+            while (sent < request.size())
+            {
+                pollfd room = {s, POLLOUT, 0};
+                if (::poll(&room, 1, ms_left(until)) != 1)
+                    break;
+                const ssize_t put = ::send(s, request.data() + sent, request.size() - sent, 0);
+                if (put <= 0)
+                    break;
+                sent += static_cast<std::size_t>(put);
+            }
+            while (sent == request.size() && reply.size() < (64u << 10))
+            {
+                pollfd wait = {s, POLLIN, 0};
+                if (::poll(&wait, 1, ms_left(until)) != 1)
+                    break;
+                char piece[4096];
+                const ssize_t got = ::recv(s, piece, sizeof(piece), 0);
+                if (got <= 0)
+                    break;
+                reply.append(piece, static_cast<std::size_t>(got));
+                if (!wsd_computer_name(reply).empty())
+                    break;
+            }
+        }
+    }
+    ::close(s);
+    return wsd_computer_name(reply);
+}
+
 } // namespace
 
 std::vector<SmbServer> smb_find_servers(const std::string &own, std::string *trace,
@@ -340,9 +403,60 @@ std::vector<SmbServer> smb_find_servers(const std::string &own, std::string *tra
         }
     }
 
+    // Windows 10 and 11 often answer no NetBIOS; every PC with network
+    // discovery on answers a WS-Discovery probe for computers, as File
+    // Explorer's Network view asks. The answer's sender is the machine.
+    say("search: workgroup answers " + std::to_string(workgroup) + "; asking for computers");
+    int discovered = 0;
+    std::vector<std::pair<std::string, std::pair<std::string, std::string>>> metadata;
+    const int w = ::socket(AF_INET, SOCK_DGRAM, 0);
+    if (w >= 0 && never_waits(w))
+    {
+        // Out of the console's own address, not whichever the system picks.
+        ::setsockopt(w, IPPROTO_IP, IP_MULTICAST_IF, &self, sizeof(self));
+        const std::string probe = wsd_probe(
+            wsd_message_id(static_cast<unsigned long long>(started.time_since_epoch().count())));
+        sockaddr_in to = {};
+        to.sin_family = AF_INET;
+        to.sin_port = htons(kWsdPort);
+        ::inet_pton(AF_INET, kWsdAddress, &to.sin_addr);
+        // Twice, as the protocol does: a multicast datagram can be lost.
+        for (int copy = 0; copy < 2; ++copy)
+            ::sendto(w, probe.data(), probe.size(), 0, reinterpret_cast<const sockaddr *>(&to),
+                     sizeof(to));
+        // Answers come within half a second of the probe (the protocol's
+        // longest random delay), and a few more for a slow network.
+        const auto until = std::min(deadline, Clock::now() + std::chrono::milliseconds(1500));
+        for (int reads = 0; reads < 64; ++reads)
+        {
+            pollfd wait = {w, POLLIN, 0};
+            if (::poll(&wait, 1, ms_left(until)) <= 0)
+                break;
+            char answer[8192];
+            sockaddr_in from = {};
+            socklen_t from_size = sizeof(from);
+            const ssize_t got = ::recvfrom(w, answer, sizeof(answer), 0,
+                                           reinterpret_cast<sockaddr *>(&from), &from_size);
+            if (got <= 0)
+                continue;
+            const std::string_view text(answer, static_cast<std::size_t>(got));
+            const std::uint32_t found = ntohl(from.sin_addr.s_addr);
+            if (found == me || found == 0 || !wsd_is_computer(text))
+                continue;
+            const std::string address = text_of(found);
+            const std::size_t before = servers.size();
+            add_server(&servers, address);
+            if (servers.size() > before)
+                ++discovered;
+            metadata.push_back({address, {wsd_xaddr(text), wsd_endpoint(text)}});
+        }
+    }
+    if (w >= 0)
+        ::close(w);
+
     // Each one's name: a NetBIOS node status query ("*"), answered with the
     // names it holds; the first unique workstation name is the machine's.
-    say("search: workgroup answers " + std::to_string(workgroup) + "; asking their names");
+    say("search: " + std::to_string(discovered) + " more by WS-Discovery; asking their names");
     int named = 0;
     if (u >= 0)
     {
@@ -392,10 +506,24 @@ std::vector<SmbServer> smb_find_servers(const std::string &own, std::string *tra
     }
     if (u >= 0)
         ::close(u);
+    // Those NetBIOS left nameless, from their WS-Discovery metadata.
+    for (const auto &[address, where] : metadata)
+    {
+        for (SmbServer &server : servers)
+        {
+            if (server.address != address || !server.name.empty() || where.first.empty())
+                continue;
+            const auto until = std::min(deadline, Clock::now() + std::chrono::milliseconds(1500));
+            server.name = wsd_name(where.first, where.second, until);
+            if (!server.name.empty())
+                ++named;
+        }
+    }
     const auto took =
         std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now() - started).count();
-    *trace = "around " + own + ": workgroup answers " + std::to_string(workgroup) + ", named " +
-             std::to_string(named) + ", " + std::to_string(took) + " ms";
+    *trace = "around " + own + ": workgroup answers " + std::to_string(workgroup) +
+             ", WS-Discovery " + std::to_string(discovered) + ", named " + std::to_string(named) +
+             ", " + std::to_string(took) + " ms";
     return servers;
 }
 
