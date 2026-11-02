@@ -10,8 +10,20 @@ Deutsch | ORION in German: Settings, Library, Language, or a console set to Germ
 A fuller setup | Ready-made labels (CO-OP, RPG, RACING...) and your own, every tab shown or hidden with the systems under Emulators, and each game's tab and label (Square). R1 goes on to the next step from anywhere. Settings, System, Run setup again opens it any time.
 Default tab label | Settings, Tabs, a tab, Default label: its titles wear it unless you gave one a label of its own.
 Any label on any title | Options, Label: ORION's GAME, PS4, HOMEBREW and MEDIA labels as well as yours.
+This console on a PC | Settings, Network drives, Share this console's drives: on a PC, \\<console> in File Explorer opens its storage and USB drives, to copy games and files both ways.
+Sub-tabs | Settings, Tabs, a tab, Inside: it moves under another tab, where L2 and R2 step through them.
+Several at once | Options, Select several: tick titles with Cross, then Options moves them all to a tab.
+Your own order | Options, Move within this tab: the direction buttons carry a title, and the tab keeps your Custom order.
+Sizes | The console's free space at the top of the Library, each title's size under the covers, and sorting by Largest or Smallest first.
+Delete installed apps | Options, Remove: installed games and apps go through the console's own uninstall, and ELF programs can be deleted.
+Wii and Xbox 360 downloads | Porpoise lists .wad games, and PS5X360 lists Games on Demand and Arcade games.
+Labels set the kind | Labelling a title GAME makes it a game (its shelf, its Details); HOMEBREW makes it homebrew.
 ## Fixed
 Games installed on extended storage are looked for as well as the console's own.
 ORION's helper tries again when the ELF loader is not ready yet, and says so when installed games cannot be read.
 PS5 packages that keep their name further in (most add-ons) are recognised.
 A RetroArch folder named the short way (content/gba) no longer makes a second tab for its system.
+Moving a tab steps past hidden tabs, so it moves on the tab bar at once.
+ORION opens after a short rest too, not only after a long one.
+Circle in the background picture browser goes back a folder, then to Appearance.
+Network drives: Windows 11 PCs are found by name, and a PC's shared folders are listed.
