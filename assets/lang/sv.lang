@@ -904,3 +904,7 @@ author = Svenska ORION-bidragsgivare
 "Move" = "Flytta"
 "Keep here" = "Behåll här"
 "Put back" = "Lägg tillbaka"
+"None: on the tab bar" = "Ingen: i flikraden"
+"Inside" = "Inuti"
+"Inside another tab, it is one of that tab's sub-tabs: L2 and R2 under it" = "Inuti en annan flik är den en av dess underflikar: L2 och R2 under den"
+"Sub-tab" = "Underflik"

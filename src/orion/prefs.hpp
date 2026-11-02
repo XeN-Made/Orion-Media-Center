@@ -105,6 +105,9 @@ struct TabPrefs
     // The label its titles wear when not given one of their own (a label id,
     // ORION's or the player's); empty: each wears ORION's for it.
     std::string label;
+    // The tab it sits inside (a tab key): off the tab bar, in that tab's row
+    // of sub-tabs. Empty: on the bar.
+    std::string parent;
 };
 
 // How a tab shows its titles: covers in a grid, big cases three to a screen
@@ -324,6 +327,15 @@ struct LibraryPrefs
     std::string tab_label(const std::string &tab) const;
     // A label id (valid_label_id); anything else, empty included, clears it.
     void set_tab_label(const std::string &tab, const std::string &label);
+    // The tab a tab sits inside, or empty.
+    std::string tab_parent(const std::string &tab) const;
+    // One level only: a tab with tabs inside it goes inside no other, and
+    // none goes inside a tab that is inside another, itself, All, Emulators
+    // (its row is the systems') or Hidden. False when refused; empty takes
+    // it back to the bar.
+    bool set_tab_parent(const std::string &tab, const std::string &parent);
+    // Whether a tab can hold others (can_be_parent) or sit inside one.
+    static bool can_hold_tabs(const std::string &tab);
 
     // Titles (and games for an emulator) the player hid: they leave every
     // tab but Hidden. By item id (library::is_item_id).

@@ -415,6 +415,30 @@ TEST(OrionPrefs, MovingATabStepsOverHiddenOnes)
     EXPECT_FALSE(prefs.move_tab_key("emulators", 1, tabs));
 }
 
+// Issue #16: a tab sits inside another, one level deep, and it is kept.
+TEST(OrionPrefs, TabsGoInsideOtherTabsOneLevelDeep)
+{
+    const std::string dir = fresh_dir("orion-prefs-parents");
+    orion::LibraryPrefs prefs;
+    const std::string ps4 = "tab:" + prefs.add_tab("PS4").id;
+    EXPECT_TRUE(prefs.set_tab_parent(ps4, "games"));
+    EXPECT_EQ(prefs.tab_parent(ps4), "games");
+    EXPECT_FALSE(prefs.set_tab_parent("games", "homebrew")); // it holds PS4
+    EXPECT_FALSE(prefs.set_tab_parent("media", ps4));        // PS4 is inside Games
+    EXPECT_FALSE(prefs.set_tab_parent("media", "media"));
+    EXPECT_FALSE(prefs.set_tab_parent("media", "all"));
+    EXPECT_FALSE(prefs.set_tab_parent("media", "emulators"));
+    EXPECT_FALSE(prefs.set_tab_parent("all", "games"));
+    EXPECT_FALSE(prefs.set_tab_parent("sys:Nintendo - Game Boy Advance", "games"));
+    EXPECT_TRUE(prefs.set_tab_parent("media", "games"));
+    ASSERT_TRUE(orion::save_prefs(dir, prefs));
+    orion::LibraryPrefs back = orion::load_prefs(dir);
+    EXPECT_EQ(back.tab_parent(ps4), "games");
+    EXPECT_EQ(back.tab_parent("media"), "games");
+    EXPECT_TRUE(back.set_tab_parent(ps4, "")); // back on the bar
+    EXPECT_EQ(back.tab_parent(ps4), "");
+}
+
 TEST(OrionPrefs, BrokenOrHandEditedFilesAreForgiven)
 {
     const std::string dir = fresh_dir("orion-prefs-edited");

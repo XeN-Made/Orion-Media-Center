@@ -909,3 +909,7 @@ author = ORION
 "Move" = "Mover"
 "Keep here" = "Dejar aquí"
 "Put back" = "Devolver"
+"None: on the tab bar" = "Ninguna: en la barra de pestañas"
+"Inside" = "Dentro de"
+"Inside another tab, it is one of that tab's sub-tabs: L2 and R2 under it" = "Dentro de otra pestaña es una de sus subpestañas: L2 y R2 bajo ella"
+"Sub-tab" = "Subpestaña"

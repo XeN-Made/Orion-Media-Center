@@ -904,3 +904,7 @@ author = ORION
 "Move" = "Mozgatás"
 "Keep here" = "Itt hagyás"
 "Put back" = "Visszatétel"
+"None: on the tab bar" = "Nincs: a lapsávon"
+"Inside" = "Benne"
+"Inside another tab, it is one of that tab's sub-tabs: L2 and R2 under it" = "Egy másik lapon belül annak egyik allapja: L2 és R2 alatta"
+"Sub-tab" = "Allap"

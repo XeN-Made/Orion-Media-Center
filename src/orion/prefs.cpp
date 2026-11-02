@@ -381,7 +381,8 @@ void edit_tab_prefs(std::vector<TabPrefs> &all, const std::string &tab, Edit edi
     }
     edit(*at);
     if (at->theme.empty() && at->cover == CoverShape::automatic && at->sort.empty() &&
-        at->view.empty() && !at->hidden && at->name.empty() && at->label.empty())
+        at->view.empty() && !at->hidden && at->name.empty() && at->label.empty() &&
+        at->parent.empty())
         all.erase(at);
 }
 
@@ -479,6 +480,35 @@ void LibraryPrefs::set_tab_label(const std::string &tab, const std::string &labe
 {
     const std::string kept = valid_label_id(label) ? label : std::string();
     edit_tab_prefs(tab_prefs, tab, [&](TabPrefs &e) { e.label = kept; });
+}
+
+std::string LibraryPrefs::tab_parent(const std::string &tab) const
+{
+    const TabPrefs *entry = find_tab_prefs(tab_prefs, tab);
+    return entry != nullptr ? entry->parent : std::string();
+}
+
+bool LibraryPrefs::can_hold_tabs(const std::string &tab)
+{
+    return !tab.empty() && tab != "all" && tab != "emulators" && tab != kHiddenTabKey &&
+           tab.rfind("sys:", 0) != 0;
+}
+
+bool LibraryPrefs::set_tab_parent(const std::string &tab, const std::string &parent)
+{
+    if (!parent.empty())
+    {
+        if (parent == tab || !can_hold_tabs(parent) || !can_hold_tabs(tab) ||
+            !tab_parent(parent).empty())
+            return false;
+        for (const TabPrefs &entry : tab_prefs)
+        {
+            if (entry.parent == tab)
+                return false; // it holds tabs itself
+        }
+    }
+    edit_tab_prefs(tab_prefs, tab, [&](TabPrefs &e) { e.parent = parent; });
+    return true;
 }
 
 bool LibraryPrefs::valid_label_id(const std::string &id) const
@@ -740,6 +770,9 @@ LibraryPrefs load_prefs(const std::string &state_dir)
         prefs.set_tab_name(member.first, value["name"].string_or(""));
         prefs.set_tab_label(member.first, value["label"].string_or(""));
     }
+    // Parents after every tab's settings, so the one-level rule sees them all.
+    for (const auto &member : root["tab_settings"].members())
+        prefs.set_tab_parent(member.first, member.second["parent"].string_or(""));
     prefs.last_tab = root["last_tab"].string_or(prefs.last_tab);
     prefs.sort = root["sort"].string_or(prefs.sort);
     if (const std::string view = root["view"].string_or(""); known_view(view))
@@ -924,13 +957,13 @@ bool save_prefs(const std::string &state_dir, const LibraryPrefs &prefs)
     {
         const TabPrefs &entry = prefs.tab_prefs[i];
         text += i == 0 ? "\n" : ",\n";
-        text += "    " + json::quote(entry.tab) + ": {\"theme\": " + json::quote(entry.theme) +
-                ", \"cover\": " + json::quote(cover_shape_key(entry.cover)) +
-                ", \"sort\": " + json::quote(entry.sort) +
-                ", \"view\": " + json::quote(entry.view) +
-                ", \"hidden\": " + (entry.hidden ? "true" : "false") +
-                ", \"name\": " + json::quote(entry.name) +
-                ", \"label\": " + json::quote(entry.label) + "}";
+        text +=
+            "    " + json::quote(entry.tab) + ": {\"theme\": " + json::quote(entry.theme) +
+            ", \"cover\": " + json::quote(cover_shape_key(entry.cover)) +
+            ", \"sort\": " + json::quote(entry.sort) + ", \"view\": " + json::quote(entry.view) +
+            ", \"hidden\": " + (entry.hidden ? "true" : "false") +
+            ", \"name\": " + json::quote(entry.name) + ", \"label\": " + json::quote(entry.label) +
+            ", \"parent\": " + json::quote(entry.parent) + "}";
     }
     text += prefs.tab_prefs.empty() ? "}\n}\n" : "\n  }\n}\n";
     return save::write_atomic(file_of(state_dir), text).empty();

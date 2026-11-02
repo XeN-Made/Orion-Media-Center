@@ -126,6 +126,7 @@ enum : int
     kPageView,
     kPageLabel,
     kPageCore,
+    kPageParent,
     kPageRename,
     kPageLeft,
     kPageRight,
@@ -931,6 +932,33 @@ void SettingsPanel::build_tab_page(const LibraryPrefs &prefs)
         }
         form_.add_choice(kPageCore, tr("Core"), std::move(cores), core).description =
             tr("The RetroArch core these games start with");
+    }
+    // Inside another tab: one of its sub-tabs (L2 and R2 under it).
+    tab_parent_keys_.clear();
+    if (LibraryPrefs::can_hold_tabs(page_))
+    {
+        bool holds = false;
+        for (const TabPrefs &entry : prefs.tab_prefs)
+            holds = holds || entry.parent == page_;
+        if (!holds)
+        {
+            std::vector<std::string> places = {tr("None: on the tab bar")};
+            tab_parent_keys_ = {""};
+            int at = 0;
+            const std::string now = prefs.tab_parent(page_);
+            for (const TabEntry &tab : tabs_)
+            {
+                if (tab.key == page_ || !LibraryPrefs::can_hold_tabs(tab.key) ||
+                    !prefs.tab_parent(tab.key).empty())
+                    continue;
+                if (tab.key == now)
+                    at = static_cast<int>(tab_parent_keys_.size());
+                places.push_back(tab.name);
+                tab_parent_keys_.push_back(tab.key);
+            }
+            form_.add_choice(kPageParent, tr("Inside"), std::move(places), at).description =
+                tr("Inside another tab, it is one of that tab's sub-tabs: L2 and R2 under it");
+        }
     }
     form_.add_action(kPageLeft, tr("Move left")).description = tr("Earlier on the tab bar");
     form_.add_action(kPageRight, tr("Move right")).description = tr("Later on the tab bar");
@@ -2082,6 +2110,16 @@ SettingsPanel::Change SettingsPanel::edit_tab_page(int id, LibraryPrefs *prefs)
         prefs->set_tab_sort(page_, index <= 0 ? std::string()
                                               : kSortKeys[std::min(index - 1, kSortCount - 1)]);
         return Change::prefs;
+    }
+    case kPageParent:
+    {
+        const int index = form_.choice_index(kPageParent);
+        return prefs->set_tab_parent(page_,
+                                     index > 0 && index < static_cast<int>(tab_parent_keys_.size())
+                                         ? tab_parent_keys_[static_cast<std::size_t>(index)]
+                                         : std::string())
+                   ? Change::prefs
+                   : Change::none;
     }
     case kPageLabel:
     {

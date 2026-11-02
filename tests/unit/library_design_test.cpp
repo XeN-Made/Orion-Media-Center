@@ -473,6 +473,36 @@ TEST_F(LibraryDesign, ATitleIsMovedWithinItsTab)
     send(*design, press(hui::Action::back));
 }
 
+// Issue #16: Media inside Games leaves the tab bar; on Games, R2 steps to
+// it in the row under the bar, and back with L2.
+TEST_F(LibraryDesign, ATabInsideAnotherIsItsSubTab)
+{
+    const std::string dir = ::testing::TempDir() + "orion-design-subtabs";
+    ASSERT_TRUE(hui::save::ensure_directory(dir));
+    hui::orion::LibraryPrefs prefs;
+    ASSERT_TRUE(prefs.set_tab_parent("media", "games"));
+    ASSERT_TRUE(hui::orion::save_prefs(dir, prefs));
+    library_.state_dir = dir;
+    auto design = with_fixture();
+    // The bar: All, Games, Homebrew, Favourites; no Media between them.
+    for (int i = 0; i < 3; ++i)
+        send(*design, press(hui::Action::page_next));
+    EXPECT_EQ(hui::orion::load_prefs(dir).last_tab, "favourites");
+    // Back to Games: its own titles first, then Media under it.
+    send(*design, press(hui::Action::page_prev));
+    send(*design, press(hui::Action::page_prev));
+    EXPECT_EQ(hui::orion::load_prefs(dir).last_tab, "games");
+    send(*design, press(hui::Action::jump_next));
+    EXPECT_EQ(hui::orion::load_prefs(dir).last_tab, "media");
+    expect_drawable(*design);
+    send(*design, press(hui::Action::jump_prev));
+    EXPECT_EQ(hui::orion::load_prefs(dir).last_tab, "games");
+    // A new Library opens on Media inside Games again.
+    send(*design, press(hui::Action::jump_next));
+    auto again = hui::concepts::make_library(context_);
+    expect_drawable(*again);
+}
+
 // Details… shows the title's page: Play and Favourite first, then its facts.
 // Cross on Favourite stars it, Circle closes the page, and the library has the
 // input again.

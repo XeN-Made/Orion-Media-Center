@@ -910,3 +910,7 @@ author = Deutsche ORION-Mitwirkende
 "Move" = "Verschieben"
 "Keep here" = "Hier lassen"
 "Put back" = "Zurücksetzen"
+"None: on the tab bar" = "Keiner: in der Tab-Leiste"
+"Inside" = "Innerhalb"
+"Inside another tab, it is one of that tab's sub-tabs: L2 and R2 under it" = "In einem anderen Tab ist er einer seiner Unter-Tabs: L2 und R2 darunter"
+"Sub-tab" = "Unter-Tab"

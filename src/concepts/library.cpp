@@ -1319,7 +1319,7 @@ class Library final : public app::Concept
         view_pick_.draw(canvas);
         tabs_.draw(canvas);
         draw_tab_edges(list, paint, tabs_, ui::Button::l1, ui::Button::r1, 40.0f, false);
-        if (on_emulators_tab())
+        if (has_subrow())
         {
             subtabs_.draw(canvas);
             draw_tab_edges(list, paint, subtabs_, ui::Button::l2, ui::Button::r2, 34.0f, true);
@@ -2016,10 +2016,11 @@ class Library final : public app::Concept
             input.is_pressed(Action::page_next) || input.is_pressed(Action::jump_next);
         const bool previous =
             input.is_pressed(Action::page_prev) || input.is_pressed(Action::jump_prev);
-        // On the Emulators tab, L2 and R2 change system instead.
+        // Under a tab with a row (Emulators' systems, a tab's sub-tabs), L2
+        // and R2 move along that row instead.
         const bool sub_next = input.is_pressed(Action::jump_next);
         const bool sub_previous = input.is_pressed(Action::jump_prev);
-        if (on_emulators_tab() && (sub_next || sub_previous))
+        if (has_subrow() && (sub_next || sub_previous))
         {
             if (subtabs_.step(sub_next ? 1 : -1, input, feedback) == ui::Event::changed)
             {
@@ -2034,6 +2035,7 @@ class Library final : public app::Concept
         {
             if (tabs_.step(next ? 1 : -1, input, feedback) == ui::Event::changed)
             {
+                fill_subrow(bar_key());
                 prefs_.last_tab = active_key();
                 save_prefs();
                 restyle();
@@ -3312,6 +3314,10 @@ class Library final : public app::Concept
                   ui::Hint{ui::Button::triangle, hint_words_[4].c_str()},
                   ui::Hint{ui::Button::options, hint_words_[5].c_str()},
                   ui::Hint{ui::Button::right_stick, hint_words_[6].c_str()}};
+        // Under a tab with tabs inside it, L2 and R2 step through them.
+        nested_word_ = tr("Sub-tab");
+        nested_hints_ = hints_;
+        nested_hints_[0] = ui::Hint{ui::Button::l2, nested_word_.c_str(), ui::Button::r2};
         // While selecting, and while arranging a tab: what the buttons do then.
         mode_words_ = {tr("Tick"), tr("Move to…"),  tr("Done"),
                        tr("Move"), tr("Keep here"), tr("Put back")};
@@ -7663,7 +7669,7 @@ class Library final : public app::Concept
     {
         const std::string bar = bar_key();
         const int sub = subtabs_.active();
-        if (bar == kEmulatorsTab && sub >= 0 && sub < static_cast<int>(sub_keys_.size()))
+        if (sub >= 0 && sub < static_cast<int>(sub_keys_.size()))
             return sub_keys_[static_cast<std::size_t>(sub)];
         return bar;
     }
@@ -7763,6 +7769,8 @@ class Library final : public app::Concept
 
     // The tab row: the built-in shelves, then the player's tabs. The active
     // tab is chosen by key, so it survives tabs being added, moved or removed.
+    // A tab inside another (TabPrefs::parent) leaves the bar for that tab's
+    // row of sub-tabs, while the other is on the bar.
     void rebuild_tabs(const std::string &active)
     {
         tab_keys_.clear();
@@ -7832,18 +7840,35 @@ class Library final : public app::Concept
             tab_keys_ = order;
             tabs = std::move(sorted);
         }
-        tabs_.set_tabs(std::move(tabs));
-        subtabs_.set_tabs(std::move(systems));
-        // A system asked for while grouped is the Emulators tab and its row.
-        int sub = 0;
-        for (std::size_t i = 0; i < sub_keys_.size(); ++i)
+        // Tabs inside another on the bar go to its row, in the bar's order.
+        child_rows_.clear();
         {
-            if (sub_keys_[i] == active)
-                sub = static_cast<int>(i);
+            std::vector<std::string> keys;
+            std::vector<ui::TabItem> items;
+            for (std::size_t i = 0; i < tab_keys_.size(); ++i)
+            {
+                const std::string parent = prefs_.tab_parent(tab_keys_[i]);
+                if (!parent.empty() && parent != tab_keys_[i] &&
+                    std::find(tab_keys_.begin(), tab_keys_.end(), parent) != tab_keys_.end())
+                    child_rows_[parent].push_back({tab_keys_[i], tabs[i]});
+                else
+                {
+                    keys.push_back(tab_keys_[i]);
+                    items.push_back(tabs[i]);
+                }
+            }
+            tab_keys_ = std::move(keys);
+            tabs = std::move(items);
         }
-        subtabs_.set_active(sub, true);
-        const std::string bar =
+        tabs_.set_tabs(std::move(tabs));
+        system_keys_ = std::move(sub_keys_);
+        system_tabs_ = std::move(systems);
+        // A system asked for while grouped is the Emulators tab and its row;
+        // a tab inside another, that tab and its row.
+        std::string bar =
             grouped && active.rfind("sys:", 0) == 0 ? std::string(kEmulatorsTab) : active;
+        if (const std::string parent = prefs_.tab_parent(active); child_rows_.count(parent) != 0)
+            bar = parent;
         int index = 0;
         for (std::size_t i = 0; i < tab_keys_.size(); ++i)
         {
@@ -7851,6 +7876,50 @@ class Library final : public app::Concept
                 index = static_cast<int>(i);
         }
         tabs_.set_active(index, true);
+        fill_subrow(active);
+    }
+
+    // The row under the tab bar for the tab on it: Emulators' systems, or a
+    // tab's own titles and then the tabs inside it; none for any other.
+    // `want` is the one to show, when it is in the row.
+    void fill_subrow(const std::string &want)
+    {
+        const std::string bar = bar_key();
+        std::vector<ui::TabItem> items;
+        sub_keys_.clear();
+        if (bar == kEmulatorsTab)
+        {
+            sub_keys_ = system_keys_;
+            items = system_tabs_;
+        }
+        else if (const auto row = child_rows_.find(bar); row != child_rows_.end())
+        {
+            // The tab itself first, by its own name, for what is on it alone.
+            const int at = tabs_.active();
+            ui::TabItem own = tabs_.tab(at);
+            sub_keys_.push_back(bar);
+            items.push_back(own);
+            for (const auto &[key, item] : row->second)
+            {
+                sub_keys_.push_back(key);
+                items.push_back(item);
+            }
+        }
+        subtabs_.set_tabs(std::move(items));
+        int sub = 0;
+        for (std::size_t i = 0; i < sub_keys_.size(); ++i)
+        {
+            if (sub_keys_[i] == want)
+                sub = static_cast<int>(i);
+        }
+        subtabs_.set_active(sub, true);
+    }
+
+    // A row of sub-tabs shows under the bar: Emulators always, any tab with
+    // tabs inside it.
+    bool has_subrow() const
+    {
+        return on_emulators_tab() || !sub_keys_.empty();
     }
 
     // Recomputes what the grid shows from the tab, the query and the sort,
@@ -7873,7 +7942,7 @@ class Library final : public app::Concept
         rebuild_continue();
         // The covers make room for the systems' row on the Emulators tab, and
         // for Continue playing on All.
-        const float top = on_emulators_tab() ? kGridTop + kSubRoom
+        const float top = has_subrow()       ? kGridTop + kSubRoom
                           : continue_shown() ? kGridTop + kContinueRoom
                                              : kGridTop;
         apply_view(top);
@@ -9128,8 +9197,9 @@ class Library final : public app::Concept
             row.width = ui::measure_hints(context_.fonts, row.hints, row.count, row.layout);
             return row;
         }
-        const bool systems = on_emulators_tab();
-        HintRow row{systems ? hints_.data() : hints_.data() + 1, systems ? 7 : 6, {}, 0.0f};
+        const bool systems = has_subrow();
+        const ui::Hint *all = on_emulators_tab() ? hints_.data() : nested_hints_.data();
+        HintRow row{systems ? all : hints_.data() + 1, systems ? 7 : 6, {}, 0.0f};
         row.layout.size = systems ? 36.0f : 38.0f;
         row.layout.text_size = systems ? 20.0f : 21.0f;
         row.layout.cy = 1010.0f;
@@ -9334,6 +9404,8 @@ class Library final : public app::Concept
     std::array<std::string, 7> hint_words_; // the hint bar's words (use_language)
     std::array<ui::Hint, 7> hints_{};
     std::array<std::string, 6> mode_words_;
+    std::string nested_word_;
+    std::array<ui::Hint, 7> nested_hints_{};
     std::array<ui::Hint, 3> select_hints_{};
     std::array<ui::Hint, 3> arrange_hints_{};
     orion::Look look_;  // the main look, as Settings edits it
@@ -9372,7 +9444,12 @@ class Library final : public app::Concept
     std::string menu_tab_;   // the tab a menu (or a rename) is about
     ui::TabBar tabs_;
     ui::TabBar subtabs_;                // the systems, under the Emulators tab (grouped)
-    std::vector<std::string> sub_keys_; // "sys:..." for each of them
+    std::vector<std::string> sub_keys_; // the row under the bar: "sys:..." or a tab and its own
+    // Emulators' systems, kept for when that tab is on the bar (fill_subrow).
+    std::vector<std::string> system_keys_;
+    std::vector<ui::TabItem> system_tabs_;
+    // The tabs inside each tab on the bar, by that tab's key.
+    std::map<std::string, std::vector<std::pair<std::string, ui::TabItem>>> child_rows_;
     ui::GridView grid_;
     ui::Carousel continue_;          // what was played last, over the All tab
     ui::Carousel cases_;             // Cases view: the grid's items as a shelf of cases
