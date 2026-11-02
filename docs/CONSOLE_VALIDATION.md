@@ -106,6 +106,10 @@ The checks (`src/orion/self_test.cpp`), one `PASS`, `FAIL` or `SKIP` line each:
 | `data-writable` | ORION cannot write and read back `/data/orion` (the "cannot reach /data" report) |
 | `payloads`, `elf-loader` | a payload is missing from the install, or nothing answers on port 9021 |
 | `library` | the library found no titles; the line counts games, homebrew, emulated games and payloads |
+| `systems` | never fails: the emulated games by system, fewest first, so a system with none stands out |
+| `emulators` | an app ORION knows as an emulator (by its name or its title ID, a folder or a package) is missing from the library's list; the line lists each with its games |
+| `label-kinds` | a title wearing ORION's GAME, PS4, HOMEBREW or MEDIA label is not that kind |
+| `sub-tabs` | a tab sits inside one that is gone, or that cannot hold it |
 | `drives` | an extended-storage or USB drive has games in its `user/app` and the library has none of them |
 | `network-drive <address>` | a saved network drive does not sign in; the line says why |
 | `network-search` | the network search (NetBIOS and WS-Discovery) finds no machine at all; the saved drives' machines it missed are named, since a Windows PC answers only while its network is Private |
