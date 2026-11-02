@@ -914,3 +914,4 @@ author = Deutsche ORION-Mitwirkende
 "Inside" = "Innerhalb"
 "Inside another tab, it is one of that tab's sub-tabs: L2 and R2 under it" = "In einem anderen Tab ist er einer seiner Unter-Tabs: L2 und R2 darunter"
 "Sub-tab" = "Unter-Tab"
+"No ELF loader took {0} (errno {1}): is one running on port 9021?" = "Kein ELF-Loader hat {0} angenommen (errno {1}): Läuft einer auf Port 9021?"

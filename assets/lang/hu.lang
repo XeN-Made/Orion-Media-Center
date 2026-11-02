@@ -908,3 +908,4 @@ author = ORION
 "Inside" = "Benne"
 "Inside another tab, it is one of that tab's sub-tabs: L2 and R2 under it" = "Egy másik lapon belül annak egyik allapja: L2 és R2 alatta"
 "Sub-tab" = "Allap"
+"No ELF loader took {0} (errno {1}): is one running on port 9021?" = "Egy ELF-betöltő sem fogadta: {0} (errno {1}). Fut egy a 9021-es porton?"

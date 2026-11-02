@@ -1080,6 +1080,7 @@ class Library final : public app::Concept
         follow_finder(feedback);
         follow_package(feedback);
         follow_uninstall(feedback);
+        follow_program(feedback);
         if (registered_.take_finished() && registered_.result().changed)
             context_.registered_changed = true;
         const bool reduced = context_.settings.reduced_motion;
@@ -6191,9 +6192,40 @@ class Library final : public app::Concept
             feedback.play(audio::Cue::error);
             return;
         }
-        std::thread([elf = std::move(elf)]() { sys::send_payload(elf, kLoaderPort); }).detach();
+        // Whether the loader took it comes back (follow_program) and goes to
+        // the log: a program that never starts is otherwise a mystery (#15).
+        auto sent = std::make_shared<std::atomic<int>>(-1);
+        program_sent_ = sent;
+        program_name_ = title.name;
+        std::thread(
+            [elf = std::move(elf), sent, log = update_log_path(), name = title.name,
+             path = title.path]()
+            {
+                const int error = sys::send_payload(elf, kLoaderPort);
+                orion::update_log(
+                    log,
+                    "orion: program " + path + " (" + std::to_string(elf.size()) +
+                        " bytes) to the ELF loader: " +
+                        (error == 0 ? std::string("taken") : "errno " + std::to_string(error)));
+                sent->store(error);
+            })
+            .detach();
         show_note(true, trf("{0} is sent to the ELF loader", {title.name}));
         feedback.play(audio::Cue::select);
+    }
+
+    // The loader's answer to a program sent: said only when it refused.
+    void follow_program(app::Feedback &feedback)
+    {
+        if (!program_sent_ || program_sent_->load() < 0)
+            return;
+        const int error = program_sent_->load();
+        program_sent_.reset();
+        if (error == 0)
+            return;
+        show_note(false, trf("No ELF loader took {0} (errno {1}): is one running on port 9021?",
+                             {program_name_, std::to_string(error)}));
+        feedback.play(audio::Cue::error);
     }
 
     // A title cannot start while ORION is in front (the system refuses with
@@ -9618,6 +9650,9 @@ class Library final : public app::Concept
     std::string package_token_;
     std::string package_name_;
     float package_asked_ = 0.0f;
+    // An ELF program sent (send_program): the loader's answer, -1 until it comes.
+    std::shared_ptr<std::atomic<int>> program_sent_;
+    std::string program_name_;
     // The installed app the system is asked to uninstall (start_uninstall).
     std::string uninstall_token_;
     std::string uninstall_id_;

@@ -204,6 +204,7 @@ author =
 "no core plays {0}" = ""
 "No drive answered on this network. On a Windows PC, set the network to Private and share a folder" = ""
 "No drive to install to" = ""
+"No ELF loader took {0} (errno {1}): is one running on port 9021?" = ""
 "No favourites yet" = ""
 "No folder at {0} (it goes under /data or /mnt)" = ""
 "No games for your emulators yet" = ""

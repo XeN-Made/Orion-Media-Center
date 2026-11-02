@@ -913,3 +913,4 @@ author = ORION
 "Inside" = "Dentro de"
 "Inside another tab, it is one of that tab's sub-tabs: L2 and R2 under it" = "Dentro de outra aba, é uma das suas subabas: L2 e R2 abaixo dela"
 "Sub-tab" = "Subaba"
+"No ELF loader took {0} (errno {1}): is one running on port 9021?" = "Nenhum carregador de ELF aceitou {0} (errno {1}): há um rodando na porta 9021?"
