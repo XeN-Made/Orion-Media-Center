@@ -27,3 +27,4 @@ Moving a tab steps past hidden tabs, so it moves on the tab bar at once.
 ORION opens after a short rest too, not only after a long one.
 Circle in the background picture browser goes back a folder, then to Appearance.
 Network drives: Windows 11 PCs are found by name, and a PC's shared folders are listed.
+ProsperoEden Switch UI is known as well as ProsperoEden, and emulators installed as packages or renamed are found.
