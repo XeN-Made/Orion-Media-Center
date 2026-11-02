@@ -158,6 +158,27 @@ if [[ ${DEPLOY_DRY_RUN:-0} == 1 ]]; then
     exit 0
 fi
 
+# Replacing the files of a title that is running pulls them from under it.
+# A running title has its sandbox at /mnt/sandbox/<TITLE_ID>_000, and only
+# while it runs: that folder says whether it is closed.
+python3 - "$host" "$port" "$user" "$password" "$title_id" <<'PY'
+from ftplib import FTP, all_errors
+import sys
+
+host, port, user, password, title_id = sys.argv[1:]
+with FTP() as ftp:
+    ftp.connect(host, int(port), timeout=15)
+    ftp.login(user, password)
+    try:
+        ftp.cwd("/mnt/sandbox")
+        running = [name for name, _ in ftp.mlsd() if name.startswith(title_id + "_")]
+    except all_errors:
+        running = []  # nothing to read: the server shows no sandboxes
+if running:
+    raise SystemExit(f"{title_id} is running on the console: close it, then deploy again")
+print(f"==> [deploy] {title_id} is closed on the console")
+PY
+
 python3 - "$host" "$port" "$user" "$password" "$title_id" "$artifact" <<'PY'
 from ftplib import FTP, error_perm
 from pathlib import Path
