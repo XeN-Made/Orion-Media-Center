@@ -251,8 +251,25 @@ int main(void)
     say("watching for the console to wake (pid %d)", (int)getpid());
     time_t last = time(NULL);
     long long last_up = uptime_s();
+    // A short rest does not always freeze this process, so the clock shows
+    // no gap. What the system says about the user and the app in front is
+    // logged when it changes, to learn which of them follows a rest.
+    int seen_rc = 1;
+    int seen_user = -1;
+    int seen_app = -1;
     for (;;)
     {
+        int user = 0;
+        const int user_rc = sceUserServiceGetForegroundUser(&user);
+        const int app = sceSystemServiceGetAppIdOfRunningBigApp();
+        if (user_rc != seen_rc || user != seen_user || app != seen_app)
+        {
+            say("now: foreground user 0x%08x (0x%08x), app in front 0x%08x", (unsigned)user,
+                (unsigned)user_rc, (unsigned)app);
+            seen_rc = user_rc;
+            seen_user = user;
+            seen_app = app;
+        }
         if (knocked(held))
         {
             say("a newer watcher takes over (pid %d ends)", (int)getpid());
