@@ -9,8 +9,10 @@
 //     for as long as it lives. A later copy (ORION sends one each time it
 //     starts, maybe a newer one) connects to it, which tells it to end, and
 //     takes the socket over.
-//   - Rest mode freezes it with everything else. It notices the wake by the
-//     clock: a short sleep that took far longer than asked was a rest.
+//   - Rest mode freezes it with everything else, though only some seconds
+//     in: a short rest may not. It notices the wake by the clock (a short
+//     sleep that took far longer than asked was a rest), or by a user
+//     coming back to the front after none was.
 //   - On a wake it waits for the system to settle. With nothing in front
 //     (the home screen) it opens ORION; with an app in front (a game left
 //     running, ORION itself) it leaves it there.
@@ -251,12 +253,12 @@ int main(void)
     say("watching for the console to wake (pid %d)", (int)getpid());
     time_t last = time(NULL);
     long long last_up = uptime_s();
-    // A short rest does not always freeze this process, so the clock shows
-    // no gap. What the system says about the user and the app in front is
-    // logged when it changes, to learn which of them follows a rest.
+    // What the system says about the user and the app in front, logged when
+    // it changes: what a rest and a wake looked like, when one is missed.
     int seen_rc = 1;
     int seen_user = -1;
     int seen_app = -1;
+    int away = 0; // no user in front since the last wake
     for (;;)
     {
         int user = 0;
@@ -288,9 +290,21 @@ int main(void)
             say("turned off in ORION: stopping");
             break;
         }
-        if (gap < REST_GAP_S)
+        // A rest takes the foreground user away (seen on a console: six
+        // seconds after the last app closed) and a wake brings one back. A
+        // short rest may never freeze this process, so the user coming back
+        // is a wake as much as a gap in the clock is.
+        const int present = user_rc == 0 && user != -1;
+        const int back = present && away;
+        if (!present)
+            away = 1;
+        if (gap < REST_GAP_S && !back)
             continue;
-        say("the console rested for about %lld s", gap);
+        away = 0;
+        if (gap >= REST_GAP_S)
+            say("the console rested for about %lld s", gap);
+        else
+            say("a user is in front again: the console woke");
         open_orion();
         last = time(NULL);
     }
