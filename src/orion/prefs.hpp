@@ -23,15 +23,17 @@ inline constexpr const char *kHiddenTabKey = "hidden";
 // The orders a tab can be in: the keys library.json keeps, and their names.
 // "tag" groups them under labels (Games of every system, Homebrew, Media);
 // "played" and "most_played" follow ORION's play records (orion/playtime.hpp);
-// "largest" and "smallest" the sizes the system keeps (orion/sizes.hpp).
-inline constexpr int kSortCount = 9;
-inline constexpr const char *kSortKeys[kSortCount] = {"name",        "name_reversed", "recent",
-                                                      "platform",    "tag",           "played",
-                                                      "most_played", "largest",       "smallest"};
+// "largest" and "smallest" the sizes the system keeps (orion/sizes.hpp);
+// "custom" the player's own order of the tab (LibraryPrefs::title_orders).
+inline constexpr int kSortCount = 10;
+inline constexpr const char *kSortKeys[kSortCount] = {
+    "name",   "name_reversed", "recent",  "platform", "tag",
+    "played", "most_played",   "largest", "smallest", "custom"};
 inline constexpr const char *kSortNames[kSortCount] = {
     i18n::marked("Name A–Z"),    i18n::marked("Name Z–A"),      i18n::marked("Recently added"),
     i18n::marked("Platform"),    i18n::marked("Tag"),           i18n::marked("Recently played"),
-    i18n::marked("Most played"), i18n::marked("Largest first"), i18n::marked("Smallest first")};
+    i18n::marked("Most played"), i18n::marked("Largest first"), i18n::marked("Smallest first"),
+    i18n::marked("Custom order")};
 
 // The weather that can fall over the player's own background picture: the
 // keys library.json keeps, and their names.
@@ -360,6 +362,14 @@ struct LibraryPrefs
     std::string title_label(const std::string &id) const;
     // An empty or invalid label id gives the title its built-in one back.
     void set_title_label(const std::string &id, const std::string &label_id);
+
+    // The player's own order of a tab's titles (Move within this tab), by
+    // tab key: item ids, first to last. The "custom" sort follows it; titles
+    // not in it come after, by name.
+    std::vector<std::pair<std::string, std::vector<std::string>>> title_orders;
+    const std::vector<std::string> *title_order(const std::string &tab) const;
+    // Ids that are not item ids are left out; an empty list forgets the order.
+    void set_title_order(const std::string &tab, std::vector<std::string> ids);
     // One of the player's labels, or what an id of ORION's looks like:
     // lower-case letters and digits, at most 24 ("ps5", "homebrew", "gba").
     bool valid_label_id(const std::string &id) const;

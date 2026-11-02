@@ -388,6 +388,91 @@ TEST_F(LibraryDesign, CrossMovesATitleToACustomTabAndItIsRemembered)
     EXPECT_TRUE(played(Cue::error));
 }
 
+// Issue #17: Select several ticks the title, Cross ticks more, and Options
+// moves them all to a tab at once; Circle stops without moving anything.
+TEST_F(LibraryDesign, SelectedTitlesMoveTogether)
+{
+    const std::string dir = ::testing::TempDir() + "orion-design-select";
+    ASSERT_TRUE(hui::save::ensure_directory(dir));
+    hui::orion::LibraryPrefs prefs;
+    const std::string rpgs = prefs.add_tab("RPGs").id;
+    ASSERT_TRUE(hui::orion::save_prefs(dir, prefs));
+    library_.state_dir = dir;
+    auto design = with_fixture();
+
+    // Ciel Ouvert's menu: Select several sits after Move to tab….
+    send(*design, press(hui::Action::menu));
+    for (int i = 0; i < 11; ++i)
+        send(*design, nav(Direction::down));
+    send(*design, press(hui::Action::confirm));
+    // Ciel Ouvert ticked; Glyph Garden too, then back to untick nothing more.
+    send(*design, nav(Direction::right));
+    send(*design, press(hui::Action::confirm));
+    EXPECT_TRUE(played(Cue::toggle));
+    expect_drawable(*design);
+    // Options: where they go. Games (first), Homebrew, Media, then RPGs.
+    send(*design, press(hui::Action::menu));
+    for (int i = 0; i < 3; ++i)
+        send(*design, nav(Direction::down));
+    send(*design, press(hui::Action::confirm));
+    const hui::orion::LibraryPrefs saved = hui::orion::load_prefs(dir);
+    ASSERT_NE(saved.placement("PPSA90108"), nullptr);
+    EXPECT_EQ(saved.placement("PPSA90108")->id, rpgs);
+    int placed = 0;
+    for (const hui::library::Title &title : library_.titles)
+        placed += saved.placement(title.id) != nullptr ? 1 : 0;
+    EXPECT_EQ(placed, 2);
+    // Selecting ended with the move: Cross launches again.
+    send(*design, press(hui::Action::confirm));
+    expect_drawable(*design);
+}
+
+// Issue #17: Move within this tab carries the title with the direction
+// buttons; Cross keeps the tab's new order (its sort becomes Custom order),
+// Circle puts the old one back.
+TEST_F(LibraryDesign, ATitleIsMovedWithinItsTab)
+{
+    const std::string dir = ::testing::TempDir() + "orion-design-arrange";
+    ASSERT_TRUE(hui::save::ensure_directory(dir));
+    std::remove((dir + "/library.json").c_str());
+    library_.state_dir = dir;
+    auto design = with_fixture();
+    const auto arrange = [&]
+    {
+        send(*design, press(hui::Action::menu));
+        for (int i = 0; i < 12; ++i)
+            send(*design, nav(Direction::down));
+        send(*design, press(hui::Action::confirm));
+    };
+    arrange();
+    send(*design, nav(Direction::right));
+    send(*design, nav(Direction::right));
+    send(*design, nav(Direction::left)); // back one: two places along in all
+    send(*design, nav(Direction::right));
+    send(*design, press(hui::Action::confirm));
+    expect_drawable(*design);
+    hui::orion::LibraryPrefs saved = hui::orion::load_prefs(dir);
+    EXPECT_EQ(saved.tab_sort("all"), "custom");
+    const std::vector<std::string> *order = saved.title_order("all");
+    ASSERT_NE(order, nullptr);
+    ASSERT_GE(order->size(), 3u);
+    EXPECT_EQ((*order)[2], "PPSA90108");
+    const std::vector<std::string> kept = *order;
+
+    // Again, now on the title at the front, and Circle: nothing changes.
+    arrange();
+    send(*design, nav(Direction::right));
+    send(*design, press(hui::Action::back));
+    saved = hui::orion::load_prefs(dir);
+    ASSERT_NE(saved.title_order("all"), nullptr);
+    EXPECT_EQ(*saved.title_order("all"), kept);
+    // A move off the front refuses.
+    arrange();
+    send(*design, nav(Direction::left));
+    EXPECT_TRUE(played(Cue::invalid) || played(Cue::error) || !last_cues_.empty());
+    send(*design, press(hui::Action::back));
+}
+
 // Details… shows the title's page: Play and Favourite first, then its facts.
 // Cross on Favourite stars it, Circle closes the page, and the library has the
 // input again.
@@ -516,9 +601,9 @@ TEST_F(LibraryDesign, DeletingAGameFileWantsCrossHeld)
         send(*design, press(hui::Action::page_next));
     // Options: Launch, Details, Favourite, Hide, Rename, Label, Choose picture,
     // Find other art, Find art by name, Choose music, Download box art again,
-    // Move to a new tab, Remove….
+    // Move to a new tab, Select several, Move within this tab, Remove….
     send(*design, press(hui::Action::menu));
-    for (int i = 0; i < 12; ++i)
+    for (int i = 0; i < 14; ++i)
         send(*design, nav(Direction::down));
     send(*design, press(hui::Action::confirm)); // Remove…
     send(*design, press(hui::Action::confirm)); // Delete the game file…

@@ -180,6 +180,7 @@ enum class Sort : int
     most_played,
     largest,
     smallest,
+    custom,
 };
 
 // What the on-screen keyboard is typing into.
@@ -217,6 +218,9 @@ enum : int
     kItemUnplace,
     kItemLaunch,
     kItemHide,
+    kItemSelect,     // Select several: ticks titles, then moves them together
+    kItemArrange,    // Move within this tab: the title's place in the tab's own order
+    kItemSelectDone, // the selection's menu: stop selecting
     kItemPlayWith,
     kItemRemove,
     kItemRemoveHome,
@@ -2053,6 +2057,34 @@ class Library final : public app::Concept
             update_header(input, feedback);
             return;
         }
+        if (arranging_)
+        {
+            update_arrange(input, feedback);
+            return;
+        }
+        if (selecting_ && grid_.count() > 0 && !continue_focus_)
+        {
+            if (input.is_pressed(Action::back))
+            {
+                stop_selecting();
+                feedback.play(audio::Cue::back);
+                return;
+            }
+            if (input.is_pressed(Action::confirm))
+            {
+                const std::string id = focused().id;
+                if (!selected_.erase(id))
+                    selected_.insert(id);
+                feedback.play(audio::Cue::toggle);
+                rebuild();
+                return;
+            }
+            if (input.is_pressed(Action::menu))
+            {
+                open_selection_menu(feedback);
+                return;
+            }
+        }
         if (input.is_pressed(Action::back) && !query_.empty())
         {
             query_.clear();
@@ -3280,6 +3312,15 @@ class Library final : public app::Concept
                   ui::Hint{ui::Button::triangle, hint_words_[4].c_str()},
                   ui::Hint{ui::Button::options, hint_words_[5].c_str()},
                   ui::Hint{ui::Button::right_stick, hint_words_[6].c_str()}};
+        // While selecting, and while arranging a tab: what the buttons do then.
+        mode_words_ = {tr("Tick"), tr("Move to…"),  tr("Done"),
+                       tr("Move"), tr("Keep here"), tr("Put back")};
+        select_hints_ = {ui::Hint{ui::Button::cross, mode_words_[0].c_str()},
+                         ui::Hint{ui::Button::options, mode_words_[1].c_str()},
+                         ui::Hint{ui::Button::circle, mode_words_[2].c_str()}};
+        arrange_hints_ = {ui::Hint{ui::Button::dpad, mode_words_[3].c_str()},
+                          ui::Hint{ui::Button::cross, mode_words_[4].c_str()},
+                          ui::Hint{ui::Button::circle, mode_words_[5].c_str()}};
     }
 
     // Where the folder browser starts; the ones not plugged in are left out.
@@ -3841,7 +3882,14 @@ class Library final : public app::Concept
         else
         {
             const std::string id = prefs_.add_tab(name_).id;
-            if (typing == Typing::new_tab_for_title)
+            if (typing == Typing::new_tab_for_title && selecting_ && !selected_.empty())
+            {
+                for (const std::string &title : selected_)
+                    prefs_.place(title, id);
+                selecting_ = false;
+                selected_.clear();
+            }
+            else if (typing == Typing::new_tab_for_title)
                 prefs_.place(menu_title_, id);
         }
         tabs_changed();
@@ -5253,6 +5301,15 @@ class Library final : public app::Concept
         move.tag = prefs_.tabs.empty() ? kItemNewTab : kItemMoveMenu;
         move.shortcut = placed != nullptr ? placed->name : "";
         items.push_back(move);
+        ui::MenuItem select = menu_item(tr("Select several…"));
+        select.tag = kItemSelect;
+        items.push_back(select);
+        if (view() != View::cases && query_.empty())
+        {
+            ui::MenuItem arrange = menu_item(tr("Move within this tab"));
+            arrange.tag = kItemArrange;
+            items.push_back(arrange);
+        }
         if (placed != nullptr)
         {
             ui::MenuItem unplace = menu_item(trf("Remove from {0}", {placed->name}));
@@ -5572,6 +5629,116 @@ class Library final : public app::Concept
     // Move to tab…: the player's tabs (the one it is on marked Here), then
     // New tab…, in the place of the title's menu. At most a page of them: the
     // menu does not scroll.
+    // While selecting, Options: where the ticked titles go, or stop.
+    void open_selection_menu(app::Feedback &feedback)
+    {
+        menu_title_ = focused().id;
+        if (selected_.empty())
+        {
+            show_note(false, tr("Tick titles with Cross first"));
+            feedback.play(audio::Cue::error);
+            return;
+        }
+        open_tab_menu(feedback);
+        std::vector<ui::MenuItem> items = menu_.items();
+        ui::MenuItem heading = menu_item(i18n::plural(static_cast<long long>(selected_.size()),
+                                                      "Move {0} title to", "Move {0} titles to"));
+        heading.disabled = true;
+        items.insert(items.begin(), heading);
+        // A tab one of them is already on is no reason to refuse the others.
+        for (ui::MenuItem &item : items)
+        {
+            if (item.tag != 0)
+            {
+                item.disabled = false;
+                item.shortcut.clear();
+            }
+        }
+        ui::MenuItem line;
+        line.separator = true;
+        items.push_back(line);
+        ui::MenuItem done = menu_item(tr("Stop selecting"));
+        done.tag = kItemSelectDone;
+        items.push_back(done);
+        menu_.set_items(std::move(items));
+        menu_.set_focus(1); // the first place, under the heading
+    }
+
+    void stop_selecting()
+    {
+        selecting_ = false;
+        selected_.clear();
+        rebuild();
+    }
+
+    // Move within this tab: the tab takes its own order (the one showing
+    // now, to begin with), and the direction buttons carry the title
+    // through it. Cross keeps it there, Circle puts everything back.
+    void start_arranging(app::Feedback &feedback)
+    {
+        const std::string key = active_key();
+        arrange_sort_was_ = prefs_.tab_sort(key);
+        const std::vector<std::string> *order = prefs_.title_order(key);
+        arrange_order_was_ = order != nullptr ? *order : std::vector<std::string>();
+        std::vector<std::string> ids;
+        for (const int index : view_)
+            ids.push_back(titles()[static_cast<std::size_t>(index)].id);
+        prefs_.set_title_order(key, ids);
+        prefs_.set_tab_sort(key, "custom");
+        arranged_id_ = menu_title_;
+        arranging_ = true;
+        sync_sort();
+        rebuild();
+        show_note(true,
+                  tr("The direction buttons move it, Cross keeps it there, Circle puts it back"));
+        feedback.play(audio::Cue::select);
+    }
+
+    void update_arrange(const InputFrame &input, app::Feedback &feedback)
+    {
+        const std::string key = active_key();
+        if (input.is_pressed(Action::confirm) || input.is_pressed(Action::back))
+        {
+            const bool keep = input.is_pressed(Action::confirm);
+            if (!keep)
+            {
+                prefs_.set_title_order(key, arrange_order_was_);
+                prefs_.set_tab_sort(key, arrange_sort_was_);
+            }
+            arranging_ = false;
+            save_prefs();
+            sync_sort();
+            rebuild();
+            feedback.play(keep ? audio::Cue::place : audio::Cue::back);
+            return;
+        }
+        const std::vector<std::string> *order = prefs_.title_order(key);
+        if (order == nullptr || input.nav == Direction::none)
+            return;
+        std::vector<std::string> ids = *order;
+        const auto at = std::find(ids.begin(), ids.end(), arranged_id_);
+        if (at == ids.end())
+            return;
+        const int columns = view() == View::grid ? std::max(1, grid_.columns()) : 1;
+        const int step = input.nav == Direction::left    ? -1
+                         : input.nav == Direction::right ? 1
+                         : input.nav == Direction::up    ? -columns
+                                                         : columns;
+        const int from = static_cast<int>(at - ids.begin());
+        const int to = from + step;
+        if (to < 0 || to >= static_cast<int>(ids.size()))
+        {
+            ui::refuse(feedback, grid_.style, input, arrange_refusal_, 0.0f);
+            return;
+        }
+        std::string carried = std::move(ids[static_cast<std::size_t>(from)]);
+        ids.erase(ids.begin() + from);
+        ids.insert(ids.begin() + to, std::move(carried));
+        prefs_.set_title_order(key, std::move(ids));
+        rebuild();
+        feedback.play(audio::Cue::focus);
+    }
+
     void open_tab_menu(app::Feedback &feedback)
     {
         const orion::CustomTab *placed = prefs_.placement(menu_title_);
@@ -5938,25 +6105,59 @@ class Library final : public app::Concept
             feedback.play(audio::Cue::select);
             return;
         }
+        if (tag == kItemSelect)
+        {
+            selecting_ = true;
+            selected_ = {menu_title_};
+            rebuild();
+            show_note(true, tr("Cross ticks titles, Options moves them, Circle is done"));
+            feedback.play(audio::Cue::select);
+            return;
+        }
+        if (tag == kItemSelectDone)
+        {
+            stop_selecting();
+            feedback.play(audio::Cue::back);
+            return;
+        }
+        if (tag == kItemArrange)
+        {
+            start_arranging(feedback);
+            return;
+        }
         if (tag == kItemNewTab)
         {
             start_typing(Typing::new_tab_for_title, "");
             feedback.play(audio::Cue::modal_open);
             return;
         }
-        if (tag == kItemUnplace)
-            prefs_.unplace(menu_title_);
-        else if (tag >= kItemMove && tag - kItemMove < static_cast<int>(prefs_.tabs.size()))
-            prefs_.place(menu_title_, prefs_.tabs[static_cast<std::size_t>(tag - kItemMove)].id);
-        else if (tag >= kItemShelf && tag - kItemShelf < static_cast<int>(std::size(kShelves)))
+        // The ticked titles move together; else the one whose menu it is.
+        std::vector<std::string> moving = {menu_title_};
+        if (selecting_ && !selected_.empty())
+            moving.assign(selected_.begin(), selected_.end());
+        for (const std::string &id : moving)
         {
-            // Its own shelf: back where it belongs, no move kept.
-            const std::string key = kShelves[static_cast<std::size_t>(tag - kItemShelf)].key;
-            const Title *title = find_title(menu_title_);
-            if (title != nullptr && key == shelf_key_of(*title))
-                prefs_.unplace(menu_title_);
-            else
-                prefs_.place(menu_title_, key);
+            if (tag == kItemUnplace)
+                prefs_.unplace(id);
+            else if (tag >= kItemMove && tag - kItemMove < static_cast<int>(prefs_.tabs.size()))
+                prefs_.place(id, prefs_.tabs[static_cast<std::size_t>(tag - kItemMove)].id);
+            else if (tag >= kItemShelf && tag - kItemShelf < static_cast<int>(std::size(kShelves)))
+            {
+                // Its own shelf: back where it belongs, no move kept.
+                const std::string key = kShelves[static_cast<std::size_t>(tag - kItemShelf)].key;
+                const Title *title = find_title(id);
+                if (title != nullptr && key == shelf_key_of(*title))
+                    prefs_.unplace(id);
+                else
+                    prefs_.place(id, key);
+            }
+        }
+        if (selecting_ && moving.size() > 1)
+        {
+            show_note(true, i18n::plural(static_cast<long long>(moving.size()), "{0} title moved",
+                                         "{0} titles moved"));
+            selecting_ = false;
+            selected_.clear();
         }
         save_prefs();
         rebuild_tabs(active_key());
@@ -7729,6 +7930,21 @@ class Library final : public app::Concept
             std::stable_sort(view_.begin(), view_.end(), [&](int a, int b)
                              { return played(titles()[a]).seconds > played(titles()[b]).seconds; });
             break;
+        case Sort::custom:
+            if (const std::vector<std::string> *order = prefs_.title_order(key))
+            {
+                std::unordered_map<std::string, std::size_t> place;
+                for (std::size_t i = 0; i < order->size(); ++i)
+                    place.emplace((*order)[i], i);
+                const auto at = [&](int index)
+                {
+                    const auto found = place.find(titles()[static_cast<std::size_t>(index)].id);
+                    return found == place.end() ? order->size() : found->second;
+                };
+                std::stable_sort(view_.begin(), view_.end(),
+                                 [&](int a, int b) { return at(a) < at(b); });
+            }
+            break;
         case Sort::largest:
         case Sort::smallest:
         {
@@ -7818,6 +8034,9 @@ class Library final : public app::Concept
         item.bottom = hashed_color(title.id, 0.7f, 0.2f);
         item.accent = hashed_color(title.id, 0.6f, 1.0f);
         item.tag = index;
+        // Ticked while selecting; the one being carried while arranging.
+        item.selected = (selecting_ && selected_.count(title.id) > 0) ||
+                        (arranging_ && title.id == arranged_id_);
         return item;
     }
 
@@ -8900,6 +9119,15 @@ class Library final : public app::Concept
     };
     HintRow hint_row() const
     {
+        if (selecting_ || arranging_)
+        {
+            HintRow row{selecting_ ? select_hints_.data() : arrange_hints_.data(), 3, {}, 0.0f};
+            row.layout.size = 38.0f;
+            row.layout.text_size = 21.0f;
+            row.layout.cy = 1010.0f;
+            row.width = ui::measure_hints(context_.fonts, row.hints, row.count, row.layout);
+            return row;
+        }
         const bool systems = on_emulators_tab();
         HintRow row{systems ? hints_.data() : hints_.data() + 1, systems ? 7 : 6, {}, 0.0f};
         row.layout.size = systems ? 36.0f : 38.0f;
@@ -9105,6 +9333,9 @@ class Library final : public app::Concept
     orion::LanguageLibrary languages_;
     std::array<std::string, 7> hint_words_; // the hint bar's words (use_language)
     std::array<ui::Hint, 7> hints_{};
+    std::array<std::string, 6> mode_words_;
+    std::array<ui::Hint, 3> select_hints_{};
+    std::array<ui::Hint, 3> arrange_hints_{};
     orion::Look look_;  // the main look, as Settings edits it
     orion::Look shown_; // what the active tab wears (its own theme, or look_)
     orion::LibraryPrefs prefs_;
@@ -9212,6 +9443,15 @@ class Library final : public app::Concept
     bool picking_music_ = false;            // the browser lists music, not pictures
     bool picking_background_ = false;       // ... a picture for behind the library, not a title
     bool background_from_settings_ = false; // ... opened from Settings, which it returns to
+    // Select several: the ticked titles' ids.
+    bool selecting_ = false;
+    std::unordered_set<std::string> selected_;
+    // Move within this tab: the title carried, and what to go back to.
+    bool arranging_ = false;
+    std::string arranged_id_;
+    std::string arrange_sort_was_;
+    std::vector<std::string> arrange_order_was_;
+    ui::Pulse arrange_refusal_;
     bool watcher_sent_ = false; // the rest-mode watcher went out while its setting was on
     // Find other art: the title looked through, its picture before, the
     // covers so far, the one shown, and whether the full one is coming.

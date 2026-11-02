@@ -207,6 +207,26 @@ std::vector<std::string> LibraryPrefs::ordered_tabs(const std::vector<std::strin
     return out;
 }
 
+const std::vector<std::string> *LibraryPrefs::title_order(const std::string &tab) const
+{
+    for (const auto &[key, ids] : title_orders)
+    {
+        if (key == tab)
+            return &ids;
+    }
+    return nullptr;
+}
+
+void LibraryPrefs::set_title_order(const std::string &tab, std::vector<std::string> ids)
+{
+    std::erase_if(ids, [](const std::string &id) { return !library::is_item_id(id); });
+    if (ids.size() > kMaxHidden)
+        ids.resize(kMaxHidden);
+    std::erase_if(title_orders, [&](const auto &entry) { return entry.first == tab; });
+    if (!ids.empty() && !tab.empty() && tab.size() <= 120 && title_orders.size() < 64)
+        title_orders.emplace_back(tab, std::move(ids));
+}
+
 bool LibraryPrefs::move_tab_key(const std::string &key, int direction,
                                 const std::vector<std::string> &tabs)
 {
@@ -686,6 +706,13 @@ LibraryPrefs load_prefs(const std::string &state_dir)
     }
     for (const auto &member : root["title_labels"].members())
         prefs.set_title_label(member.first, member.second.string_or(""));
+    for (const auto &member : root["title_orders"].members())
+    {
+        std::vector<std::string> ids;
+        for (const json::Value &id : member.second.elements())
+            ids.push_back(id.string_or(""));
+        prefs.set_title_order(member.first, std::move(ids));
+    }
 
     for (const auto &member : root["systems"].members())
     {
@@ -871,6 +898,17 @@ bool save_prefs(const std::string &state_dir, const LibraryPrefs &prefs)
                 json::quote(prefs.title_labels[i].first) + ": " +
                 json::quote(prefs.title_labels[i].second);
     text += prefs.title_labels.empty() ? "},\n" : "\n  },\n";
+    text += "  \"title_orders\": {";
+    for (std::size_t i = 0; i < prefs.title_orders.size(); ++i)
+    {
+        text += std::string(i == 0 ? "\n" : ",\n") + "    " +
+                json::quote(prefs.title_orders[i].first) + ": [";
+        const std::vector<std::string> &ids = prefs.title_orders[i].second;
+        for (std::size_t j = 0; j < ids.size(); ++j)
+            text += (j == 0 ? "" : ", ") + json::quote(ids[j]);
+        text += "]";
+    }
+    text += prefs.title_orders.empty() ? "},\n" : "\n  },\n";
     text += "  \"systems\": {";
     for (std::size_t i = 0; i < prefs.systems.size(); ++i)
     {
