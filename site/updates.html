@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ORION Updates</title>
+  <meta name="description" content="What changed in each version of ORION Media Center, newest first, with a download for each.">
+  <link rel="icon" href="icon.png">
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .toc a[aria-current="true"] { color: var(--text); border-color: var(--accent); }
+    .release { border: 1px solid var(--rim); border-radius: 16px; background: var(--glass);
+               padding: 24px 28px; margin-bottom: 1.2em; }
+    .release header { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center;
+                      margin-bottom: 0.6em; }
+    .release header h2 { margin: 0; }
+    .release .when { color: var(--muted); }
+    .release .notes h3 { margin-top: 1.4em; }
+    .release .notes img { max-width: 100%; }
+  </style>
+</head>
+<body>
+  <header class="top">
+    <div class="wrap">
+      <a class="brand" href="./"><img src="icon.png" alt="">ORION</a>
+      <nav aria-label="Pages">
+        <a href="./#features">Features</a>
+        <a href="guide.html">Guide</a>
+        <a href="updates.html" aria-current="page">Updates</a>
+        <a href="./#emulators">Emulators</a>
+        <a href="themes.html">Themes</a>
+        <a href="./#install">Install</a>
+        <a href="https://github.com/XeN-Made/Orion-Media-Center">GitHub</a>
+        <a href="https://discord.gg/SS7N7ukzQv">Discord</a>
+        <a href="https://ko-fi.com/xenorion">Support on Ko-fi</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <div class="wrap hero">
+      <span class="eyebrow">Updates</span>
+      <h1>What changed in <span>each version.</span></h1>
+      <p class="lead">The newest version shows first; pick any other below. Each has a link of its
+        own to share. ORION finds a new version by itself (Settings, About, <em>Check now</em>).</p>
+    </div>
+
+    <div class="wrap">
+      <ul class="toc" id="versions" aria-label="Versions"></ul>
+      <article class="release" id="release" aria-live="polite">
+        <p class="note">Loading the versions from GitHub…</p>
+      </article>
+    </div>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <span>ORION Media Center · GPL-3.0-or-later</span>
+      <span>Every version, with its files, is also on
+        <a href="https://github.com/XeN-Made/Orion-Media-Center/releases">GitHub</a>.</span>
+      <span><a href="https://discord.gg/SS7N7ukzQv">Discord</a> ·
+        <a href="https://ko-fi.com/xenorion">Support ORION on Ko-fi</a></span>
+    </div>
+  </footer>
+
+  <script>
+    // The releases straight from GitHub, notes already rendered (body_html,
+    // which GitHub sanitises), so a new version shows here without the site
+    // changing. ORION's versions only: build dependencies are pre-releases.
+    const REPO = "XeN-Made/Orion-Media-Center";
+    const list = document.getElementById("versions");
+    const box = document.getElementById("release");
+    let releases = [];
+
+    function show() {
+      const wanted = decodeURIComponent(location.hash.slice(1));
+      const release = releases.find(r => r.tag_name === wanted) || releases[0];
+      if (!release) return;
+      for (const a of list.querySelectorAll("a"))
+        a.setAttribute("aria-current", a.dataset.tag === release.tag_name ? "true" : "false");
+      const when = new Date(release.published_at).toLocaleDateString(undefined,
+        { year: "numeric", month: "long", day: "numeric" });
+      const zip = release.assets.find(a => a.name.endsWith(".zip"));
+      const latest = release === releases[0] ? " · the latest" : "";
+      box.innerHTML = "";
+      const head = document.createElement("header");
+      const title = document.createElement("h2");
+      title.textContent = release.tag_name;
+      const date = document.createElement("span");
+      date.className = "when";
+      date.textContent = when + latest;
+      head.append(title, date);
+      if (zip) {
+        const get = document.createElement("a");
+        get.className = "button";
+        get.href = zip.browser_download_url;
+        get.textContent = "Download " + zip.name;
+        head.append(get);
+      }
+      const notes = document.createElement("div");
+      notes.className = "notes";
+      notes.innerHTML = release.body_html || "<p>No notes for this version.</p>";
+      box.append(head, notes);
+      document.title = "ORION " + release.tag_name + " · Updates";
+    }
+
+    fetch(`https://api.github.com/repos/${REPO}/releases?per_page=100`,
+          { headers: { Accept: "application/vnd.github.html+json" } })
+      .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+      .then(all => {
+        releases = all.filter(r => !r.draft && !r.prerelease && /^\d\d\.\d{3}\.\d{3}$/.test(r.tag_name))
+                      .sort((a, b) => b.published_at.localeCompare(a.published_at));
+        for (const r of releases) {
+          const li = document.createElement("li");
+          const a = document.createElement("a");
+          a.href = "#" + r.tag_name;
+          a.dataset.tag = r.tag_name;
+          a.textContent = r.tag_name;
+          li.append(a);
+          list.append(li);
+        }
+        show();
+      })
+      .catch(() => {
+        box.innerHTML = '<p class="note">The versions could not be loaded just now. Every one is on ' +
+          '<a href="https://github.com/XeN-Made/Orion-Media-Center/releases">GitHub</a>.</p>';
+      });
+    window.addEventListener("hashchange", show);
+  </script>
+</body>
+</html>
