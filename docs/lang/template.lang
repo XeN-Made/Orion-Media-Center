@@ -32,6 +32,7 @@ author =
 "All" = ""
 "Already syncing RomM" = ""
 "Asking RomM for its games…" = ""
+"Asking the console to uninstall {0}…" = ""
 "Asking the console's installer for {0}…" = ""
 "Asking {0} for its shared folders…" = ""
 "Automatic ({0})" = ""
@@ -301,6 +302,8 @@ author =
 "That is not a share's address: \\\\server\\share" = ""
 "The console is installing {0}: it shows in Downloads" = ""
 "The console is not on a network" = ""
+"The console uninstalls it, as Delete on its home screen does. Its saved data stays.\nThis cannot be undone." = ""
+"The console would not uninstall {0} (error {1})" = ""
 "The console's installer refused {0} (error {1})" = ""
 "The console's storage" = ""
 "The ELF file is erased for good:\n{0}\nThis cannot be undone." = ""
@@ -381,6 +384,7 @@ author =
 "{0} title" = ""
 "{0} titles" = ""
 "{0} waits its turn: Activity (L3) shows the queue" = ""
+"{0} waits: something is being installed or removed" = ""
 "{0} went to the console whole: it finishes installing there" = ""
 
 # src/library/emulators.cpp

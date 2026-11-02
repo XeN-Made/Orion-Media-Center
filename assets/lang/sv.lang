@@ -884,3 +884,7 @@ author = Svenska ORION-bidragsgivare
 "The ELF file is erased for good:\n{0}\nThis cannot be undone." = "ELF-filen raderas för gott:\n{0}\nDet går inte att ångra."
 "Largest first" = "Störst först"
 "Smallest first" = "Minst först"
+"The console uninstalls it, as Delete on its home screen does. Its saved data stays.\nThis cannot be undone." = "Konsolen avinstallerar den, som Radera på hemskärmen gör. Sparade data finns kvar.\nDet går inte att ångra."
+"{0} waits: something is being installed or removed" = "{0} väntar: något installeras eller tas bort"
+"Asking the console to uninstall {0}…" = "Ber konsolen att avinstallera {0}…"
+"The console would not uninstall {0} (error {1})" = "Konsolen avinstallerade inte {0} (fel {1})"

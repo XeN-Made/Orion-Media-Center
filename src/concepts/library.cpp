@@ -1075,6 +1075,7 @@ class Library final : public app::Concept
         follow_share_check(feedback);
         follow_finder(feedback);
         follow_package(feedback);
+        follow_uninstall(feedback);
         if (registered_.take_finished() && registered_.result().changed)
             context_.registered_changed = true;
         const bool reduced = context_.settings.reduced_motion;
@@ -2818,10 +2819,71 @@ class Library final : public app::Concept
         return true;
     }
 
+    // An installed app taken away by the system's own uninstall: the
+    // package go-between asks for it (payload/pkginstall, "uninstall:"), as
+    // ORION's sandbox may not; follow_uninstall reads the answer.
+    void start_uninstall(const Title &title, app::Feedback &feedback)
+    {
+        const auto refuse = [&](std::string why)
+        {
+            show_note(false, std::move(why));
+            feedback.play(audio::Cue::error);
+        };
+        std::string elf;
+        if (!sys::on_console() || !save::read_file(kPkgInstallPath, &elf, 8u << 20) || elf.empty())
+            return refuse(tr("Removing works on the console only"));
+        // One job file serves both: an install going on goes first.
+        if (package_server_.running() || !uninstall_token_.empty())
+            return refuse(trf("{0} waits: something is being installed or removed", {title.name}));
+        const std::string &state = context_.library.state_dir;
+        uninstall_token_ = "u" + std::to_string(static_cast<long long>(std::time(nullptr)));
+        uninstall_id_ = title.id;
+        uninstall_name_ = title.name;
+        uninstall_asked_ = clock_;
+        std::remove((state + "/pkg-install-result.txt").c_str());
+        save::write_atomic(state + "/pkg-install.txt", uninstall_token_ +
+                                                           "\tuninstall:" + title.id + "\t" +
+                                                           one_line(title.name) + "\n");
+        orion::log_share(state, "uninstall " + title.id + " (" + title.name + "): asked");
+        std::thread([elf = std::move(elf)]() { sys::send_payload(elf, kLoaderPort); }).detach();
+        show_note(true, trf("Asking the console to uninstall {0}…", {title.name}));
+        feedback.play(audio::Cue::select);
+    }
+
+    void follow_uninstall(app::Feedback &feedback)
+    {
+        if (uninstall_token_.empty())
+            return;
+        const std::string &state = context_.library.state_dir;
+        std::string text;
+        const bool answered = save::read_file(state + "/pkg-install-result.txt", &text, 4096) &&
+                              text.rfind(uninstall_token_ + "\t", 0) == 0;
+        if (!answered && clock_ - uninstall_asked_ < 30.0f)
+            return;
+        const std::string code = answered ? text.substr(uninstall_token_.size() + 1, 8) : "";
+        std::remove((state + "/pkg-install.txt").c_str());
+        const bool ok = code == "00000000";
+        const std::string note =
+            ok ? trf("Deleted {0}", {uninstall_name_})
+            : answered
+                ? trf("The console would not uninstall {0} (error {1})", {uninstall_name_, code})
+                : tr("The installer did not answer: is the ELF loader running?");
+        orion::log_share(state, "uninstall " + uninstall_id_ + ": " + (ok ? "done" : note));
+        if (ok)
+        {
+            removed_ids_.insert(uninstall_id_);
+            tabs_changed();
+        }
+        remember(note, ok);
+        show_note(ok, note);
+        feedback.play(ok ? audio::Cue::erase : audio::Cue::error);
+        uninstall_token_.clear();
+    }
+
     // The next package waiting, if one can start.
     void next_package(app::Feedback &feedback)
     {
-        while (!package_queue_.empty() && !package_server_.running())
+        while (!package_queue_.empty() && !package_server_.running() && uninstall_token_.empty())
         {
             const PackageJob job = std::move(package_queue_.front());
             package_queue_.pop_front();
@@ -5225,7 +5287,11 @@ class Library final : public app::Concept
     {
         if (title.is_rom() || title.source == library::Source::payload)
             return !title.path.empty();
-        if (title.path.empty())
+        // An installed app goes through the system's own uninstall; never
+        // ORION itself, which is open.
+        if (title.source == library::Source::installed && title.id == own_title_id())
+            return false;
+        if (title.path.empty() && title.source != library::Source::installed)
             return false;
         for (const library::EmulatorApp &app : context_.library.emulator.apps)
         {
@@ -5247,6 +5313,13 @@ class Library final : public app::Concept
             ui::MenuItem erase = menu_item(title->is_rom() ? tr("Delete the game file…")
                                                            : tr("Delete the ELF file…"));
             erase.tag = kItemRemoveRom;
+            erase.danger = true;
+            items.push_back(erase);
+        }
+        else if (title->source == library::Source::installed)
+        {
+            ui::MenuItem erase = menu_item(tr("Delete from the console…"));
+            erase.tag = kItemRemoveErase;
             erase.danger = true;
             items.push_back(erase);
         }
@@ -5289,7 +5362,10 @@ class Library final : public app::Concept
             content.icon = ui::StatusKind::danger;
             content.title = trf("Delete {0}?", {title->name});
             content.body =
-                kind == kItemRemoveRom && title->source == library::Source::payload
+                title->source == library::Source::installed
+                    ? tr("The console uninstalls it, as Delete on its home screen does. Its "
+                         "saved data stays.\nThis cannot be undone.")
+                : kind == kItemRemoveRom && title->source == library::Source::payload
                     ? trf("The ELF file is erased for good:\n{0}\nThis cannot be undone.",
                           {title->path})
                 : kind == kItemRemoveRom
@@ -5388,6 +5464,11 @@ class Library final : public app::Concept
             tabs_changed();
             show_note(true, trf("Deleted {0}", {title->name}));
             feedback.play(audio::Cue::erase);
+            return;
+        }
+        if (title->source == library::Source::installed)
+        {
+            start_uninstall(*title, feedback);
             return;
         }
         // ShadowMountPlus touches no game while one is open, and ORION is
@@ -9220,6 +9301,11 @@ class Library final : public app::Concept
     std::string package_token_;
     std::string package_name_;
     float package_asked_ = 0.0f;
+    // The installed app the system is asked to uninstall (start_uninstall).
+    std::string uninstall_token_;
+    std::string uninstall_id_;
+    std::string uninstall_name_;
+    float uninstall_asked_ = 0.0f;
     bool package_answered_ = false;
     orion::Installed installed_content_;           // what the console has, for the browser
     PackageJob package_job_;                       // the one going to the installer now

@@ -884,3 +884,7 @@ author = ORION
 "The ELF file is erased for good:\n{0}\nThis cannot be undone." = "Az ELF-fájl végleg törlődik:\n{0}\nEz nem vonható vissza."
 "Largest first" = "Legnagyobb elöl"
 "Smallest first" = "Legkisebb elöl"
+"The console uninstalls it, as Delete on its home screen does. Its saved data stays.\nThis cannot be undone." = "A konzol eltávolítja, ahogy a kezdőképernyő Törlés parancsa teszi. A mentett adatai megmaradnak.\nEz nem vonható vissza."
+"{0} waits: something is being installed or removed" = "{0} vár: épp valami települ vagy törlődik"
+"Asking the console to uninstall {0}…" = "A konzol felkérése {0} eltávolítására…"
+"The console would not uninstall {0} (error {1})" = "A konzol nem távolította el: {0} (hiba: {1})"

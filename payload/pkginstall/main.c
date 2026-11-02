@@ -7,6 +7,7 @@
 // this ELF to the ELF loader with the job in /data/orion/pkg-install.txt:
 //
 //   <token>\t<package URL>\t<name shown while it installs>
+//   <token>\tuninstall:<title ID>\t<its name>   (an installed app taken away)
 //
 // The URL is ORION's own package server on 127.0.0.1, which streams the file
 // off the network drive as the installer reads it. This asks for the
@@ -92,6 +93,7 @@ typedef struct
 int sceAppInstUtilInitialize(void);
 int sceAppInstUtilInstallByPackage(MetaInfo *meta, PkgInfo *info, PlayGoInfo *playgo);
 int sceAppInstUtilTerminate(void);
+int sceAppInstUtilAppUnInstall(const char *title_id);
 
 static void say(const char *format, ...)
 {
@@ -261,6 +263,9 @@ int main(void)
     char kept[64];
     snprintf(kept, sizeof(kept), "%s", token);
     say("job %s: %s", kept, name);
+    // An installed app to take away: the system's own uninstall, which
+    // clears its tile, its data and its listing as the home screen's does.
+    const int uninstall = strncmp(url, "uninstall:", 10) == 0;
 
     // The installer's rights first: a system library may want them to open.
     const pid_t self = getpid();
@@ -268,9 +273,12 @@ int main(void)
     const int firmware = firmware_major();
     if (raise_self() != 0)
         say("some of the process's rights could not be raised");
-    char said[256];
-    probe(url, said, sizeof(said));
-    say("the package server says: %s", said);
+    if (!uninstall)
+    {
+        char said[256];
+        probe(url, said, sizeof(said));
+        say("the package server says: %s", said);
+    }
     // Unknown firmware: the newer rules, as most consoles run 10 or later.
     const uint64_t init_as = firmware == 0 || firmware >= 10 ? SYSTEM_AUTHID : SHELLCORE_AUTHID;
     const uint64_t install_as =
@@ -285,6 +293,17 @@ int main(void)
         answer(kept, code);
         kernel_set_ucred_authid(self, authid);
         return 1;
+    }
+    if (uninstall)
+    {
+        const char *id = url + 10;
+        kernel_set_ucred_authid(self, install_as);
+        code = sceAppInstUtilAppUnInstall(id);
+        say("uninstalling %s (%s): %08x", id, name, (unsigned)code);
+        answer(kept, code);
+        sceAppInstUtilTerminate();
+        kernel_set_ucred_authid(self, authid);
+        return code == 0 ? 0 : 1;
     }
     static MetaInfo meta;
     memset(&meta, 0, sizeof(meta));

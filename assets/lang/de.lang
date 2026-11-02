@@ -890,3 +890,7 @@ author = Deutsche ORION-Mitwirkende
 "The ELF file is erased for good:\n{0}\nThis cannot be undone." = "Die ELF-Datei wird endgültig gelöscht:\n{0}\nDas kann nicht rückgängig gemacht werden."
 "Largest first" = "Größte zuerst"
 "Smallest first" = "Kleinste zuerst"
+"The console uninstalls it, as Delete on its home screen does. Its saved data stays.\nThis cannot be undone." = "Die Konsole deinstalliert es wie „Löschen“ auf dem Startbildschirm. Gespeicherte Daten bleiben.\nDas kann nicht rückgängig gemacht werden."
+"{0} waits: something is being installed or removed" = "{0} wartet: Gerade wird etwas installiert oder entfernt"
+"Asking the console to uninstall {0}…" = "Die Konsole wird gebeten, {0} zu deinstallieren…"
+"The console would not uninstall {0} (error {1})" = "Die Konsole hat {0} nicht deinstalliert (Fehler {1})"

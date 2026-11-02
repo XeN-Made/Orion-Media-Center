@@ -889,3 +889,7 @@ author = ORION
 "The ELF file is erased for good:\n{0}\nThis cannot be undone." = "O arquivo ELF é apagado de vez:\n{0}\nIsso não pode ser desfeito."
 "Largest first" = "Maiores primeiro"
 "Smallest first" = "Menores primeiro"
+"The console uninstalls it, as Delete on its home screen does. Its saved data stays.\nThis cannot be undone." = "O console a desinstala, como Excluir na tela inicial faz. Os dados salvos ficam.\nIsso não pode ser desfeito."
+"{0} waits: something is being installed or removed" = "{0} aguarda: algo está sendo instalado ou removido"
+"Asking the console to uninstall {0}…" = "Pedindo ao console para desinstalar {0}…"
+"The console would not uninstall {0} (error {1})" = "O console não desinstalou {0} (erro {1})"
