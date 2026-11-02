@@ -1134,6 +1134,27 @@ TEST(Emulators, ListsDigitalXbox360AndWiiGames)
     fs::remove_all(root);
 }
 
+// ProsperoEden's Switch UI (PPSA99186) beside the original (PPSA99008): each
+// is ProsperoEden by its title ID whatever its tile is called, installed as
+// a package or kept as a folder; RetroArch still wants its folder.
+TEST(Emulators, KnowsEmulatorsByTheirTitleIds)
+{
+    library::Title ui = app_title("PPSA99186", "Switch UI", "");
+    ui.source = library::Source::installed;
+    EXPECT_EQ(library::emulator_key(ui), "eden");
+    library::Title original = app_title("PPSA99008", "My Switch", "/data/homebrew/PPSA99008");
+    EXPECT_EQ(library::emulator_key(original), "eden");
+    library::Title named = app_title("PPSA12345", "ProsperoEden Switch UI", "");
+    named.source = library::Source::installed;
+    EXPECT_EQ(library::emulator_key(named), "eden");
+    library::Title game = app_title("PPSA01325", "Quiet Bay", "");
+    game.source = library::Source::installed;
+    EXPECT_EQ(library::emulator_key(game), "");
+    library::Title image = app_title("PPSA99186", "ProsperoEden", "/mnt/usb0/eden.ffpkg");
+    image.source = library::Source::image;
+    EXPECT_EQ(library::emulator_key(image), "");
+}
+
 // Game Boy games share the Game Boy Color's tab, each keeping its own system
 // (its box art is the Game Boy's).
 TEST(Emulators, PutsGameBoyGamesOnTheColorsTab)

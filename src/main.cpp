@@ -609,6 +609,7 @@ int main()
     gfx::Canvas capture;
     std::int64_t last_frame_start = sys::monotonic_us();
     std::vector<std::string> icon_queue; // box art wanted on screen, not loaded yet
+    bool emulators_joined = false;       // an emulator joined with the registered titles
     for (;;)
     {
         const std::int64_t now = sys::monotonic_us();
@@ -626,7 +627,7 @@ int main()
 
         // Before the design's update, which rebuilds on the new generation
         // before it touches an index into the titles.
-        if (shell.take_rescan_request())
+        if (shell.take_rescan_request() || std::exchange(emulators_joined, false))
         {
             std::vector<library::Title> before;
             for (const library::Title &title : titles.titles)
@@ -685,6 +686,14 @@ int main()
                 library::apply_custom_art(titles, titles.state_dir + "/custom-art");
                 library::load_icons(titles, renderer.batch());
                 ++titles.generation;
+                // An emulator installed while ORION ran (a package, so it
+                // joins only now): its games are looked for next frame.
+                for (const library::Title &title : titles.titles)
+                {
+                    const std::string key = library::emulator_key(title);
+                    if (!key.empty() && titles.emulator.app(key) == nullptr)
+                        emulators_joined = true;
+                }
             }
         }
         // The player chose a picture for a title, or gave it its own back.

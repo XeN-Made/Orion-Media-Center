@@ -1362,10 +1362,24 @@ std::span<const KnownEmulator> known_emulators()
 
 std::string emulator_key(const Title &title)
 {
-    if (title.source != Source::folder)
+    // A folder app, or one installed as a package (RecompStore and the like
+    // install them so): only RetroArch needs its folder (its cores).
+    if (title.source != Source::folder && title.source != Source::installed)
         return "";
     if (is_retroarch(title))
         return "retroarch";
+    // The title IDs they ship with, for a tile renamed or a build named
+    // otherwise: ProsperoEden's two (the original and its Switch UI, one data
+    // folder between them) and the others as their releases have them.
+    static constexpr std::pair<std::string_view, const char *> kShippedIds[] = {
+        {"PPSA99008", "eden"},   {"PPSA99186", "eden"},          {"PPSA99764", "porpoise"},
+        {"PPSA99203", "ps5sx2"}, {"PPSA99248", "psswanstation"}, {"PPSA99360", "ecam"},
+        {"PPSA50011", "ps5x360"}};
+    for (const auto &[id, key] : kShippedIds)
+    {
+        if (title.id == id)
+            return key;
+    }
     const std::string name = lower(title.name);
     if (name.find("porpoise") != std::string::npos || name.find("dolphin") != std::string::npos ||
         is_folder(title.path + "/porpoise"))
