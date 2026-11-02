@@ -108,7 +108,7 @@ The checks (`src/orion/self_test.cpp`), one `PASS`, `FAIL` or `SKIP` line each:
 | `library` | the library found no titles; the line counts games, homebrew, emulated games and payloads |
 | `drives` | an extended-storage or USB drive has games in its `user/app` and the library has none of them |
 | `network-drive <address>` | a saved network drive does not sign in; the line says why |
-| `network-search` | the network search finds no machine, or not the ones the saved drives are on |
+|  | the network search (NetBIOS and WS-Discovery) finds no machine at all; the saved drives' machines it missed are named, since a Windows PC answers only while its network is Private |
 | `console-share` | sharing is on, and the payload reports a problem or a sign-in to `\\127.0.0.1\data` fails |
 | `share-list` | the console's share list (what Windows' `net view` reads) has no `data` |
 | `drive-errors` | a wrong password, or a share that is not there, is let in or does not come back with the hint a player is shown |

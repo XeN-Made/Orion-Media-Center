@@ -437,7 +437,10 @@ void check_network_search(const SelfTestInput &in, std::vector<CheckResult> *res
     for (std::size_t i = 0; i < servers.size() && i < 6; ++i)
         found += (i == 0 ? "" : ", ") + servers[i].address +
                  (servers[i].name.empty() ? std::string() : " " + servers[i].name);
-    // The machines the saved drives are on should answer the search too.
+    // The machines the saved drives are on are named when they did not
+    // answer, but that fails nothing: a Windows PC answers only while its
+    // network is Private (network discovery on), which is its owner's
+    // choice, and a drive added by address works without it.
     std::string missed;
     for (const Share &share : load_shares(in.state_dir))
     {
@@ -447,11 +450,13 @@ void check_network_search(const SelfTestInput &in, std::vector<CheckResult> *res
         if (!seen && missed.find(share.server) == std::string::npos)
             missed += (missed.empty() ? "" : ", ") + share.server;
     }
-    add(results, "network-search",
-        servers.empty() || !missed.empty() ? Outcome::fail : Outcome::pass,
+    add(results, "network-search", servers.empty() ? Outcome::fail : Outcome::pass,
         servers.empty() ? "found no machine sharing on " + in.own_address + "'s network"
                         : std::to_string(servers.size()) + " found: " + found +
-                              (missed.empty() ? "" : "; not found: " + missed));
+                              (missed.empty() ? ""
+                                              : "; not found: " + missed +
+                                                    " (a Windows PC answers only while its "
+                                                    "network is Private)"));
 }
 
 // What a player sees when a drive will not open: the console's own share
