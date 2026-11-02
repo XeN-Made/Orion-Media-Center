@@ -7782,7 +7782,24 @@ class Library final : public app::Concept
         return bar_key() == kEmulatorsTab;
     }
 
+    // A tab with tabs inside it holds theirs too: it is the All at the head
+    // of its row of sub-tabs, and its count on the bar is all of them.
     bool on_tab(const Title &title, const std::string &key) const
+    {
+        if (on_tab_itself(title, key))
+            return true;
+        if (const auto row = child_rows_.find(key); row != child_rows_.end())
+        {
+            for (const auto &[child, item] : row->second)
+            {
+                if (on_tab_itself(title, child))
+                    return true;
+            }
+        }
+        return false;
+    }
+
+    bool on_tab_itself(const Title &title, const std::string &key) const
     {
         // A title removed since the scan is on no tab.
         if (removed_ids_.count(title.id) != 0)
@@ -7988,11 +8005,11 @@ class Library final : public app::Concept
         }
         else if (const auto row = child_rows_.find(bar); row != child_rows_.end())
         {
-            // The tab itself first, by its own name, for what is on it alone.
-            const int at = tabs_.active();
-            ui::TabItem own = tabs_.tab(at);
+            // All first: the tab itself, which holds its sub-tabs' titles too.
+            ui::TabItem all = tabs_.tab(tabs_.active());
+            all.label = tr("All");
             sub_keys_.push_back(bar);
-            items.push_back(own);
+            items.push_back(all);
             for (const auto &[key, item] : row->second)
             {
                 sub_keys_.push_back(key);
