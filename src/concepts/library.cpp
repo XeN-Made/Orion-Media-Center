@@ -6197,18 +6197,12 @@ class Library final : public app::Concept
         auto sent = std::make_shared<std::atomic<int>>(-1);
         program_sent_ = sent;
         program_name_ = title.name;
-        std::thread(
-            [elf = std::move(elf), sent, log = update_log_path(), name = title.name,
-             path = title.path]()
-            {
-                const int error = sys::send_payload(elf, kLoaderPort);
-                orion::update_log(
-                    log,
-                    "orion: program " + path + " (" + std::to_string(elf.size()) +
-                        " bytes) to the ELF loader: " +
-                        (error == 0 ? std::string("taken") : "errno " + std::to_string(error)));
-                sent->store(error);
-            })
+        program_id_ = title.id;
+        log_launch(title, "program " + title.path + " (" + std::to_string(elf.size()) +
+                              " bytes): sending it to the ELF loader on 127.0.0.1:" +
+                              std::to_string(kLoaderPort));
+        std::thread([elf = std::move(elf), sent]()
+                    { sent->store(sys::send_payload(elf, kLoaderPort)); })
             .detach();
         show_note(true, trf("{0} is sent to the ELF loader", {title.name}));
         feedback.play(audio::Cue::select);
@@ -6221,6 +6215,11 @@ class Library final : public app::Concept
             return;
         const int error = program_sent_->load();
         program_sent_.reset();
+        // In launch.txt, which the logs ZIP on the key page carries.
+        if (const Title *title = find_title(program_id_))
+            log_launch(*title, error == 0 ? std::string("the ELF loader took it")
+                                          : "the ELF loader did not take it: errno " +
+                                                std::to_string(error));
         if (error == 0)
             return;
         show_note(false, trf("No ELF loader took {0} (errno {1}): is one running on port 9021?",
@@ -9653,6 +9652,7 @@ class Library final : public app::Concept
     // An ELF program sent (send_program): the loader's answer, -1 until it comes.
     std::shared_ptr<std::atomic<int>> program_sent_;
     std::string program_name_;
+    std::string program_id_;
     // The installed app the system is asked to uninstall (start_uninstall).
     std::string uninstall_token_;
     std::string uninstall_id_;
