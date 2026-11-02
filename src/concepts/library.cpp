@@ -3494,6 +3494,12 @@ class Library final : public app::Concept
             const std::string &state = context_.library.state_dir;
             const std::string id = settings_.share_id();
             std::vector<orion::Share> shares = orion::load_shares(state);
+            for (const orion::Share &share : shares)
+            {
+                if (share.id == id)
+                    orion::log_share(state, "removed " + orion::share_address(share) +
+                                                " (Settings, Network drives)");
+            }
             std::erase_if(shares, [&](const orion::Share &s) { return s.id == id; });
             orion::save_shares(state, shares);
             orion::write_service_key(state, orion::share_password_key(id), "");
