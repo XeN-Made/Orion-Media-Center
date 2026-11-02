@@ -393,6 +393,28 @@ TEST(OrionPrefs, BuiltInTabsMoveAndTakeTitles)
     EXPECT_EQ(back.placed_shelf("PPSA01234"), "games");
 }
 
+// Issue #19: with Games and Homebrew hidden, Emulators moved left goes past
+// both to before All, as the bar shows it, not one hidden place.
+TEST(OrionPrefs, MovingATabStepsOverHiddenOnes)
+{
+    orion::LibraryPrefs prefs;
+    const std::vector<std::string> tabs = {"all", "games", "homebrew", "emulators", "media"};
+    prefs.set_tab_hidden("games", true);
+    prefs.set_tab_hidden("homebrew", true);
+    EXPECT_TRUE(prefs.move_tab_key("emulators", -1, tabs));
+    EXPECT_EQ(prefs.ordered_tabs(tabs),
+              (std::vector<std::string>{"emulators", "all", "games", "homebrew", "media"}));
+    EXPECT_FALSE(prefs.move_tab_key("emulators", -1, tabs)); // first of those shown
+    // Right again: past All, the hidden ones staying where they were.
+    EXPECT_TRUE(prefs.move_tab_key("emulators", 1, tabs));
+    EXPECT_EQ(prefs.ordered_tabs(tabs),
+              (std::vector<std::string>{"all", "emulators", "games", "homebrew", "media"}));
+    EXPECT_TRUE(prefs.move_tab_key("emulators", 1, tabs));
+    EXPECT_EQ(prefs.ordered_tabs(tabs),
+              (std::vector<std::string>{"all", "games", "homebrew", "media", "emulators"}));
+    EXPECT_FALSE(prefs.move_tab_key("emulators", 1, tabs));
+}
+
 TEST(OrionPrefs, BrokenOrHandEditedFilesAreForgiven)
 {
     const std::string dir = fresh_dir("orion-prefs-edited");
