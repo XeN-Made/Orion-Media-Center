@@ -260,6 +260,7 @@ enum : int
     kItemInstallItem = 6100,  // + an index in install_entries_
     kItemFoundServer = 11000, // + an index in found_servers_
     kItemFoundShare = 11500,  // + an index in found_shares_
+    kItemTabPlace = 12000, // where a new tab goes: 0 the tab bar, else 1 + an index in place_keys_
 };
 
 // The picture browser shows this many folders and pictures at a time: the
@@ -3386,6 +3387,8 @@ class Library final : public app::Concept
             tabs_changed();
             break;
         case orion::SetupPanel::Change::new_tab:
+            new_tab_parent_.clear();
+            new_tab_ask_ = false; // the setup's tabs step places tabs itself
             start_typing(Typing::new_tab, "");
             break;
         case orion::SetupPanel::Change::new_label:
@@ -3428,6 +3431,15 @@ class Library final : public app::Concept
             tabs_changed();
             break;
         case orion::SettingsPanel::Change::new_tab:
+            // Named first, then asked where it goes (ask_tab_place).
+            new_tab_parent_.clear();
+            new_tab_ask_ = true;
+            start_typing(Typing::new_tab, "");
+            feedback.play(audio::Cue::modal_open);
+            break;
+        case orion::SettingsPanel::Change::new_sub_tab:
+            new_tab_parent_ = settings_.tab_id();
+            new_tab_ask_ = false;
             start_typing(Typing::new_tab, "");
             feedback.play(audio::Cue::modal_open);
             break;
@@ -3898,8 +3910,49 @@ class Library final : public app::Concept
             }
             else if (typing == Typing::new_tab_for_title)
                 prefs_.place(menu_title_, id);
+            else if (typing == Typing::new_tab && !new_tab_parent_.empty())
+                prefs_.set_tab_parent("tab:" + id, std::exchange(new_tab_parent_, {}));
+            else if (typing == Typing::new_tab && std::exchange(new_tab_ask_, false))
+            {
+                tabs_changed();
+                ask_tab_place("tab:" + id, feedback);
+                return;
+            }
         }
         tabs_changed();
+        feedback.play(audio::Cue::saved);
+    }
+
+    // A new tab, named: on the tab bar (Circle leaves it there), or inside
+    // one of the tabs that can hold others.
+    void ask_tab_place(const std::string &key, app::Feedback &feedback)
+    {
+        new_tab_key_ = key;
+        place_keys_.clear();
+        std::vector<ui::MenuItem> items;
+        const orion::CustomTab *tab = prefs_.tab(key.substr(4));
+        ui::MenuItem heading =
+            menu_item(trf("Where does {0} go?", {tab != nullptr ? tab->name : key}));
+        heading.disabled = true;
+        items.push_back(heading);
+        ui::MenuItem bar = menu_item(tr("On the tab bar"));
+        bar.tag = kItemTabPlace;
+        items.push_back(bar);
+        for (std::size_t i = 0; i < tab_keys_.size() && place_keys_.size() < kPickPage; ++i)
+        {
+            const std::string &place = tab_keys_[i];
+            if (place == key || !orion::LibraryPrefs::can_hold_tabs(place) ||
+                !prefs_.tab_parent(place).empty())
+                continue;
+            ui::MenuItem item =
+                menu_item(trf("Inside {0}", {tabs_.tab(static_cast<int>(i)).label}));
+            item.tag = kItemTabPlace + 1 + static_cast<int>(place_keys_.size());
+            place_keys_.push_back(place);
+            items.push_back(item);
+        }
+        menu_.set_items(std::move(items));
+        menu_.open(drive_menu_anchor(), feedback);
+        menu_.set_focus(1);
         feedback.play(audio::Cue::saved);
     }
 
@@ -5869,6 +5922,16 @@ class Library final : public app::Concept
             menu_.close(feedback);
         if (install_item(tag, feedback) || found_item(tag, feedback))
             return;
+        // Before the ranges below, which take any tag past theirs.
+        if (tag >= kItemTabPlace && tag <= kItemTabPlace + static_cast<int>(place_keys_.size()))
+        {
+            const int at = tag - kItemTabPlace;
+            if (at > 0)
+                prefs_.set_tab_parent(new_tab_key_, place_keys_[static_cast<std::size_t>(at - 1)]);
+            tabs_changed();
+            feedback.play(audio::Cue::place);
+            return;
+        }
 
         if (tag == kItemLaunch)
         {
@@ -9552,6 +9615,12 @@ class Library final : public app::Concept
     bool picking_background_ = false;       // ... a picture for behind the library, not a title
     bool background_from_settings_ = false; // ... opened from Settings, which it returns to
     // Select several: the ticked titles' ids.
+    // A new tab: inside which tab it goes (New tab inside this one), or
+    // whether to ask once it is named (Settings' New tab), and the asking.
+    std::string new_tab_parent_;
+    bool new_tab_ask_ = false;
+    std::string new_tab_key_;
+    std::vector<std::string> place_keys_;
     bool selecting_ = false;
     std::unordered_set<std::string> selected_;
     // Move within this tab: the title carried, and what to go back to.

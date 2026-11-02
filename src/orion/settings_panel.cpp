@@ -127,6 +127,7 @@ enum : int
     kPageLabel,
     kPageCore,
     kPageParent,
+    kPageNewInside,
     kPageRename,
     kPageLeft,
     kPageRight,
@@ -959,6 +960,13 @@ void SettingsPanel::build_tab_page(const LibraryPrefs &prefs)
             form_.add_choice(kPageParent, tr("Inside"), std::move(places), at).description =
                 tr("Inside another tab, it is one of that tab's sub-tabs: L2 and R2 under it");
         }
+    }
+    // A tab that can hold others, and is inside none itself: a new one in it.
+    if (LibraryPrefs::can_hold_tabs(page_) && prefs.tab_parent(page_).empty())
+    {
+        ui::FormRow &inside = form_.add_action(kPageNewInside, tr("New tab inside this one"));
+        inside.chevron = true;
+        inside.description = tr("One of this tab's sub-tabs: L2 and R2 reach it");
     }
     form_.add_action(kPageLeft, tr("Move left")).description = tr("Earlier on the tab bar");
     form_.add_action(kPageRight, tr("Move right")).description = tr("Later on the tab bar");
@@ -2158,6 +2166,9 @@ SettingsPanel::Change SettingsPanel::edit_tab_page(int id, LibraryPrefs *prefs)
         return prefs->move_tab_key(page_, id == kPageLeft ? -1 : 1, keys) ? Change::prefs
                                                                           : Change::none;
     }
+    case kPageNewInside:
+        tab_id_ = page_; // the tab it goes inside, by its key
+        return Change::new_sub_tab;
     case kPageDelete:
         if (custom.empty() || !prefs->remove_tab(custom))
             return Change::none;

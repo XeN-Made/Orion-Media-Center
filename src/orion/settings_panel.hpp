@@ -95,6 +95,7 @@ class SettingsPanel
         restore_look,      // "Restore the ORION look": the Look is ORION's again; the screen
                            // drops the player's picture and its weather too
         rename_tab,        // "Rename" on a tab's page: tab_id() says which custom tab
+        new_sub_tab,       // "New tab inside this one": tab_id() says inside which tab
         fetch_art,         // "Find box art now" was chosen
         art_folder,        // the box art folder changed (prefs.art_dir)
         type_art_folder,   // "Your own folder" was chosen: the screen asks for a path

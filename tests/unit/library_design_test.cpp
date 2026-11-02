@@ -503,6 +503,41 @@ TEST_F(LibraryDesign, ATabInsideAnotherIsItsSubTab)
     expect_drawable(*again);
 }
 
+// A new tab from Settings is named, then asked where it goes: Inside Games
+// makes it one of Games' sub-tabs. A tab's page offers one inside it too.
+TEST_F(LibraryDesign, ANewTabIsAskedWhereItGoes)
+{
+    const std::string dir = ::testing::TempDir() + "orion-design-new-tab-place";
+    ASSERT_TRUE(hui::save::ensure_directory(dir));
+    std::remove((dir + "/library.json").c_str());
+    library_.state_dir = dir;
+    auto design = with_fixture();
+    // The keyboard's Done key: down to Shift, the bottom row's first, then
+    // past Symbols, Space and Delete (the keyboard wraps, so no more).
+    const auto done = [&]
+    {
+        for (int i = 0; i < 4; ++i)
+            send(*design, nav(Direction::down));
+        for (int i = 0; i < 4; ++i)
+            send(*design, nav(Direction::right));
+        send(*design, press(hui::Action::confirm));
+    };
+    send(*design, press(hui::Action::r3));
+    send(*design, press(hui::Action::page_next)); // Library -> Tabs
+    send(*design, nav(Direction::right));         // into the rows: "New tab"
+    send(*design, press(hui::Action::confirm));   // the keyboard
+    done();                                       // no name typed: "New tab"
+    expect_drawable(*design);
+    // The question: On the tab bar (focused), then Inside All? no: Inside
+    // Games first, as All holds no tabs.
+    send(*design, nav(Direction::down));
+    send(*design, press(hui::Action::confirm));
+    hui::orion::LibraryPrefs saved = hui::orion::load_prefs(dir);
+    ASSERT_EQ(saved.tabs.size(), 1u);
+    EXPECT_EQ(saved.tab_parent("tab:" + saved.tabs[0].id), "games");
+    expect_drawable(*design);
+}
+
 // Details… shows the title's page: Play and Favourite first, then its facts.
 // Cross on Favourite stars it, Circle closes the page, and the library has the
 // input again.
