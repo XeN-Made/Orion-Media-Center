@@ -14,11 +14,13 @@
       <a class="brand" href="./"><img src="icon.png" alt="">ORION</a>
       <nav aria-label="Pages">
         <a href="#features">Features</a>
+        <a href="guide.html">Guide</a>
         <a href="#emulators">Emulators</a>
         <a href="themes.html">Themes</a>
         <a href="#install">Install</a>
         <a href="https://github.com/XeN-Made/Orion-Media-Center">GitHub</a>
         <a href="https://discord.gg/SS7N7ukzQv">Discord</a>
+        <a href="https://ko-fi.com/xenorion">Support on Ko-fi</a>
       </nav>
     </div>
   </header>
@@ -29,10 +31,11 @@
       <h1>Every game you own,<br><span>one library.</span></h1>
       <p class="lead">A launcher for a jailbroken PS5: your PS5 and PS4 games, homebrew, media apps
         and emulated games side by side, with box art, favourites, tabs of your own and a galaxy
-        glass look. Everything is driven with the controller, and everything can be changed in
-        Settings.</p>
+        glass look. Play and install games from a PC or a NAS, open the console's drives from a
+        PC, and change everything in Settings, all with the controller.</p>
       <div class="actions">
         <a class="button primary" href="https://github.com/XeN-Made/Orion-Media-Center/releases/latest">Download the latest release</a>
+        <a class="button" href="guide.html">Read the guide: every setting</a>
         <a class="button" href="themes.html">Make it yours: themes</a>
       </div>
       <figure>
@@ -75,22 +78,61 @@
             <span class="tag">Tabs</span>
             <h3>Arranged your way</h3>
             <p>All, Games, Homebrew, Media, Favourites, one Emulators tab with a row per system (or
-              a tab per system), and tabs of your own. Each keeps its own view, sort and theme.</p>
+              a tab per system), and tabs of your own, inside each other too: a tab's sub-tabs sit
+              in a row under it. Each keeps its own view, sort, theme and default label.
+              <a href="guide.html#tabs">Tabs and sub-tabs</a>.</p>
+          </div>
+          <div class="card">
+            <span class="tag">Network drives</span>
+            <h3>Games on a PC or a NAS</h3>
+            <p>A Windows shared folder or a NAS (SMB) joins the library: its games show on their
+              systems' tabs and copy over the first time you play them. Add a drive from a phone
+              with a QR code, or let ORION find the drives on your network.
+              <a href="guide.html#network">Network drives</a>.</p>
+          </div>
+          <div class="card">
+            <span class="tag">Installing</span>
+            <h3>Games and packages from a drive</h3>
+            <p>PS5 games from a network drive as a folder, an image, or a ZIP, 7z or RAR (in parts
+              too), unpacked as they arrive. PS4 and PS5 packages go to the console's installer,
+              one after another; Activity (L3) shows the queue.
+              <a href="guide.html#installing">Installing games</a>.</p>
+          </div>
+          <div class="card">
+            <span class="tag">Your PC</span>
+            <h3>The console's drives on a PC</h3>
+            <p>Share the console's storage and USB drives: open <code>\\&lt;console&gt;</code> in
+              File Explorer and copy games and files both ways.
+              <a href="guide.html#console-share">The console on a PC</a>.</p>
+          </div>
+          <div class="card">
+            <span class="tag">Organise</span>
+            <h3>Several at once, your own order</h3>
+            <p>Tick several titles and move them together, carry a title to the place you want it
+              in a tab, label any title, see each title's size and the free space, and sort by
+              size. Installed apps and ELF programs can be deleted from their menu.</p>
+          </div>
+          <div class="card">
+            <span class="tag">RomM</span>
+            <h3>Your RomM server</h3>
+            <p>Your RomM server's games on their systems' tabs, downloaded when you first play
+              them, with RetroArch saves kept in step. Set it up from a phone with a QR code.</p>
           </div>
           <div class="card">
             <span class="tag">Themes</span>
             <h3>A look of your own</h3>
-            <p>31 built-in themes, a theme per tab, and theme files you write in a few lines of
-              text. Settings shows every change live beside the library.
+            <p>31 built-in themes, a theme per tab, theme files you write in a few lines of text,
+              and a picture of your own behind the library (moving, too) with snow, rain or
+              fireflies over it. Settings shows every change live.
               <a href="themes.html">The theming guide</a>.</p>
           </div>
           <div class="card">
             <span class="tag">Console</span>
             <h3>Made for the controller</h3>
-            <p>Every setting in one place (R3), a first-run setup, English, Spanish, Portuguese (Brazil),
-              Hungarian or Swedish, background music and each game's own music as you rest on it, autoboot
-              after the jailbreak, ORION again after rest mode, a return to ORION when a game
-              closes, and updates that install themselves.</p>
+            <p>Every setting in one place (R3), a first-run setup, English, German, Spanish,
+              Portuguese (Brazil), Hungarian or Swedish, background music and each game's own
+              music, autoboot after the jailbreak, ORION again after rest mode, a return to ORION
+              when a game closes, and updates that install themselves.</p>
           </div>
         </div>
       </div>
@@ -120,7 +162,8 @@
           <span class="eyebrow">Three views</span>
           <h2>Look at it three ways</h2>
           <p>Each tab keeps its own view and its own order: by name, recently added, platform, tag
-            (Games, Homebrew, Media, under separators), recently played or most played.</p>
+            (Games, Homebrew, Media, under separators), recently played, most played, largest or
+            smallest first, or your own custom order.</p>
         </div>
         <div class="views">
           <figure>
@@ -164,7 +207,8 @@
                 <td><strong>Porpoise</strong></td>
                 <td>GameCube, Wii</td>
                 <td>Its <code>porpoise/games</code> folder, <code>/data/porpoise/games</code>,
-                  <code>/data/games</code>, <code>/data/roms</code>, <code>/data/iso</code></td>
+                  <code>/data/games</code>, <code>/data/roms</code>, <code>/data/iso</code>: discs,
+                  and Wii downloads as <code>.wad</code></td>
               </tr>
               <tr>
                 <td><strong>PS5SX2</strong></td>
@@ -180,9 +224,10 @@
                   <code>playstation</code> folder at the top of a drive</td>
               </tr>
               <tr>
-                <td><strong>ProsperoEden</strong></td>
+                <td><strong>ProsperoEden</strong> and <strong>ProsperoEden Switch UI</strong></td>
                 <td>Switch</td>
-                <td>The game folder set in its settings, and <code>/data/prosperoeden/roms</code></td>
+                <td>The game folder set in its settings (<code>roms/</code> inside it), and
+                  <code>/data/prosperoeden/roms</code></td>
               </tr>
               <tr>
                 <td><strong>PS5-ECAM</strong></td>
@@ -195,19 +240,47 @@
                 <td><strong>PS5X360</strong></td>
                 <td>Xbox 360</td>
                 <td>Its <code>assets/roms</code> folder, <code>/data/xbox360</code> and
-                  <code>xbox360/</code> on a drive: extracted games (<code>default.xex</code>)
-                  and <code>.iso</code> discs</td>
+                  <code>xbox360/</code> on a drive: extracted games (<code>default.xex</code>),
+                  <code>.iso</code> discs, and Games on Demand and Arcade games
+                  (<code>&lt;title ID&gt;/00007000/</code>, <code>000D0000/</code>)</td>
               </tr>
               <tr>
                 <td><strong>Your folders</strong></td>
                 <td>Any of the above</td>
                 <td>Settings, Emulators, an emulator, <strong>Add a game folder</strong></td>
               </tr>
+              <tr>
+                <td><strong>Network drives</strong></td>
+                <td>Any system</td>
+                <td>Folders named for their systems (<code>gba</code>, <code>snes</code>,
+                  <code>psx</code>…) on a shared folder or a NAS, copied over the first time you
+                  play</td>
+              </tr>
             </tbody>
           </table>
         </div>
         <p class="note">ORION does not come with games, emulators or system files. It lists and starts
           what you have installed yourself.</p>
+      </div>
+    </section>
+
+    <section>
+      <div class="wrap split">
+        <div>
+          <span class="eyebrow">Network drives</span>
+          <h2>Your PC's games, and the console on your PC</h2>
+          <p style="color:var(--muted)">Add a Windows shared folder or a NAS by name or address,
+            from the console or from a phone with the QR code, or let ORION find the drives on
+            your network. Its games join their systems' tabs, PS5 games and packages install
+            straight from it, and Activity (L3) follows every install.</p>
+          <p style="color:var(--muted)">The other way round, <strong>Share this console's
+            drives</strong> opens the PS5's storage and USB drives in File Explorer on your PC.</p>
+          <a class="button" href="guide.html#network">How network drives work</a>
+        </div>
+        <figure>
+          <img class="shot" src="screenshots/network.jpg" width="1920" height="1080" loading="lazy"
+               alt="Settings, Network drives: add a drive, find drives, share this console's drives, and a QR code">
+        </figure>
       </div>
     </section>
 
@@ -249,8 +322,8 @@
           <li><strong>Wait about ten seconds.</strong> ShadowMountPlus registers the title and ORION
             appears on the home screen. If it does not, run ShadowMountPlus again.</li>
           <li><strong>Open ORION.</strong> A short setup walks you through the language, the look,
-            your emulators,
-            box art, how the library is sorted and autoboot.</li>
+            your tabs, games and labels, your emulators, box art and autoboot. The
+            <a href="guide.html">guide</a> explains everything after that.</li>
         </ol>
         <p class="note"><strong>Coming from PPSA99061?</strong> ORION's title ID is
           <code>PPSA99062</code> since 01.103.000. ORION 01.102.000 installs it beside itself as
@@ -279,6 +352,12 @@
             front.</p>
         </div>
         <div class="card">
+          <span class="tag">Support</span>
+          <h3>Keep ORION going</h3>
+          <p>ORION is free and always will be. If it made your console nicer to use, you can
+            buy its maker a coffee on <a href="https://ko-fi.com/xenorion">Ko-fi</a>.</p>
+        </div>
+        <div class="card">
           <span class="tag">Help</span>
           <h3>When something goes wrong</h3>
           <p>Every launch, update and scan is written to a log in <code>/data/orion</code>. The
@@ -295,7 +374,8 @@
       <span>ORION Media Center · GPL-3.0-or-later</span>
       <span>The pictures show invented titles, drawn by ORION's own renderer.</span>
       <span><a href="https://github.com/XeN-Made/Orion-Media-Center">Source on GitHub</a> ·
-        <a href="https://discord.gg/SS7N7ukzQv">Discord</a></span>
+        <a href="https://discord.gg/SS7N7ukzQv">Discord</a> ·
+        <a href="https://ko-fi.com/xenorion">Support ORION on Ko-fi</a></span>
     </div>
   </footer>
 </body>

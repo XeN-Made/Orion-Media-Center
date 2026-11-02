@@ -1,0 +1,532 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ORION Guide</title>
+  <meta name="description" content="Everything ORION Media Center can do, and every setting explained: the library, tabs and sub-tabs, network drives, installing games and packages, sharing the console's drives, RomM, emulators, appearance and more.">
+  <link rel="icon" href="icon.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="wrap">
+      <a class="brand" href="./"><img src="icon.png" alt="">ORION</a>
+      <nav aria-label="Pages">
+        <a href="./#features">Features</a>
+        <a href="guide.html" aria-current="page">Guide</a>
+        <a href="./#emulators">Emulators</a>
+        <a href="themes.html">Themes</a>
+        <a href="./#install">Install</a>
+        <a href="https://github.com/XeN-Made/Orion-Media-Center">GitHub</a>
+        <a href="https://discord.gg/SS7N7ukzQv">Discord</a>
+        <a href="https://ko-fi.com/xenorion">Support on Ko-fi</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <div class="wrap hero">
+      <span class="eyebrow">Guide · ORION 01.107.000</span>
+      <h1>Everything ORION does,<br><span>and every setting.</span></h1>
+      <p class="lead">How to get around the library, what each button and menu does, how to play
+        and install games from a network drive, and what every row in Settings changes. Settings
+        is always one press away: <strong>R3</strong>.</p>
+    </div>
+
+    <div class="wrap">
+      <ul class="toc" aria-label="On this page">
+        <li><a href="#controls">Controls</a></li>
+        <li><a href="#library">The library</a></li>
+        <li><a href="#title-menu">A title's menu</a></li>
+        <li><a href="#tabs">Tabs and sub-tabs</a></li>
+        <li><a href="#several">Several at once</a></li>
+        <li><a href="#activity">Activity</a></li>
+        <li><a href="#network">Network drives</a></li>
+        <li><a href="#installing">Installing games</a></li>
+        <li><a href="#packages">Packages</a></li>
+        <li><a href="#console-share">The console on a PC</a></li>
+        <li><a href="#settings">Every setting</a></li>
+        <li><a href="#files">Files and logs</a></li>
+        <li><a href="#trouble">When something goes wrong</a></li>
+      </ul>
+    </div>
+
+    <section id="controls">
+      <div class="wrap">
+        <div class="section-head">
+          <span class="eyebrow">Controls</span>
+          <h2>The buttons, in the library</h2>
+          <p>The bar at the bottom of the screen always shows what the buttons do where you are.</p>
+        </div>
+        <div class="table">
+          <table>
+            <thead><tr><th>Button</th><th>What it does</th></tr></thead>
+            <tbody>
+              <tr><td><strong>Cross</strong></td><td>Starts the focused title: a game, an app, or an emulated game straight in its emulator.</td></tr>
+              <tr><td><strong>Square</strong></td><td>Stars the title as a favourite, or takes the star away.</td></tr>
+              <tr><td><strong>Triangle</strong></td><td>Search: type part of a name or a title ID. Circle clears the search.</td></tr>
+              <tr><td><strong>Options</strong></td><td>The focused title's menu (<a href="#title-menu">below</a>).</td></tr>
+              <tr><td><strong>R3</strong></td><td>Settings. Circle closes it.</td></tr>
+              <tr><td><strong>L1 / R1</strong></td><td>The previous or next tab.</td></tr>
+              <tr><td><strong>L2 / R2</strong></td><td>Under a tab with a row below the tab bar (the Emulators tab's systems, or a tab's sub-tabs): the previous or next one in that row.</td></tr>
+              <tr><td><strong>L3</strong></td><td>Activity: what ORION is doing in the background, from anywhere.</td></tr>
+              <tr><td><strong>Up</strong> from the covers</td><td>The view and sort pickers at the top right.</td></tr>
+              <tr><td><strong>Circle</strong> held</td><td>Closes ORION (a short press only goes back).</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="library">
+      <div class="wrap">
+        <div class="section-head">
+          <span class="eyebrow">The library</span>
+          <h2>What you see on the home screen</h2>
+          <p>ORION lists what ShadowMountPlus can mount and what the console has installed, plus the
+            games your emulators can play, network drives' games and RomM's.</p>
+        </div>
+        <div class="grid">
+          <div class="card">
+            <span class="tag">Views</span>
+            <h3>Grid, Cases or List</h3>
+            <p>Grid shows covers many to a screen; Cases shows big game cases three at a time;
+              List shows a row per title. Pick it with Up from the covers, for every tab or for one.</p>
+          </div>
+          <div class="card">
+            <span class="tag">Order</span>
+            <h3>Sort the way you like</h3>
+            <p>Name A–Z or Z–A, recently added, platform, tag (Games, Homebrew, Media under
+              separators), recently played, most played, largest or smallest first, or your own
+              <em>Custom order</em> (<a href="#several">Move within this tab</a>).</p>
+          </div>
+          <div class="card">
+            <span class="tag">At a glance</span>
+            <h3>Under the covers</h3>
+            <p>The focused title's ID, version, kind and size, and when you last played it and for
+              how long. Top right: how much space the console's storage has free.</p>
+          </div>
+          <div class="card">
+            <span class="tag">Continue</span>
+            <h3>Continue playing</h3>
+            <p>Over the All tab, a row of what you played last. Up from the covers reaches it.
+              Turn it off in Settings, Library.</p>
+          </div>
+          <div class="card">
+            <span class="tag">Favourites</span>
+            <h3>Starred and hidden</h3>
+            <p>Square stars a title; Favourites holds every starred one. Options, <em>Hide this
+              title</em> moves one to the Hidden tab at the end, and <em>Show this title</em> brings it
+              back.</p>
+          </div>
+          <div class="card">
+            <span class="tag">Your own look</span>
+            <h3>A picture behind it all</h3>
+            <p>Settings, Appearance, <em>Background picture</em>: a PNG, JPEG, GIF or WebP of yours
+              (one that moves, too) behind the library, with snow, rain or fireflies over it if
+              you like.</p>
+          </div>
+        </div>
+        <figure>
+          <img class="shot" src="screenshots/background.jpg" width="1920" height="1080" loading="lazy"
+               alt="The library over a picture of your own, a night landscape, with snow drifting over it">
+          <figcaption>Your own picture behind the library, with snow over it</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section id="title-menu">
+      <div class="wrap">
+        <div class="section-head">
+          <span class="eyebrow">Options</span>
+          <h2>A title's menu</h2>
+          <p>Options on any cover. Rows only show where they apply.</p>
+        </div>
+        <div class="table">
+          <table>
+            <thead><tr><th>Row</th><th>What it does</th></tr></thead>
+            <tbody>
+              <tr><td><strong>Launch</strong></td><td>The same as Cross.</td></tr>
+              <tr><td><strong>Continue from the last save state</strong></td><td>A RetroArch game with a save state: starts from the newest one, RomM's included.</td></tr>
+              <tr><td><strong>Details…</strong></td><td>A page of what the title is: kind, what plays it, where it lives, its size, play time, when it was added. Play and Favourite are on it too.</td></tr>
+              <tr><td><strong>Add to / Remove from Favourites</strong></td><td>The same as Square.</td></tr>
+              <tr><td><strong>Play with…</strong></td><td>A game more than one emulator plays: which one, for this game.</td></tr>
+              <tr><td><strong>Hide this title</strong></td><td>To the Hidden tab, off every other tab.</td></tr>
+              <tr><td><strong>Rename…</strong></td><td>A name of your own; an empty name gives it its own back.</td></tr>
+              <tr><td><strong>Label…</strong></td><td>The banner on its cover: <em>Automatic</em>, ORION's GAME, PS4, HOMEBREW or MEDIA, or one of yours. ORION's labels also set the kind: GAME makes a title a game, with its shelf and Details following.</td></tr>
+              <tr><td><strong>Choose picture…</strong></td><td>A PNG or JPEG of yours as its cover.</td></tr>
+              <tr><td><strong>Find other art…</strong></td><td>Covers from SteamGridDB to choose from (needs your free key, Settings, Box art).</td></tr>
+              <tr><td><strong>Find art by name…</strong></td><td>The same, searching a name you type.</td></tr>
+              <tr><td><strong>Use its own picture</strong></td><td>Back to the cover it came with.</td></tr>
+              <tr><td><strong>Choose music… / Use its own music</strong></td><td>The music it plays while focused: an <code>.ogg</code> or <code>.at9</code> of yours, or its own.</td></tr>
+              <tr><td><strong>Download HD picture / box art again</strong></td><td>A sharper home-screen picture, or the box art fetched again.</td></tr>
+              <tr><td><strong>Move to tab…</strong></td><td>To Games, Homebrew, Media or one of your tabs, or a new tab.</td></tr>
+              <tr><td><strong>Select several…</strong></td><td>Tick several titles and move them together (<a href="#several">below</a>).</td></tr>
+              <tr><td><strong>Move within this tab</strong></td><td>Put it where you want it in the tab (<a href="#several">below</a>).</td></tr>
+              <tr><td><strong>Remove from &lt;tab&gt;</strong></td><td>Out of your tab, back to its own shelf.</td></tr>
+              <tr><td><strong>Remove…</strong></td><td>For a game ShadowMountPlus mounts: off the home screen (its files stay), or deleted from the console. For an installed app: the console's own uninstall (saved data stays). For an emulated game or an ELF program: its file deleted. A delete always asks you to hold Cross.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="tabs">
+      <div class="wrap split">
+        <div>
+          <span class="eyebrow">Tabs and sub-tabs</span>
+          <h2>Shelves of your own, inside each other</h2>
+          <p style="color:var(--muted)">The tab bar holds All, Games, Homebrew, Media, Favourites,
+            Emulators (a row per system under it, or a tab per system) and tabs you make.
+            Settings, <strong>Tabs</strong> makes new ones, hides, renames and reorders them, and
+            gives each its own theme, cover shape, sort, view and default label.</p>
+          <p style="color:var(--muted)"><strong>Sub-tabs</strong>: a tab can sit inside another.
+            Its parent then has a row under the tab bar: <em>All</em> first (everything in the tab
+            and its sub-tabs), then each sub-tab. L2 and R2 step through them.</p>
+          <ul style="color:var(--muted)">
+            <li><strong>New tab</strong> in Settings, Tabs: after the name, ORION asks where it
+              goes: on the tab bar, or inside a tab.</li>
+            <li>A tab's page, <strong>New tab inside this one</strong>: straight into that tab.</li>
+            <li>A tab's page, <strong>Inside</strong>: move an existing tab in or out.</li>
+          </ul>
+          <p style="color:var(--muted)">One level deep: a tab with sub-tabs goes inside no other,
+            and All, Emulators and Hidden hold none. A sub-tab whose parent you hide goes back on
+            the tab bar.</p>
+        </div>
+        <figure>
+          <img class="shot" src="screenshots/subtabs.jpg" width="1920" height="1080" loading="lazy"
+               alt="The Games tab with a row under the tab bar: All, then a PS4 sub-tab">
+          <figcaption>Games, with a PS4 sub-tab: All holds both</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section id="several">
+      <div class="wrap split flip">
+        <div>
+          <span class="eyebrow">Several at once</span>
+          <h2>Tick, move, arrange</h2>
+          <p style="color:var(--muted)"><strong>Select several</strong> (Options on a title):
+            Cross ticks or unticks the focused title; you can change tabs and keep ticking.
+            Options opens <em>Move N titles to</em>: Games, Homebrew, Media, your tabs or a new tab.
+            Circle stops without moving anything.</p>
+          <p style="color:var(--muted)"><strong>Move within this tab</strong> (Options on a
+            title): the direction buttons carry it through the tab (up and down by a whole row in
+            Grid). Cross keeps it there, Circle puts everything back. The tab's sort becomes
+            <em>Custom order</em> and remembers yours.</p>
+        </div>
+        <figure>
+          <img class="shot" src="screenshots/select.jpg" width="1920" height="1080" loading="lazy"
+               alt="Three covers ticked in Select several, with Tick, Move to and Done in the hints">
+          <figcaption>Select several: three ticked, Options moves them</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section id="activity">
+      <div class="wrap">
+        <div class="section-head">
+          <span class="eyebrow">Activity</span>
+          <h2>What ORION is doing, from anywhere: L3</h2>
+          <p>Installs (with speed and time left), the package queue, box art (the game it is on and
+            the next ones), RomM downloads waiting, and what has finished. Square clears the
+            finished ones. While something runs, a small card shows over Settings too.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="network">
+      <div class="wrap split">
+        <div>
+          <span class="eyebrow">Network drives</span>
+          <h2>Games on a PC or a NAS</h2>
+          <p style="color:var(--muted)">Settings, <strong>Network drives</strong>. A Windows shared
+            folder or a NAS (SMB) becomes part of the library: its games show on their systems'
+            tabs and copy to the console the first time you play them.</p>
+          <ul style="color:var(--muted)">
+            <li><strong>Add a network drive</strong>: its address (<code>\\PC\share</code> or
+              <code>\\192.168.1.20\share</code>), a user and a password. <code>PC\user</code>
+              signs in to that PC's own account; an empty user is a guest.</li>
+            <li><strong>Add one from a phone or PC</strong>: scan the QR code and type them there.</li>
+            <li><strong>Find drives on this network</strong>: the PCs and NAS drives sharing
+              folders, then the folders they share.</li>
+            <li><strong>Look for games again</strong>: games sit in folders named for their systems
+              (<code>gba</code>, <code>snes</code>, <code>psx</code>…), as ES-DE keeps them.</li>
+            <li>A drive's page: <strong>Install from this drive…</strong> and <strong>Remove this
+              drive</strong> (its games leave the library; ones already copied stay).</li>
+          </ul>
+          <p class="note"><strong>Windows PC not found, or not opening?</strong> Set its network
+            to <em>Private</em> (Settings, Network &amp; internet), turn on network discovery and
+            <em>File and printer sharing</em> (Advanced sharing settings), and share the folder. A
+            Microsoft account signs in with its email address and password, not the PIN.</p>
+        </div>
+        <figure>
+          <img class="shot" src="screenshots/network.jpg" width="1920" height="1080" loading="lazy"
+               alt="Settings, Network drives: add a drive, find drives, share this console's drives, and a QR code">
+          <figcaption>Settings, Network drives</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section id="installing">
+      <div class="wrap">
+        <div class="section-head">
+          <span class="eyebrow">Installing games</span>
+          <h2>PS5 games straight from a drive</h2>
+          <p>A drive's page, <strong>Install from this drive…</strong>, lists what it holds. Pick a
+            game and the drive it goes to (the console's storage, extended storage or a USB drive;
+            one too full is greyed out).</p>
+        </div>
+        <div class="table">
+          <table>
+            <thead><tr><th>What it is</th><th>What ORION does</th></tr></thead>
+            <tbody>
+              <tr><td>A game's folder (<code>sce_sys</code> inside)</td><td>Copied whole.</td></tr>
+              <tr><td>An image: <code>.ffpkg</code>, <code>.ffpfs</code>, <code>.exfat</code></td><td>Copied, for ShadowMountPlus to mount.</td></tr>
+              <tr><td>An archive: ZIP, 7z, RAR (RAR5 stored or compressed)</td><td>Unpacked as it comes off the network, nothing in between. A game folder inside is found wherever it sits.</td></tr>
+              <tr><td>An archive in parts: <code>.part1.rar</code>, <code>.7z.001</code></td><td>Every part read in order.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="note">Activity (L3) shows the speed and the time left. <strong>Stop
+          installing</strong> (Settings, Network drives) stops and deletes what was copied. A game
+          that is already there is refused, not overwritten.</p>
+      </div>
+    </section>
+
+    <section id="packages">
+      <div class="wrap">
+        <div class="section-head">
+          <span class="eyebrow">Packages</span>
+          <h2>PS4 and PS5 packages, through the console's installer</h2>
+          <p>In <strong>Install from this drive…</strong>, <code>.pkg</code> games, add-ons and
+            updates show what they are and whether they are installed. Pick one and it goes to the
+            console's own installer straight from the drive; it finishes in the console's
+            Downloads. Pick more while one is going and they queue; <strong>Install all not
+            installed</strong> queues every one a folder has. Add-ons for a game the console does
+            not have say so. Needs kstuff, as any fake package does.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="console-share">
+      <div class="wrap">
+        <div class="section-head">
+          <span class="eyebrow">The console on a PC</span>
+          <h2>Open the PS5's drives from File Explorer</h2>
+          <p>Settings, Network drives, <strong>Share this console's drives</strong>, with a user name
+            and password of your choosing. On a PC on the same network, type
+            <code>\\&lt;the console's address&gt;</code> in File Explorer's address bar (Settings
+            shows it) and sign in: the console's storage and its USB drives show as network
+            folders, to copy games and files both ways. It keeps going after ORION closes, and
+            starts again with ORION.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="settings">
+      <div class="wrap">
+        <div class="section-head">
+          <span class="eyebrow">Settings (R3)</span>
+          <h2>Every setting, section by section</h2>
+          <p>L1 and R1 step through the sections; Cross picks a row; left and right change a choice.
+            Each row's own description also shows under it on the console.</p>
+        </div>
+
+        <h3>Library</h3>
+        <div class="table"><table><tbody>
+          <tr><td><strong>Sort by</strong></td><td>The order of the covers, on every tab without an order of its own.</td></tr>
+          <tr><td><strong>View</strong></td><td>Grid of covers, big cases three to a screen, or a list.</td></tr>
+          <tr><td><strong>Case pictures</strong></td><td>Cases view puts each cover in a picture of its console's case; off draws a plain one.</td></tr>
+          <tr><td><strong>Reopen on last tab</strong></td><td>ORION starts on the tab you left it on.</td></tr>
+          <tr><td><strong>Continue playing</strong></td><td>A row of what you played last over the All tab's covers.</td></tr>
+          <tr><td><strong>Moved titles leave shelf</strong></td><td>A title moved to your own tab leaves Games, Homebrew or Media.</td></tr>
+        </tbody></table></div>
+
+        <h3>Tabs</h3>
+        <div class="table"><table><tbody>
+          <tr><td><strong>New tab</strong></td><td>A shelf of your own; after its name, ORION asks where it goes (the tab bar, or inside a tab).</td></tr>
+          <tr><td><strong>Group emulator tabs</strong></td><td>One Emulators tab with a row for each system that has games (L2 and R2 change system); off, a tab per system.</td></tr>
+          <tr><td><strong>Every tab</strong></td><td>Opens its page:</td></tr>
+          <tr><td style="padding-left:32px">Show this tab</td><td>Off takes it off the tab bar; nothing is deleted. For a system, off hides it and its games everywhere.</td></tr>
+          <tr><td style="padding-left:32px">Rename</td><td>A name of your own on the tab bar; empty gives a built-in tab its own back.</td></tr>
+          <tr><td style="padding-left:32px">Theme</td><td>This tab can wear a theme of its own.</td></tr>
+          <tr><td style="padding-left:32px">Cover shape</td><td>Square for console icons; the box's own shape for box art.</td></tr>
+          <tr><td style="padding-left:32px">Sort by, View</td><td>This tab's own, or the Library's default.</td></tr>
+          <tr><td style="padding-left:32px">Default label</td><td>Titles on this tab wear it, unless you gave one a label of its own.</td></tr>
+          <tr><td style="padding-left:32px">Core</td><td>For a system RetroArch plays with several cores: the one its games start with.</td></tr>
+          <tr><td style="padding-left:32px">Inside</td><td>Inside another tab, it is one of that tab's sub-tabs (L2 and R2 under it).</td></tr>
+          <tr><td style="padding-left:32px">New tab inside this one</td><td>One of this tab's sub-tabs, made straight away.</td></tr>
+          <tr><td style="padding-left:32px">Move left, Move right</td><td>Earlier or later on the tab bar, past hidden tabs.</td></tr>
+          <tr><td style="padding-left:32px">Delete tab</td><td>One of yours: its games go back to their shelves.</td></tr>
+        </tbody></table></div>
+
+        <h3>Labels</h3>
+        <div class="table"><table><tbody>
+          <tr><td><strong>New label</strong></td><td>A label of your own: give it to any game from its menu (Label…).</td></tr>
+          <tr><td><strong>Every label</strong></td><td>ORION's and yours: its <em>Text</em>, <em>Label colour</em> and <em>Text colour</em>, with a preview. Yours can be deleted (games wearing it go back to ORION's); ORION's can go <em>Back to ORION's</em>.</td></tr>
+        </tbody></table></div>
+
+        <h3>Emulators</h3>
+        <div class="table"><table><tbody>
+          <tr><td><strong>Scan for emulators</strong></td><td>Finds the emulators installed and the games they can see. Ones not installed are listed with what they play.</td></tr>
+          <tr><td><strong>Every emulator</strong></td><td>Its page: the app, how many games, its built-in folders, and <em>Add a game folder</em> (a system's folder like <code>roms/gba</code>, or a folder of them, under <code>/data</code> or <code>/mnt</code>; pick it with the folder browser or type a path). A folder's page sets its <em>System</em> or removes it.</td></tr>
+          <tr><td><strong>Ask which emulator to use</strong></td><td>A game more than one emulator plays asks the first time; Options, Play with changes it.</td></tr>
+          <tr><td><strong>Every version of a game</strong></td><td>Bad dumps, hacks, translations and other regions as covers of their own; off shows the best one.</td></tr>
+          <tr><td><strong>Systems</strong></td><td>Each system with its number of games: switch it off to hide it and its games, and for one RetroArch plays with several cores, the core its games start with.</td></tr>
+        </tbody></table></div>
+
+        <h3>RomM</h3>
+        <div class="table"><table><tbody>
+          <tr><td><strong>Set it up from a phone or PC</strong></td><td>Open the address (or scan the code) on the same network: it takes the server's address and the pairing code.</td></tr>
+          <tr><td><strong>RomM server</strong></td><td>Its address with the port, like <code>192.168.1.20:8080</code> or <code>https://romm.example.com</code>.</td></tr>
+          <tr><td><strong>Pair with RomM</strong></td><td>In RomM: your profile, Client tokens, a new token, Pair; then type the code here.</td></tr>
+          <tr><td><strong>Browse RomM games</strong></td><td>A tab per system: tick the games to download, see which have saves.</td></tr>
+          <tr><td><strong>RomM games in the library</strong></td><td><em>Only ones not on the console</em> (a game you already have shows once, from the console) or <em>None</em>.</td></tr>
+          <tr><td><strong>Refresh RomM's game list</strong></td><td>Asks RomM which games it has. A game downloads only when you play it, to <code>/data/orion/romm/games</code>.</td></tr>
+        </tbody></table></div>
+
+        <h3>Network drives</h3>
+        <div class="table"><table><tbody>
+          <tr><td><strong>Add one from a phone or PC</strong></td><td>Scan the code, or open the address on the same network.</td></tr>
+          <tr><td><strong>Add a network drive</strong></td><td>A Windows share or a NAS (SMB): its address, user and password. ORION signs in and lists it before keeping it.</td></tr>
+          <tr><td><strong>Find drives on this network</strong></td><td>The PCs and NAS drives sharing folders here, then the folders they share.</td></tr>
+          <tr><td><strong>Look for games again</strong></td><td>Folders named for their systems: gba, snes, psx…</td></tr>
+          <tr><td><strong>Stop installing</strong></td><td>While a game installs: stops it, and what was copied so far is deleted.</td></tr>
+          <tr><td><strong>Every drive</strong></td><td>Its address and user, <em>Install from this drive…</em> and <em>Remove this drive</em>.</td></tr>
+          <tr><td><strong>Share this console's drives</strong></td><td>Its storage and USB drives as network drives on a PC; Settings then shows the address to type. It keeps going after ORION closes.</td></tr>
+          <tr><td><strong>User name, Password</strong></td><td>What Windows asks for when it connects to the console.</td></tr>
+        </tbody></table></div>
+
+        <h3>Box art</h3>
+        <div class="table"><table><tbody>
+          <tr><td><strong>Find box art by itself</strong></td><td>When ORION starts, new games get covers from the internet.</td></tr>
+          <tr><td><strong>Find box art now</strong></td><td>Looks for every game still without a cover.</td></tr>
+          <tr><td><strong>Enter the key on a phone or PC</strong></td><td>Scan the code to paste your SteamGridDB key there.</td></tr>
+          <tr><td><strong>SteamGridDB key</strong></td><td>Free at steamgriddb.com: your profile, Preferences, API. It opens Find other art.</td></tr>
+          <tr><td><strong>Box art folder</strong></td><td>Where covers are kept; chosen under Storage.</td></tr>
+        </tbody></table></div>
+
+        <h3>Storage</h3>
+        <div class="table"><table><tbody>
+          <tr><td><strong>Drives</strong></td><td>Each drive with its free space and how many of your titles are on it.</td></tr>
+          <tr><td><strong>Box art folder</strong></td><td>ORION's folder, a USB drive, extended storage, or a folder of yours.</td></tr>
+          <tr><td><strong>Game background copies</strong></td><td>The home-screen pictures ORION copied; <em>Copy them again</em> asks for every missing one once more.</td></tr>
+          <tr><td><strong>Your themes, Settings and play records</strong></td><td>Where they live (<code>/data/orion</code>).</td></tr>
+        </tbody></table></div>
+
+        <h3>Appearance</h3>
+        <p style="color:var(--muted)">While you are here, Settings steps aside and the library shows
+          each change live. The <a href="themes.html">theming guide</a> has the details.</p>
+        <div class="table"><table><tbody>
+          <tr><td><strong>Theme for this tab</strong></td><td>A theme for the tab you are on alone.</td></tr>
+          <tr><td><strong>Theme for every tab</strong></td><td>Built in, or a theme file of yours; every row below adjusts it.</td></tr>
+          <tr><td><strong>Background</strong></td><td>What moves behind the glass.</td></tr>
+          <tr><td><strong>Sky, Nebula, Clouds, Motion</strong></td><td>The colour of empty space, the glow and its clouds, how many clouds, and whether the sky drifts.</td></tr>
+          <tr><td><strong>Glass tint, Glass opacity</strong></td><td>The colour and strength of the frosted panels.</td></tr>
+          <tr><td><strong>Highlight, Accent</strong></td><td>The selected tab and focused key; labels, counts and the text cursor.</td></tr>
+          <tr><td><strong>Cover corners</strong></td><td>How round the covers are.</td></tr>
+          <tr><td><strong>Tab bar</strong></td><td>Plain text like the home screen, or pills on a frosted track.</td></tr>
+          <tr><td><strong>Focus ring</strong></td><td>A ring that drifts through the colours, or the theme's own.</td></tr>
+          <tr><td><strong>Bottom bars</strong></td><td>Behind the title details and button hints: nothing, a rim, or glass.</td></tr>
+          <tr><td><strong>Category banners, Cover rim</strong></td><td>GAME, HOMEBREW, MEDIA or PS4 on each cover; a hairline of light around each cover.</td></tr>
+          <tr><td><strong>Game backgrounds, Blurred covers, Background strength</strong></td><td>The focused game's home-screen picture fades in behind the library; for a game with no picture of its own, its cover, blurred (or the sky, with Blurred covers off); and how strongly.</td></tr>
+          <tr><td><strong>Background picture</strong></td><td>A PNG, JPEG, GIF or WebP of your own (one that moves, too) from a USB drive, extended storage or the console; <em>Use the sky</em> takes it away.</td></tr>
+          <tr><td><strong>Effect over your picture</strong></td><td>Snow, rain or fireflies drifting over your background picture.</td></tr>
+          <tr><td><strong>Save as new theme</strong></td><td>Keeps this look as a theme file in <code>/data/orion/themes</code>, to reuse or share.</td></tr>
+          <tr><td><strong>Restore the ORION look</strong></td><td>Back to the galaxy glass ORION starts with, without your picture.</td></tr>
+        </tbody></table></div>
+
+        <h3>Sound</h3>
+        <div class="table"><table><tbody>
+          <tr><td><strong>Music, Sound effects, Menu sounds</strong></td><td>How loud the songs behind ORION are (Off stops them), launching and saving, and moving the focus.</td></tr>
+          <tr><td><strong>Now playing, Next song</strong></td><td>The song playing, and a skip to the next.</td></tr>
+          <tr><td><strong>Title music, Title music volume</strong></td><td>A focused game plays its own music, as on the home screen, at its own volume.</td></tr>
+          <tr><td><strong>Your music</strong></td><td>Your own songs join when ORION starts: <code>.ogg</code> files, 48 kHz, in <code>/data/orion/music</code>.</td></tr>
+        </tbody></table></div>
+
+        <h3>System</h3>
+        <div class="table"><table><tbody>
+          <tr><td><strong>Language</strong></td><td>English, Deutsch, Español, Português (Brasil), Magyar or Svenska; Automatic follows the console.</td></tr>
+          <tr><td><strong>Return to ORION after a game</strong></td><td>Close a game from the PS button menu and ORION opens again.</td></tr>
+          <tr><td><strong>Open ORION after rest mode</strong></td><td>When the console wakes on the home screen, ORION opens; a game left running stays in front.</td></tr>
+          <tr><td><strong>Autoboot ORION after the jailbreak</strong></td><td>ORION opens on its own after each jailbreak, once the payload shown below it (<code>orion-autostart.elf</code>) is last in your autoloader.</td></tr>
+          <tr><td><strong>Run setup again</strong></td><td>The first-run steps again: the look, your tabs, games and labels, emulators, box art and autoboot.</td></tr>
+        </tbody></table></div>
+
+        <h3>About</h3>
+        <div class="table"><table><tbody>
+          <tr><td><strong>Version, Title ID, Releases</strong></td><td>Which ORION this is, and where releases are.</td></tr>
+          <tr><td><strong>What's new</strong></td><td>What changed in this version (it also shows once after each update).</td></tr>
+          <tr><td><strong>Share your logs</strong></td><td>Scan the code on a phone or PC to download ORION's logs as a ZIP for a bug report. No keys or passwords are in it.</td></tr>
+          <tr><td><strong>Check for updates, Download updates by themselves, Check now</strong></td><td>ORION asks GitHub for a newer release each time it opens, makes it ready in the background, and asks before installing; <em>Install ORION</em> appears when one is ready.</td></tr>
+        </tbody></table></div>
+      </div>
+    </section>
+
+    <section id="files">
+      <div class="wrap">
+        <div class="section-head">
+          <span class="eyebrow">Files and logs</span>
+          <h2>Where ORION keeps things</h2>
+          <p>Everything is in <code>/data/orion</code>, so it stays through updates and reinstalls.</p>
+        </div>
+        <div class="table"><table>
+          <thead><tr><th>Path</th><th>What it is</th></tr></thead>
+          <tbody>
+            <tr><td><code>library.json</code></td><td>Your tabs, labels, placements, names and library settings.</td></tr>
+            <tr><td><code>shares.json</code>, <code>keys.txt</code></td><td>Your network drives, and the keys and passwords (never in the logs ZIP).</td></tr>
+            <tr><td><code>themes/</code>, <code>music/</code>, <code>custom-art/</code></td><td>Your theme files, songs and cover pictures.</td></tr>
+            <tr><td><code>launch.txt</code></td><td>Every launch, and every ELF program sent to the loader.</td></tr>
+            <tr><td><code>launcher.txt</code>, <code>shares.txt</code></td><td>The helpers' log; network drives, installs and packages.</td></tr>
+            <tr><td><code>scan.txt</code>, <code>update/log.txt</code>, <code>resume.txt</code></td><td>What the scan found; updates; the rest-mode watcher.</td></tr>
+          </tbody>
+        </table></div>
+      </div>
+    </section>
+
+    <section id="trouble">
+      <div class="wrap">
+        <div class="section-head">
+          <span class="eyebrow">When something goes wrong</span>
+          <h2>The usual problems</h2>
+        </div>
+        <div class="grid">
+          <div class="card">
+            <h3>"ORION cannot reach /data"</h3>
+            <p>ShadowMountPlus mounts <code>/data</code> into ORION. Update ShadowMountPlus, keep its
+              <em>backport_fakelib</em> on, and turn BackPork off.</p>
+          </div>
+          <div class="card">
+            <h3>Games and installs do not start</h3>
+            <p>ORION starts games, packages and sharing through an ELF loader on port 9021. If none
+              runs, ORION says so: run your jailbreak's loader again.</p>
+          </div>
+          <div class="card">
+            <h3>A Windows PC is not found</h3>
+            <p>Set its network to Private, turn on network discovery and File and printer sharing,
+              and share the folder. Adding it by address works even when the search cannot see it.</p>
+          </div>
+          <div class="card">
+            <h3>Still stuck</h3>
+            <p>Settings, About, <strong>Share your logs</strong>, and attach the ZIP on the
+              <a href="https://discord.gg/SS7N7ukzQv">ORION Discord</a> (#bug-reports) or in a
+              <a href="https://github.com/XeN-Made/Orion-Media-Center/issues">GitHub issue</a>.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <span>ORION Media Center · GPL-3.0-or-later</span>
+      <span>The pictures show invented titles, drawn by ORION's own renderer.</span>
+      <span><a href="https://github.com/XeN-Made/Orion-Media-Center">Source on GitHub</a> ·
+        <a href="https://discord.gg/SS7N7ukzQv">Discord</a> ·
+        <a href="https://ko-fi.com/xenorion">Support ORION on Ko-fi</a></span>
+    </div>
+  </footer>
+</body>
+</html>
