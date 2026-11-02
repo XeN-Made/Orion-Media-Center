@@ -10,6 +10,7 @@
 #include "library/animation.hpp"
 #include "library/icon.hpp"
 #include "orion/console_share.hpp"
+#include "orion/prefs.hpp"
 
 #include <sys/stat.h>
 
@@ -150,6 +151,97 @@ void check_library(const SelfTestInput &in, std::vector<CheckResult> *results)
     else
         add(results, "drives", lost.empty() ? Outcome::pass : Outcome::fail,
             lost.empty() ? seen : lost + " but the library has none of them");
+}
+
+// Every emulator ORION would know among the titles is in the library's
+// list (a ProsperoEden by its title ID, one installed as a package), with
+// what it found.
+void check_emulators(const SelfTestInput &in, std::vector<CheckResult> *results)
+{
+    std::string found;
+    for (const library::EmulatorApp &app : in.emulators)
+        found += (found.empty() ? "" : ", ") + app.name + " " + app.title_id + " " +
+                 std::to_string(app.games) + (app.games == 1 ? " game" : " games");
+    std::string missed;
+    for (const library::Title &title : in.titles)
+    {
+        const std::string key = library::emulator_key(title);
+        if (key.empty())
+            continue;
+        const bool listed =
+            std::any_of(in.emulators.begin(), in.emulators.end(),
+                        [&](const library::EmulatorApp &app) { return app.key == key; });
+        if (!listed)
+            missed += (missed.empty() ? "" : ", ") + title.name + " " + title.id;
+    }
+    if (found.empty() && missed.empty())
+    {
+        add(results, "emulators", Outcome::skip, "none installed");
+        return;
+    }
+    add(results, "emulators", missed.empty() ? Outcome::pass : Outcome::fail,
+        missed.empty() ? found : "not in the library's list: " + missed);
+}
+
+// What the player set in Settings holds together: a title given GAME, PS4,
+// HOMEBREW or MEDIA is that kind (library::apply_kinds), and every tab
+// inside another sits one level deep in a tab that can hold it.
+void check_settings(const SelfTestInput &in, std::vector<CheckResult> *results)
+{
+    const LibraryPrefs prefs = load_prefs(in.state_dir);
+    int labelled = 0;
+    std::string wrong;
+    for (const auto &[id, label] : prefs.title_labels)
+    {
+        const bool game = label == "ps5" || label == "ps4";
+        if (!game && label != "homebrew" && label != "media")
+            continue;
+        for (const library::Title &title : in.titles)
+        {
+            if (title.id != id || title.is_rom())
+                continue;
+            ++labelled;
+            const bool right = game ? !title.homebrew && title.category == library::Category::game
+                               : label == "homebrew" ? title.homebrew
+                                                     : title.category == library::Category::media;
+            if (!right)
+                wrong += (wrong.empty() ? "" : ", ") + title.name + " (" + label + ")";
+        }
+    }
+    if (labelled == 0)
+        add(results, "label-kinds", Outcome::skip, "no title wears GAME, PS4, HOMEBREW or MEDIA");
+    else
+        add(results, "label-kinds", wrong.empty() ? Outcome::pass : Outcome::fail,
+            wrong.empty() ? std::to_string(labelled) + " titles are the kind their label says"
+                          : "not the kind their label says: " + wrong);
+
+    std::string inside;
+    std::string bad;
+    for (const TabPrefs &tab : prefs.tab_prefs)
+    {
+        if (tab.parent.empty())
+            continue;
+        const auto name = [&](const std::string &key)
+        {
+            if (key.rfind("tab:", 0) == 0)
+            {
+                const CustomTab *own = prefs.tab(key.substr(4));
+                return own != nullptr ? own->name : std::string();
+            }
+            return key;
+        };
+        const bool parent_known =
+            tab.parent.rfind("tab:", 0) != 0 || prefs.tab(tab.parent.substr(4)) != nullptr;
+        const bool ok = parent_known && LibraryPrefs::can_hold_tabs(tab.parent) &&
+                        prefs.tab_parent(tab.parent).empty() && !name(tab.tab).empty();
+        (ok ? inside : bad) += std::string((ok ? inside : bad).empty() ? "" : ", ") +
+                               name(tab.tab) + " in " + name(tab.parent);
+    }
+    if (inside.empty() && bad.empty())
+        add(results, "sub-tabs", Outcome::skip, "no tab inside another");
+    else
+        add(results, "sub-tabs", bad.empty() ? Outcome::pass : Outcome::fail,
+            bad.empty() ? inside : "inside a tab that is gone or cannot hold it: " + bad);
 }
 
 void check_network_drives(const SelfTestInput &in, std::vector<CheckResult> *results)
@@ -615,6 +707,8 @@ std::vector<CheckResult> run_self_test(const SelfTestInput &in)
     check_data(in, &results);
     check_payloads(in, &results);
     check_library(in, &results);
+    check_emulators(in, &results);
+    check_settings(in, &results);
     check_network_drives(in, &results);
     check_network_search(in, &results);
     check_console_share(in, &results);

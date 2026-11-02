@@ -5,6 +5,7 @@
 #include "core/save_file.hpp"
 #include "core/sha256.hpp"
 #include "orion/console_share.hpp"
+#include "orion/prefs.hpp"
 #include "orion/self_test.hpp"
 #include "orion/shares.hpp"
 
@@ -381,6 +382,48 @@ TEST_F(SelfTestFixture, DecodesTestPictures)
     EXPECT_EQ(pictures[1]->outcome, Outcome::pass) << pictures[1]->detail;
     EXPECT_EQ(pictures[2]->outcome, Outcome::fail);
     EXPECT_EQ(pictures[2]->detail.rfind("does not decode", 0), 0u) << pictures[2]->detail;
+}
+
+// The emulators found, and one ORION knows by its title ID left out of the
+// library's list (a detection gap) fails; Settings' kinds and sub-tabs hold.
+TEST_F(SelfTestFixture, ChecksEmulatorsLabelsAndSubTabs)
+{
+    hui::library::Title eden;
+    eden.id = "PPSA99186";
+    eden.name = "ProsperoEden Switch UI";
+    eden.source = hui::library::Source::installed;
+    hui::library::Title astro;
+    astro.id = "PPSA01325";
+    astro.name = "Astro";
+    astro.category = hui::library::Category::game;
+    in.titles = {eden, astro};
+    std::vector<CheckResult> results = hui::orion::run_self_test(in);
+    EXPECT_EQ(find(results, "emulators")->outcome, Outcome::fail);
+    EXPECT_NE(find(results, "emulators")->detail.find("PPSA99186"), std::string::npos);
+    EXPECT_EQ(find(results, "label-kinds")->outcome, Outcome::skip);
+    EXPECT_EQ(find(results, "sub-tabs")->outcome, Outcome::skip);
+
+    hui::library::EmulatorApp app;
+    app.key = "eden";
+    app.name = "ProsperoEden";
+    app.title_id = "PPSA99186";
+    app.games = 1;
+    in.emulators = {app};
+    hui::orion::LibraryPrefs prefs;
+    prefs.set_title_label("PPSA01325", "ps5");
+    const std::string ps4 = "tab:" + prefs.add_tab("PS4").id;
+    ASSERT_TRUE(prefs.set_tab_parent(ps4, "games"));
+    ASSERT_TRUE(hui::orion::save_prefs(in.state_dir, prefs));
+    results = hui::orion::run_self_test(in);
+    EXPECT_EQ(find(results, "emulators")->outcome, Outcome::pass);
+    EXPECT_EQ(find(results, "emulators")->detail, "ProsperoEden PPSA99186 1 game");
+    EXPECT_EQ(find(results, "label-kinds")->outcome, Outcome::pass);
+    EXPECT_EQ(find(results, "sub-tabs")->outcome, Outcome::pass);
+    EXPECT_EQ(find(results, "sub-tabs")->detail, "PS4 in games");
+
+    // Labelled GAME but still homebrew: apply_kinds did not reach it.
+    in.titles[1].homebrew = true;
+    EXPECT_EQ(find(hui::orion::run_self_test(in), "label-kinds")->outcome, Outcome::fail);
 }
 
 TEST(OrionSelfTest, WritesALineACheck)

@@ -575,6 +575,7 @@ int main()
                 in.payloads = {"orion-launcher.elf", "orion-autostart.elf",  "orion-resume.elf",
                                "orion-playtime.elf", "orion-pkginstall.elf", "orion-smbshare.elf"};
                 in.titles = titles.titles;
+                in.emulators = titles.emulator.apps;
                 in.drive_roots = {"/mnt/ext0", "/mnt/ext1"};
                 for (int usb = 0; usb < 8; ++usb)
                     in.drive_roots.push_back("/mnt/usb" + std::to_string(usb));

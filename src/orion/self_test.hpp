@@ -61,6 +61,8 @@ struct SelfTestInput
     std::vector<library::Title> titles;
     // Drives games are installed on: "/mnt/ext0", "/mnt/usb0".
     std::vector<std::string> drive_roots;
+    // The emulators the library found (library.emulator.apps).
+    std::vector<library::EmulatorApp> emulators;
     SmbLister list;                          // sys::smb_list on the console
     std::function<bool(int port)> port_open; // something answers on 127.0.0.1:<port>
     // sys::copy_game: the installer's own copier, for the install checks.
