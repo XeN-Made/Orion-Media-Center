@@ -5197,15 +5197,13 @@ class Library final : public app::Concept
     // The orders for the active tab: its own choice, or the Library's.
     // ---- removing ----
 
-    // What Remove… is offered for: a game for an emulator (its file), or a
-    // console title ShadowMountPlus registered from a folder or an image. An
-    // emulator other games play with is not, while it has them.
+    // What Remove… is offered for: a game for an emulator or an ELF program
+    // (its file), or a console title ShadowMountPlus registered from a
+    // folder or an image. An emulator other games play with is not, while
+    // it has them.
     bool removable(const Title &title) const
     {
-        // An ELF program is a file the player put there: they take it away.
-        if (title.source == library::Source::payload)
-            return false;
-        if (title.is_rom())
+        if (title.is_rom() || title.source == library::Source::payload)
             return !title.path.empty();
         if (title.path.empty())
             return false;
@@ -5223,9 +5221,11 @@ class Library final : public app::Concept
         if (title == nullptr)
             return;
         std::vector<ui::MenuItem> items;
-        if (title->is_rom())
+        if (title->is_rom() || title->source == library::Source::payload)
         {
-            ui::MenuItem erase = menu_item(tr("Delete the game file…"));
+            // Both are one file, which ORION erases itself.
+            ui::MenuItem erase = menu_item(title->is_rom() ? tr("Delete the game file…")
+                                                           : tr("Delete the ELF file…"));
             erase.tag = kItemRemoveRom;
             erase.danger = true;
             items.push_back(erase);
@@ -5269,7 +5269,10 @@ class Library final : public app::Concept
             content.icon = ui::StatusKind::danger;
             content.title = trf("Delete {0}?", {title->name});
             content.body =
-                kind == kItemRemoveRom
+                kind == kItemRemoveRom && title->source == library::Source::payload
+                    ? trf("The ELF file is erased for good:\n{0}\nThis cannot be undone.",
+                          {title->path})
+                : kind == kItemRemoveRom
                     ? trf("Its game file is erased for good:\n{0}\nThis cannot be undone.",
                           {title->path})
                     : trf("Its files are erased for good:\n{0}\nIt leaves the home screen "

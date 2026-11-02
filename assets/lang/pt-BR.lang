@@ -885,3 +885,5 @@ author = ORION
 "about a minute left" = "falta cerca de um minuto"
 "about {0} min left" = "faltam cerca de {0} min"
 "about {0} h {1} min left" = "faltam cerca de {0} h {1} min"
+"Delete the ELF file…" = "Apagar o arquivo ELF…"
+"The ELF file is erased for good:\n{0}\nThis cannot be undone." = "O arquivo ELF é apagado de vez:\n{0}\nIsso não pode ser desfeito."

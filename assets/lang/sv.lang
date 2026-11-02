@@ -880,3 +880,5 @@ author = Svenska ORION-bidragsgivare
 "about a minute left" = "ungefär en minut kvar"
 "about {0} min left" = "ungefär {0} min kvar"
 "about {0} h {1} min left" = "ungefär {0} h {1} min kvar"
+"Delete the ELF file…" = "Radera ELF-filen…"
+"The ELF file is erased for good:\n{0}\nThis cannot be undone." = "ELF-filen raderas för gott:\n{0}\nDet går inte att ångra."
