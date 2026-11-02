@@ -3,13 +3,16 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "core/save_file.hpp"
+#include "core/sha256.hpp"
 #include "orion/console_share.hpp"
 #include "orion/self_test.hpp"
 #include "orion/shares.hpp"
 
 #include <gtest/gtest.h>
 
+#include <chrono>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace
@@ -175,6 +178,106 @@ TEST_F(SelfTestFixture, SignsInToTheConsolesOwnShare)
     EXPECT_EQ(seen.user, "ps5");
     EXPECT_EQ(seen.password, "secret");
     EXPECT_NE(result->detail.find("shared: data, usb0"), std::string::npos);
+}
+
+// The test games are installed off the console's own share with the
+// installer's code; here a copier stands in for SMB and the archive reader.
+TEST_F(SelfTestFixture, InstallsEachTestGameAndComparesIt)
+{
+    hui::orion::ConsoleShare share;
+    share.on = true;
+    share.password = "secret";
+    ASSERT_TRUE(hui::orion::write_console_share(in.state_dir, share));
+    const std::string fixtures = in.state_dir + "/selftest/fixtures";
+    ASSERT_TRUE(make_path(fixtures));
+    hui::save::write_atomic(fixtures + "/cases.txt", "ok\tgame.zip\tgame.sha256\n"
+                                                     "twice\tsplit.part1.rar\tgame.sha256\n"
+                                                     "ok\tbroken.7z\tgame.sha256\n"
+                                                     "stop\tbig.7z\tgame.sha256\n"
+                                                     "ok\tcheck.ffpkg\timage.sha256\n");
+    hui::save::write_atomic(fixtures + "/game.sha256",
+                            hui::sha256_hex("{}") + "  sce_sys/param.json\n" +
+                                hui::sha256_hex("data") + "  data/a.bin\n");
+    hui::save::write_atomic(fixtures + "/image.sha256",
+                            hui::sha256_hex("image") + "  check.ffpkg\n");
+    in.list = [](const hui::sys::SmbLogin &, const std::string &folder, int, std::size_t,
+                 std::vector<hui::sys::SmbEntry> *entries, std::string *)
+    {
+        EXPECT_EQ(folder, "orion/selftest/fixtures");
+        for (const char *name : {"game.zip", "split.part1.rar", "split.part2.rar", "broken.7z",
+                                 "big.7z", "check.ffpkg"})
+        {
+            hui::sys::SmbEntry entry;
+            entry.path = name;
+            entries->push_back(entry);
+        }
+        return true;
+    };
+    std::vector<std::vector<std::string>> asked;
+    in.copy = [&asked](const hui::sys::GameSource &source, const std::string &into,
+                       hui::sys::CopyProgress *progress, std::string *)
+    {
+        asked.push_back(source.paths);
+        const std::string &first = source.paths.front();
+        progress->done = 1000000;
+        if (first.find("check.ffpkg") != std::string::npos)
+            return hui::save::write_atomic(into + "/check.ffpkg", "image").empty();
+        if (first.find("big.7z") != std::string::npos)
+        {
+            while (!progress->cancel.load())
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            return false;
+        }
+        const std::string game = into + "/Check Game";
+        make_path(game + "/sce_sys");
+        make_path(game + "/data");
+        hui::save::write_atomic(game + "/sce_sys/param.json", "{}");
+        hui::save::write_atomic(game + "/data/a.bin",
+                                first.find("broken") != std::string::npos ? "dat" : "data");
+        return true;
+    };
+    const std::vector<CheckResult> results = hui::orion::run_self_test(in);
+
+    const CheckResult *zip = find(results, "install ok game.zip");
+    ASSERT_NE(zip, nullptr);
+    EXPECT_EQ(zip->outcome, Outcome::pass) << zip->detail;
+    EXPECT_EQ(zip->detail.rfind("2 files match, ", 0), 0u) << zip->detail;
+    const CheckResult *split = find(results, "install twice split.part1.rar");
+    ASSERT_NE(split, nullptr);
+    EXPECT_EQ(split->outcome, Outcome::pass) << split->detail;
+    EXPECT_NE(split->detail.find("(2 volumes)"), std::string::npos);
+    EXPECT_NE(split->detail.find("again: already there"), std::string::npos);
+    const CheckResult *broken = find(results, "install ok broken.7z");
+    ASSERT_NE(broken, nullptr);
+    EXPECT_EQ(broken->outcome, Outcome::fail);
+    EXPECT_EQ(broken->detail, "data/a.bin differs");
+    const CheckResult *stop = find(results, "install stop big.7z");
+    ASSERT_NE(stop, nullptr);
+    EXPECT_EQ(stop->outcome, Outcome::pass) << stop->detail;
+    const CheckResult *image = find(results, "install ok check.ffpkg");
+    ASSERT_NE(image, nullptr);
+    EXPECT_EQ(image->outcome, Outcome::pass) << image->detail;
+
+    ASSERT_EQ(asked.size(), 6u); // the split archive twice
+    EXPECT_EQ(asked[1], (std::vector<std::string>{"orion/selftest/fixtures/split.part1.rar",
+                                                  "orion/selftest/fixtures/split.part2.rar"}));
+    // Every install is removed again.
+    EXPECT_TRUE(hui::save::list_directory(in.state_dir + "/selftest/installed").empty());
+}
+
+// Without sharing there is no share to install from: skipped, and said why.
+TEST_F(SelfTestFixture, SkipsInstallsWithoutSharing)
+{
+    ASSERT_TRUE(make_path(in.state_dir + "/selftest/fixtures"));
+    hui::save::write_atomic(in.state_dir + "/selftest/fixtures/cases.txt", "ok\tgame.zip\tx\n");
+    in.copy = [](const hui::sys::GameSource &, const std::string &, hui::sys::CopyProgress *,
+                 std::string *) { return false; };
+    const std::vector<CheckResult> results = hui::orion::run_self_test(in);
+    ASSERT_NE(find(results, "installs"), nullptr);
+    EXPECT_EQ(find(results, "installs")->outcome, Outcome::skip);
+    // No fixtures: no install line at all.
+    hui::save::remove_tree(in.state_dir + "/selftest/fixtures");
+    EXPECT_EQ(find(hui::orion::run_self_test(in), "installs"), nullptr);
 }
 
 TEST(OrionSelfTest, WritesALineACheck)

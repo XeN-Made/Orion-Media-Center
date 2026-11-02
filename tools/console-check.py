@@ -5,6 +5,7 @@
 """Runs ORION's checks on a console (src/orion/self_test.hpp) and prints them.
 
 usage: PS5_HOST=<address> tools/console-check.py <results dir> [design id|-] [--quit]
+                                                 [--installs]
 
 Uses the ORION already installed (make deploy first); it uploads nothing but
 two request files. Steps: check the console's services; start ORION through
@@ -16,6 +17,14 @@ that the console's share answers when sharing is on. ORION stays open
 unless --quit is given (or a tour ran: it closes itself a few minutes after
 one). The exit status is 1 when a check failed.
 
+--installs also tests installing games off a network drive: a small
+invented game is packed every way the installer takes (a game folder, ZIP,
+7z, 7z volumes, stored and compressed RAR5, each also in volumes, an image) with 7-Zip and WinRAR, put in /data/orion/selftest/fixtures, and
+ORION installs each off its own share (sharing must be on), compares every
+file, installs one twice (refused as already there), stops one half way
+(nothing may be left), and removes them all. The fixtures are deleted from
+the console afterwards.
+
 It never kills the app and never retries. If something is wrong it stops
 and says what it saw. Ask the console's owner before every run.
 
@@ -25,12 +34,18 @@ Environment:
   ELF_PORT       default 9021 (ELF loader, for the launch helper)
   CHECK_TIMEOUT  seconds to wait for the report (default 180)
   TOUR_TIMEOUT   seconds to wait for a tour after the checks (default 900)
+  SEVEN_ZIP      7-Zip's command line (default: Windows' 7z.exe, through WSL)
+  RAR            WinRAR's command line (default: Windows' Rar.exe, through WSL)
 """
 
+import hashlib
 import io
 import json
 import os
+import random
+import shutil
 import socket
+import subprocess
 import sys
 import time
 from ftplib import FTP, all_errors
@@ -38,6 +53,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 STATE = "/data/orion"
+FIXTURES = f"{STATE}/selftest/fixtures"
+GAME = "ORION Check Game"  # invented; its title ID is no real product's
 
 
 def say(text):
@@ -104,6 +121,130 @@ class Console:
         except all_errors:
             pass
 
+    def make_dirs(self, path):
+        current = ""
+        for part in path.strip("/").split("/"):
+            current += "/" + part
+            try:
+                self.ftp.mkd(current)
+            except all_errors:
+                pass
+
+    def upload(self, path, local):
+        with open(local, "rb") as data:
+            self.ftp.storbinary(f"STOR {path}", data, blocksize=256 * 1024)
+
+    def remove_tree(self, path):
+        """Only ever called on the fixtures folder this tool made."""
+        try:
+            self.ftp.cwd(path)
+            entries = [(name, facts.get("type")) for name, facts in self.ftp.mlsd()
+                       if name not in (".", "..")]
+            self.ftp.cwd("/")
+        except all_errors:
+            return
+        for name, kind in entries:
+            if kind == "dir":
+                self.remove_tree(f"{path}/{name}")
+            else:
+                self.remove(f"{path}/{name}")
+        try:
+            self.ftp.rmd(path)
+        except all_errors:
+            pass
+
+
+def sums(folder):
+    """sha256sum's lines for every file under folder, by path inside it."""
+    lines = []
+    for path in sorted(p for p in folder.rglob("*") if p.is_file()):
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        lines.append(f"{digest}  {path.relative_to(folder).as_posix()}\n")
+    return "".join(lines)
+
+
+def windows_tool(variable, *candidates):
+    named = os.environ.get(variable)
+    if named:
+        return named
+    for candidate in candidates:
+        if Path(candidate).is_file():
+            return candidate
+    stop(f"{variable}: not found (set it to the program's path)")
+
+
+def make_fixtures(out):
+    """The invented game packed every way the installer takes, and cases.txt."""
+    seven = windows_tool("SEVEN_ZIP", "/mnt/c/Program Files/7-Zip/7z.exe")
+    rar = windows_tool("RAR", "/mnt/c/Program Files/WinRAR/Rar.exe")
+    shutil.rmtree(out, ignore_errors=True)
+    game = out / GAME
+    (game / "sce_sys").mkdir(parents=True)
+    (game / "data" / "two words").mkdir(parents=True)
+    (game / "sce_sys" / "param.json").write_text(json.dumps(
+        {"titleId": "CHEK00001", "contentVersion": "01.000.000",
+         "localizedParameters": {"en-US": {"titleName": GAME}}}, indent=2))
+    noise = random.Random(7)
+    # Incompressible data spans volumes and RAR blocks; text gives the
+    # decoders something to do.
+    (game / "data" / "noise.bin").write_bytes(noise.randbytes(9 * 1024 * 1024 + 17))
+    (game / "data" / "two words" / "words.txt").write_text(
+        "".join(f"line {n} of the check game\n" for n in range(120000)))
+    (game / "eboot.bin").write_bytes(noise.randbytes(4096))
+    (out / "game.sha256").write_text(sums(game))
+    (out / "check.ffpkg").write_bytes(noise.randbytes(3 * 1024 * 1024))
+    (out / "image.sha256").write_text(
+        f"{hashlib.sha256((out / 'check.ffpkg').read_bytes()).hexdigest()}  check.ffpkg\n")
+
+    def run(*command):
+        done = subprocess.run(command, cwd=out, capture_output=True, text=True, check=False)
+        if done.returncode != 0:
+            stop(f"{' '.join(command[:3])}... failed: {(done.stdout + done.stderr)[-400:]}")
+
+    run(seven, "a", "-tzip", "-mx5", "folder-inside.zip", GAME)
+    run(seven, "a", "-t7z", "-mx5", "game.7z", GAME)
+    run(seven, "a", "-t7z", "-mx1", "-v4m", "volumes.7z", GAME)
+    run(rar, "a", "-ma5", "-m0", "-ep1", "-r", "stored.rar", GAME)
+    run(rar, "a", "-ma5", "-m3", "-ep1", "-r", "packed.rar", GAME)
+    run(rar, "a", "-ma5", "-m0", "-v4m", "-ep1", "-r", "stored-volumes.rar", GAME)
+    run(rar, "a", "-ma5", "-m3", "-v4m", "-ep1", "-r", "packed-volumes.rar", GAME)
+    # x.rar, x.r00 volumes exist only for RAR4, which WinRAR 7 no longer
+    # writes: their naming is left to the unit tests (archive_volumes).
+    # Big enough that Stop lands half way.
+    big = out / "big"
+    shutil.copytree(game, big / GAME)
+    (big / GAME / "data" / "big.bin").write_bytes(noise.randbytes(96 * 1024 * 1024))
+    run(seven, "a", "-tzip", "-mx0", "big.zip", f"big/{GAME}")
+    shutil.rmtree(big)
+    (out / "cases.txt").write_text(
+        f"ok\t{GAME}\tgame.sha256\n"
+        "ok\tfolder-inside.zip\tgame.sha256\n"
+        "ok\tgame.7z\tgame.sha256\n"
+        "ok\tvolumes.7z.001\tgame.sha256\n"
+        "ok\tstored.rar\tgame.sha256\n"
+        "twice\tpacked.rar\tgame.sha256\n"
+        "ok\tstored-volumes.part1.rar\tgame.sha256\n"
+        "ok\tpacked-volumes.part1.rar\tgame.sha256\n"
+        "ok\tcheck.ffpkg\timage.sha256\n"
+        "stop\tbig.zip\tgame.sha256\n")
+    return out
+
+
+def upload_fixtures(console, local):
+    console.remove_tree(FIXTURES)
+    console.make_dirs(FIXTURES)
+    count = 0
+    size = 0
+    for path in sorted(local.rglob("*")):
+        remote = f"{FIXTURES}/{path.relative_to(local).as_posix()}"
+        if path.is_dir():
+            console.make_dirs(remote)
+        else:
+            console.upload(remote, path)
+            count += 1
+            size += path.stat().st_size
+    return count, size
+
 
 def running(console, title):
     return any(name.startswith(title) for name in console.names("/mnt/sandbox") or [])
@@ -120,8 +261,9 @@ def launch(host, elf_port, console, title):
 
 
 def main():
-    args = [arg for arg in sys.argv[1:] if arg != "--quit"]
+    args = [arg for arg in sys.argv[1:] if arg not in ("--quit", "--installs")]
     quit_after = "--quit" in sys.argv[1:]
+    installs = "--installs" in sys.argv[1:]
     if len(args) not in (1, 2):
         raise SystemExit(__doc__)
     results = Path(args[0])
@@ -141,6 +283,11 @@ def main():
     console = Console(host, ftp_port)
     if console.names(f"/data/homebrew/{title}") is None:
         stop(f"{title} is not installed in /data/homebrew (make deploy first)")
+    if installs:
+        local = make_fixtures(ROOT / "build" / "install-fixtures")
+        say("Uploading the test games to the console")
+        count, size = upload_fixtures(console, local)
+        say(f"Uploaded {count} files, {size / 1e6:.0f} MB")
     token = str(int(time.time()))
     # Written before a launch, so ORION finds it on its first look.
     console.write(f"{STATE}/dev-request.txt", f"check {design} {token}\n".encode())
@@ -225,6 +372,8 @@ def main():
 
     console = Console(host, ftp_port)
     console.remove(f"{STATE}/dev-request.txt")
+    if installs:
+        console.remove_tree(FIXTURES)
     if quit_after and design == "-":
         console.write(f"{STATE}/dev-request.txt", f"quit - {token}q\n".encode())
         say("Asked ORION to close itself")

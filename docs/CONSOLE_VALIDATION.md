@@ -95,6 +95,7 @@ cannot be written.
 PS5_HOST=<console address> tools/console-check.py results/check-1           # checks only
 PS5_HOST=<console address> tools/console-check.py results/check-1 library   # then the library's tour
 PS5_HOST=<console address> tools/console-check.py results/check-1 --quit    # and close ORION after
+PS5_HOST=<console address> tools/console-check.py results/check-1 --installs # and the installer
 ```
 
 The checks (`src/orion/self_test.cpp`), one `PASS`, `FAIL` or `SKIP` line each:
@@ -109,6 +110,18 @@ The checks (`src/orion/self_test.cpp`), one `PASS`, `FAIL` or `SKIP` line each:
 | `console-share` | sharing is on, and the payload reports a problem or a sign-in to `\\127.0.0.1\data` fails |
 | `memory` | the heap has refused an allocation |
 | `pc-reaches-share` | sharing is on and port 445 does not answer from the PC |
+| `install ok <file>` | with `--installs`: the test game installed off the share differs from what was packed, file by file |
+| `install twice <file>` | the same game installed again is not refused as already there |
+| `install stop <file>` | Stop half way leaves files behind |
+
+`--installs` packs an invented game with 7-Zip and WinRAR (Windows' own,
+through WSL; `SEVEN_ZIP` and `RAR` name others): a game folder, ZIP with
+the game in a folder, 7z, 7z volumes, stored and compressed RAR5, both in
+volumes too, an image, and a large ZIP for Stop. About 200 MB go to
+`/data/orion/selftest/fixtures`; ORION installs each off its own share
+(sharing must be on) into `/data/orion/selftest/installed`, compares, and
+removes it; the tool deletes the fixtures afterwards. RAR4 volumes
+(`x.rar`, `x.r00`) are not among them: WinRAR 7 no longer writes RAR4.
 
 ORION stays open afterwards unless `--quit` is given; after a tour it closes
 itself a few minutes later, as with `console-tour.py`. The exit status is 1

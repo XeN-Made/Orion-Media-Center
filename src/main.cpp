@@ -30,6 +30,7 @@
 #include "orion/updates.hpp"
 #include "platform/ps5/audio_out.hpp"
 #include "platform/ps5/display_egl.hpp"
+#include "platform/ps5/game_copy.hpp"
 #include "platform/ps5/pad.hpp"
 #include "platform/ps5/smb.hpp"
 #include "platform/ps5/system.hpp"
@@ -577,6 +578,7 @@ int main()
                     in.drive_roots.push_back("/mnt/usb" + std::to_string(usb));
                 in.list = sys::smb_list;
                 in.port_open = local_port_open;
+                in.copy = sys::copy_game;
                 std::remove(kCheckReportPath); // a new report must not be taken for an old one
                 self_test.start(std::move(in));
                 check_token = token;

@@ -5,12 +5,15 @@
 #include "orion/self_test.hpp"
 
 #include "core/save_file.hpp"
+#include "core/sha256.hpp"
 #include "orion/console_share.hpp"
 
 #include <sys/stat.h>
 
+#include <chrono>
 #include <cstdio>
 #include <map>
+#include <thread>
 #include <utility>
 
 namespace hui::orion
@@ -184,6 +187,238 @@ void check_console_share(const SelfTestInput &in, std::vector<CheckResult> *resu
                : "sharing, but a sign-in to it failed: " + error);
 }
 
+// Every file under `folder`, as paths relative to it.
+void files_under(const std::string &folder, const std::string &prefix,
+                 std::vector<std::string> *files)
+{
+    for (const save::DirectoryEntry &entry : save::list_directory(folder))
+    {
+        if (entry.directory)
+            files_under(folder + "/" + entry.name, prefix + entry.name + "/", files);
+        else
+            files->push_back(prefix + entry.name);
+    }
+}
+
+// The file's SHA-256, read a piece at a time (a game's files are large).
+std::string hash_file(const std::string &path)
+{
+    std::FILE *file = std::fopen(path.c_str(), "rb");
+    if (file == nullptr)
+        return {};
+    Sha256 hash;
+    std::string piece(1u << 20, '\0');
+    std::size_t got = 0;
+    while ((got = std::fread(piece.data(), 1, piece.size(), file)) > 0)
+        hash.update(std::string_view(piece.data(), got));
+    std::fclose(file);
+    return hash.hex();
+}
+
+// "<sha256>  <path>" a line, as sha256sum writes them.
+std::map<std::string, std::string> read_sums(const std::string &path)
+{
+    std::map<std::string, std::string> sums;
+    std::string text;
+    save::read_file(path, &text, 1u << 20);
+    for (std::size_t start = 0; start < text.size();)
+    {
+        std::size_t end = text.find('\n', start);
+        if (end == std::string::npos)
+            end = text.size();
+        const std::string line = text.substr(start, end - start);
+        start = end + 1;
+        if (line.size() > 66 && line.compare(64, 2, "  ") == 0)
+            sums[line.substr(66)] = line.substr(0, 64);
+    }
+    return sums;
+}
+
+// What was installed against what the PC packed: the same files, no more,
+// each with the same bytes. An image is one file, compared by itself.
+std::string compare_installed(const std::string &installed,
+                              const std::map<std::string, std::string> &sums)
+{
+    struct stat info = {};
+    if (::stat(installed.c_str(), &info) != 0)
+        return "nothing at " + installed;
+    if (!S_ISDIR(info.st_mode))
+    {
+        if (sums.size() != 1)
+            return "an image, where a folder was expected";
+        return hash_file(installed) == sums.begin()->second ? std::string()
+                                                            : "the image's bytes differ";
+    }
+    std::vector<std::string> found;
+    files_under(installed, "", &found);
+    if (found.size() != sums.size())
+        return std::to_string(found.size()) + " files, " + std::to_string(sums.size()) +
+               " expected";
+    for (const auto &[path, sum] : sums)
+    {
+        if (hash_file(installed + "/" + path) != sum)
+            return path + " differs";
+    }
+    return {};
+}
+
+// One install, start to end, the way the library screen runs it; `stop`
+// cancels it as soon as bytes have started to arrive.
+GameInstall::Result install_once(const SelfTestInput &in, const sys::GameSource &source,
+                                 const std::string &name, const std::string &place, bool stop,
+                                 double *mb_per_second)
+{
+    GameInstall install(in.copy);
+    GameInstall::Result result;
+    install.start(source, name, place);
+    while (!install.take_finished(&result))
+    {
+        if (stop && install.done() > 0)
+            install.cancel();
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+    const double seconds = install.seconds();
+    *mb_per_second = seconds > 0.0 ? static_cast<double>(install.done()) / 1e6 / seconds : 0.0;
+    return result;
+}
+
+std::string problem_name(GameInstall::Problem problem)
+{
+    switch (problem)
+    {
+    case GameInstall::Problem::none:
+        return "none";
+    case GameInstall::Problem::copy:
+        return "copy";
+    case GameInstall::Problem::stopped:
+        return "stopped";
+    case GameInstall::Problem::no_game:
+        return "no game";
+    case GameInstall::Problem::already_there:
+        return "already there";
+    case GameInstall::Problem::cannot_write:
+        return "cannot write";
+    }
+    return "?";
+}
+
+// The test games the PC packed (tools/console-check.py), installed off the
+// console's own share as a game off a PC's would be. fixtures/cases.txt has
+// a line each: "<ok|twice|stop>\t<file or folder>\t<sums file>". ok:
+// installs and matches the sums; twice: then the same again is refused as
+// already there; stop: stopped once it has begun leaves nothing behind.
+void check_installs(const SelfTestInput &in, std::vector<CheckResult> *results)
+{
+    const std::string fixtures = in.state_dir + "/selftest/fixtures";
+    std::string cases;
+    if (!save::read_file(fixtures + "/cases.txt", &cases, 64u << 10))
+        return; // the PC asked for no install checks
+    const ConsoleShare share = read_console_share(in.state_dir);
+    if (!share.on || !in.copy || !in.list)
+    {
+        add(results, "installs", Outcome::skip,
+            "turn sharing on in Settings: the test games are installed off the console's share");
+        return;
+    }
+    sys::SmbLogin login;
+    login.server = "127.0.0.1";
+    login.share = "data";
+    login.user = share.user;
+    login.password = share.password;
+    const std::string on_share = "orion/selftest/fixtures";
+    std::vector<sys::SmbEntry> entries;
+    std::string error;
+    if (!in.list(login, on_share, 0, 256, &entries, &error))
+    {
+        add(results, "installs", Outcome::fail, "cannot list the test games: " + error);
+        return;
+    }
+    std::vector<std::string> names;
+    for (const sys::SmbEntry &entry : entries)
+        names.push_back(entry.path);
+
+    const std::string place = in.state_dir + "/selftest/installed";
+    save::remove_tree(place);
+    for (std::size_t start = 0; start < cases.size();)
+    {
+        std::size_t end = cases.find('\n', start);
+        if (end == std::string::npos)
+            end = cases.size();
+        const std::string line = cases.substr(start, end - start);
+        start = end + 1;
+        const std::size_t first_tab = line.find('\t');
+        const std::size_t second_tab = line.find('\t', first_tab + 1);
+        if (first_tab == std::string::npos || second_tab == std::string::npos)
+            continue;
+        const std::string expect = line.substr(0, first_tab);
+        const std::string path = line.substr(first_tab + 1, second_tab - first_tab - 1);
+        const std::map<std::string, std::string> sums =
+            read_sums(fixtures + "/" + line.substr(second_tab + 1));
+
+        sys::GameSource source;
+        source.login = login;
+        source.kind = install_kind(path);
+        if (source.kind == sys::GameSourceKind::none)
+            source.kind = sys::GameSourceKind::folder;
+        const std::vector<std::string> volumes = source.kind == sys::GameSourceKind::archive
+                                                     ? archive_volumes(names, path)
+                                                     : std::vector<std::string>{path};
+        for (const std::string &volume : volumes)
+            source.paths.push_back(on_share + "/" + volume);
+        const std::string label = "install " + expect + " " + path;
+        const std::string name = install_name(path);
+        const std::string count = volumes.size() > 1
+                                      ? " (" + std::to_string(volumes.size()) + " volumes)"
+                                      : std::string();
+        double speed = 0.0;
+        const GameInstall::Result result =
+            install_once(in, source, name, place, expect == "stop", &speed);
+
+        if (expect == "stop")
+        {
+            std::vector<std::string> left;
+            files_under(in.state_dir + "/selftest", "", &left);
+            std::string stray;
+            for (const std::string &file : left)
+            {
+                if (starts_with(file, "installed/") || starts_with(file, ".orion-install/"))
+                    stray = file;
+            }
+            const bool good = result.problem == GameInstall::Problem::stopped && stray.empty();
+            add(results, label, good ? Outcome::pass : Outcome::fail,
+                good ? "stopped, nothing left behind"
+                     : "ended " + problem_name(result.problem) +
+                           (stray.empty() ? std::string() : ", left " + stray));
+            save::remove_tree(place);
+            continue;
+        }
+        if (!result.ok)
+        {
+            add(results, label, Outcome::fail,
+                problem_name(result.problem) + (result.detail.empty() ? "" : ": " + result.detail));
+            save::remove_tree(place);
+            continue;
+        }
+        std::string differs = compare_installed(result.installed, sums);
+        if (differs.empty() && expect == "twice")
+        {
+            double again_speed = 0.0;
+            const GameInstall::Result again =
+                install_once(in, source, name, place, false, &again_speed);
+            if (again.problem != GameInstall::Problem::already_there)
+                differs = "a second install ended " + problem_name(again.problem) +
+                          " instead of already there";
+        }
+        char rate[32];
+        std::snprintf(rate, sizeof(rate), "%.1f MB/s", speed);
+        add(results, label, differs.empty() ? Outcome::pass : Outcome::fail,
+            differs.empty() ? std::to_string(sums.size()) + " files match" + count + ", " + rate +
+                                  (expect == "twice" ? "; again: already there" : "")
+                            : differs);
+        save::remove_tree(place);
+    }
+}
+
 } // namespace
 
 std::vector<CheckResult> run_self_test(const SelfTestInput &in)
@@ -194,6 +429,7 @@ std::vector<CheckResult> run_self_test(const SelfTestInput &in)
     check_library(in, &results);
     check_network_drives(in, &results);
     check_console_share(in, &results);
+    check_installs(in, &results);
     return results;
 }
 

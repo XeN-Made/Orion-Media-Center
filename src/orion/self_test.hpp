@@ -6,8 +6,11 @@
 // without a person: can it write /data, are its payloads and the ELF loader
 // there, what did the library find, do the saved network drives sign in,
 // and does the console's own share (orion/console_share.hpp) let a client
-// in. A PC asks with a line "check <what> <token>" (main.cpp) and reads the
-// report from <state>/selftest/report.txt, which outlives the app.
+// in. When the PC has put test games in <state>/selftest/fixtures, each is
+// installed off that share with the installer's own code, compared file by
+// file and removed (check_installs in self_test.cpp). A PC asks with a
+// line "check <what> <token>" (main.cpp) and reads the report from
+// <state>/selftest/report.txt, which outlives the app.
 //
 //   orion::SelfTestInput in;
 //   in.state_dir = "/data/orion";
@@ -23,6 +26,7 @@
 #pragma once
 
 #include "library/library.hpp"
+#include "orion/game_install.hpp"
 #include "orion/shares.hpp"
 
 #include <atomic>
@@ -58,6 +62,8 @@ struct SelfTestInput
     std::vector<std::string> drive_roots;
     SmbLister list;                          // sys::smb_list on the console
     std::function<bool(int port)> port_open; // something answers on 127.0.0.1:<port>
+    // sys::copy_game: the installer's own copier, for the install checks.
+    GameInstall::Copier copy;
 };
 
 // Every check, in the report's order. Blocking: network drives are tried.
