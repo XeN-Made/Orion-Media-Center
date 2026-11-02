@@ -443,12 +443,53 @@ std::vector<SmbServer> smb_find_servers(const std::string &own, std::string *tra
             const std::uint32_t found = ntohl(from.sin_addr.s_addr);
             if (found == me || found == 0 || !wsd_is_computer(text))
                 continue;
+            // A PC answers from each of its networks (Hyper-V's and WSL's
+            // too), all with one endpoint: it is kept once, by the address
+            // nearest the console's own.
+            const std::string endpoint = wsd_endpoint(text);
+            const auto nearness = [me](std::uint32_t address)
+            {
+                int bits = 0;
+                while (bits < 32 && ((address ^ me) & (0x80000000u >> bits)) == 0)
+                    ++bits;
+                return bits;
+            };
+            bool known = false;
+            for (auto &[address, where] : metadata)
+            {
+                if (endpoint.empty() || where.second != endpoint)
+                    continue;
+                known = true;
+                in_addr kept = {};
+                ::inet_pton(AF_INET, address.c_str(), &kept);
+                if (nearness(found) <= nearness(ntohl(kept.s_addr)))
+                    break;
+                const std::string nearer = text_of(found);
+                bool listed = false;
+                for (const SmbServer &server : servers)
+                    listed = listed || server.address == nearer;
+                if (listed) // NetBIOS has it there already
+                    servers.erase(std::remove_if(servers.begin(), servers.end(),
+                                                 [&address](const SmbServer &server)
+                                                 { return server.address == address; }),
+                                  servers.end());
+                for (SmbServer &server : servers)
+                {
+                    if (server.address == address)
+                        server.address = nearer;
+                }
+                address = nearer;
+                where.first = wsd_xaddr(text);
+                break;
+            }
+            if (known)
+                continue;
             const std::string address = text_of(found);
             const std::size_t before = servers.size();
             add_server(&servers, address);
             if (servers.size() > before)
                 ++discovered;
-            metadata.push_back({address, {wsd_xaddr(text), wsd_endpoint(text)}});
+            metadata.push_back({address, {wsd_xaddr(text), endpoint}});
         }
     }
     if (w >= 0)
