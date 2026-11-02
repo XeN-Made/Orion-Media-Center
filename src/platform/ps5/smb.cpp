@@ -260,6 +260,16 @@ std::string text_of(std::uint32_t address)
     return text;
 }
 
+// How many leading bits two addresses share: a machine on several networks
+// is reached at the one nearest the console's own.
+int nearness(std::uint32_t a, std::uint32_t b)
+{
+    int bits = 0;
+    while (bits < 32 && ((a ^ b) & (0x80000000u >> bits)) == 0)
+        ++bits;
+    return bits;
+}
+
 void add_server(std::vector<SmbServer> *servers, const std::string &address)
 {
     for (const SmbServer &server : *servers)
@@ -387,18 +397,28 @@ std::vector<SmbServer> smb_find_servers(const std::string &own, std::string *tra
             // length at 54, then 6 bytes an address (2 of flags, 4 of address).
             if (got < 62 || answer[0] != 0x51 || answer[1] != 0x57 || (answer[2] & 0x80) == 0)
                 continue;
+            // One answer is one machine with every address it has (Hyper-V's
+            // and WSL's too): it is kept once, at the nearest.
             const int length = (answer[54] << 8) | answer[55];
+            std::uint32_t best = 0;
             for (int at = 56; at + 6 <= 56 + length && at + 6 <= got; at += 6)
             {
                 const std::uint32_t found = (static_cast<std::uint32_t>(answer[at + 2]) << 24) |
                                             (static_cast<std::uint32_t>(answer[at + 3]) << 16) |
                                             (static_cast<std::uint32_t>(answer[at + 4]) << 8) |
                                             answer[at + 5];
-                if (found != me && found != 0)
+                if (found == me)
                 {
-                    add_server(&servers, text_of(found));
-                    ++workgroup;
+                    best = 0; // the console's own answer
+                    break;
                 }
+                if (found != 0 && (best == 0 || nearness(found, me) > nearness(best, me)))
+                    best = found;
+            }
+            if (best != 0)
+            {
+                add_server(&servers, text_of(best));
+                ++workgroup;
             }
         }
     }
@@ -447,13 +467,6 @@ std::vector<SmbServer> smb_find_servers(const std::string &own, std::string *tra
             // too), all with one endpoint: it is kept once, by the address
             // nearest the console's own.
             const std::string endpoint = wsd_endpoint(text);
-            const auto nearness = [me](std::uint32_t address)
-            {
-                int bits = 0;
-                while (bits < 32 && ((address ^ me) & (0x80000000u >> bits)) == 0)
-                    ++bits;
-                return bits;
-            };
             bool known = false;
             for (auto &[address, where] : metadata)
             {
@@ -462,7 +475,7 @@ std::vector<SmbServer> smb_find_servers(const std::string &own, std::string *tra
                 known = true;
                 in_addr kept = {};
                 ::inet_pton(AF_INET, address.c_str(), &kept);
-                if (nearness(found) <= nearness(ntohl(kept.s_addr)))
+                if (nearness(found, me) <= nearness(ntohl(kept.s_addr), me))
                     break;
                 const std::string nearer = text_of(found);
                 bool listed = false;
