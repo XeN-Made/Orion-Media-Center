@@ -887,3 +887,5 @@ author = ORION
 "about {0} h {1} min left" = "quedan unas {0} h {1} min"
 "Delete the ELF file…" = "Borrar el archivo ELF…"
 "The ELF file is erased for good:\n{0}\nThis cannot be undone." = "El archivo ELF se borra para siempre:\n{0}\nNo se puede deshacer."
+"Largest first" = "Primero los más grandes"
+"Smallest first" = "Primero los más pequeños"

@@ -882,3 +882,5 @@ author = ORION
 "about {0} h {1} min left" = "nagyjából {0} óra {1} perc van hátra"
 "Delete the ELF file…" = "Az ELF-fájl törlése…"
 "The ELF file is erased for good:\n{0}\nThis cannot be undone." = "Az ELF-fájl végleg törlődik:\n{0}\nEz nem vonható vissza."
+"Largest first" = "Legnagyobb elöl"
+"Smallest first" = "Legkisebb elöl"

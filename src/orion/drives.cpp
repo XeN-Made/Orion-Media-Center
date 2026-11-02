@@ -6,6 +6,7 @@
 
 #include "core/i18n.hpp"
 
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <unordered_map>
@@ -136,8 +137,10 @@ std::string format_bytes(std::uint64_t bytes)
         std::snprintf(text, sizeof(text), "%.1f TB", value / (kKilo * kKilo * kKilo * kKilo));
     else if (value >= kKilo * kKilo * kKilo)
         std::snprintf(text, sizeof(text), "%.0f GB", value / (kKilo * kKilo * kKilo));
-    else
+    else if (value >= kKilo * kKilo || bytes == 0)
         std::snprintf(text, sizeof(text), "%.0f MB", value / (kKilo * kKilo));
+    else // a small file: an ELF program, a cartridge's game
+        std::snprintf(text, sizeof(text), "%.0f KB", std::max(1.0, value / kKilo));
     return text;
 }
 

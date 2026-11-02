@@ -97,6 +97,8 @@ TEST(Drives, WritesSizesAsDrivesAreSold)
     EXPECT_EQ(orion::format_bytes(312 * kGb), "312 GB");
     EXPECT_EQ(orion::format_bytes(1800 * kGb), "1.8 TB");
     EXPECT_EQ(orion::format_bytes(0), "0 MB");
+    EXPECT_EQ(orion::format_bytes(148000), "148 KB"); // an ELF program
+    EXPECT_EQ(orion::format_bytes(12), "1 KB");
 }
 
 } // namespace

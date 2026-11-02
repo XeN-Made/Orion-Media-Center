@@ -40,6 +40,7 @@
 #include "orion/playtime.hpp"
 #include "orion/prefs.hpp"
 #include "orion/settings_panel.hpp"
+#include "orion/sizes.hpp"
 #include "orion/setup_panel.hpp"
 #include "orion/storage.hpp"
 #include "orion/theme_file.hpp"
@@ -177,6 +178,8 @@ enum class Sort : int
     tag,
     played,
     most_played,
+    largest,
+    smallest,
 };
 
 // What the on-screen keyboard is typing into.
@@ -656,7 +659,8 @@ class Library final : public app::Concept
     explicit Library(app::Context &context)
         : context_(context), prefs_(orion::load_prefs(context.library.state_dir)),
           favourites_(library::load_favourites(context.library.state_dir)),
-          plays_(load_plays(context.library.state_dir))
+          plays_(load_plays(context.library.state_dir)),
+          sizes_(orion::read_sizes(context.library.state_dir))
     {
         tabs_.style.kind = ui::TabKind::pill;
         tabs_.style.height = 52.0f;
@@ -1186,6 +1190,14 @@ class Library final : public app::Concept
             }
         }
         follow_drive_space();
+        // The console's free space for the header: the last answer at once,
+        // a fresh one asked for once ORION is up.
+        if (!std::exchange(space_asked_, true))
+        {
+            show_drive_space();
+            ask_drive_space();
+        }
+        follow_focused_size();
         follow_system_play_time();
         follow_console_share();
         follow_romm(feedback);
@@ -2969,9 +2981,17 @@ class Library final : public app::Concept
             drive_space_time_ = info.st_mtime;
             save::read_file(file, &report, 64u << 10);
         }
-        settings_.set_drives(orion::find_drives(titles(), sys::on_console()
-                                                              ? orion::space_from_report(report)
-                                                              : orion::SpaceOf(preview_space)));
+        const std::vector<orion::Drive> drives =
+            orion::find_drives(titles(), sys::on_console() ? orion::space_from_report(report)
+                                                           : orion::SpaceOf(preview_space));
+        home_space_.clear();
+        if (!drives.empty() && drives.front().kind == orion::DriveKind::console &&
+            drives.front().space.capacity > 0)
+            home_space_ =
+                orion::drive_name(drives.front().path) + ": " +
+                trf("{0} free of {1}", {orion::format_bytes(drives.front().space.free),
+                                        orion::format_bytes(drives.front().space.capacity)});
+        settings_.set_drives(drives);
     }
 
     // The helper (payload/launcher, "@space") asks the system, which refuses
@@ -6998,8 +7018,11 @@ class Library final : public app::Concept
             return;
         playtime_time_ = info.st_mtime;
         plays_ = load_plays(state);
+        sizes_ = orion::read_sizes(state);
+        sized_id_.clear();
         const Sort sort = sort_of(sort_key());
-        if (sort == Sort::played || sort == Sort::most_played)
+        if (sort == Sort::played || sort == Sort::most_played || sort == Sort::largest ||
+            sort == Sort::smallest)
             rebuild();
     }
 
@@ -7300,6 +7323,40 @@ class Library final : public app::Concept
         return grid_focused();
     }
 
+    // A title's size: the system's figure for what it registered, else a
+    // single file's own (a game for an emulator, an ELF program, an image);
+    // 0 when neither is known.
+    std::uint64_t size_of(const Title &title)
+    {
+        if (!title.is_rom())
+        {
+            if (const auto at = sizes_.find(title.id); at != sizes_.end())
+                return at->second;
+        }
+        const bool one_file = title.is_rom() || title.source == library::Source::payload ||
+                              title.source == library::Source::image;
+        if (!one_file || title.path.empty())
+            return 0;
+        const auto [at, fresh] = file_bytes_.try_emplace(title.path, 0);
+        struct stat info = {};
+        if (fresh && ::stat(title.path.c_str(), &info) == 0 && S_ISREG(info.st_mode))
+            at->second = static_cast<std::uint64_t>(info.st_size);
+        return at->second;
+    }
+
+    // The focused title's size, for the line under the covers: worked out
+    // here, as the focus moves, since draw() reads no files.
+    void follow_focused_size()
+    {
+        if (view_.empty())
+            return;
+        const Title &title = focused();
+        if (title.id == sized_id_)
+            return;
+        sized_id_ = title.id;
+        focused_bytes_ = size_of(title);
+    }
+
     const Title &grid_focused() const
     {
         return titles()[static_cast<std::size_t>(view_[focus_index()])];
@@ -7591,6 +7648,24 @@ class Library final : public app::Concept
             std::stable_sort(view_.begin(), view_.end(), [&](int a, int b)
                              { return played(titles()[a]).seconds > played(titles()[b]).seconds; });
             break;
+        case Sort::largest:
+        case Sort::smallest:
+        {
+            const bool largest = sort_of(sort_key()) == Sort::largest;
+            std::unordered_map<int, std::uint64_t> bytes;
+            for (const int index : view_)
+                bytes[index] = size_of(titles()[static_cast<std::size_t>(index)]);
+            std::stable_sort(view_.begin(), view_.end(),
+                             [&](int a, int b)
+                             {
+                                 const std::uint64_t x = bytes[a];
+                                 const std::uint64_t y = bytes[b];
+                                 if ((x == 0) != (y == 0))
+                                     return y == 0; // unknown last
+                                 return largest ? x > y : x < y;
+                             });
+            break;
+        }
         default:
             break;
         }
@@ -7777,6 +7852,14 @@ class Library final : public app::Concept
             i18n::plural(static_cast<long long>(count), "{0} title", "{0} titles");
         ui::text(list, fonts.regular, summary.c_str(), view_pick_.bounds().x - 22.0f, 165, 24,
                  paint.page_text_muted(), gfx::Align::right);
+        const float busy = status_.empty() ? 0.0f : std::min(status_shown_.value, 1.0f);
+        if (!home_space_.empty() && busy < 0.99f)
+        {
+            list.push_opacity(1.0f - busy);
+            ui::text(list, fonts.semibold, home_space_.c_str(), gfx::kVirtualWidth - kMargin, 105,
+                     17, paint.page_text_muted(), gfx::Align::right);
+            list.pop_opacity();
+        }
         draw_status(list, paint);
     }
 
@@ -8623,6 +8706,8 @@ class Library final : public app::Concept
                 line += "   v" + title.version;
             line += "   " + tr(shelf_name(library::shelf_of(title)));
         }
+        if (focused_bytes_ > 0 && title.id == sized_id_)
+            line += "   " + orion::format_bytes(focused_bytes_);
         // What it is goes on the first line, its history on a second: one
         // line beside the buttons left too little room for both.
         std::string history;
@@ -8946,6 +9031,14 @@ class Library final : public app::Concept
     bool reduced_ = false;
     std::vector<std::string> favourites_;
     orion::PlayLog plays_;
+    // Titles' sizes: the system's (orion/sizes.hpp), and single files' own,
+    // looked at once each (size_of).
+    std::unordered_map<std::string, std::uint64_t> sizes_;
+    std::unordered_map<std::string, std::uint64_t> file_bytes_;
+    std::string sized_id_; // the focused title focused_bytes_ is for
+    std::uint64_t focused_bytes_ = 0;
+    std::string home_space_;     // the console's free space, over the covers
+    bool space_asked_ = false;   // the helper was asked once since ORION opened
     std::string art_folder_was_; // where box art was before the folder last changed
     orion::BackdropCopies backdrop_copies_;
     orion::RegisteredTitles registered_;     // the system's titles beyond the homebrew folders

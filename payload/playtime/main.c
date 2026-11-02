@@ -40,6 +40,8 @@
 
 #define APP_DB "/system_data/priv/mms/app.db"
 #define OUT_PATH "/data/orion/system-playtime.txt"
+// Each registered title's size as the system keeps it: "<ID>\t<bytes>" a line.
+#define SIZES_PATH "/data/orion/sizes.txt"
 #define LOG_PATH "/data/orion/launcher.txt"
 #define APPS_DIR "/data/orion/system-apps"
 #define WANT_PATH "/data/orion/system-want.txt"
@@ -463,6 +465,45 @@ static int write_out(void)
     return 0;
 }
 
+// Every title's size from the system's list of them (tbl_contentinfo's
+// size): installed packages, and the folders and images ShadowMountPlus
+// registered, without adding up a single folder.
+static void read_sizes(sqlite3 *db)
+{
+    sqlite3_stmt *statement = NULL;
+    if (sqlite3_prepare_v2(db, "SELECT titleId, size FROM tbl_contentinfo", -1, &statement,
+                           NULL) != SQLITE_OK)
+    {
+        say("sizes: %s", sqlite3_errmsg(db));
+        return;
+    }
+    static char text[MAX_TITLES * 32];
+    size_t used = 0;
+    int count = 0;
+    while (sqlite3_step(statement) == SQLITE_ROW)
+    {
+        const char *id = (const char *)sqlite3_column_text(statement, 0);
+        const long long bytes = sqlite3_column_int64(statement, 1);
+        if (!is_game_id(id) || bytes <= 0)
+            continue;
+        const int wrote = snprintf(text + used, sizeof(text) - used, "%s\t%lld\n", id, bytes);
+        if (wrote < 0 || (size_t)wrote >= sizeof(text) - used)
+            break;
+        used += (size_t)wrote;
+        ++count;
+    }
+    sqlite3_finalize(statement);
+    const char *part = SIZES_PATH ".part";
+    const int fd = open(part, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+    if (fd < 0)
+        return;
+    const ssize_t written = write(fd, text, used);
+    fchmod(fd, 0666);
+    close(fd);
+    if (written == (ssize_t)used && rename(part, SIZES_PATH) == 0)
+        say("%d titles' sizes from the system", count);
+}
+
 static int read_play_time(void)
 {
     struct stat info;
@@ -498,6 +539,7 @@ static int read_play_time(void)
     sqlite3_finalize(statement);
     for (int i = 0; i < table_count; ++i)
         read_table(db, tables[i]);
+    read_sizes(db);
     sqlite3_close(db);
     if (table_count == 0)
     {
