@@ -505,14 +505,11 @@ bool smb_shares(const SmbLogin &login, std::vector<std::string> *shares, std::st
     for (std::uint32_t i = 0; list.Buffer != nullptr && i < list.EntriesRead; ++i)
     {
         const srvsvc_SHARE_INFO_1 &info = list.Buffer->share_info_1[i];
-        if ((info.type & 0x0fffffffu) != SHARE_TYPE_DISKTREE || info.netname.utf16 == nullptr)
+        // Decoding fills in the name as UTF-8 only: utf16 is libsmb2's own
+        // and stays empty, which once left every list empty.
+        if ((info.type & 0x0fffffffu) != SHARE_TYPE_DISKTREE || info.netname.utf8 == nullptr)
             continue;
-        const char *name = smb2_utf16_to_utf8(info.netname.utf16->val,
-                                              static_cast<std::size_t>(info.netname.utf16->len));
-        if (name == nullptr)
-            continue;
-        std::string text = name;
-        std::free(const_cast<char *>(name));
+        const std::string text = info.netname.utf8;
         if (!text.empty() && text.back() != '$')
             shares->push_back(text);
     }
