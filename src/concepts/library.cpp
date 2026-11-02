@@ -813,6 +813,7 @@ class Library final : public app::Concept
         take_update_result();
         tidy_update_folder();
         start_resume_watcher();
+        watcher_sent_ = prefs_.reopen_after_rest;
         read_hover_music();
         take_new_title_id();
         if (!own_title_id().empty())
@@ -3291,8 +3292,9 @@ class Library final : public app::Concept
             orion::save_look(context_.library.state_dir, look_);
             break;
         case orion::SettingsPanel::Change::prefs:
-            if (prefs_.reopen_after_rest)
+            if (prefs_.reopen_after_rest && !std::exchange(watcher_sent_, true))
                 start_resume_watcher();
+            watcher_sent_ = prefs_.reopen_after_rest;
             tabs_changed();
             break;
         case orion::SettingsPanel::Change::new_tab:
@@ -3401,6 +3403,7 @@ class Library final : public app::Concept
         case orion::SettingsPanel::Change::choose_background:
             settings_.close(feedback);
             pick_background(feedback);
+            background_from_settings_ = true;
             break;
         case orion::SettingsPanel::Change::clear_background:
             clear_background();
@@ -4909,9 +4912,29 @@ class Library final : public app::Concept
     {
         picking_music_ = false;
         picking_background_ = true;
+        background_from_settings_ = false;
         pick_dir_.clear();
         pick_page_ = 0;
         open_picture_menu(feedback);
+    }
+
+    // The folder above the browser's, or the places when it is one of them.
+    std::string parent_pick_dir() const
+    {
+        const bool place = std::any_of(pick_places_.begin(), pick_places_.end(),
+                                       [&](const auto &p) { return p.second == pick_dir_; });
+        const std::size_t slash = pick_dir_.rfind('/');
+        return place || slash == std::string::npos || slash == 0 ? std::string()
+                                                                 : pick_dir_.substr(0, slash);
+    }
+
+    // Settings again, on the row the picture browser was opened from.
+    void back_to_settings(app::Feedback &feedback)
+    {
+        if (!std::exchange(background_from_settings_, false))
+            return;
+        picking_background_ = false;
+        settings_.open_at_background(look_, prefs_, feedback);
     }
 
     void clear_background()
@@ -5547,6 +5570,19 @@ class Library final : public app::Concept
             {
                 launch_after_pick_ = false;
                 install_browsing_ = false;
+                // Backing out of a background's folder goes up a folder,
+                // and out of the places, back to Settings that opened it.
+                if (picking_background_ && background_from_settings_)
+                {
+                    if (!pick_dir_.empty())
+                    {
+                        pick_dir_ = parent_pick_dir();
+                        pick_page_ = 0;
+                        open_picture_menu(feedback);
+                    }
+                    else
+                        back_to_settings(feedback);
+                }
             }
             return;
         }
@@ -5700,15 +5736,7 @@ class Library final : public app::Concept
             {
                 pick_page_ = 0;
                 if (tag == kItemPickUp)
-                {
-                    const bool place =
-                        std::any_of(pick_places_.begin(), pick_places_.end(),
-                                    [&](const auto &p) { return p.second == pick_dir_; });
-                    const std::size_t slash = pick_dir_.rfind('/');
-                    pick_dir_ = place || slash == std::string::npos || slash == 0
-                                    ? std::string()
-                                    : pick_dir_.substr(0, slash);
-                }
+                    pick_dir_ = parent_pick_dir();
                 else if (tag < kItemPickDir)
                     pick_dir_ = pick_places_[static_cast<std::size_t>(tag - kItemPickPlace)].second;
                 else
@@ -5724,7 +5752,16 @@ class Library final : public app::Concept
             if (picking_music_)
                 choose_music(file, feedback);
             else if (picking_background_)
+            {
+                // Taken: back where the browser was opened from; refused (the
+                // note says why): the same folder, to pick another.
+                const int version = context_.wallpaper_version;
                 choose_background(file, feedback);
+                if (context_.wallpaper_version != version)
+                    back_to_settings(feedback);
+                else
+                    open_picture_menu(feedback);
+            }
             else
                 choose_picture(file, feedback);
             return;
@@ -8993,8 +9030,10 @@ class Library final : public app::Concept
     // Wide covers: the copies being made, and the titles already asked for.
     orion::WideCopies wide_copies_;
     std::unordered_set<std::string> wide_asked_;
-    bool picking_music_ = false;      // the browser lists music, not pictures
-    bool picking_background_ = false; // ... a picture for behind the library, not a title
+    bool picking_music_ = false;            // the browser lists music, not pictures
+    bool picking_background_ = false;       // ... a picture for behind the library, not a title
+    bool background_from_settings_ = false; // ... opened from Settings, which it returns to
+    bool watcher_sent_ = false; // the rest-mode watcher went out while its setting was on
     // Find other art: the title looked through, its picture before, the
     // covers so far, the one shown, and whether the full one is coming.
     orion::GridPicker picker_{grid_http()};

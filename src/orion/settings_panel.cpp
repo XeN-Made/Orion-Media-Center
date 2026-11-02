@@ -395,6 +395,18 @@ void SettingsPanel::open_tab(const std::string &key, const Look &look, const Lib
     enter_rows(true);
 }
 
+void SettingsPanel::open_at_background(const Look &look, const LibraryPrefs &prefs,
+                                       ui::Feedback &feedback)
+{
+    build_nav();
+    show(Section::appearance, look, prefs);
+    sheet_.open(feedback);
+    layout();
+    nav_.enter();
+    enter_rows(true);
+    form_.focus_row(kOwnBackground);
+}
+
 void SettingsPanel::close(ui::Feedback &feedback)
 {
     sheet_.close(feedback);

@@ -331,6 +331,9 @@ class SettingsPanel
     // Opens straight on one tab's page.
     void open_tab(const std::string &key, const Look &look, const LibraryPrefs &prefs,
                   ui::Feedback &feedback);
+    // Opens on Appearance's "your own picture" row: where the picture
+    // browser it opened returns to.
+    void open_at_background(const Look &look, const LibraryPrefs &prefs, ui::Feedback &feedback);
     void close(ui::Feedback &feedback);
     bool is_open() const
     {

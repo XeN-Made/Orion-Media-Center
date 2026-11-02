@@ -180,6 +180,17 @@ TEST_F(OrionSettings, ALabelsPageChangesItsColours)
     EXPECT_TRUE(panel.label_id().empty());
 }
 
+// Backing out of the picture browser that Background picture opened lands
+// on that row again, ready to choose once more.
+TEST_F(OrionSettings, ReopensOnTheBackgroundPictureRow)
+{
+    SettingsPanel panel;
+    panel.open_at_background(look_, prefs_, feedback_);
+    EXPECT_TRUE(panel.is_open());
+    EXPECT_EQ(panel.section(), SettingsPanel::Section::appearance);
+    EXPECT_EQ(send_to(panel, press(Action::confirm)), SettingsPanel::Change::choose_background);
+}
+
 // Appearance, near its end: Background picture asks the screen for a
 // picture; with one set, Use the sky takes it away and an effect can fall
 // over it.
