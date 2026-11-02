@@ -432,6 +432,7 @@ int main()
         library::prefer_saved_icons(titles, titles.state_dir + "/icons");
         scan_emulators(true);
         library::apply_names(titles, orion::load_prefs(titles.state_dir).title_names);
+        library::apply_kinds(titles, orion::load_prefs(titles.state_dir).title_labels);
         library::apply_custom_art(titles, titles.state_dir + "/custom-art");
         const int icons = library::load_icons(titles, renderer.batch());
         // ORION's own case pictures, then the player's, which replace them by name.
@@ -635,6 +636,7 @@ int main()
             }
             const int games = scan_emulators(false);
             library::apply_names(titles, orion::load_prefs(titles.state_dir).title_names);
+            library::apply_kinds(titles, orion::load_prefs(titles.state_dir).title_labels);
             library::apply_custom_art(titles, titles.state_dir + "/custom-art");
             // A game still there keeps its picture; the others' go.
             for (library::Title &title : titles.titles)
@@ -666,6 +668,10 @@ int main()
             library::apply_names(titles, names);
             ++titles.generation;
         }
+        // The player's built-in labels made titles another kind.
+        if (shell.take_kinds_change() &&
+            library::apply_kinds(titles, orion::load_prefs(titles.state_dir).title_labels) > 0)
+            ++titles.generation;
         // The system's registered titles changed: the new ones join.
         if (shell.take_registered_change())
         {
@@ -675,6 +681,7 @@ int main()
                                           titles.self_id) > 0)
             {
                 library::apply_names(titles, orion::load_prefs(titles.state_dir).title_names);
+                library::apply_kinds(titles, orion::load_prefs(titles.state_dir).title_labels);
                 library::apply_custom_art(titles, titles.state_dir + "/custom-art");
                 library::load_icons(titles, renderer.batch());
                 ++titles.generation;
@@ -704,6 +711,7 @@ int main()
             if (added > 0)
             {
                 library::apply_names(titles, prefs.title_names);
+                library::apply_kinds(titles, prefs.title_labels);
                 library::apply_custom_art(titles, titles.state_dir + "/custom-art");
                 library::load_icons(titles, renderer.batch());
                 ++titles.generation;

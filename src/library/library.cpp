@@ -402,6 +402,46 @@ int merge_registered(Library &library, std::string_view cache, const std::string
     return added;
 }
 
+int apply_kinds(Library &library, const std::vector<std::pair<std::string, std::string>> &labels)
+{
+    int changed = 0;
+    for (Title &title : library.titles)
+    {
+        if (title.is_rom())
+            continue; // a game for an emulator is its system's
+        std::string label;
+        for (const auto &[id, wears] : labels)
+        {
+            if (id == title.id)
+                label = wears;
+        }
+        const bool game = label == "ps5" || label == "ps4";
+        const bool wanted = game || label == "homebrew" || label == "media";
+        if (!wanted && !title.kind_set)
+            continue;
+        if (!title.kind_set)
+        {
+            title.own_homebrew = title.homebrew;
+            title.own_category = title.category;
+        }
+        const bool homebrew = wanted ? label == "homebrew" : title.own_homebrew;
+        const Category category =
+            !wanted ? title.own_category
+            : game  ? Category::game
+            : label == "media"
+                ? Category::media
+                : (title.own_category == Category::media ? Category::app : title.own_category);
+        title.kind_set = wanted;
+        if (title.homebrew != homebrew || title.category != category)
+        {
+            title.homebrew = homebrew;
+            title.category = category;
+            ++changed;
+        }
+    }
+    return changed;
+}
+
 int apply_names(Library &library, const std::vector<std::pair<std::string, std::string>> &names)
 {
     int changed = 0;

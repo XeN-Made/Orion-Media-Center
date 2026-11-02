@@ -103,6 +103,10 @@ struct Context
     // Titles the player renamed (id, name; empty: its own again): the app
     // applies them between frames and bumps library.generation.
     std::vector<std::pair<std::string, std::string>> new_names = {};
+    // The player gave a title a built-in label (GAME, PS4, HOMEBREW, MEDIA)
+    // or took one away: the app applies the kinds they give between frames
+    // (library::apply_kinds) and bumps library.generation.
+    bool kinds_changed = false;
     // Games just downloaded that the library does not list yet (their file,
     // their name): the app adds them between frames and bumps
     // library.generation, without scanning everything again.

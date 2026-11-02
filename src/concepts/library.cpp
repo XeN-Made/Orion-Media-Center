@@ -5644,6 +5644,7 @@ class Library final : public app::Concept
             prefs_.set_title_label(
                 menu_title_, every_label()[static_cast<std::size_t>(tag - kItemLabelBuiltin)].id);
             save_prefs();
+            context_.kinds_changed = true; // GAME makes it a game, HOMEBREW homebrew
             rebuild();
             feedback.play(audio::Cue::place);
             return;
@@ -5656,6 +5657,7 @@ class Library final : public app::Concept
                                  ? std::string()
                                  : custom_labels()[static_cast<std::size_t>(tag - kItemLabel)]->id);
             save_prefs();
+            context_.kinds_changed = true; // a built-in label's kind goes with it
             rebuild();
             feedback.play(audio::Cue::place);
             return;

@@ -44,7 +44,11 @@ struct Title
     std::string id;       // "PPSA01234"
     std::string name;     // as the home screen shows it, or as the player renamed it
     std::string own_name; // the name it came with, once renamed (apply_names); else empty
-    std::string version;  // "01.000.010"; empty when unknown
+    // What it was before a built-in label made it another kind (apply_kinds).
+    bool kind_set = false;
+    bool own_homebrew = false;
+    Category own_category = Category::game;
+    std::string version; // "01.000.010"; empty when unknown
     Category category = Category::game;
     Platform platform = Platform::unknown;
     Source source = Source::folder;
@@ -240,6 +244,11 @@ int prefer_saved_icons(Library &library, const std::string &folder);
 // The player's names for titles (id, name); an empty name gives a title the
 // name it came with back. Returns how many titles changed.
 int apply_names(Library &library, const std::vector<std::pair<std::string, std::string>> &names);
+// The kinds the player's built-in labels give titles (id, label id): "ps5"
+// and "ps4" (GAME, PS4) make a game of it, "homebrew" homebrew, "media"
+// media. A title no longer labelled so is its own kind again. Returns how
+// many titles changed.
+int apply_kinds(Library &library, const std::vector<std::pair<std::string, std::string>> &labels);
 // The player's own pictures, in <folder> (/data/orion/custom-art): a PNG or
 // JPEG named after a title's ID, its name, or a game's file shows instead of
 // the title's picture; names match as box art does (art_key), so case and

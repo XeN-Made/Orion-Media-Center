@@ -101,6 +101,10 @@ class Shell
     {
         return std::exchange(context_.new_names, {});
     }
+    bool take_kinds_change()
+    {
+        return std::exchange(context_.kinds_changed, false);
+    }
     std::vector<std::pair<std::string, std::string>> take_downloaded_games()
     {
         return std::exchange(context_.downloaded_games, {});

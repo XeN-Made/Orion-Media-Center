@@ -350,6 +350,43 @@ TEST(Library, AppliesThePlayersNamesForTitles)
     EXPECT_EQ(shelf.titles[1].name, "Moon Garden");
 }
 
+// Issue #21: a free game taken for homebrew becomes a game when labelled
+// GAME (its Kind, its shelf), homebrew when labelled HOMEBREW, and its own
+// kind again when the label goes. Emulated games keep their system's.
+TEST(Library, BuiltInLabelsSetTheKind)
+{
+    library::Library shelf;
+    shelf.titles.resize(3);
+    shelf.titles[0].id = "PPSA90180";
+    shelf.titles[0].homebrew = true;
+    shelf.titles[0].category = library::Category::app;
+    shelf.titles[1].id = "PPSA90181";
+    shelf.titles[2].id = "rom-0000000000aa";
+    shelf.titles[2].system = "Nintendo - Game Boy Advance";
+    ASSERT_EQ(library::shelf_of(shelf.titles[0]), library::Shelf::homebrew);
+
+    EXPECT_EQ(library::apply_kinds(shelf, {{"PPSA90180", "ps5"},
+                                           {"PPSA90181", "homebrew"},
+                                           {"rom-0000000000aa", "homebrew"},
+                                           {"PPSA99999", "ps5"}}),
+              2);
+    EXPECT_FALSE(shelf.titles[0].homebrew);
+    EXPECT_EQ(shelf.titles[0].category, library::Category::game);
+    EXPECT_EQ(library::shelf_of(shelf.titles[0]), library::Shelf::games);
+    EXPECT_TRUE(shelf.titles[1].homebrew);
+    EXPECT_EQ(library::shelf_of(shelf.titles[1]), library::Shelf::homebrew);
+    EXPECT_FALSE(shelf.titles[2].homebrew);
+    EXPECT_EQ(library::apply_kinds(shelf, {{"PPSA90180", "ps5"}, {"PPSA90181", "homebrew"}}),
+              0); // already so
+
+    // A label of the player's own is no kind: both are themselves again.
+    EXPECT_EQ(library::apply_kinds(shelf, {{"PPSA90180", "l1"}}), 2);
+    EXPECT_TRUE(shelf.titles[0].homebrew);
+    EXPECT_EQ(shelf.titles[0].category, library::Category::app);
+    EXPECT_FALSE(shelf.titles[1].homebrew);
+    EXPECT_EQ(shelf.titles[1].category, library::Category::game);
+}
+
 TEST(Library, ShowsThePlayersOwnPictures)
 {
     const std::string folder = ::testing::TempDir() + "orion-custom-art";
