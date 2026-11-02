@@ -232,6 +232,12 @@ std::string xbox360_title_id(const std::string &path);
 // The title ID in the start of an Xbox 360 executable (its XEX2 header's
 // execution info), or empty.
 std::string xex_title_id(std::string_view head);
+// A digital Xbox 360 game: a Games on Demand or Arcade package (STFS,
+// "LIVE", "PIRS" or "CON "), kept as <title ID>/00007000/<file> or
+// <title ID>/000D0000/<file>. From its first kStfsHead bytes: its title ID
+// and its name. False for anything else.
+constexpr std::size_t kStfsHead = 0x1711;
+bool stfs_package(std::string_view head, std::string *title_id, std::string *name);
 // What a game's cover is looked up by: its serial (GameTDB's ID), or for an
 // Xbox 360 game its title ID, read from the game only now (a disc read is
 // left out of every scan: only games without a cover need it).

@@ -1051,6 +1051,89 @@ TEST(Emulators, ListsPS5X360Games)
     fs::remove_all(root);
 }
 
+// An invented Games on Demand (0x7000) or Arcade (0xD0000) package: the
+// STFS header's magic, content type, title ID and English display name.
+std::string stfs(std::uint32_t type, std::uint32_t title_id, const std::string &name)
+{
+    std::string head(library::kStfsHead + 64, '\0');
+    head.replace(0, 4, "LIVE");
+    const auto put32 = [&](std::size_t at, std::uint32_t value)
+    {
+        for (int i = 0; i < 4; ++i)
+            head[at + static_cast<std::size_t>(i)] = static_cast<char>(value >> (24 - 8 * i));
+    };
+    put32(0x344, type);
+    put32(0x360, title_id);
+    for (std::size_t i = 0; i < name.size(); ++i)
+        head[0x411 + 2 * i + 1] = name[i];
+    return head;
+}
+
+// Digital games (issue #20): Xbox 360 Games on Demand and Arcade packages,
+// in a folder of their title ID or one named for the game around it, and
+// Wii downloads (.wad) for Porpoise, which have no disc header.
+TEST(Emulators, ListsDigitalXbox360AndWiiGames)
+{
+    namespace fs = std::filesystem;
+    const fs::path root = fs::temp_directory_path() / "hui-digital";
+    fs::remove_all(root);
+    const fs::path x360_root = root / "PPSA50011";
+    const fs::path roms = x360_root / "assets/roms";
+    write_file(roms / "Lantern Sea/545407E1/00007000/0123456789ABCDEF0123456789ABCDEF01234567",
+               stfs(0x7000u, 0x545407e1u, "Lantern Sea"));
+    write_file(roms / "Lantern Sea/cover.jpg", "jpg");
+    write_file(roms / "584109AA/000D0000/FEDCBA9876543210FEDCBA9876543210FEDCBA98",
+               stfs(0xD0000u, 0x584109aau, "Pocket Comet"));
+    // A saved game's package (content type 1) is no game.
+    write_file(roms / "4D530001/00000001/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+               stfs(0x1u, 0x4d530001u, "Save"));
+    const fs::path porpoise = root / "PPSA90130";
+    write_file(porpoise / "porpoise/games/Garden Bells (Channel).wad", std::string(64, 'w'));
+
+    const std::vector<library::Title> titles = {
+        app_title("PPSA50011", "PS5X360", x360_root.string()),
+        app_title("PPSA90130", "Porpoise (DolphinPS5)", porpoise.string()),
+    };
+    std::vector<library::Title> found;
+    library::Emulator emulator = library::scan_emulators(titles, {}, &found);
+    const library::Title *comet = nullptr;
+    const library::Title *lantern = nullptr;
+    const library::Title *bells = nullptr;
+    for (const library::Title &rom : found)
+    {
+        if (rom.name == "Pocket Comet")
+            comet = &rom;
+        if (rom.name == "Lantern Sea")
+            lantern = &rom;
+        if (rom.name == "Garden Bells")
+            bells = &rom;
+    }
+    ASSERT_EQ(found.size(), 3u);
+    ASSERT_NE(comet, nullptr);
+    ASSERT_NE(lantern, nullptr);
+    ASSERT_NE(bells, nullptr);
+    EXPECT_EQ(lantern->system, "Microsoft - Xbox 360");
+    EXPECT_EQ(lantern->icon, (roms / "Lantern Sea/cover.jpg").string());
+    EXPECT_EQ(library::cover_id(*lantern), "545407E1");
+    EXPECT_EQ(library::cover_id(*comet), "584109AA");
+    // PS5X360 is handed the package as it is handed a disc.
+    const std::vector<library::Player> players = library::players_for(emulator, *comet);
+    ASSERT_EQ(players.size(), 1u);
+    EXPECT_EQ(players[0].key, "ps5x360");
+    EXPECT_EQ(library::game_arguments(players[0].rom),
+              "/app0/assets/roms/584109AA/000D0000/FEDCBA9876543210FEDCBA9876543210FEDCBA98\n");
+
+    EXPECT_EQ(bells->system, "Nintendo - Wii");
+    ASSERT_EQ(library::players_for(emulator, *bells).size(), 1u);
+    EXPECT_EQ(library::players_for(emulator, *bells)[0].key, "porpoise");
+
+    std::string id;
+    std::string name;
+    EXPECT_FALSE(library::stfs_package("LIVE", &id, &name));
+    EXPECT_FALSE(library::stfs_package(std::string(library::kStfsHead, '\0'), &id, &name));
+    fs::remove_all(root);
+}
+
 // Game Boy games share the Game Boy Color's tab, each keeping its own system
 // (its box art is the Game Boy's).
 TEST(Emulators, PutsGameBoyGamesOnTheColorsTab)

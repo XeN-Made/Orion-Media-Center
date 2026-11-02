@@ -688,7 +688,9 @@ std::string read_head(const std::string &file)
 
 bool porpoise_takes(const std::string &ext)
 {
-    for (const char *known : {"iso", "gcm", "rvz", "wia", "wbfs", "ciso", "gcz"})
+    // .wad: a WiiWare or Virtual Console download, which Porpoise installs
+    // and starts like a disc.
+    for (const char *known : {"iso", "gcm", "rvz", "wia", "wbfs", "ciso", "gcz", "wad"})
     {
         if (ext == known)
             return true;
@@ -1130,6 +1132,40 @@ int add_x360_folder(Emulator &emulator, std::size_t app_index, const std::string
         rom.path = path;
         found.push_back(std::move(rom));
     };
+    // A digital game's package in `folder`, its title ID folder, or a
+    // folder named for the game around that: <folder>[/<title ID>]/<type>/<file>.
+    const auto package = [&](const std::string &folder, std::string *name) -> std::string
+    {
+        std::vector<std::string> tries = {folder};
+        for (const save::DirectoryEntry &inner : save::list_directory(folder))
+        {
+            if (inner.directory && inner.name.size() == 8)
+                tries.push_back(folder + "/" + inner.name);
+        }
+        for (const std::string &base : tries)
+        {
+            for (const char *type : {"00007000", "000D0000", "000d0000"})
+            {
+                const std::string kind = base + "/" + type;
+                for (const save::DirectoryEntry &file : save::list_directory(kind))
+                {
+                    if (file.directory || file.name.front() == '.' ||
+                        !extension_of(file.name).empty())
+                        continue;
+                    std::string head;
+                    std::string id;
+                    std::FILE *in = std::fopen((kind + "/" + file.name).c_str(), "rb");
+                    if (in == nullptr)
+                        continue;
+                    read_at(in, 0, kStfsHead, &head);
+                    std::fclose(in);
+                    if (stfs_package(head, &id, name))
+                        return kind + "/" + file.name;
+                }
+            }
+        }
+        return {};
+    };
     for (const save::DirectoryEntry &entry : save::list_directory(dir))
     {
         if (entry.name.front() == '.')
@@ -1137,8 +1173,14 @@ int add_x360_folder(Emulator &emulator, std::size_t app_index, const std::string
         const std::string path = dir + "/" + entry.name;
         if (entry.directory)
         {
+            std::string name;
             if (files.has(path + "/default.xex"))
                 add(path + "/default.xex", entry.name + ".",
+                    {path + "/cover.png", path + "/cover.jpg"});
+            else if (const std::string found = package(path, &name); !found.empty())
+                // Its own name, unless it has none; then the folder's (a title
+                // ID folder's name is no name, but better than nothing).
+                add(found, name.empty() ? entry.name + "." : name + ".",
                     {path + "/cover.png", path + "/cover.jpg"});
             continue;
         }
@@ -1191,7 +1233,10 @@ int add_app_folder(Emulator &emulator, std::size_t app_index, const std::string 
             std::any_of(found.begin(), found.end(), [&](const Title &t) { return t.id == rom.id; }))
             continue;
         Disc disc;
-        const bool nintendo = read_nintendo_disc(read_head(path), &disc);
+        const bool wad = porpoise && ext == "wad";
+        if (wad)
+            disc.system = kWii;
+        const bool nintendo = wad || read_nintendo_disc(read_head(path), &disc);
         // A shared folder (/data/roms, /data/iso) holds both kinds of .iso.
         if (porpoise != nintendo)
             continue;
@@ -1413,8 +1458,68 @@ std::string xex_title_id(std::string_view head)
     return "";
 }
 
+bool stfs_package(std::string_view head, std::string *title_id, std::string *name)
+{
+    if (head.size() < kStfsHead ||
+        (head.substr(0, 4) != "LIVE" && head.substr(0, 4) != "PIRS" && head.substr(0, 4) != "CON "))
+        return false;
+    // Its metadata, as Free60 documents it: the content type at 0x344
+    // (0x7000 Games on Demand, 0xD0000 Arcade), the title ID at 0x360, the
+    // display name at 0x411 (English first of its languages) and the title's
+    // name at 0x1691, both 0x80 bytes of UTF-16 big-endian.
+    const std::uint32_t type = big32(head, 0x344);
+    if (type != 0x7000u && type != 0xD0000u)
+        return false;
+    char id[9];
+    std::snprintf(id, sizeof(id), "%08X", static_cast<unsigned>(big32(head, 0x360)));
+    *title_id = id;
+    const auto text_at = [&](std::size_t at)
+    {
+        std::string out;
+        for (std::size_t i = at; i + 1 < at + 0x80; i += 2)
+        {
+            std::uint32_t c = (static_cast<unsigned char>(head[i]) << 8) |
+                              static_cast<unsigned char>(head[i + 1]);
+            if (c == 0)
+                break;
+            if (c >= 0xD800 && c <= 0xDFFF)
+                c = '?'; // a surrogate pair: no game's name was seen to need one
+            if (c < 0x80)
+                out += static_cast<char>(c);
+            else if (c < 0x800)
+            {
+                out += static_cast<char>(0xC0 | (c >> 6));
+                out += static_cast<char>(0x80 | (c & 0x3F));
+            }
+            else
+            {
+                out += static_cast<char>(0xE0 | (c >> 12));
+                out += static_cast<char>(0x80 | ((c >> 6) & 0x3F));
+                out += static_cast<char>(0x80 | (c & 0x3F));
+            }
+        }
+        return out;
+    };
+    *name = text_at(0x411);
+    if (name->empty())
+        *name = text_at(0x1691);
+    return true;
+}
+
 std::string xbox360_title_id(const std::string &path)
 {
+    if (extension_of(path).empty())
+    {
+        std::string head;
+        std::string id;
+        std::string name;
+        std::FILE *in = std::fopen(path.c_str(), "rb");
+        if (in == nullptr)
+            return "";
+        read_at(in, 0, kStfsHead, &head);
+        std::fclose(in);
+        return stfs_package(head, &id, &name) ? id : "";
+    }
     if (extension_of(path) != "xex")
         return xbox_disc_title_id(path);
     std::string head;
@@ -1790,7 +1895,9 @@ std::vector<Player> players_for(const Emulator &emulator, const Title &game)
     standalone("psswanstation", "PSwanStation", game.system == kPs1 && swan_takes(ext));
     standalone("eden", "ProsperoEden", game.system == kSwitch && eden_takes(ext));
     standalone("ecam", "PS5-ECAM", ecam_takes(game.system, ext));
-    standalone("ps5x360", "PS5X360", game.system == kXbox360 && (ext == "iso" || ext == "xex"));
+    // A digital game is its package, a file with no extension.
+    standalone("ps5x360", "PS5X360",
+               game.system == kXbox360 && (ext == "iso" || ext == "xex" || ext.empty()));
     // PS5SX2 reads its launch note after its jailbreak, where /data is /data.
     if (!players.empty() && players.back().key == "ps5sx2")
         players.back().rom = game.path;
