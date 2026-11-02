@@ -5,6 +5,7 @@
 #include "orion/self_test.hpp"
 
 #include "core/save_file.hpp"
+#include "library/emulators.hpp"
 #include "core/sha256.hpp"
 #include "library/animation.hpp"
 #include "library/icon.hpp"
@@ -12,6 +13,7 @@
 
 #include <sys/stat.h>
 
+#include <algorithm>
 #include <chrono>
 #include <cstdio>
 #include <map>
@@ -96,6 +98,26 @@ void check_library(const SelfTestInput &in, std::vector<CheckResult> *results)
             " titles: " + std::to_string(total - homebrew - emulated - payloads) + " games, " +
             std::to_string(homebrew) + " homebrew, " + std::to_string(emulated) + " emulated, " +
             std::to_string(payloads) + " payloads");
+
+    // The emulated games by system, fewest first: a system an emulator is
+    // set up for that shows none (a Switch folder it missed) stands out.
+    std::map<std::string, int> systems;
+    for (const library::Title &title : in.titles)
+    {
+        if (!title.system.empty())
+            ++systems[library::short_system_name(title.system)];
+    }
+    if (!systems.empty())
+    {
+        std::vector<std::pair<int, std::string>> counts;
+        for (const auto &[system, games] : systems)
+            counts.emplace_back(games, system);
+        std::sort(counts.begin(), counts.end());
+        std::string line;
+        for (const auto &[games, system] : counts)
+            line += (line.empty() ? "" : ", ") + system + " " + std::to_string(games);
+        add(results, "systems", Outcome::pass, line);
+    }
 
     // A drive that holds installed games (its user/app) and gave the library
     // none of them is the extended-storage helper failing.
