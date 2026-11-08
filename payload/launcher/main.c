@@ -78,6 +78,13 @@
 #define WAIT_FOR_TITLE_MS 20000
 #define TITLE_READS_MS 15000 // after it is up, before its files go back
 #define REFUSED_GRACE_MS 8000 // a refused title that still comes up, within this
+// The system's answer while the app before is still being torn down. Seen on
+// players' consoles for web-based homebrew a second after ORION closed, and
+// for ORION itself the moment a game closed (issues #29 and #15): asked
+// again a moment later, it starts.
+#define LAUNCH_BUSY 0x80940033
+#define BUSY_RETRY_MS 12000
+#define BUSY_STEP_MS 1000
 #define GONE_FOR_MS 1000     // no app in front this long: the title has closed
 #define POLL_MS 100
 #define MAX_ARGUMENTS 16
@@ -589,6 +596,8 @@ static int launch(launch_job_t *job)
     if (sceUserServiceGetForegroundUser(&user) != 0)
         say("no foreground user; launching for user 0");
     job->param.user_id = (uint32_t)user;
+    job->done = 0;
+    job->result = 0;
     say("launching %s for user 0x%08x", job->title, (unsigned)user);
     pthread_t thread;
     if (pthread_create(&thread, NULL, launch_thread, job) != 0)
@@ -607,6 +616,28 @@ static int launch(launch_job_t *job)
     say("system answered 0x%08x (%s)", (unsigned)job->result,
         job->result >= 0 ? "accepted" : "refused");
     return job->result;
+}
+
+// launch(), asked again while the system is busy closing the app before.
+// Stops as soon as something is in front: a busy refusal has been followed
+// by the title coming up by itself, and a second request then would not help.
+static int launch_patiently(launch_job_t *job)
+{
+    int answer = launch(job);
+    for (int waited = 0; (unsigned)answer == LAUNCH_BUSY && waited < BUSY_RETRY_MS;
+         waited += BUSY_STEP_MS)
+    {
+        usleep(BUSY_STEP_MS * 1000);
+        const int app = sceSystemServiceGetAppIdOfRunningBigApp();
+        if (app > 0)
+        {
+            say("an app (0x%08x) came up while the system was busy", (unsigned)app);
+            return app;
+        }
+        say("the system was busy; asking again after %d ms", waited + BUSY_STEP_MS);
+        answer = launch(job);
+    }
+    return answer;
 }
 
 // ---- @update: ORION's own files, replaced while it is closed ----
@@ -1108,7 +1139,7 @@ int main(void)
                 static launch_job_t back;
                 memset(&back, 0, sizeof(back));
                 strcpy(back.title, return_to != NULL ? return_to : fallback_to);
-                launch(&back);
+                launch_patiently(&back);
             }
             return 1;
         }
@@ -1118,7 +1149,7 @@ int main(void)
     // -1: no answer yet (the title may still come up); below that, refused.
     // A refusal is not always the end: PS5SX2 has come up three seconds
     // after a 0x80940010. So it counts only once nothing has appeared.
-    const int answer = launch(&job);
+    const int answer = launch_patiently(&job);
     if (answer < -1)
     {
         int late = 0;
@@ -1141,7 +1172,7 @@ int main(void)
                 static launch_job_t back;
                 memset(&back, 0, sizeof(back));
                 strcpy(back.title, return_to != NULL ? return_to : fallback_to);
-                launch(&back);
+                launch_patiently(&back);
             }
             return 1;
         }
@@ -1205,7 +1236,7 @@ int main(void)
             static launch_job_t back;
             memset(&back, 0, sizeof(back));
             strcpy(back.title, return_to);
-            launch(&back);
+            launch_patiently(&back);
         }
         break;
     }
