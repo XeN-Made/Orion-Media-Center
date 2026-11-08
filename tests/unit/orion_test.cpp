@@ -415,6 +415,29 @@ TEST(OrionPrefs, MovingATabStepsOverHiddenOnes)
     EXPECT_FALSE(prefs.move_tab_key("emulators", 1, tabs));
 }
 
+// Issue #25: a tab moves past the next tab on its own row. Tabs on the bar
+// step over sub-tabs; a sub-tab stays inside its tab and stops at the ends.
+TEST(OrionPrefs, MovingATabStaysOnItsOwnRow)
+{
+    orion::LibraryPrefs prefs;
+    const std::string ps4 = "tab:" + prefs.add_tab("PS4").id;
+    const std::string ps5 = "tab:" + prefs.add_tab("PS5").id;
+    const std::vector<std::string> tabs = {"all", "games", "homebrew", ps4, ps5};
+    ASSERT_TRUE(prefs.set_tab_parent(ps4, "games"));
+    ASSERT_TRUE(prefs.set_tab_parent(ps5, "games"));
+    EXPECT_TRUE(prefs.move_tab_key("homebrew", -1, tabs));
+    EXPECT_EQ(prefs.ordered_tabs(tabs),
+              (std::vector<std::string>{"all", "homebrew", "games", ps4, ps5}));
+    EXPECT_FALSE(prefs.move_tab_key(ps4, -1, tabs)); // first inside Games
+    EXPECT_FALSE(prefs.move_tab_key(ps5, 1, tabs));  // last inside Games
+    EXPECT_TRUE(prefs.move_tab_key(ps5, -1, tabs));
+    EXPECT_EQ(prefs.ordered_tabs(tabs),
+              (std::vector<std::string>{"all", "homebrew", "games", ps5, ps4}));
+    EXPECT_TRUE(prefs.move_tab_key("games", -1, tabs));
+    EXPECT_EQ(prefs.ordered_tabs(tabs),
+              (std::vector<std::string>{"all", "games", "homebrew", ps5, ps4}));
+}
+
 // Issue #16: a tab sits inside another, one level deep, and it is kept.
 TEST(OrionPrefs, TabsGoInsideOtherTabsOneLevelDeep)
 {

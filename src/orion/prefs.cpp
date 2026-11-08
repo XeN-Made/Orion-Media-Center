@@ -235,15 +235,18 @@ bool LibraryPrefs::move_tab_key(const std::string &key, int direction,
     if (found == order.end())
         return false;
     const std::size_t i = static_cast<std::size_t>(found - order.begin());
-    // Past the next tab the bar shows: hidden ones between take no place
-    // there, so stepping over only one of them looked like no move at all.
+    // Past the next tab the same bar shows: hidden ones between take no
+    // place there, and neither do tabs on another row (a sub-tab is not a
+    // neighbour of the tabs on the bar, issue #25), so stepping over only one
+    // of them looked like no move at all. A sub-tab stops at its row's ends.
+    const std::string parent = tab_parent(key);
     std::size_t j = i;
     do
     {
         if (direction < 0 ? j == 0 : j + 1 >= order.size())
             return false;
         j = direction < 0 ? j - 1 : j + 1;
-    } while (tab_hidden(order[j]));
+    } while (tab_hidden(order[j]) || tab_parent(order[j]) != parent);
     std::string moving = std::move(order[i]);
     order.erase(order.begin() + static_cast<std::ptrdiff_t>(i));
     // Left: before that tab; right: after it, which the erase moved down one.

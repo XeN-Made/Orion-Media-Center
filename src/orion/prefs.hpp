@@ -287,8 +287,9 @@ struct LibraryPrefs
     std::vector<std::string> ordered_tabs(const std::vector<std::string> &tabs) const;
     // Moves any tab, a built-in one too, one place along `tabs` as
     // ordered_tabs shows them (-1 left, 1 right), past the next tab that is
-    // not hidden, and keeps the order. False when no shown tab is that way,
-    // or for a tab not there.
+    // not hidden and sits in the same tab (or on the bar, for a tab on the
+    // bar), and keeps the order. False when no such tab is that way, or for
+    // a tab not there.
     bool move_tab_key(const std::string &key, int direction, const std::vector<std::string> &tabs);
     // The built-in shelf a title was moved to ("games", "homebrew",
     // "media"), or empty. place() takes a shelf's key as well as a tab id.
