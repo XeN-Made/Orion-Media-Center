@@ -151,18 +151,23 @@ enum : int
     kLabelInk,
     kLabelReset,
     kLabelDelete,
-    kTabRow = 100,       // + the tab's index in tabs_
-    kSystemRow = 200,    // + the system's index: on or off
-    kCoreRow = 300,      // + the system's index: which core
-    kRomFolderRow = 400, // + the folder's index in prefs.rom_folders
-    kEmulatorRow = 500,  // + the emulator's index in emulator_->apps
-    kOwnFolderRow = 600, // + the index of a folder the emulator looks in by itself
-    kMissingRow = 700,   // + the index of a known emulator that is not installed
-    kBrowseRow = 800,    // + the folder's index in browse_folders_ (or in places_)
-    kDriveRow = 900,     // + the drive's index in drives_
-    kLabelRow = 1000,    // + the label's index in label_rows_
-    kShareRow = 1100,    // + the drive's index in shares_
+    kPlainEnd,
+    // The rows below are a base plus an index. The bases sit far apart and
+    // well above the plain ids: once the plain ids passed 100 they answered
+    // for the first tabs' rows (issue #27).
+    kTabRow = 10000,       // + the tab's index in tabs_
+    kSystemRow = 20000,    // + the system's index: on or off
+    kCoreRow = 30000,      // + the system's index: which core
+    kRomFolderRow = 40000, // + the folder's index in prefs.rom_folders
+    kEmulatorRow = 50000,  // + the emulator's index in emulator_->apps
+    kOwnFolderRow = 60000, // + the index of a folder the emulator looks in by itself
+    kMissingRow = 70000,   // + the index of a known emulator that is not installed
+    kBrowseRow = 80000,    // + the folder's index in browse_folders_ (or in places_)
+    kDriveRow = 90000,     // + the drive's index in drives_
+    kLabelRow = 100000,    // + the label's index in label_rows_
+    kShareRow = 110000,    // + the drive's index in shares_
 };
+static_assert(kPlainEnd < kTabRow, "a plain row id would answer for a tab's row");
 
 // The emulator a game folder is for: empty in the prefs is RetroArch.
 std::string folder_key(const RomFolder &folder)
