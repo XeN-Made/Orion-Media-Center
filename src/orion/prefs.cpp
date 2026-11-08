@@ -22,6 +22,7 @@ namespace
 constexpr std::size_t kMaxName = 24; // bytes
 constexpr std::size_t kMaxTabs = 32;
 constexpr std::size_t kMaxHidden = 4000; // titles and games hidden
+constexpr std::size_t kMaxCopies = 4000; // titles shown on a second tab, all told
 constexpr std::size_t kMaxLabels = 64;   // the player's labels and changed built-in ones
 
 std::string file_of(const std::string &state_dir)
@@ -133,12 +134,35 @@ bool LibraryPrefs::place(const std::string &title, const std::string &tab_id)
         return false;
     unplace(title);
     placements.push_back({title, tab_id});
+    uncopy(title, tab_id); // moved where it was shown already: once is enough
     return true;
 }
 
 void LibraryPrefs::unplace(const std::string &title)
 {
     std::erase_if(placements, [&](const Placement &p) { return p.title == title; });
+}
+
+bool LibraryPrefs::copy_to(const std::string &title, const std::string &tab_id)
+{
+    const CustomTab *placed = placement(title);
+    if (tab(tab_id) == nullptr || !library::is_item_id(title) ||
+        (placed != nullptr && placed->id == tab_id) || copied_to(title, tab_id) ||
+        copies.size() >= kMaxCopies)
+        return false;
+    copies.push_back({title, tab_id});
+    return true;
+}
+
+void LibraryPrefs::uncopy(const std::string &title, const std::string &tab_id)
+{
+    std::erase_if(copies, [&](const Placement &p) { return p.title == title && p.tab == tab_id; });
+}
+
+bool LibraryPrefs::copied_to(const std::string &title, const std::string &tab_id) const
+{
+    return std::any_of(copies.begin(), copies.end(),
+                       [&](const Placement &p) { return p.title == title && p.tab == tab_id; });
 }
 
 const CustomTab &LibraryPrefs::add_tab(const std::string &name)
@@ -173,6 +197,7 @@ bool LibraryPrefs::remove_tab(const std::string &id)
         return false;
     tabs.erase(found);
     std::erase_if(placements, [&](const Placement &p) { return p.tab == id; });
+    std::erase_if(copies, [&](const Placement &p) { return p.tab == id; });
     if (last_tab == "tab:" + id)
         last_tab = "all";
     return true;
@@ -714,6 +739,8 @@ LibraryPrefs load_prefs(const std::string &state_dir)
     }
     for (const auto &member : root["placements"].members())
         prefs.place(member.first, member.second.string_or(""));
+    for (const json::Value &value : root["copies"].elements())
+        prefs.copy_to(value["title"].string_or(""), value["tab"].string_or(""));
     for (const json::Value &value : root["tab_order"].elements())
     {
         const std::string key = value.string_or("");
@@ -897,6 +924,14 @@ bool save_prefs(const std::string &state_dir, const LibraryPrefs &prefs)
                 json::quote(prefs.placements[i].tab);
     }
     text += prefs.placements.empty() ? "},\n" : "\n  },\n";
+    text += "  \"copies\": [";
+    for (std::size_t i = 0; i < prefs.copies.size(); ++i)
+    {
+        text += i == 0 ? "\n" : ",\n";
+        text += "    {\"title\": " + json::quote(prefs.copies[i].title) +
+                ", \"tab\": " + json::quote(prefs.copies[i].tab) + "}";
+    }
+    text += prefs.copies.empty() ? "],\n" : "\n  ],\n";
     text += "  \"tab_order\": [";
     for (std::size_t i = 0; i < prefs.tab_order.size(); ++i)
         text += (i == 0 ? "" : ", ") + json::quote(prefs.tab_order[i]);

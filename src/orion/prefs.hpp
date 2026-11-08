@@ -168,6 +168,7 @@ struct Placement
 //     "art_dir": "/mnt/usb0/ORION/art",
 //     "tabs": [{"id": "t1", "name": "RPGs"}],
 //     "placements": {"PPSA01234": "t1"},
+//     "copies": [{"title": "PPSA01234", "tab": "t2"}],
 //     "hidden_titles": ["CUSA00001", "rom-0123456789ab"],
 //     "game_players": {"rom-0123456789ab": "retroarch:snes9x_libretro.so"},
 //     "title_names": {"CUSA00001": "My name for it"},
@@ -192,6 +193,9 @@ struct LibraryPrefs
 {
     std::vector<CustomTab> tabs;
     std::vector<Placement> placements;
+    // The player's other tabs a title shows on as well: the same title, the
+    // same files, on more than one tab. Its placement stays its own.
+    std::vector<Placement> copies;
     // The tab bar in the player's order, by key ("games", "tab:t1"...);
     // empty: ORION's own order.
     std::vector<std::string> tab_order;
@@ -273,6 +277,11 @@ struct LibraryPrefs
     // Moves a title to a tab (from any other); an unknown tab id is refused.
     bool place(const std::string &title, const std::string &tab_id);
     void unplace(const std::string &title);
+    // A title also shown on one of the player's tabs (issue #24). False for
+    // an unknown tab, the one it was moved to, or a tab it is shown on already.
+    bool copy_to(const std::string &title, const std::string &tab_id);
+    void uncopy(const std::string &title, const std::string &tab_id);
+    bool copied_to(const std::string &title, const std::string &tab_id) const;
     // Adds a tab with a fresh id and returns it. Names are trimmed and kept
     // to 24 bytes; an empty name becomes "New tab".
     const CustomTab &add_tab(const std::string &name);

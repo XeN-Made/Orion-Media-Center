@@ -438,6 +438,35 @@ TEST(OrionPrefs, MovingATabStaysOnItsOwnRow)
               (std::vector<std::string>{"all", "games", "homebrew", ps5, ps4}));
 }
 
+// Issue #24: a title shows on more of the player's tabs than the one it was
+// moved to; the copies are kept, and go with their tab.
+TEST(OrionPrefs, ATitleShowsOnMoreThanOneTab)
+{
+    const std::string dir = fresh_dir("orion-prefs-copies");
+    orion::LibraryPrefs prefs;
+    const std::string exfat = prefs.add_tab("exFAT").id;
+    const std::string series = prefs.add_tab("Series").id;
+    const std::string spare = prefs.add_tab("Spare").id;
+    ASSERT_TRUE(prefs.place("PPSA01234", exfat));
+    EXPECT_FALSE(prefs.copy_to("PPSA01234", exfat)); // moved there already
+    EXPECT_TRUE(prefs.copy_to("PPSA01234", series));
+    EXPECT_FALSE(prefs.copy_to("PPSA01234", series)); // shown there already
+    EXPECT_FALSE(prefs.copy_to("PPSA01234", "nope"));
+    EXPECT_TRUE(prefs.copy_to("PPSA01234", spare));
+    ASSERT_TRUE(orion::save_prefs(dir, prefs));
+    orion::LibraryPrefs back = orion::load_prefs(dir);
+    EXPECT_EQ(back.placement("PPSA01234")->id, exfat);
+    EXPECT_TRUE(back.copied_to("PPSA01234", series));
+    EXPECT_TRUE(back.copied_to("PPSA01234", spare));
+    // Moved where it was shown: once is enough.
+    ASSERT_TRUE(back.place("PPSA01234", series));
+    EXPECT_FALSE(back.copied_to("PPSA01234", series));
+    EXPECT_TRUE(back.remove_tab(spare));
+    EXPECT_FALSE(back.copied_to("PPSA01234", spare));
+    back.uncopy("PPSA01234", series);
+    EXPECT_TRUE(back.copies.empty());
+}
+
 // Issue #16: a tab sits inside another, one level deep, and it is kept.
 TEST(OrionPrefs, TabsGoInsideOtherTabsOneLevelDeep)
 {
