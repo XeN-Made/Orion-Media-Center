@@ -239,7 +239,12 @@ within 30 minutes. Every step it took is written to
 - **Tabs of your own**, a theme per tab, hidden titles: Settings, Tabs.
   Every tab, the built-in ones too, moves along the tab bar (its page, *Move
   left* and *Move right*) or hides (*Show this tab* off). Options on a title,
-  *Move to tab…*, also moves it onto Games, Homebrew or Media.
+  *Move to tab…*, also moves it onto Games, Homebrew or Media; *Also show
+  in…* puts it on more of your tabs as well, the same title launched from any
+  of them.
+- **Select several** (Options on a title): Cross ticks titles, Square ticks
+  every one in the tab, and Options moves them, shows them in another tab,
+  stars, hides, labels or deletes them together.
   Every tab, the built-in ones too (All, Games, Emulators, each system), can
   be **renamed** or **hidden** from its page there.
 - **Wide covers**: give a tab the Landscape cover shape (Settings, Tabs, its

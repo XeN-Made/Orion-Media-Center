@@ -163,9 +163,10 @@
               <tr><td><strong>Choose music… / Use its own music</strong></td><td>The music it plays while focused: an <code>.ogg</code> or <code>.at9</code> of yours, or its own.</td></tr>
               <tr><td><strong>Download HD picture / box art again</strong></td><td>A sharper home-screen picture, or the box art fetched again.</td></tr>
               <tr><td><strong>Move to tab…</strong></td><td>To Games, Homebrew, Media or one of your tabs, or a new tab.</td></tr>
-              <tr><td><strong>Select several…</strong></td><td>Tick several titles and move them together (<a href="#several">below</a>).</td></tr>
+              <tr><td><strong>Also show in…</strong></td><td>On more of your tabs as well: the same title, its files kept once, launched from any of them. Choose a tab it shows on again to take it off.</td></tr>
+              <tr><td><strong>Select several…</strong></td><td>Tick several titles and act on them together (<a href="#several">below</a>).</td></tr>
               <tr><td><strong>Move within this tab</strong></td><td>Put it where you want it in the tab (<a href="#several">below</a>).</td></tr>
-              <tr><td><strong>Remove from &lt;tab&gt;</strong></td><td>Out of your tab, back to its own shelf.</td></tr>
+              <tr><td><strong>Remove from &lt;tab&gt;</strong></td><td>Out of your tab, back to its own shelf. On a tab it is only shown on (Also show in…), off that tab alone.</td></tr>
               <tr><td><strong>Remove…</strong></td><td>For a game ShadowMountPlus mounts: off the home screen (its files stay), or deleted from the console. For an installed app: the console's own uninstall (saved data stays). For an emulated game or an ELF program: its file deleted. A delete always asks you to hold Cross.</td></tr>
             </tbody>
           </table>
@@ -210,8 +211,13 @@
           <h2>Tick, move, arrange</h2>
           <p style="color:var(--muted)"><strong>Select several</strong> (Options on a title):
             Cross ticks or unticks the focused title; you can change tabs and keep ticking.
-            Options opens <em>Move N titles to</em>: Games, Homebrew, Media, your tabs or a new tab.
-            Circle stops without moving anything.</p>
+            Square ticks every title in the tab, and unticks them again. Options acts on the
+            ticked titles: <em>Move to tab…</em>, <em>Also show in…</em>, <em>Add to
+            Favourites</em>, <em>Hide titles</em> (<em>Show titles</em> on Hidden),
+            <em>Label…</em> and <em>Delete…</em>, which erases game and ELF files and has the
+            console uninstall installed apps, one after another, after you hold Cross. Games
+            ShadowMountPlus mounts keep <em>Remove…</em> in their own menu. Circle stops without
+            changing anything.</p>
           <p style="color:var(--muted)"><strong>Move within this tab</strong> (Options on a
             title): the direction buttons carry it through the tab (up and down by a whole row in
             Grid). Cross keeps it there, Circle puts everything back. The tab's sort becomes
@@ -220,7 +226,7 @@
         <figure>
           <img class="shot" src="screenshots/select.jpg" width="1920" height="1080" loading="lazy"
                alt="Three covers ticked in Select several, with Tick, Move to and Done in the hints">
-          <figcaption>Select several: three ticked, Options moves them</figcaption>
+          <figcaption>Select several: three ticked, Options acts on them</figcaption>
         </figure>
       </div>
     </section>
