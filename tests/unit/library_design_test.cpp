@@ -400,9 +400,10 @@ TEST_F(LibraryDesign, SelectedTitlesMoveTogether)
     library_.state_dir = dir;
     auto design = with_fixture();
 
-    // Ciel Ouvert's menu: Select several sits after Move to tab….
+    // Ciel Ouvert's menu: Select several sits after Move to tab… and, with a
+    // tab of the player's there, Also show in….
     send(*design, press(hui::Action::menu));
-    for (int i = 0; i < 11; ++i)
+    for (int i = 0; i < 12; ++i)
         send(*design, nav(Direction::down));
     send(*design, press(hui::Action::confirm));
     // Ciel Ouvert ticked; Glyph Garden too, then back to untick nothing more.
@@ -410,8 +411,10 @@ TEST_F(LibraryDesign, SelectedTitlesMoveTogether)
     send(*design, press(hui::Action::confirm));
     EXPECT_TRUE(played(Cue::toggle));
     expect_drawable(*design);
-    // Options: where they go. Games (first), Homebrew, Media, then RPGs.
+    // Options: what to do with them, Move to tab… first; then where they go.
+    // Games (first), Homebrew, Media, then RPGs.
     send(*design, press(hui::Action::menu));
+    send(*design, press(hui::Action::confirm));
     for (int i = 0; i < 3; ++i)
         send(*design, nav(Direction::down));
     send(*design, press(hui::Action::confirm));
@@ -424,6 +427,77 @@ TEST_F(LibraryDesign, SelectedTitlesMoveTogether)
     EXPECT_EQ(placed, 2);
     // Selecting ended with the move: Cross launches again.
     send(*design, press(hui::Action::confirm));
+    expect_drawable(*design);
+}
+
+// Issue #30: Square ticks every title in the tab (and unticks them again),
+// and the selection's menu stars and hides them all at once.
+TEST_F(LibraryDesign, TickedTitlesAreStarredAndHiddenTogether)
+{
+    const std::string dir = ::testing::TempDir() + "orion-design-select-all";
+    ASSERT_TRUE(hui::save::ensure_directory(dir));
+    std::remove((dir + "/library.json").c_str());
+    std::remove((dir + "/favourites.json").c_str());
+    library_.state_dir = dir;
+    auto design = with_fixture();
+    const auto start_selecting = [&]
+    {
+        send(*design, press(hui::Action::menu));
+        for (int i = 0; i < 11; ++i)
+            send(*design, nav(Direction::down));
+        send(*design, press(hui::Action::confirm));
+    };
+    start_selecting();
+    send(*design, press(hui::Action::west)); // Square: all of them
+    EXPECT_TRUE(played(Cue::toggle));
+    expect_drawable(*design);
+    // Options, then Add to Favourites: the second action.
+    send(*design, press(hui::Action::menu));
+    send(*design, nav(Direction::down));
+    send(*design, press(hui::Action::confirm));
+    EXPECT_TRUE(played(Cue::favorite_on));
+    const std::vector<std::string> stars = hui::library::load_favourites(dir);
+    EXPECT_EQ(stars.size(), library_.titles.size());
+    // Ticked again, all of them: Hide titles, the third action.
+    start_selecting();
+    send(*design, press(hui::Action::west));
+    send(*design, press(hui::Action::menu));
+    for (int i = 0; i < 2; ++i)
+        send(*design, nav(Direction::down));
+    send(*design, press(hui::Action::confirm));
+    const hui::orion::LibraryPrefs saved = hui::orion::load_prefs(dir);
+    int hidden = 0;
+    for (const hui::library::Title &title : library_.titles)
+        hidden += saved.title_hidden(title.id) ? 1 : 0;
+    EXPECT_EQ(hidden, static_cast<int>(library_.titles.size()));
+    expect_drawable(*design);
+}
+
+// Issue #24: Also show in… puts the title on another of the player's tabs as
+// well, and leaves the one it was moved to as it was.
+TEST_F(LibraryDesign, ATitleIsShownOnAnotherTabToo)
+{
+    const std::string dir = ::testing::TempDir() + "orion-design-copy";
+    ASSERT_TRUE(hui::save::ensure_directory(dir));
+    hui::orion::LibraryPrefs prefs;
+    const std::string first = prefs.add_tab("exFAT").id;
+    const std::string second = prefs.add_tab("Series").id;
+    ASSERT_TRUE(hui::orion::save_prefs(dir, prefs));
+    library_.state_dir = dir;
+    auto design = with_fixture();
+    // Ciel Ouvert's menu: Also show in… sits after Move to tab….
+    send(*design, press(hui::Action::menu));
+    for (int i = 0; i < 11; ++i)
+        send(*design, nav(Direction::down));
+    send(*design, press(hui::Action::confirm));
+    // exFAT first, under the heading; then Series.
+    send(*design, nav(Direction::down));
+    send(*design, press(hui::Action::confirm));
+    EXPECT_TRUE(played(Cue::place));
+    const hui::orion::LibraryPrefs saved = hui::orion::load_prefs(dir);
+    EXPECT_TRUE(saved.copied_to("PPSA90108", second));
+    EXPECT_FALSE(saved.copied_to("PPSA90108", first));
+    EXPECT_EQ(saved.placement("PPSA90108"), nullptr);
     expect_drawable(*design);
 }
 

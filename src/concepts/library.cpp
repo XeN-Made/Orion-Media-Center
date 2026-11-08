@@ -248,6 +248,12 @@ enum : int
     kItemInstallLess,         // its page before
     kItemInstallHere,         // Install this game folder
     kItemInstallMissing,      // Install every package here that is not in
+    kItemSelFavourite,        // the selection's menu: star (or unstar) them all
+    kItemSelHide,             // hide them all, or show them again on Hidden
+    kItemSelDelete,           // Delete…: every one that can be
+    kItemSelAll,              // tick every title in the tab, or untick them all
+    kItemCopyMenu,            // Also show in…: the player's tabs
+    kItemUncopy,              // Remove from this tab, where it is a copy
     kItemMove = 100,          // + the tab's index
     kItemShelf = 250,         // + a built-in shelf's index in kShelves
     kItemPlayer = 300,        // 0: the default, then 1 + an index in library::players_for
@@ -261,6 +267,7 @@ enum : int
     kItemFoundServer = 11000, // + an index in found_servers_
     kItemFoundShare = 11500,  // + an index in found_shares_
     kItemTabPlace = 12000, // where a new tab goes: 0 the tab bar, else 1 + an index in place_keys_
+    kItemCopy = 13000,     // + the tab's index: shown there too (or not any more)
 };
 
 // The picture browser shows this many folders and pictures at a time: the
@@ -2083,6 +2090,11 @@ class Library final : public app::Concept
                 rebuild();
                 return;
             }
+            if (input.is_pressed(Action::west))
+            {
+                tick_all(feedback);
+                return;
+            }
             if (input.is_pressed(Action::menu))
             {
                 open_selection_menu(feedback);
@@ -2914,6 +2926,7 @@ class Library final : public app::Concept
         show_note(ok, note);
         feedback.play(ok ? audio::Cue::erase : audio::Cue::error);
         uninstall_token_.clear();
+        next_uninstall(feedback);
     }
 
     // The next package waiting, if one can start.
@@ -3327,9 +3340,10 @@ class Library final : public app::Concept
         nested_hints_ = hints_;
         nested_hints_[0] = ui::Hint{ui::Button::l2, nested_word_.c_str(), ui::Button::r2};
         // While selecting, and while arranging a tab: what the buttons do then.
-        mode_words_ = {tr("Tick"), tr("Move to…"),  tr("Done"),
-                       tr("Move"), tr("Keep here"), tr("Put back")};
+        mode_words_ = {tr("Tick"),      tr("Actions"),  tr("Done"),    tr("Move"),
+                       tr("Keep here"), tr("Put back"), tr("Tick all")};
         select_hints_ = {ui::Hint{ui::Button::cross, mode_words_[0].c_str()},
+                         ui::Hint{ui::Button::square, mode_words_[6].c_str()},
                          ui::Hint{ui::Button::options, mode_words_[1].c_str()},
                          ui::Hint{ui::Button::circle, mode_words_[2].c_str()}};
         arrange_hints_ = {ui::Hint{ui::Button::dpad, mode_words_[3].c_str()},
@@ -3883,7 +3897,12 @@ class Library final : public app::Concept
             const std::string id =
                 prefs_.add_label(name_, colours[prefs_.labels.size() % light].first, 0x08101c).id;
             if (typing == Typing::new_label_for_title)
-                prefs_.set_title_label(menu_title_, id);
+            {
+                for (const std::string &title : menu_targets())
+                    prefs_.set_title_label(title, id);
+                if (selecting_)
+                    finish_selection(tr("Label changed"));
+            }
             tabs_changed();
             feedback.play(audio::Cue::saved);
             return;
@@ -5373,6 +5392,12 @@ class Library final : public app::Concept
         move.tag = prefs_.tabs.empty() ? kItemNewTab : kItemMoveMenu;
         move.shortcut = placed != nullptr ? placed->name : "";
         items.push_back(move);
+        if (!prefs_.tabs.empty())
+        {
+            ui::MenuItem copy = menu_item(tr("Also show in…"));
+            copy.tag = kItemCopyMenu;
+            items.push_back(copy);
+        }
         ui::MenuItem select = menu_item(tr("Select several…"));
         select.tag = kItemSelect;
         items.push_back(select);
@@ -5382,7 +5407,15 @@ class Library final : public app::Concept
             arrange.tag = kItemArrange;
             items.push_back(arrange);
         }
-        if (placed != nullptr)
+        // On a tab it is shown on as a copy, Remove takes that copy away.
+        if (const orion::CustomTab *shown = copy_tab_here(title.id))
+        {
+            ui::MenuItem uncopy = menu_item(trf("Remove from {0}", {shown->name}));
+            uncopy.tag = kItemUncopy;
+            uncopy.danger = true;
+            items.push_back(uncopy);
+        }
+        else if (placed != nullptr)
         {
             ui::MenuItem unplace = menu_item(trf("Remove from {0}", {placed->name}));
             unplace.tag = kItemUnplace;
@@ -5574,6 +5607,11 @@ class Library final : public app::Concept
 
     void do_remove(app::Feedback &feedback)
     {
+        if (remove_kind_ == kItemSelDelete)
+        {
+            remove_selected(feedback);
+            return;
+        }
         const Title *title = find_title(remove_id_);
         if (title == nullptr)
             return;
@@ -5711,29 +5749,223 @@ class Library final : public app::Concept
             feedback.play(audio::Cue::error);
             return;
         }
-        open_tab_menu(feedback);
-        std::vector<ui::MenuItem> items = menu_.items();
+        // What the ticked titles can do together (issue #30); Move to tab
+        // keeps the tabs on a page of their own, as for one title.
+        std::vector<ui::MenuItem> items;
         ui::MenuItem heading = menu_item(i18n::plural(static_cast<long long>(selected_.size()),
-                                                      "Move {0} title to", "Move {0} titles to"));
+                                                      "{0} title ticked", "{0} titles ticked"));
         heading.disabled = true;
-        items.insert(items.begin(), heading);
-        // A tab one of them is already on is no reason to refuse the others.
-        for (ui::MenuItem &item : items)
+        items.push_back(heading);
+        ui::MenuItem move =
+            menu_item(prefs_.tabs.empty() ? tr("Move to a new tab…") : tr("Move to tab…"));
+        move.tag = prefs_.tabs.empty() ? kItemNewTab : kItemMoveMenu;
+        items.push_back(move);
+        if (!prefs_.tabs.empty())
         {
-            if (item.tag != 0)
-            {
-                item.disabled = false;
-                item.shortcut.clear();
-            }
+            ui::MenuItem copy = menu_item(tr("Also show in…"));
+            copy.tag = kItemCopyMenu;
+            items.push_back(copy);
         }
+        ui::MenuItem star = menu_item(all_favourites(selected_) ? tr("Remove from Favourites")
+                                                                : tr("Add to Favourites"));
+        star.tag = kItemSelFavourite;
+        items.push_back(star);
+        ui::MenuItem hide =
+            menu_item(active_key() == kHiddenTab ? tr("Show titles") : tr("Hide titles"));
+        hide.tag = kItemSelHide;
+        items.push_back(hide);
+        ui::MenuItem label = menu_item(tr("Label…"));
+        label.tag = kItemLabelMenu;
+        items.push_back(label);
+        ui::MenuItem all =
+            menu_item(every_ticked() ? tr("Untick all") : tr("Tick all in this tab"));
+        all.tag = kItemSelAll;
+        items.push_back(all);
         ui::MenuItem line;
         line.separator = true;
         items.push_back(line);
+        if (removable_count() > 0)
+        {
+            ui::MenuItem remove = menu_item(tr("Delete…"));
+            remove.tag = kItemSelDelete;
+            remove.danger = true;
+            items.push_back(remove);
+        }
         ui::MenuItem done = menu_item(tr("Stop selecting"));
         done.tag = kItemSelectDone;
         items.push_back(done);
         menu_.set_items(std::move(items));
-        menu_.set_focus(1); // the first place, under the heading
+        menu_.open(grid_.cell_rect(grid_.focus()), feedback);
+        menu_.set_focus(1); // the first action, under the heading
+    }
+
+    // What a menu item acts on: the ticked titles while selecting, else the
+    // one whose menu it is.
+    std::vector<std::string> menu_targets() const
+    {
+        if (selecting_ && !selected_.empty())
+            return {selected_.begin(), selected_.end()};
+        return {menu_title_};
+    }
+
+    // Done with the ticked titles: the note says what became of them.
+    void finish_selection(const std::string &note)
+    {
+        show_note(true, note);
+        selecting_ = false;
+        selected_.clear();
+    }
+
+    bool all_favourites(const std::unordered_set<std::string> &ids) const
+    {
+        return std::all_of(ids.begin(), ids.end(),
+                           [&](const std::string &id) { return favourite_of(id); });
+    }
+
+    // Whether every title the tab shows is ticked.
+    bool every_ticked() const
+    {
+        for (const int index : view_)
+        {
+            if (selected_.count(titles()[static_cast<std::size_t>(index)].id) == 0)
+                return false;
+        }
+        return !view_.empty();
+    }
+
+    // Square while selecting: every title in the tab, or none again.
+    void tick_all(app::Feedback &feedback)
+    {
+        if (every_ticked())
+            selected_.clear();
+        else
+        {
+            for (const int index : view_)
+                selected_.insert(titles()[static_cast<std::size_t>(index)].id);
+        }
+        feedback.play(audio::Cue::toggle);
+        rebuild();
+    }
+
+    // The ticked titles Delete… can take: the others are kept, and said so.
+    int removable_count() const
+    {
+        int count = 0;
+        for (const std::string &id : selected_)
+        {
+            const Title *title = find_title(id);
+            if (title != nullptr && removable_together(*title))
+                ++count;
+        }
+        return count;
+    }
+
+    // A game's file and an ELF are erased here, and an installed app goes to
+    // the system's uninstall one after another. A ShadowMountPlus title is
+    // removed while ORION is closed, one per close: it keeps Remove… of its own.
+    bool removable_together(const Title &title) const
+    {
+        return removable(title) && (title.is_rom() || title.source == library::Source::payload ||
+                                    title.source == library::Source::installed);
+    }
+
+    void ask_remove_selected(app::Feedback &feedback)
+    {
+        const int count = removable_count();
+        if (count == 0)
+            return;
+        remove_kind_ = kItemSelDelete;
+        remove_id_.clear();
+        remove_hold_ = 0.0f;
+        ui::DialogContent content;
+        content.icon = ui::StatusKind::danger;
+        content.title = i18n::plural(count, "Delete {0} title?", "Delete {0} titles?");
+        std::string names;
+        int listed = 0;
+        for (const std::string &id : selected_)
+        {
+            const Title *title = find_title(id);
+            if (title == nullptr || !removable_together(*title))
+                continue;
+            if (++listed > 6)
+            {
+                names += "…\n";
+                break;
+            }
+            names += title->name + "\n";
+        }
+        const int kept = static_cast<int>(selected_.size()) - count;
+        content.body =
+            names + tr("Game files and ELF files are erased; installed apps are uninstalled by the "
+                       "console. Saved data stays.\nThis cannot be undone.");
+        if (kept > 0)
+            content.body += "\n" + i18n::plural(kept,
+                                                "{0} ticked title is not deleted here: it has "
+                                                "Remove… in its own menu.",
+                                                "{0} ticked titles are not deleted here: they "
+                                                "have Remove… in their own menus.");
+        content.buttons = {{tr("Cancel")}, {delete_label(0.0f), ui::ButtonKind::primary, true}};
+        content.default_button = 0;
+        dialog_.open(std::move(content), feedback);
+    }
+
+    void remove_selected(app::Feedback &feedback)
+    {
+        int erased = 0;
+        int failed = 0;
+        std::vector<std::string> uninstall;
+        for (const std::string &id : selected_)
+        {
+            const Title *title = find_title(id);
+            if (title == nullptr || !removable_together(*title))
+                continue;
+            if (title->source == library::Source::installed)
+            {
+                uninstall.push_back(title->id);
+                continue;
+            }
+            struct stat info = {};
+            if (::stat(title->path.c_str(), &info) != 0 || !S_ISREG(info.st_mode) ||
+                std::remove(title->path.c_str()) != 0)
+            {
+                ++failed;
+                continue;
+            }
+            removed_ids_.insert(title->id);
+            ++erased;
+        }
+        selecting_ = false;
+        selected_.clear();
+        if (erased > 0)
+            tabs_changed();
+        // The system takes one uninstall at a time: the rest wait their turn
+        // (follow_uninstall starts the next).
+        uninstall_queue_.insert(uninstall_queue_.end(), uninstall.begin(), uninstall.end());
+        next_uninstall(feedback);
+        std::string note = i18n::plural(erased, "{0} file deleted", "{0} files deleted");
+        if (!uninstall.empty())
+            note += "   ·   " + i18n::plural(static_cast<long long>(uninstall.size()),
+                                             "{0} app to uninstall", "{0} apps to uninstall");
+        if (failed > 0)
+            note += "   ·   " +
+                    i18n::plural(failed, "{0} could not be deleted", "{0} could not be deleted");
+        show_note(failed == 0, note);
+        feedback.play(failed == 0 ? audio::Cue::erase : audio::Cue::error);
+    }
+
+    // The next app waiting to be uninstalled, once nothing else is going on.
+    void next_uninstall(app::Feedback &feedback)
+    {
+        while (!uninstall_queue_.empty() && uninstall_token_.empty() && !package_server_.running())
+        {
+            const std::string id = std::move(uninstall_queue_.front());
+            uninstall_queue_.pop_front();
+            if (const Title *title = find_title(id))
+            {
+                start_uninstall(*title, feedback);
+                return;
+            }
+        }
     }
 
     void stop_selecting()
@@ -5847,8 +6079,93 @@ class Library final : public app::Concept
         ui::MenuItem fresh = menu_item(tr("New tab…"));
         fresh.tag = kItemNewTab;
         items.push_back(fresh);
+        if (selecting_ && !selected_.empty())
+        {
+            // A tab one of them is already on is no reason to refuse the others.
+            for (ui::MenuItem &item : items)
+            {
+                item.disabled = false;
+                item.shortcut.clear();
+            }
+            ui::MenuItem heading =
+                menu_item(i18n::plural(static_cast<long long>(selected_.size()),
+                                       "Move {0} title to", "Move {0} titles to"));
+            heading.disabled = true;
+            items.insert(items.begin(), heading);
+        }
         menu_.set_items(std::move(items));
         menu_.open(grid_.cell_rect(grid_.focus()), feedback);
+        if (selecting_ && !selected_.empty())
+            menu_.set_focus(1); // the first place, under the heading
+    }
+
+    // The tab the library shows where this title is a copy (issue #24), or
+    // nullptr: anywhere else, Remove is about where it was moved.
+    const orion::CustomTab *copy_tab_here(const std::string &title) const
+    {
+        const std::string key = active_key();
+        if (key.rfind("tab:", 0) != 0 || !prefs_.copied_to(title, key.substr(4)))
+            return nullptr;
+        return prefs_.tab(key.substr(4));
+    }
+
+    // Also show in…: the player's tabs. For one title, the tab it was moved
+    // to is Here and the ones it shows on too are marked; choosing one of
+    // those takes it off again. Ticked titles are all shown on the tab chosen.
+    void open_copy_menu(app::Feedback &feedback)
+    {
+        const bool several = selecting_ && !selected_.empty();
+        const orion::CustomTab *placed = several ? nullptr : prefs_.placement(menu_title_);
+        std::vector<ui::MenuItem> items;
+        ui::MenuItem heading =
+            menu_item(several ? i18n::plural(static_cast<long long>(selected_.size()),
+                                             "Show {0} title in", "Show {0} titles in")
+                              : tr("Also show in"));
+        heading.disabled = true;
+        items.push_back(heading);
+        for (std::size_t i = 0; i < prefs_.tabs.size() && i < kPickPage; ++i)
+        {
+            const std::string &id = prefs_.tabs[i].id;
+            const bool here = placed != nullptr && placed->id == id;
+            const bool shown = !several && prefs_.copied_to(menu_title_, id);
+            ui::MenuItem item = menu_item(prefs_.tabs[i].name);
+            item.tag = kItemCopy + static_cast<int>(i);
+            item.disabled = here;
+            item.shortcut = here ? tr("Here") : shown ? tr("Shown") : "";
+            items.push_back(item);
+        }
+        menu_.set_items(std::move(items));
+        menu_.open(grid_.cell_rect(grid_.focus()), feedback);
+        menu_.set_focus(1);
+    }
+
+    void copy_chosen(int index, app::Feedback &feedback)
+    {
+        if (index < 0 || index >= static_cast<int>(prefs_.tabs.size()))
+            return;
+        const orion::CustomTab tab = prefs_.tabs[static_cast<std::size_t>(index)];
+        const bool several = selecting_ && !selected_.empty();
+        if (!several && prefs_.copied_to(menu_title_, tab.id))
+        {
+            prefs_.uncopy(menu_title_, tab.id);
+            show_note(true, trf("Not shown in {0} any more", {tab.name}));
+        }
+        else
+        {
+            int added = 0;
+            for (const std::string &id : menu_targets())
+                added += prefs_.copy_to(id, tab.id) ? 1 : 0;
+            const std::string note = several ? i18n::plural(added, "{0} title is shown in {1} too",
+                                                            "{0} titles are shown in {1} too")
+                                             : trf("Shown in {0} too", {tab.name});
+            if (several)
+                finish_selection(i18n::fill(note, {std::to_string(added), tab.name}));
+            else
+                show_note(true, note);
+        }
+        save_prefs();
+        tabs_changed();
+        feedback.play(audio::Cue::place);
     }
 
     void open_player_menu(app::Feedback &feedback, bool launch_after = false)
@@ -5935,6 +6252,29 @@ class Library final : public app::Concept
         if (install_item(tag, feedback) || found_item(tag, feedback))
             return;
         // Before the ranges below, which take any tag past theirs.
+        if (tag >= kItemCopy && tag < kItemCopy + kPickPage)
+        {
+            copy_chosen(tag - kItemCopy, feedback);
+            return;
+        }
+        if (tag == kItemCopyMenu)
+        {
+            open_copy_menu(feedback);
+            return;
+        }
+        if (tag == kItemUncopy)
+        {
+            if (const orion::CustomTab *shown = copy_tab_here(menu_title_))
+            {
+                const std::string name = shown->name;
+                prefs_.uncopy(menu_title_, shown->id);
+                save_prefs();
+                tabs_changed();
+                show_note(true, trf("Not shown in {0} any more", {name}));
+                feedback.play(audio::Cue::place);
+            }
+            return;
+        }
         if (tag >= kItemTabPlace && tag <= kItemTabPlace + static_cast<int>(place_keys_.size()))
         {
             const int at = tag - kItemTabPlace;
@@ -5994,8 +6334,12 @@ class Library final : public app::Concept
         if (tag >= kItemLabelBuiltin &&
             tag - kItemLabelBuiltin < static_cast<int>(every_label().size()))
         {
-            prefs_.set_title_label(
-                menu_title_, every_label()[static_cast<std::size_t>(tag - kItemLabelBuiltin)].id);
+            const std::string id =
+                every_label()[static_cast<std::size_t>(tag - kItemLabelBuiltin)].id;
+            for (const std::string &title : menu_targets())
+                prefs_.set_title_label(title, id);
+            if (selecting_)
+                finish_selection(tr("Label changed"));
             save_prefs();
             context_.kinds_changed = true; // GAME makes it a game, HOMEBREW homebrew
             rebuild();
@@ -6005,10 +6349,14 @@ class Library final : public app::Concept
         if (tag == kItemLabelOwn ||
             (tag >= kItemLabel && tag - kItemLabel < static_cast<int>(custom_labels().size())))
         {
-            prefs_.set_title_label(
-                menu_title_, tag == kItemLabelOwn
-                                 ? std::string()
-                                 : custom_labels()[static_cast<std::size_t>(tag - kItemLabel)]->id);
+            const std::string id =
+                tag == kItemLabelOwn
+                    ? std::string()
+                    : custom_labels()[static_cast<std::size_t>(tag - kItemLabel)]->id;
+            for (const std::string &title : menu_targets())
+                prefs_.set_title_label(title, id);
+            if (selecting_)
+                finish_selection(tr("Label changed"));
             save_prefs();
             context_.kinds_changed = true; // a built-in label's kind goes with it
             rebuild();
@@ -6192,8 +6540,53 @@ class Library final : public app::Concept
             selecting_ = true;
             selected_ = {menu_title_};
             rebuild();
-            show_note(true, tr("Cross ticks titles, Options moves them, Circle is done"));
+            show_note(true, tr("Cross ticks titles, Square ticks them all, Options acts on them, "
+                               "Circle is done"));
             feedback.play(audio::Cue::select);
+            return;
+        }
+        if (tag == kItemSelFavourite)
+        {
+            const bool star = !all_favourites(selected_);
+            for (const std::string &id : selected_)
+            {
+                const auto found = std::find(favourites_.begin(), favourites_.end(), id);
+                if (star && found == favourites_.end())
+                    favourites_.push_back(id);
+                else if (!star && found != favourites_.end())
+                    favourites_.erase(found);
+            }
+            library::save_favourites(context_.library.state_dir, favourites_);
+            const long long count = static_cast<long long>(selected_.size());
+            finish_selection(
+                star ? i18n::plural(count, "{0} title starred", "{0} titles starred")
+                     : i18n::plural(count, "{0} title unstarred", "{0} titles unstarred"));
+            rebuild();
+            feedback.play(star ? audio::Cue::favorite_on : audio::Cue::favorite_off);
+            return;
+        }
+        if (tag == kItemSelHide)
+        {
+            // On Hidden they go back where they were; anywhere else, to Hidden.
+            const bool hide = active_key() != kHiddenTab;
+            int changed = 0;
+            for (const std::string &id : selected_)
+                changed += prefs_.set_title_hidden(id, hide) ? 1 : 0;
+            finish_selection(hide ? i18n::plural(changed, "{0} title hidden", "{0} titles hidden")
+                                  : i18n::plural(changed, "{0} title is back on its shelves",
+                                                 "{0} titles are back on their shelves"));
+            tabs_changed();
+            feedback.play(audio::Cue::select);
+            return;
+        }
+        if (tag == kItemSelAll)
+        {
+            tick_all(feedback);
+            return;
+        }
+        if (tag == kItemSelDelete)
+        {
+            ask_remove_selected(feedback);
             return;
         }
         if (tag == kItemSelectDone)
@@ -7843,7 +8236,8 @@ class Library final : public app::Concept
             if (key.rfind("tab:", 0) == 0)
             {
                 const orion::CustomTab *placed = prefs_.placement(title.id);
-                return placed != nullptr && key.compare(4, std::string::npos, placed->id) == 0;
+                return (placed != nullptr && key.compare(4, std::string::npos, placed->id) == 0) ||
+                       prefs_.copied_to(title.id, key.substr(4));
             }
             return false;
         }
@@ -7855,7 +8249,8 @@ class Library final : public app::Concept
             return favourite_of(title.id);
         const orion::CustomTab *placed = prefs_.placement(title.id);
         if (key.rfind("tab:", 0) == 0)
-            return placed != nullptr && key.compare(4, std::string::npos, placed->id) == 0;
+            return (placed != nullptr && key.compare(4, std::string::npos, placed->id) == 0) ||
+                   prefs_.copied_to(title.id, key.substr(4));
         // A built-in shelf; a moved title may have left it, or been moved
         // to another.
         if (const std::string shelf = prefs_.placed_shelf(title.id); !shelf.empty())
@@ -8629,10 +9024,13 @@ class Library final : public app::Concept
         const Title *title = find_title(menu_title_);
         if (title == nullptr)
             return;
-        const std::string worn = prefs_.title_label(menu_title_);
+        const bool several = selecting_ && !selected_.empty();
+        // Ticked titles wear different labels: none is marked Here.
+        const std::string worn = several ? std::string(1, '\x01') : prefs_.title_label(menu_title_);
         std::vector<ui::MenuItem> items;
         // Automatic: its tab's Default label, or ORION's for it.
-        ui::MenuItem own = menu_item(trf("Automatic ({0})", {banner_of(*title, true).text}));
+        ui::MenuItem own = menu_item(
+            several ? tr("Automatic") : trf("Automatic ({0})", {banner_of(*title, true).text}));
         own.tag = kItemLabelOwn;
         own.disabled = worn.empty();
         own.shortcut = worn.empty() ? tr("Here") : "";
@@ -9187,21 +9585,44 @@ class Library final : public app::Concept
         }
     }
 
+    // The kind of file a game is kept in, for the line under the covers
+    // (issue #31): a game for an emulator or a PS5 game image, by its
+    // extension. Empty for anything else, or a file with none.
+    static std::string file_type(const Title &title)
+    {
+        if (!title.is_rom() && title.source != library::Source::image)
+            return "";
+        const std::size_t slash = title.path.find_last_of('/');
+        const std::size_t dot = title.path.find_last_of('.');
+        if (dot == std::string::npos || (slash != std::string::npos && dot < slash) ||
+            dot + 1 >= title.path.size() || title.path.size() - dot > 8)
+            return "";
+        std::string type = title.path.substr(dot + 1);
+        for (char &c : type)
+            c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+        // A cue sheet is how a BIN/CUE game is listed.
+        return type == "CUE" ? std::string("BIN/CUE") : type;
+    }
+
     void draw_details(gfx::DrawList &list, ui::Painter &paint) const
     {
         const Title &title = focused();
         std::string line = title.id;
         const library::Player player = title.is_rom() ? player_of(title) : library::Player();
+        const std::string type = file_type(title);
+        const std::string system =
+            library::short_system_name(title.system) + (type.empty() ? "" : "   " + type);
         if (player.app != nullptr && player.app->key == "retroarch")
-            line = library::short_system_name(title.system) + "   " +
-                   trf("RetroArch, {0}", {core_name(player.core)});
+            line = system + "   " + trf("RetroArch, {0}", {core_name(player.core)});
         else if (title.is_rom())
-            line = library::short_system_name(title.system) + "   " + emulator_name(title);
+            line = system + "   " + emulator_name(title);
         else
         {
             if (!title.version.empty())
                 line += "   v" + title.version;
             line += "   " + tr(shelf_name(library::shelf_of(title)));
+            if (!type.empty())
+                line += "   " + type;
         }
         if (focused_bytes_ > 0 && title.id == sized_id_)
             line += "   " + orion::format_bytes(focused_bytes_);
@@ -9318,7 +9739,10 @@ class Library final : public app::Concept
     {
         if (selecting_ || arranging_)
         {
-            HintRow row{selecting_ ? select_hints_.data() : arrange_hints_.data(), 3, {}, 0.0f};
+            HintRow row{selecting_ ? select_hints_.data() : arrange_hints_.data(),
+                        selecting_ ? 4 : 3,
+                        {},
+                        0.0f};
             row.layout.size = 38.0f;
             row.layout.text_size = 21.0f;
             row.layout.cy = 1010.0f;
@@ -9531,10 +9955,10 @@ class Library final : public app::Concept
     orion::LanguageLibrary languages_;
     std::array<std::string, 7> hint_words_; // the hint bar's words (use_language)
     std::array<ui::Hint, 7> hints_{};
-    std::array<std::string, 6> mode_words_;
+    std::array<std::string, 7> mode_words_;
     std::string nested_word_;
     std::array<ui::Hint, 7> nested_hints_{};
-    std::array<ui::Hint, 3> select_hints_{};
+    std::array<ui::Hint, 4> select_hints_{};
     std::array<ui::Hint, 3> arrange_hints_{};
     orion::Look look_;  // the main look, as Settings edits it
     orion::Look shown_; // what the active tab wears (its own theme, or look_)
@@ -9758,6 +10182,7 @@ class Library final : public app::Concept
     std::string program_id_;
     // The installed app the system is asked to uninstall (start_uninstall).
     std::string uninstall_token_;
+    std::deque<std::string> uninstall_queue_; // ticked apps waiting for the system's uninstall
     std::string uninstall_id_;
     std::string uninstall_name_;
     float uninstall_asked_ = 0.0f;
