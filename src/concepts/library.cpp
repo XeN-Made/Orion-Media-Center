@@ -3221,12 +3221,18 @@ class Library final : public app::Concept
 
     // While Settings previews a tab's page, the library shows that tab (its
     // own theme, view and covers, as they are being chosen), then goes back
-    // to the tab it was on. A hidden tab has nothing to show.
+    // to the tab it was on. A hidden tab has nothing to show. A sub-tab is
+    // found in every tab's row, not only the open one (issue #28).
     void follow_preview()
     {
         const std::string want = settings_.preview_tab();
-        const bool shown = std::find(tab_keys_.begin(), tab_keys_.end(), want) != tab_keys_.end() ||
-                           std::find(sub_keys_.begin(), sub_keys_.end(), want) != sub_keys_.end();
+        bool shown = std::find(tab_keys_.begin(), tab_keys_.end(), want) != tab_keys_.end() ||
+                     std::find(sub_keys_.begin(), sub_keys_.end(), want) != sub_keys_.end();
+        for (const auto &[parent, row] : child_rows_)
+        {
+            for (const auto &entry : row)
+                shown = shown || entry.first == want;
+        }
         if (!want.empty() && shown && want != active_key())
         {
             if (preview_return_.empty())
@@ -7711,25 +7717,30 @@ class Library final : public app::Concept
         return grid_focused();
     }
 
-    // A title's size: the system's figure for what it registered, else a
-    // single file's own (a game for an emulator, an ELF program, an image);
-    // 0 when neither is known.
+    // A title's size: a single file's own (a game for an emulator, an ELF
+    // program, an image), else the system's figure for what it registered;
+    // 0 when neither is known. An image's file comes first: the system's
+    // figure for a mounted image is what it installed, not the image, and
+    // Details shows the file (issue #26).
     std::uint64_t size_of(const Title &title)
     {
+        const bool one_file = title.is_rom() || title.source == library::Source::payload ||
+                              title.source == library::Source::image;
+        if (one_file && !title.path.empty())
+        {
+            const auto [at, fresh] = file_bytes_.try_emplace(title.path, 0);
+            struct stat info = {};
+            if (fresh && ::stat(title.path.c_str(), &info) == 0 && S_ISREG(info.st_mode))
+                at->second = static_cast<std::uint64_t>(info.st_size);
+            if (at->second != 0 || title.is_rom())
+                return at->second;
+        }
         if (!title.is_rom())
         {
             if (const auto at = sizes_.find(title.id); at != sizes_.end())
                 return at->second;
         }
-        const bool one_file = title.is_rom() || title.source == library::Source::payload ||
-                              title.source == library::Source::image;
-        if (!one_file || title.path.empty())
-            return 0;
-        const auto [at, fresh] = file_bytes_.try_emplace(title.path, 0);
-        struct stat info = {};
-        if (fresh && ::stat(title.path.c_str(), &info) == 0 && S_ISREG(info.st_mode))
-            at->second = static_cast<std::uint64_t>(info.st_size);
-        return at->second;
+        return 0;
     }
 
     // The focused title's size, for the line under the covers: worked out
