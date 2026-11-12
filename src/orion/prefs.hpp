@@ -148,6 +148,7 @@ struct Placement
 //     "sort": "recent",
 //     "view": "grid",
 //     "case_pictures": true,
+//     "square_covers": false,
 //     "reopen_last_tab": true,
 //     "group_systems": true,
 //     "continue_row": true,
@@ -209,6 +210,9 @@ struct LibraryPrefs
     // Cases view puts covers in the pictures of real cases (ORION's and the
     // player's, /data/orion/cases); off draws ORION's own plain case for all.
     bool case_pictures = true;
+    // SteamGridDB's square covers instead of its portrait ones, for players
+    // whose tabs show square icons.
+    bool square_covers = false;
     bool reopen_last_tab = true;
     // The emulated systems share one Emulators tab, a row of their own under it.
     bool group_systems = true;

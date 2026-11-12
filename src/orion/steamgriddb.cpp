@@ -141,11 +141,11 @@ std::string grid_search_url(std::string_view name)
     return std::string(kApi) + "/search/autocomplete/" + library::url_encode(grid_query(name));
 }
 
-std::string grid_covers_url(long long game)
+std::string grid_covers_url(long long game, bool square)
 {
     return std::string(kApi) + "/grids/game/" + std::to_string(game) +
-           "?dimensions=600x900,342x482,660x930&mimes=image/png,image/jpeg&types=static"
-           "&nsfw=false&humor=false";
+           "?dimensions=" + (square ? "512x512,1024x1024" : "600x900,342x482,660x930") +
+           "&mimes=image/png,image/jpeg&types=static&nsfw=false&humor=false";
 }
 
 bool parse_grid_search(std::string_view json, std::vector<long long> *games)
@@ -186,7 +186,8 @@ bool parse_grid_covers(std::string_view json, std::vector<GridCover> *covers)
 }
 
 bool find_grid_covers(const HttpGetWith &get, const std::string &key, std::string_view name,
-                      std::size_t most, std::vector<GridCover> *covers, std::string *error)
+                      std::size_t most, std::vector<GridCover> *covers, std::string *error,
+                      bool square)
 {
     if (key.empty() || grid_query(name).empty())
     {
@@ -205,7 +206,7 @@ bool find_grid_covers(const HttpGetWith &get, const std::string &key, std::strin
     }
     if (games.empty())
         return true;
-    if (!get(grid_covers_url(games.front()), headers, kMaxAnswer, &body, error))
+    if (!get(grid_covers_url(games.front(), square), headers, kMaxAnswer, &body, error))
         return false;
     std::vector<GridCover> found;
     if (!parse_grid_covers(body, &found))
@@ -251,7 +252,8 @@ void GridPicker::begin(std::function<void()> work)
         });
 }
 
-bool GridPicker::search(std::string key, std::string name, std::string folder, std::string id)
+bool GridPicker::search(std::string key, std::string name, std::string folder, std::string id,
+                        bool square)
 {
     if (running_.load())
         return false;
@@ -266,11 +268,12 @@ bool GridPicker::search(std::string key, std::string name, std::string folder, s
     cancelled_ = false;
     begin(
         [this, key = std::move(key), name = std::move(name), folder = std::move(folder),
-         id = std::move(id)]
+         id = std::move(id), square]
         {
             std::vector<GridCover> covers;
             std::string error;
-            const bool asked = find_grid_covers(get_, key, name, kMostCovers, &covers, &error);
+            const bool asked =
+                find_grid_covers(get_, key, name, kMostCovers, &covers, &error, square);
             {
                 std::lock_guard<std::mutex> lock(mutex_);
                 covers_ = covers;

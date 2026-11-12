@@ -304,6 +304,7 @@ void ArtFetcher::run(std::vector<ArtJob> jobs, std::string log_path)
     // a key. True when it had a cover (written and reported by keep).
     const std::string grid_key = grid_key_;
     const HttpGetWith grid_get = grid_get_;
+    const bool grid_square = grid_square_;
     const auto from_grid = [&](const ArtJob &job)
     {
         if (grid_key.empty() || !grid_get)
@@ -313,8 +314,9 @@ void ArtFetcher::run(std::vector<ArtJob> jobs, std::string log_path)
         std::vector<GridCover> covers;
         std::string error;
         std::string bytes;
-        if (!find_grid_covers(grid_get, grid_key, name, 1, &covers, &error) || covers.empty() ||
-            !get_(covers.front().url, kMaxPicture, &bytes, &error) || !is_picture(bytes))
+        if (!find_grid_covers(grid_get, grid_key, name, 1, &covers, &error, grid_square) ||
+            covers.empty() || !get_(covers.front().url, kMaxPicture, &bytes, &error) ||
+            !is_picture(bytes))
         {
             append_line(log_path, job.system + "/" + job.rom_file + ": SteamGridDB: " +
                                       (error.empty() ? std::string("no cover") : error));

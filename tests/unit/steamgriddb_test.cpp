@@ -55,6 +55,11 @@ TEST(SteamGridDb, SearchesByTheNameWithoutItsTags)
               "https://www.steamgriddb.com/api/v2/search/autocomplete/Chrono%20Trigger");
     EXPECT_NE(orion::grid_covers_url(42).find("/grids/game/42?"), std::string::npos);
     EXPECT_NE(orion::grid_covers_url(42).find("mimes=image/png,image/jpeg"), std::string::npos);
+    // Portrait covers unless square ones are asked for.
+    EXPECT_NE(orion::grid_covers_url(42).find("dimensions=600x900"), std::string::npos);
+    EXPECT_NE(orion::grid_covers_url(42, true).find("dimensions=512x512,1024x1024&"),
+              std::string::npos);
+    EXPECT_EQ(orion::grid_covers_url(42, true).find("600x900"), std::string::npos);
 }
 
 TEST(SteamGridDb, ReadsItsAnswers)

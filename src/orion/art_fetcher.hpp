@@ -78,10 +78,12 @@ class ArtFetcher
 
     // SteamGridDB, asked for a game no other source has a picture for; an
     // empty key leaves it out. Takes effect at the next start.
-    void set_grid_source(std::string key, HttpGetWith get)
+    // square asks for its square covers instead of the portrait ones.
+    void set_grid_source(std::string key, HttpGetWith get, bool square = false)
     {
         grid_key_ = std::move(key);
         grid_get_ = std::move(get);
+        grid_square_ = square;
     }
     // False while a run is going (the jobs are not taken). log_path, when
     // not empty, gets a line per game.
@@ -123,6 +125,7 @@ class ArtFetcher
     HttpGet get_;
     std::string grid_key_; // SteamGridDB: the player's key, and how to ask it
     HttpGetWith grid_get_;
+    bool grid_square_ = false;
     std::thread worker_;
     std::atomic<bool> running_{false};
     std::atomic<bool> cancel_{false};

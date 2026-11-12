@@ -45,10 +45,11 @@ struct GridCover
 // What a name is searched by: a ROM's tags ("(USA)", "[!]") and extra
 // spaces left out, so "Chrono Trigger (USA) [!]" finds Chrono Trigger.
 std::string grid_query(std::string_view name);
-// The API's addresses: games by name, and a game's covers (portrait, PNG or
-// JPEG, still, neither NSFW nor joke covers).
+// The API's addresses: games by name, and a game's covers (portrait, or
+// square for players whose tabs show square icons; PNG or JPEG, still,
+// neither NSFW nor joke covers).
 std::string grid_search_url(std::string_view name);
-std::string grid_covers_url(long long game);
+std::string grid_covers_url(long long game, bool square = false);
 // Its answers: the games' IDs, best first; the covers. False when the answer
 // is not a successful one.
 bool parse_grid_search(std::string_view json, std::vector<long long> *games);
@@ -63,7 +64,8 @@ using HttpGetWith =
 // it from a worker thread). False with *error when SteamGridDB could not be
 // asked; true with no covers when it knows no such game.
 bool find_grid_covers(const HttpGetWith &get, const std::string &key, std::string_view name,
-                      std::size_t most, std::vector<GridCover> *covers, std::string *error);
+                      std::size_t most, std::vector<GridCover> *covers, std::string *error,
+                      bool square = false);
 
 // Find other art on a title: its covers on SteamGridDB, on a thread of
 // their own. The small copies arrive one by one (to look through on the
@@ -85,7 +87,8 @@ class GridPicker
     GridPicker &operator=(const GridPicker &) = delete;
 
     // Small copies go to <folder>/<id>-<n>.<png|jpg>. False while busy.
-    bool search(std::string key, std::string name, std::string folder, std::string id);
+    bool search(std::string key, std::string name, std::string folder, std::string id,
+                bool square = false);
     // Cover `index` in full, to <target_stem>.<png|jpg>. False while busy.
     bool keep(std::size_t index, std::string target_stem);
     bool busy() const

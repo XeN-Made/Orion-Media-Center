@@ -88,6 +88,7 @@ enum : int
     kArtNow,
     kArtKeyPage,
     kGridKey,
+    kGridShape,
     kArtFolder,
     kAddRomFolder,
     kBackdropsInfo,
@@ -1239,6 +1240,11 @@ void SettingsPanel::build_art(const LibraryPrefs &prefs)
                  "/data/orion/keys.txt")
             : tr("Free at steamgriddb.com: your profile, Preferences, API. Typing it here "
                  "works too");
+    form_
+        .add_choice(kGridShape, tr("SteamGridDB covers"), {tr("Portrait"), tr("Square")},
+                    prefs.square_covers ? 1 : 0)
+        .description = tr("Square suits tabs with square icons. Find other art… on a title "
+                          "replaces a cover it already has");
     form_.add_value(kStateInfo, tr("Box art folder"), art_folder(prefs, state_dir_)).description =
         tr("Chosen under Storage");
 }
@@ -1578,7 +1584,7 @@ void SettingsPanel::build_appearance(const Look &look, const LibraryPrefs &prefs
                                                             : 2)
         .description = tr("Behind the title details and button hints: nothing, a rim, or glass");
     form_.add_toggle(kBadges, tr("Category banners"), look.chrome.badges).description =
-        tr("GAME, HOMEBREW, MEDIA or PS4 on each cover");
+        tr("The system's name on each cover, and the header across the top of a case");
     form_.add_toggle(kRim, tr("Cover rim"), look.chrome.cover_rim).description =
         tr("A hairline of light around each cover");
     form_.add_toggle(kGameBackgrounds, tr("Game backgrounds"), prefs.game_backgrounds).description =
@@ -1991,6 +1997,9 @@ SettingsPanel::Change SettingsPanel::handle(const InputFrame &input, ui::Feedbac
         return Change::prefs;
     case kCasePictures:
         prefs->case_pictures = form_.toggle_value(kCasePictures);
+        return Change::prefs;
+    case kGridShape:
+        prefs->square_covers = form_.choice_index(kGridShape) == 1;
         return Change::prefs;
     case kTitleVolume:
         if (app_settings_ == nullptr)

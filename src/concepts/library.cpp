@@ -4051,8 +4051,9 @@ class Library final : public app::Concept
         preview_index_ = 0;
         // A search put back with Circle may still be ending its download:
         // this one starts as soon as it has (poll_preview).
-        preview_asked_ = picker_.search(grid_key_, preview_query_,
-                                        context_.library.state_dir + "/art/picks", title->id);
+        preview_asked_ =
+            picker_.search(grid_key_, preview_query_, context_.library.state_dir + "/art/picks",
+                           title->id, prefs_.square_covers);
         show_note(true, trf("Looking on SteamGridDB for {0}…", {preview_query_}));
         feedback.play(audio::Cue::select);
     }
@@ -4706,9 +4707,9 @@ class Library final : public app::Concept
         if (!preview_asked_)
         {
             if (!picker_.busy())
-                preview_asked_ =
-                    picker_.search(grid_key_, preview_query_,
-                                   context_.library.state_dir + "/art/picks", preview_id_);
+                preview_asked_ = picker_.search(grid_key_, preview_query_,
+                                                context_.library.state_dir + "/art/picks",
+                                                preview_id_, prefs_.square_covers);
             return;
         }
         for (auto &[index, path] : picker_.take_ready())
@@ -4827,7 +4828,7 @@ class Library final : public app::Concept
     // SteamGridDB for the box art downloader: the player's key, as it is now.
     void arm_grid()
     {
-        art_.set_grid_source(grid_key(), grid_http());
+        art_.set_grid_source(grid_key(), grid_http(), prefs_.square_covers);
     }
 
     static orion::HttpGetWith grid_http()
@@ -9359,7 +9360,10 @@ class Library final : public app::Concept
         const float side = std::round(art.w * (band.console ? 0.018f : 0.024f));
         const float ends = band.console ? std::round(art.h * 0.02f) : side;
         const Rect sleeve{art.x + side, art.y + ends, art.w - 2.0f * side, art.h - 2.0f * ends};
-        const float band_h = std::round(sleeve.h * (band.console ? 0.125f : 0.115f));
+        // Category banners off: no header, the cover fills the whole sleeve.
+        const bool header = shown_.chrome.badges;
+        const float band_h =
+            header ? std::round(sleeve.h * (band.console ? 0.125f : 0.115f)) : 0.0f;
         if (band.console)
         {
             // The clips: short lighter ridges along the top and bottom edge,
@@ -9384,13 +9388,37 @@ class Library final : public app::Concept
         const Rect cover{sleeve.x, sleeve.y + band_h, sleeve.w, sleeve.h - band_h};
         // Drawn a corner taller and clipped flat: a straight edge under the
         // header, round corners at the bottom.
-        const Rect drawn{cover.x, cover.y - kInner, cover.w, cover.h + kInner};
+        const Rect drawn =
+            header ? Rect{cover.x, cover.y - kInner, cover.w, cover.h + kInner} : cover;
         list.push_clip(cover);
         draw_cover_art(canvas, drawn, cover, item, title, kInner);
         list.pop_clip();
+        if (header)
+            draw_case_header(canvas, sleeve, cover, band, band_h);
+        // The plastic over the sleeve: a faint sheen and the case's edge.
+        list.gradient_rect(cover, kInner, Color::rgb(0xffffff, 0.1f), Color::rgb(0xffffff, 0.0f));
+        list.bordered_rect(art, kRadius, Color::rgb(0x000000, 0.0f), 1.5f,
+                           Color::rgb(0xffffff, 0.28f));
+        if (favourite_of(title.id))
+        {
+            const float r = std::max(16.0f, art.w * 0.06f);
+            const float cx = sleeve.x + sleeve.w - r - 12.0f;
+            const float cy = cover.y + r + 12.0f;
+            list.circle(cx, cy, r, Color::rgb(0x0b0e20, 0.72f));
+            list.star(cx, cy, r * 0.72f, Color::rgb(0xffc94a));
+        }
+        if (aurora)
+            draw_aurora_ring(list, art, kRadius, focus);
+    }
+
+    // A drawn case's header: the rule under it and the system's name, large
+    // at its left, where a case prints its mark.
+    void draw_case_header(ui::Canvas &canvas, const Rect &sleeve, const Rect &cover,
+                          const CaseBand &band, float band_h) const
+    {
+        gfx::DrawList &list = canvas.list;
         if (band.rule.a > 0.0f)
             list.rounded_rect({sleeve.x, cover.y - 2.0f, sleeve.w, 3.0f}, 0.0f, band.rule);
-        // The header's name, large at its left, where a case prints its mark.
         const float size = band_h * 0.6f;
         float x = sleeve.x + band_h * 0.32f;
         const float mid = sleeve.y + band_h * 0.5f;
@@ -9411,20 +9439,6 @@ class Library final : public app::Concept
         else
             ui::text(list, canvas.fonts.semibold, band.label.c_str(), x, mid + label_size * 0.36f,
                      label_size, band.ink, gfx::Align::left, label_size * 0.06f);
-        // The plastic over the sleeve: a faint sheen and the case's edge.
-        list.gradient_rect(cover, kInner, Color::rgb(0xffffff, 0.1f), Color::rgb(0xffffff, 0.0f));
-        list.bordered_rect(art, kRadius, Color::rgb(0x000000, 0.0f), 1.5f,
-                           Color::rgb(0xffffff, 0.28f));
-        if (favourite_of(title.id))
-        {
-            const float r = std::max(16.0f, art.w * 0.06f);
-            const float cx = sleeve.x + sleeve.w - r - 12.0f;
-            const float cy = cover.y + r + 12.0f;
-            list.circle(cx, cy, r, Color::rgb(0x0b0e20, 0.72f));
-            list.star(cx, cy, r * 0.72f, Color::rgb(0xffc94a));
-        }
-        if (aurora)
-            draw_aurora_ring(list, art, kRadius, focus);
     }
 
     // A title in List view: its cover small, its name, what it is and when

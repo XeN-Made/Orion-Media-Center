@@ -320,6 +320,8 @@ TEST(OrionPrefs, BackgroundsCanBeToldApart)
     EXPECT_FALSE(prefs.blurred_covers); // the sky, unless asked for
     EXPECT_TRUE(prefs.case_pictures);
     prefs.case_pictures = false;
+    EXPECT_FALSE(prefs.square_covers); // SteamGridDB's portrait covers, unless asked for
+    prefs.square_covers = true;
     EXPECT_FLOAT_EQ(prefs.background_strength, 1.0f);
     prefs.blurred_covers = true;
     prefs.background_strength = 0.5f;
@@ -327,6 +329,7 @@ TEST(OrionPrefs, BackgroundsCanBeToldApart)
     orion::LibraryPrefs back = orion::load_prefs(dir);
     EXPECT_TRUE(back.blurred_covers);
     EXPECT_FALSE(back.case_pictures);
+    EXPECT_TRUE(back.square_covers);
     EXPECT_NEAR(back.background_strength, 0.5f, 0.01f);
     // Out of range by hand: kept within it.
     ASSERT_TRUE(save::write_atomic(dir + "/library.json", R"({"background_strength": 7})").empty());
