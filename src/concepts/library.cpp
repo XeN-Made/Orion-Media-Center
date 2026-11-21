@@ -254,6 +254,8 @@ enum : int
     kItemSelAll,              // tick every title in the tab, or untick them all
     kItemCopyMenu,            // Also show in…: the player's tabs
     kItemUncopy,              // Remove from this tab, where it is a copy
+    kItemPageMore,            // a paged menu of tabs or labels: its next page
+    kItemPageLess,            // its page before
     kItemMove = 100,          // + the tab's index
     kItemShelf = 250,         // + a built-in shelf's index in kShelves
     kItemPlayer = 300,        // 0: the default, then 1 + an index in library::players_for
@@ -273,6 +275,20 @@ enum : int
 // The picture browser shows this many folders and pictures at a time: the
 // menu does not scroll.
 constexpr int kPickPage = 10;
+// The menus of the player's tabs and labels show this many at a time, with
+// Back… and More… around them and room left for the menu's other rows
+// (issue #33: past the first page, tabs could not be chosen at all).
+constexpr int kMenuPage = 8;
+
+// Which paged menu Back… and More… turn the page of.
+enum class PagedMenu : std::uint8_t
+{
+    none,
+    move,  // Move to tab…
+    copy,  // Also show in…
+    label, // Label…
+    place, // where a new tab goes
+};
 constexpr std::size_t kPickMost = 1500; // entries read from one folder
 
 constexpr const char *kTechniques[] = {
@@ -3956,8 +3972,10 @@ class Library final : public app::Concept
 
     // A new tab, named: on the tab bar (Circle leaves it there), or inside
     // one of the tabs that can hold others.
-    void ask_tab_place(const std::string &key, app::Feedback &feedback)
+    void ask_tab_place(const std::string &key, app::Feedback &feedback, bool turning = false)
     {
+        if (!turning)
+            menu_page_ = 0;
         new_tab_key_ = key;
         place_keys_.clear();
         std::vector<ui::MenuItem> items;
@@ -3969,22 +3987,30 @@ class Library final : public app::Concept
         ui::MenuItem bar = menu_item(tr("On the tab bar"));
         bar.tag = kItemTabPlace;
         items.push_back(bar);
-        for (std::size_t i = 0; i < tab_keys_.size() && place_keys_.size() < kPickPage; ++i)
+        std::vector<std::string> names;
+        for (std::size_t i = 0; i < tab_keys_.size(); ++i)
         {
             const std::string &place = tab_keys_[i];
             if (place == key || !orion::LibraryPrefs::can_hold_tabs(place) ||
                 !prefs_.tab_parent(place).empty())
                 continue;
-            ui::MenuItem item =
-                menu_item(trf("Inside {0}", {tabs_.tab(static_cast<int>(i)).label}));
-            item.tag = kItemTabPlace + 1 + static_cast<int>(place_keys_.size());
             place_keys_.push_back(place);
+            names.push_back(tabs_.tab(static_cast<int>(i)).label);
+        }
+        const int total = static_cast<int>(place_keys_.size());
+        const auto [begin, end] = page_begin(items, PagedMenu::place, total);
+        for (int i = begin; i < end; ++i)
+        {
+            ui::MenuItem item = menu_item(trf("Inside {0}", {names[static_cast<std::size_t>(i)]}));
+            item.tag = kItemTabPlace + 1 + i;
             items.push_back(item);
         }
+        page_end(items, end, total);
         menu_.set_items(std::move(items));
         menu_.open(drive_menu_anchor(), feedback);
-        menu_.set_focus(1);
-        feedback.play(audio::Cue::saved);
+        menu_.set_focus(turning ? page_focus_ : 1);
+        if (!turning)
+            feedback.play(audio::Cue::saved);
     }
 
     // The name typed for the title whose menu was open: the player's name for
@@ -6044,14 +6070,88 @@ class Library final : public app::Concept
         feedback.play(audio::Cue::focus);
     }
 
-    void open_tab_menu(app::Feedback &feedback)
+    // ---- menus of tabs and labels, a page at a time ----
+
+    // Back… first when this is not the first page, for the caller's entries
+    // from .first to .second; page_end then adds More… when more follow.
+    std::pair<int, int> page_begin(std::vector<ui::MenuItem> &items, PagedMenu which, int total)
     {
-        const orion::CustomTab *placed = prefs_.placement(menu_title_);
+        paged_ = which;
+        menu_page_ = std::clamp(menu_page_, 0, std::max(0, (total - 1) / kMenuPage));
+        if (menu_page_ > 0)
+        {
+            ui::MenuItem less = menu_item(tr("Back…"));
+            less.tag = kItemPageLess;
+            items.push_back(less);
+        }
+        page_focus_ = static_cast<int>(items.size());
+        const int begin = menu_page_ * kMenuPage;
+        return {begin, std::min(total, begin + kMenuPage)};
+    }
+
+    static void page_end(std::vector<ui::MenuItem> &items, int end, int total)
+    {
+        if (end >= total)
+            return;
+        ui::MenuItem more = menu_item(tr("More…"));
+        more.tag = kItemPageMore;
+        items.push_back(more);
+    }
+
+    // A paged menu opened again on its next or previous page: the focus on
+    // its first entry there.
+    void show_page(bool turning, int focus, app::Feedback &feedback)
+    {
+        menu_.open(grid_.cell_rect(grid_.focus()), feedback);
+        if (turning)
+            menu_.set_focus(page_focus_);
+        else if (focus > 0)
+            menu_.set_focus(focus);
+    }
+
+    void turn_page(int tag, app::Feedback &feedback)
+    {
+        menu_page_ += tag == kItemPageMore ? 1 : -1;
+        switch (paged_)
+        {
+        case PagedMenu::move:
+            open_tab_menu(feedback, true);
+            break;
+        case PagedMenu::copy:
+            open_copy_menu(feedback, true);
+            break;
+        case PagedMenu::label:
+            open_label_menu(feedback, true);
+            break;
+        case PagedMenu::place:
+            ask_tab_place(new_tab_key_, feedback, true);
+            break;
+        case PagedMenu::none:
+            break;
+        }
+    }
+
+    void open_tab_menu(app::Feedback &feedback, bool turning = false)
+    {
+        if (!turning)
+            menu_page_ = 0;
+        // Ticked titles: a tab one of them is already on is no reason to
+        // refuse the others, so none is marked Here.
+        const bool several = selecting_ && !selected_.empty();
+        const orion::CustomTab *placed = several ? nullptr : prefs_.placement(menu_title_);
         std::vector<ui::MenuItem> items;
+        if (several)
+        {
+            ui::MenuItem heading =
+                menu_item(i18n::plural(static_cast<long long>(selected_.size()),
+                                       "Move {0} title to", "Move {0} titles to"));
+            heading.disabled = true;
+            items.push_back(heading);
+        }
         // The built-in shelves first: a homebrew app can sit with the games.
         const Title *title = find_title(menu_title_);
-        std::string shelf_now = prefs_.placed_shelf(menu_title_);
-        if (shelf_now.empty() && placed == nullptr && title != nullptr)
+        std::string shelf_now = several ? std::string() : prefs_.placed_shelf(menu_title_);
+        if (!several && shelf_now.empty() && placed == nullptr && title != nullptr)
             shelf_now = shelf_key_of(*title);
         for (std::size_t i = 0; i < std::size(kShelves); ++i)
         {
@@ -6065,39 +6165,28 @@ class Library final : public app::Concept
             item.shortcut = here ? tr("Here") : "";
             items.push_back(item);
         }
-        for (std::size_t i = 0; i < prefs_.tabs.size() && i < kPickPage; ++i)
+        const int total = static_cast<int>(prefs_.tabs.size());
+        const auto [begin, end] = page_begin(items, PagedMenu::move, total);
+        for (int i = begin; i < end; ++i)
         {
-            const bool here = placed != nullptr && placed->id == prefs_.tabs[i].id;
-            ui::MenuItem item = menu_item(prefs_.tabs[i].name);
-            item.tag = kItemMove + static_cast<int>(i);
+            const orion::CustomTab &tab = prefs_.tabs[static_cast<std::size_t>(i)];
+            const bool here = placed != nullptr && placed->id == tab.id;
+            ui::MenuItem item = menu_item(tab.name);
+            item.tag = kItemMove + i;
             item.disabled = here;
             item.shortcut = here ? tr("Here") : "";
             items.push_back(item);
         }
+        page_end(items, end, total);
         ui::MenuItem line;
         line.separator = true;
         items.push_back(line);
         ui::MenuItem fresh = menu_item(tr("New tab…"));
         fresh.tag = kItemNewTab;
         items.push_back(fresh);
-        if (selecting_ && !selected_.empty())
-        {
-            // A tab one of them is already on is no reason to refuse the others.
-            for (ui::MenuItem &item : items)
-            {
-                item.disabled = false;
-                item.shortcut.clear();
-            }
-            ui::MenuItem heading =
-                menu_item(i18n::plural(static_cast<long long>(selected_.size()),
-                                       "Move {0} title to", "Move {0} titles to"));
-            heading.disabled = true;
-            items.insert(items.begin(), heading);
-        }
         menu_.set_items(std::move(items));
-        menu_.open(grid_.cell_rect(grid_.focus()), feedback);
-        if (selecting_ && !selected_.empty())
-            menu_.set_focus(1); // the first place, under the heading
+        show_page(turning, several ? 1 : 0,
+                  feedback); // several: the first place, under the heading
     }
 
     // The tab the library shows where this title is a copy (issue #24), or
@@ -6113,8 +6202,10 @@ class Library final : public app::Concept
     // Also show in…: the player's tabs. For one title, the tab it was moved
     // to is Here and the ones it shows on too are marked; choosing one of
     // those takes it off again. Ticked titles are all shown on the tab chosen.
-    void open_copy_menu(app::Feedback &feedback)
+    void open_copy_menu(app::Feedback &feedback, bool turning = false)
     {
+        if (!turning)
+            menu_page_ = 0;
         const bool several = selecting_ && !selected_.empty();
         const orion::CustomTab *placed = several ? nullptr : prefs_.placement(menu_title_);
         std::vector<ui::MenuItem> items;
@@ -6124,20 +6215,22 @@ class Library final : public app::Concept
                               : tr("Also show in"));
         heading.disabled = true;
         items.push_back(heading);
-        for (std::size_t i = 0; i < prefs_.tabs.size() && i < kPickPage; ++i)
+        const int total = static_cast<int>(prefs_.tabs.size());
+        const auto [begin, end] = page_begin(items, PagedMenu::copy, total);
+        for (int i = begin; i < end; ++i)
         {
-            const std::string &id = prefs_.tabs[i].id;
-            const bool here = placed != nullptr && placed->id == id;
-            const bool shown = !several && prefs_.copied_to(menu_title_, id);
-            ui::MenuItem item = menu_item(prefs_.tabs[i].name);
-            item.tag = kItemCopy + static_cast<int>(i);
+            const orion::CustomTab &tab = prefs_.tabs[static_cast<std::size_t>(i)];
+            const bool here = placed != nullptr && placed->id == tab.id;
+            const bool shown = !several && prefs_.copied_to(menu_title_, tab.id);
+            ui::MenuItem item = menu_item(tab.name);
+            item.tag = kItemCopy + i;
             item.disabled = here;
             item.shortcut = here ? tr("Here") : shown ? tr("Shown") : "";
             items.push_back(item);
         }
+        page_end(items, end, total);
         menu_.set_items(std::move(items));
-        menu_.open(grid_.cell_rect(grid_.focus()), feedback);
-        menu_.set_focus(1);
+        show_page(turning, 1, feedback);
     }
 
     void copy_chosen(int index, app::Feedback &feedback)
@@ -6253,9 +6346,14 @@ class Library final : public app::Concept
         if (install_item(tag, feedback) || found_item(tag, feedback))
             return;
         // Before the ranges below, which take any tag past theirs.
-        if (tag >= kItemCopy && tag < kItemCopy + kPickPage)
+        if (tag >= kItemCopy && tag < kItemCopy + static_cast<int>(prefs_.tabs.size()))
         {
             copy_chosen(tag - kItemCopy, feedback);
+            return;
+        }
+        if (tag == kItemPageMore || tag == kItemPageLess)
+        {
+            turn_page(tag, feedback);
             return;
         }
         if (tag == kItemCopyMenu)
@@ -9019,9 +9117,11 @@ class Library final : public app::Concept
     }
 
     // Label…: ORION's label for it, then the player's (the one it wears
-    // marked Here), then New label…; at most a page: the menu does not scroll.
-    void open_label_menu(app::Feedback &feedback)
+    // marked Here) a page at a time, then New label….
+    void open_label_menu(app::Feedback &feedback, bool turning = false)
     {
+        if (!turning)
+            menu_page_ = 0;
         const Title *title = find_title(menu_title_);
         if (title == nullptr)
             return;
@@ -9039,6 +9139,7 @@ class Library final : public app::Concept
         // ORION's labels for the console's kinds of title (GAME, PS4,
         // HOMEBREW, MEDIA): a homebrew app can wear GAME. Systems' labels
         // are for their own games.
+        std::vector<ui::MenuItem> entries;
         const std::vector<orion::LabelEntry> builtins = every_label();
         std::size_t shown = 0;
         for (std::size_t i = 0; i < builtins.size() && shown < 4; ++i)
@@ -9054,18 +9155,23 @@ class Library final : public app::Concept
             item.tag = kItemLabelBuiltin + static_cast<int>(i);
             item.disabled = here;
             item.shortcut = here ? tr("Here") : "";
-            items.push_back(item);
+            entries.push_back(item);
         }
         const std::vector<const orion::Label *> labels = custom_labels();
-        for (std::size_t i = 0; i < labels.size() && i + shown < kPickPage; ++i)
+        for (std::size_t i = 0; i < labels.size(); ++i)
         {
             const bool here = labels[i]->id == worn;
             ui::MenuItem item = menu_item(labels[i]->text);
             item.tag = kItemLabel + static_cast<int>(i);
             item.disabled = here;
             item.shortcut = here ? tr("Here") : "";
-            items.push_back(item);
+            entries.push_back(item);
         }
+        const int total = static_cast<int>(entries.size());
+        const auto [begin, end] = page_begin(items, PagedMenu::label, total);
+        for (int i = begin; i < end; ++i)
+            items.push_back(entries[static_cast<std::size_t>(i)]);
+        page_end(items, end, total);
         ui::MenuItem line;
         line.separator = true;
         items.push_back(line);
@@ -9073,7 +9179,7 @@ class Library final : public app::Concept
         fresh.tag = kItemNewLabel;
         items.push_back(fresh);
         menu_.set_items(std::move(items));
-        menu_.open(grid_.cell_rect(grid_.focus()), feedback);
+        show_page(turning, 0, feedback);
     }
 
     void draw_banner(ui::Canvas &canvas, const Rect &art, const Title &title) const
@@ -10207,6 +10313,11 @@ class Library final : public app::Concept
     std::vector<orion::PackageId> packages_taken_; // read whole by the installer this session
     std::vector<orion::ActivityJob> finished_;     // ended this session, the latest first
     int pick_page_ = 0;
+    // The page a menu of tabs or labels shows, which one, and where its
+    // first entry on the page is.
+    int menu_page_ = 0;
+    PagedMenu paged_ = PagedMenu::none;
+    int page_focus_ = 0;
     float check_started_ = 0.0f;       // clock_ when the running check began
     bool update_asked_ = false;        // the check this launch makes by itself has started
     bool manual_update_check_ = false; // the running check was asked for: say how it went

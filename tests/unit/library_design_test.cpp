@@ -501,6 +501,39 @@ TEST_F(LibraryDesign, ATitleIsShownOnAnotherTabToo)
     expect_drawable(*design);
 }
 
+// Issue #33: past a page of tabs, More… turns to the next page and every
+// tab can be chosen.
+TEST_F(LibraryDesign, EveryTabCanBeChosenPastTheFirstPage)
+{
+    const std::string dir = ::testing::TempDir() + "orion-design-many-tabs";
+    ASSERT_TRUE(hui::save::ensure_directory(dir));
+    hui::orion::LibraryPrefs prefs;
+    std::string last;
+    for (int i = 0; i < 12; ++i)
+        last = prefs.add_tab("Tab " + std::to_string(i + 1)).id;
+    ASSERT_TRUE(hui::orion::save_prefs(dir, prefs));
+    library_.state_dir = dir;
+    auto design = with_fixture();
+    // Ciel Ouvert's menu: Move to tab… comes before Also show in….
+    send(*design, press(hui::Action::menu));
+    for (int i = 0; i < 10; ++i)
+        send(*design, nav(Direction::down));
+    send(*design, press(hui::Action::confirm));
+    // Games, Homebrew, Media, the first eight tabs, then More….
+    for (int i = 0; i < 11; ++i)
+        send(*design, nav(Direction::down));
+    send(*design, press(hui::Action::confirm));
+    expect_drawable(*design);
+    // The next page, focused on its first tab (Tab 9): Tab 12 is three down.
+    for (int i = 0; i < 3; ++i)
+        send(*design, nav(Direction::down));
+    send(*design, press(hui::Action::confirm));
+    const hui::orion::LibraryPrefs saved = hui::orion::load_prefs(dir);
+    ASSERT_NE(saved.placement("PPSA90108"), nullptr);
+    EXPECT_EQ(saved.placement("PPSA90108")->id, last);
+    expect_drawable(*design);
+}
+
 // Issue #17: Move within this tab carries the title with the direction
 // buttons; Cross keeps the tab's new order (its sort becomes Custom order),
 // Circle puts the old one back.
